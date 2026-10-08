@@ -55,6 +55,14 @@ endif
 
 -include mtkernel_3/app_program/subdir.mk
 
+# Create every object directory up front.  Git does not store empty
+# directories, so a fresh clone lacks them, and not every compile rule
+# creates its own (make 3.81, shipped with macOS, picks the first matching
+# pattern rule, which may be one without a mkdir).
+ifneq ($(MAKECMDGOALS),clean)
+$(shell mkdir -p $(sort $(dir $(OBJS))))
+endif
+
 ifneq ($(MAKECMDGOALS),clean)
 ifneq ($(strip $(ASM_DEPS)),)
 -include $(ASM_DEPS)
