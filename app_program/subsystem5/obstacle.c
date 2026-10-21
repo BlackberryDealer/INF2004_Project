@@ -10,6 +10,8 @@
 #include "obstacle.h"          /* own header first (BARR-C 4.3.c) */
 #include "sys_tick.h"
 #include "sys_health.h"
+#include "drv_ultrasonic.h"
+#include "drv_servo.h"
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -28,12 +30,15 @@ static void obstacle_task(INT stacd, void * p_exinf);
 
 /**
  * obstacle_init
- * @brief   Phase 0: nothing to create yet.
+ * @brief   Phase 1: sets up the trigger output and the servo (90 deg).
  * @return  E_OK
  * @context usermain (init phase)
  */
 ER obstacle_init(void)
 {
+    drv_ultrasonic_init();
+    drv_servo_init();
+
     return E_OK;
 }
 

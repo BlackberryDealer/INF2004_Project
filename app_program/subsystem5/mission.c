@@ -1,7 +1,7 @@
 /**
  * @file    mission.c
  * @brief   Mission queue K4, mode flags K10 and mission_task
- *          (Phase 0 subset: prints every event, services the watchdog).
+ *          (Phase 0/1 subset: prints every event, services the watchdog).
  * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    task
  * @reqs    min-bit item 7 (queue messages), NFR10b
@@ -11,6 +11,8 @@
 #include "../app_types.h"
 #include "../subsystem2/fault.h"
 #include "sys_health.h"
+#include "drv_buzzer.h"
+#include "drv_ws2812.h"
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -31,6 +33,7 @@ typedef struct
                                    + MISSION_EVT_MSG_BYTES))
 #define MISSION_RCV_TMO_MS     (10)    /* one pass at least every 10 ms */
 #define MISSION_STACK_WORDS    (APP_STACK_MISSION_BYTES / 8u)
+#define MISSION_RGB_BOOT_LEVEL (32u)   /* dim white at boot */
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -218,7 +221,8 @@ uint32_t mission_queue_high_water(void)
 
 /**
  * mission_task
- * @brief   Phase 0 body: prints each event and services the watchdog.
+ * @brief   Phase 1 body: sets up buzzer and RGB, then prints each event
+ *          and services the watchdog.
  * @param   stacd   unused (kernel start code)
  * @param   p_exinf unused
  * @context mission_task (priority 16)
@@ -230,6 +234,13 @@ static void mission_task(INT stacd, void * p_exinf)
 
     (void) stacd;    /* unused: kernel start code */
     (void) p_exinf;  /* unused: no extended info  */
+
+    drv_buzzer_init();
+    if (drv_ws2812_init())   /* false: runs on without RGB (fault set) */
+    {
+        drv_ws2812_set(MISSION_RGB_BOOT_LEVEL, MISSION_RGB_BOOT_LEVEL,
+                       MISSION_RGB_BOOT_LEVEL);   /* white: booted */
+    }
 
     for (;;)
     {
