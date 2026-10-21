@@ -36,3 +36,8 @@ Add a new row for every run. Never edit or delete old rows.
 
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
+| 2026-10-21 | S5-U01 | `e74d623` | AfifLotfi | PASS | `logs/2026-10-21_host_tests.txt` | host run (gcc); target and track tests not run yet |
+| 2026-10-21 | S5-U02 | `e74d623` | AfifLotfi | PASS | `logs/2026-10-21_host_tests.txt` | host run (gcc); target and track tests not run yet |
+| 2026-10-21 | S5-U03 | `e74d623` | AfifLotfi | PASS | `logs/2026-10-21_host_tests.txt` | host run (gcc); target and track tests not run yet |
+| 2026-10-21 | S5-U07 | `e74d623` | AfifLotfi | PASS | `logs/2026-10-21_host_tests.txt` | host run (gcc); target and track tests not run yet |
+| 2026-10-21 | S5-U08 | `e74d623` | AfifLotfi | PASS | `logs/2026-10-21_host_tests.txt` | host run (gcc); target and track tests not run yet |
