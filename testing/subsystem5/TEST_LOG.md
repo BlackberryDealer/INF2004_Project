@@ -59,3 +59,12 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-21 | S5-U03 | `e74d623` | AfifLotfi | PASS | `logs/2026-10-21_host_tests.txt` | host run (gcc); target and track tests not run yet |
 | 2026-10-21 | S5-U07 | `e74d623` | AfifLotfi | PASS | `logs/2026-10-21_host_tests.txt` | host run (gcc); target and track tests not run yet |
 | 2026-10-21 | S5-U08 | `e74d623` | AfifLotfi | PASS | `logs/2026-10-21_host_tests.txt` | host run (gcc); target and track tests not run yet |
+| 2026-10-21 | S5-U01 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
+| 2026-10-21 | S5-U02 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
+| 2026-10-21 | S5-U02b | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
+| 2026-10-21 | S5-U03 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
+| 2026-10-21 | S5-U23 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
+| 2026-10-21 | S5-U07 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
+| 2026-10-21 | S5-U08 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
+| 2026-10-21 | S5-U14 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
+| 2026-10-21 | S5-U27 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
