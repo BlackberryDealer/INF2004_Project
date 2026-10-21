@@ -81,7 +81,8 @@ extern void     status_board_write_line(status_board_line_t const * p_part);
 extern void     status_board_write_motion(status_board_motion_t const * p_part);
 extern void     status_board_write_imu(status_board_imu_t const * p_part);
 extern void     status_board_write_obstacle(status_board_obs_t const * p_part);
-extern void     status_board_write_mission(status_board_mission_t const * p_part);
+extern void     status_board_write_mission(
+                    status_board_mission_t const * p_part);
 extern void     status_board_read(status_board_t * p_snapshot);
 
 /* Getters (pure; work on a snapshot) */

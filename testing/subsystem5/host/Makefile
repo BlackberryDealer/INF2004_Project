@@ -27,6 +27,8 @@ tree:
 	rm -rf build
 	mkdir -p $(B)/subsystem1 $(B)/subsystem2 $(B)/subsystem3 $(B)/subsystem5
 	cp mock/app.h $(B)/app.h
+	mkdir -p build/hardware
+	cp mock/hardware/gpio.h build/hardware/gpio.h
 	cp $(APP)/app_types.h $(APP)/board_pins.h $(B)/
 	cp $(APP)/subsystem1/telem.h $(APP)/subsystem1/telem_bin.h $(B)/subsystem1/
 	cp $(APP)/subsystem2/safety.h $(APP)/subsystem2/fault.h \

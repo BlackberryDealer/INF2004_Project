@@ -2,6 +2,8 @@
  * @file    obs_profile.c
  * @brief   Turns the 25-point servo scan into an obstacle profile and a
  *          bypass plan. Pure C: integer trig only, compiles on a laptop.
+ *          The obstacle is the nearest run of near points that reaches
+ *          into the driving corridor (review R02).
  * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    algo
  * @reqs    FR7 (profile), FR8 (choose side), NFR16 (leg limits)
@@ -15,7 +17,7 @@
 #define OBS_SIN_ENTRIES    (37u)   /* 0, 5, ..., 180 deg               */
 #define OBS_SIN_IDX_90     (18u)   /* index of 90 deg                  */
 #define OBS_STEP_IDX_BASE  (6u)    /* scan step 0 = 30 deg = index 6   */
-#define OBS_Q14_SHIFT      (14u)
+#define OBS_Q14_ONE        (16384)  /* 1.0 in Q14 (signed division) */
 #define OBS_STEP_LAST      (APP_SCAN_STEPS - 1u)
 
 typedef struct
@@ -40,8 +42,8 @@ static int16_t const g_obs_sin_q14[OBS_SIN_ENTRIES] =
 /* ---- private function prototypes ------------------------------------- */
 
 static void     obs_make_points(uint16_t const * p_scan_mm,
-                                obs_point_t * p_pts, uint32_t * p_best);
-static uint32_t obs_q14_mul(uint32_t distance_mm, uint32_t sin_idx);
+                                obs_point_t * p_pts);
+static uint32_t obs_pick_blocking(obs_point_t const * p_pts);
 static void     obs_find_run(obs_point_t const * p_pts, uint32_t best,
                              uint32_t * p_lo, uint32_t * p_hi);
 static void     obs_clearances(obs_point_t const * p_pts, uint32_t lo,
@@ -52,11 +54,12 @@ static uint32_t obs_min_u(uint32_t value_a, uint32_t value_b);
 
 /**
  * obs_profile_build
- * @brief   Finds the obstacle (the contiguous run of near points holding
- *          the nearest point), its lateral extent, width and the free
- *          gaps to other objects on each side.
+ * @brief   Finds the obstacle (the run of contiguous near points that
+ *          reaches into the corridor and has the smallest forward
+ *          distance), its lateral extent, width and the free gaps to the
+ *          points of every other run on each side.
  * @param   p_scan_mm 25 distances (mm), step n = 30 + 5n degrees
- * @param   p_prof    result; b_is_valid false if nothing is near
+ * @param   p_prof    result; b_is_valid false if no run blocks
  * @context obstacle_task (event time, once per scan)
  */
 void obs_profile_build(uint16_t const * p_scan_mm, obs_profile_t * p_prof)
@@ -75,7 +78,8 @@ void obs_profile_build(uint16_t const * p_scan_mm, obs_profile_t * p_prof)
     p_prof->clear_left_mm  = APP_PROFILE_CLEAR_MM;
     p_prof->clear_right_mm = APP_PROFILE_CLEAR_MM;
 
-    obs_make_points(p_scan_mm, pts, &best);
+    obs_make_points(p_scan_mm, pts);
+    best = obs_pick_blocking(pts);
 
     if (best < APP_SCAN_STEPS)
     {
@@ -130,8 +134,7 @@ void obs_profile_plan(obs_profile_t const * p_prof, obs_plan_t * p_plan)
     p_plan->leg_forward_mm = 0u;
     p_plan->b_was_clamped  = false;
 
-    if (p_prof->b_is_valid && (p_prof->x_right_mm >= -corridor)
-        && (p_prof->x_left_mm <= corridor))
+    if (p_prof->b_is_valid)    /* only a run that blocks the corridor */
     {
         /* casts: both >= 0 because the obstacle overlaps the corridor */
         shift_l = (uint32_t) (corridor - p_prof->x_left_mm);
@@ -159,6 +162,12 @@ void obs_profile_plan(obs_profile_t const * p_prof, obs_plan_t * p_plan)
 
     if (OBS_OUT_PLAN == p_plan->outcome)
     {
+        /* a run that only touches the corridor edge gives shift 0, which
+           motion_move_forward() would reject (review V13-04)            */
+        if (p_plan->leg_lateral_mm < OBS_LEG_MIN_MM)
+        {
+            p_plan->leg_lateral_mm = OBS_LEG_MIN_MM;
+        }
         p_plan->leg_forward_mm = p_prof->nearest_mm + OBS_DEPTH_ASSUMED_MM
                                  + OBS_ROBOT_LEN_MM;
         if ((p_plan->leg_lateral_mm > OBS_LEG_LAT_MAX_MM)
@@ -178,65 +187,90 @@ void obs_profile_plan(obs_profile_t const * p_prof, obs_plan_t * p_plan)
 
 /**
  * obs_make_points
- * @brief   Converts each near scan reading to (x, y) and finds the point
- *          with the smallest forward distance.
+ * @brief   Converts each near scan reading to (x, y).
  * @param   p_scan_mm 25 distances
  * @param   p_pts     25 points out
- * @param   p_best    step of the nearest point, APP_SCAN_STEPS if none
  * @context any
  */
-static void obs_make_points(uint16_t const * p_scan_mm, obs_point_t * p_pts,
-                            uint32_t * p_best)
+static void obs_make_points(uint16_t const * p_scan_mm, obs_point_t * p_pts)
 {
-    uint32_t best_y  = APP_PROFILE_CLEAR_MM;
     uint32_t sin_idx = 0u;
-    uint32_t dist    = 0u;
-    uint32_t x_mag   = 0u;
+    int32_t  dist    = 0;
+    int32_t  cos_q14 = 0;
 
     for (uint32_t step = 0u; step < APP_SCAN_STEPS; step++)
     {
-        dist                 = (uint32_t) p_scan_mm[step]; /* cast: widen */
-        sin_idx              = step + OBS_STEP_IDX_BASE;
-        p_pts[step].b_is_near = (dist < OBS_NEAR_MM);
-        p_pts[step].x_mm     = 0;
-        p_pts[step].y_mm     = APP_PROFILE_CLEAR_MM;
+        sin_idx               = step + OBS_STEP_IDX_BASE;
+        dist                  = (int32_t) p_scan_mm[step]; /* cast: widen */
+        p_pts[step].b_is_near = (p_scan_mm[step] < OBS_NEAR_MM);
+        p_pts[step].x_mm      = 0;
+        p_pts[step].y_mm      = APP_PROFILE_CLEAR_MM;
 
         if (p_pts[step].b_is_near)
         {
-            p_pts[step].y_mm = obs_q14_mul(dist, sin_idx);
-            if (sin_idx <= OBS_SIN_IDX_90)          /* right half: x >= 0 */
+            if (sin_idx <= OBS_SIN_IDX_90)          /* right half: cos >= 0 */
             {
-                x_mag            = obs_q14_mul(dist, OBS_SIN_IDX_90 - sin_idx);
-                p_pts[step].x_mm = (int32_t) x_mag; /* cast: < 400 */
+                cos_q14 = g_obs_sin_q14[OBS_SIN_IDX_90 - sin_idx];
             }
-            else                                    /* left half: x < 0  */
+            else                                    /* left half: cos < 0  */
             {
-                x_mag            = obs_q14_mul(dist, sin_idx - OBS_SIN_IDX_90);
-                p_pts[step].x_mm = -((int32_t) x_mag); /* cast: < 400 */
+                cos_q14 = -g_obs_sin_q14[sin_idx - OBS_SIN_IDX_90];
             }
-            if (p_pts[step].y_mm < best_y)
-            {
-                best_y  = p_pts[step].y_mm;
-                *p_best = step;
-            }
+            /* signed division by a power of two, truncates toward zero
+               (never >> on a signed value, review R19); |d x cos| < 2^23 */
+            p_pts[step].x_mm = (dist * cos_q14) / OBS_Q14_ONE;
+            /* cast: d >= 0 and sin >= 0, so the quotient is >= 0 */
+            p_pts[step].y_mm = (uint32_t) ((dist * g_obs_sin_q14[sin_idx])
+                                           / OBS_Q14_ONE);
         }
     }
 }
 
 /**
- * obs_q14_mul
- * @brief   distance x sin(5 x sin_idx deg), Q14, unsigned.
- * @param   distance_mm 0..1023
- * @param   sin_idx     0..36
- * @return  mm
+ * obs_pick_blocking
+ * @brief   Splits the near points into runs (one object each) and picks
+ *          the nearest point of the runs that block the corridor
+ *          (-c <= x <= c for at least one point of the run).
+ * @param   p_pts points
+ * @return  step of that nearest point; APP_SCAN_STEPS if no run blocks
  * @context any
  */
-static uint32_t obs_q14_mul(uint32_t distance_mm, uint32_t sin_idx)
+static uint32_t obs_pick_blocking(obs_point_t const * p_pts)
 {
-    /* cast: table entries are 0..16384 */
-    uint32_t const sin_q14 = (uint32_t) g_obs_sin_q14[sin_idx];
+    /* cast: small positive constants */
+    int32_t const corridor = (int32_t) (OBS_ROBOT_HALF_W_MM
+                                        + OBS_SIDE_MARGIN_MM);
+    uint32_t      best     = APP_SCAN_STEPS;
+    uint32_t      best_y   = APP_PROFILE_CLEAR_MM;
+    uint32_t      run_best = APP_SCAN_STEPS;
+    bool          b_blocks = false;
 
-    return ((distance_mm * sin_q14) >> OBS_Q14_SHIFT);
+    for (uint32_t step = 0u; step < APP_SCAN_STEPS; step++)
+    {
+        if (p_pts[step].b_is_near)
+        {
+            if ((APP_SCAN_STEPS == run_best)
+                || (p_pts[step].y_mm < p_pts[run_best].y_mm))
+            {
+                run_best = step;                /* nearest point of run */
+            }
+            b_blocks = b_blocks || ((p_pts[step].x_mm >= -corridor)
+                                    && (p_pts[step].x_mm <= corridor));
+        }
+        if ((APP_SCAN_STEPS != run_best)
+            && ((OBS_STEP_LAST == step) || (!p_pts[step + 1u].b_is_near)))
+        {
+            if (b_blocks && (p_pts[run_best].y_mm < best_y))
+            {
+                best   = run_best;              /* run ends here */
+                best_y = p_pts[run_best].y_mm;
+            }
+            run_best = APP_SCAN_STEPS;
+            b_blocks = false;
+        }
+    }
+
+    return best;
 }
 
 /**

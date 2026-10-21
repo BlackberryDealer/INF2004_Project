@@ -1,13 +1,14 @@
 /*
  * sim_obstacle_host.c
- * Laptop simulation of obstacle.c (echo path, confirmation, scanner,
- * profile and plan) against a simple world: a flat face in front of the
- * robot. Checks the event order (ESTOP before OBSTACLE, board before
- * PLAN), the mm conversion, NO_PATH, RANGE_CLAMP and NO_ECHO.
+ * Laptop simulation of obstacle.c (echo window and freshness counters,
+ * confirmation, scanner, profile and plan) against a simple world: a
+ * flat face in front of the robot. Covers S5-U14 (distance conversion)
+ * and the host parts of S5-U17, S5-U24, S5-U25 and S5-U26.
  * Host-only test code, outside BARR-C scope. Run: make -C testing/subsystem5/host
  */
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 #include "app_program/app.h"
 typedef struct { void *exinf; ATR sematr; INT isemcnt; INT maxsem; } T_CSEM;
 ID tk_cre_sem(T_CSEM const *p); ER tk_wai_sem(ID id, INT c, TMO t); ER tk_sig_sem(ID id, INT c);
@@ -15,8 +16,12 @@ ER tk_slp_tsk(TMO t); ID tk_get_tid(void);
 #include "app_program/subsystem5/obstacle.c"
 
 static int sem; static uint32_t g_now, g_safety, g_fault, g_modes, g_servo = 90;
+static bool g_echo_high;           /* echo line already high (stuck) */
 ID tk_cre_sem(T_CSEM const *p) { (void) p; return 3; }
-ER tk_wai_sem(ID id, INT c, TMO t) { (void) id; (void) c; (void) t; if (sem > 0) { sem--; return E_OK; } return E_TMOUT; }
+ER tk_wai_sem(ID id, INT c, TMO t) { (void) id; (void) c;
+  if (sem > 0) { sem--; return E_OK; }
+  if (t > 0) { g_now += (uint32_t) t * 1000u; }   /* time passes while waiting */
+  return E_TMOUT; }
 ER tk_sig_sem(ID id, INT c) { (void) id; (void) c; if (sem >= 1) return -43; sem++; return E_OK; }
 ER tk_slp_tsk(TMO t) { (void) t; return E_OK; }
 ID tk_get_tid(void) { return 5; }
@@ -38,75 +43,95 @@ void safety_set(uint32_t b) { g_safety |= b; }
 void fault_set(uint32_t b) { g_fault |= b; }
 uint32_t odometry_counts_to_mm(uint32_t c) { return (c * 349u) / 1000u; }
 bool mission_mode_is_set(uint32_t b) { return 0u != (g_modes & b); }
+bool gpio_get(uint32_t pin) { (void) pin; return g_echo_high; }
 /* world */
 static int w_mode;                 /* 0 = fixed distance, 1 = face, 2 = silent */
-static uint32_t w_dist = 1000;     /* mode 0 */
+static uint32_t w_dist = 1000;
 static int32_t w_y = 240, w_xl = -60, w_xr = 80;
 static uint32_t world_mm(void) {
   if (0 == w_mode) return w_dist;
-  { double th = (double) g_servo * 3.14159265 / 180.0, s = __builtin_sin(th), c = __builtin_cos(th);
-    double x = (double) w_y * c / s;   /* + = right (0 deg = right) */
+  { double th = (double) g_servo * 3.14159265 / 180.0, s = sin(th), c = cos(th);
+    double x = (double) w_y * c / s;
     if (x >= w_xl && x <= w_xr) return (uint32_t) ((double) w_y / s); }
-  return 6000;   /* far: long echo */ }
+  return 6000; }
 void drv_ultrasonic_trigger(void) {
   uint32_t d, w;
   if (2 == w_mode) return;
-  d = world_mm(); w = (uint32_t) ((double) d * 5.831);
+  d = world_mm(); w = (uint32_t) ((double) d * 5.8);
   if (w > 38000u) w = 38000u;
   obstacle_echo_isr(DRV_GPIO_IRQ_RISE, g_now + 500u);
   obstacle_echo_isr(DRV_GPIO_IRQ_FALL, g_now + 500u + w); }
-/* events */
-static uint32_t ev[64], evv[64], evsafety[64], evlegs[64]; static int nev;
+static uint32_t ev[64], evv[64], evsafety[64], evlegs[64], evservo[64]; static int nev;
 bool mission_post_event(uint32_t t, uint32_t v) { status_board_t s; status_board_read(&s);
-  ev[nev] = t; evv[nev] = v; evsafety[nev] = g_safety; evlegs[nev] = status_board_leg_lateral(&s); nev++; return true; }
+  ev[nev] = t; evv[nev] = v; evsafety[nev] = g_safety; evlegs[nev] = status_board_leg_lateral(&s); evservo[nev] = g_servo; nev++; return true; }
 static int pass_n, fail_n;
-#define CHECK(c, d) do { if (c) pass_n++; else { fail_n++; printf("FAIL %s (line %d) state=%u servo=%u nev=%d last=%u\n", d, __LINE__, g_state, g_servo, nev, nev ? ev[nev-1] : 99u); } } while (0)
+#define CHECK(id, c, d) do { if (c) { pass_n++; printf("[TEST] %s PASS  %s\n", id, d); } else { fail_n++; printf("[TEST] %s FAIL  %s (line %d) state=%u servo=%u nev=%d\n", id, d, __LINE__, g_state, g_servo, nev); } } while (0)
 static void cyc(void) { g_now += 60000u; obstacle_cycle(); }
 static int count_ev(uint32_t t) { int n = 0; for (int i = 0; i < nev; i++) if (ev[i] == t) n++; return n; }
+static uint32_t dist(void) { status_board_t s; status_board_read(&s); return status_board_distance(&s); }
 int main(void) {
   status_board_t snap;
   status_board_init(); obstacle_init();
+  /* S5-U14: conversion */
+  CHECK("S5-U14", 100u == obstacle_width_to_mm(580u / 4u), "580 us -> 100 mm");
+  CHECK("S5-U14", 1000u == obstacle_width_to_mm(5800u / 4u), "5800 us -> 1000 mm");
+  CHECK("S5-U14", APP_DIST_NONE_MM == obstacle_width_to_mm(4095u), "40 000 us (saturated width) -> APP_DIST_NONE_MM");
+  CHECK("S5-U14", 0u == (obstacle_width_to_mm(300u) % 4u), "readings stored in 4 mm steps");
   w_mode = 0; w_dist = 1000; cyc(); cyc();
-  status_board_read(&snap);
-  CHECK(APP_SCAN_MONITOR == g_state && 0 == nev, "far object: stay in MONITOR");
-  CHECK(status_board_distance(&snap) >= 995 && status_board_distance(&snap) <= 1000, "1000 mm measured as ~1000 mm (mm conversion)");
-  w_dist = 300; cyc(); status_board_read(&snap);
-  CHECK(status_board_distance(&snap) >= 298 && status_board_distance(&snap) <= 300, "300 mm echo -> ~300 mm");
-  CHECK(APP_SCAN_MONITOR == g_state, "one reading is not confirmed");
-  w_dist = 290; cyc(); CHECK(APP_SCAN_APPROACH == g_state && 1 == count_ev(APP_EVT_OBSTACLE_AHEAD), "two agreeing readings < 400 -> OBSTACLE_AHEAD");
-  w_dist = 300; cyc(); w_dist = 245; cyc(); CHECK(APP_SCAN_APPROACH == g_state, "245 right after 300 is not confirmed (diff 55)");
+  CHECK("S5-U08", APP_SCAN_MONITOR == g_state && 0 == nev && 1000u == dist(), "far object: MONITOR, 1000 mm measured");
+  w_dist = 300; cyc(); CHECK("S5-U08", 300u == dist() && APP_SCAN_MONITOR == g_state, "300 mm, not yet confirmed");
+  w_dist = 290; cyc(); CHECK("S5-U08", APP_SCAN_APPROACH == g_state && 1 == count_ev(APP_EVT_OBSTACLE_AHEAD), "two agreeing readings < 400 -> OBSTACLE_AHEAD");
+  w_dist = 300; cyc(); w_dist = 245; cyc(); CHECK("S5-U08", APP_SCAN_APPROACH == g_state, "245 right after 300 is not confirmed");
   w_dist = 240; cyc();
-  CHECK(APP_SCAN_STOPPED == g_state && 1 == count_ev(APP_EVT_OBSTACLE), "confirmed < 251 -> OBSTACLE, STOPPED");
-  CHECK((evsafety[nev - 1] & SAFETY_ESTOP) != 0u, "ESTOP was set before OBSTACLE was posted");
-  cyc(); cyc(); CHECK(APP_SCAN_STOPPED == g_state, "STOPPED waits for RESCAN");
+  CHECK("S5-U08", APP_SCAN_STOPPED == g_state && 1 == count_ev(APP_EVT_OBSTACLE), "confirmed < 251 -> OBSTACLE, STOPPED");
+  CHECK("S5-U08", (evsafety[nev - 1] & SAFETY_ESTOP) != 0u, "ESTOP set before OBSTACLE was posted");
   g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN; w_mode = 1;
-  cyc(); CHECK(APP_SCAN_COARSE == g_state && 30u == g_servo, "RESCAN rise -> COARSE at 30 deg");
+  cyc(); CHECK("S5-U08", APP_SCAN_COARSE == g_state && 30u == g_servo, "RESCAN rise -> COARSE at 30 deg");
   for (int i = 0; i < 120 && (APP_SCAN_COARSE == g_state || APP_SCAN_FINE == g_state); i++) cyc();
-  CHECK(APP_SCAN_BYPASS_WATCH == g_state, "scan finished -> BYPASS_WATCH");
-  CHECK(1 == count_ev(APP_EVT_PLAN) && APP_SIDE_LEFT == evv[nev - 1], "PLAN(left): obstacle extends further right");
-  CHECK(evlegs[nev - 1] > 0u, "legs were on the board before PLAN was posted");
+  CHECK("S5-U25", APP_SCAN_WATCH_SETTLE == g_state && 0 == count_ev(APP_EVT_PLAN) && 30u == g_servo, "scan done -> WATCH_SETTLE, servo at watch angle, PLAN not posted yet");
+  cyc(); cyc(); cyc(); CHECK("S5-U25", 0 == count_ev(APP_EVT_PLAN), "no PLAN before OBS_WATCH_SETTLE_PINGS cycles");
+  cyc(); CHECK("S5-U25", 1 == count_ev(APP_EVT_PLAN) && APP_SIDE_LEFT == evv[nev - 1] && APP_SCAN_BYPASS_WATCH == g_state, "PLAN(left) after exactly 4 cycles -> BYPASS_WATCH");
+  CHECK("S5-U08", evlegs[nev - 1] > 0u && 0u == (evlegs[nev - 1] % 4u), "legs on the board (4 mm steps) before PLAN");
   status_board_read(&snap);
-  printf("   profile: width %u nearest %u legs %u/%u clearL %u clearR %u step %u\n", status_board_width(&snap), status_board_nearest(&snap), status_board_leg_lateral(&snap), status_board_leg_forward(&snap), status_board_clear_left(&snap), status_board_clear_right(&snap), status_board_angle_step(&snap));
-  CHECK(status_board_is_profile_valid(&snap) && status_board_width(&snap) >= 100 && status_board_width(&snap) <= 145, "width 106 mm at 5 deg resolution (face -60..+80)");
-  CHECK(30u == g_servo, "watch angle 30 deg (obstacle on the robot's right)");
-  g_modes = 0; w_mode = 0; w_dist = 200; cyc(); cyc();
-  CHECK(0 == count_ev(APP_EVT_SIDE_TOO_CLOSE), "side 200 mm: fine");
-  w_dist = 50; cyc(); cyc(); cyc(); CHECK(1 == count_ev(APP_EVT_SIDE_TOO_CLOSE), "side 50 mm: SIDE_TOO_CLOSE once");
-  g_modes = APP_MODE_RESUME; cyc(); CHECK(APP_SCAN_MONITOR == g_state && 90u == g_servo, "RESUME rise -> MONITOR, servo 90");
+  printf("   profile: width %u nearest %u legs %u/%u step %u inferred 0x%x\n", status_board_width(&snap), status_board_nearest(&snap), status_board_leg_lateral(&snap), status_board_leg_forward(&snap), status_board_angle_step(&snap), g_inferred);
+  CHECK("S5-U08", status_board_is_profile_valid(&snap) && status_board_width(&snap) >= 100 && status_board_width(&snap) <= 145, "width at 5 deg resolution (face -60..+80)");
+  CHECK("S5-U08", 0u != g_inferred && 0u == (g_inferred & g_measured), "unmeasured steps marked inferred");
+  g_modes = 0; w_mode = 0; w_dist = 200; g_safety = 0; cyc(); cyc();
+  CHECK("S5-U08", 0 == count_ev(APP_EVT_SIDE_TOO_CLOSE), "side 200 mm: fine");
+  w_dist = 50; cyc(); cyc();
+  CHECK("S5-U08", 1 == count_ev(APP_EVT_SIDE_TOO_CLOSE) && (evsafety[nev - 1] & SAFETY_ESTOP) && APP_SCAN_STOPPED == g_state, "side 50 mm: ESTOP, then SIDE_TOO_CLOSE once, STOPPED");
+  g_modes = APP_MODE_RESUME; cyc(); CHECK("S5-U08", APP_SCAN_MONITOR == g_state && 90u == g_servo, "RESUME rise -> MONITOR, servo 90");
   g_modes = 0; w_dist = 1000; cyc(); cyc();
-  /* NO_PATH scan: wall everywhere */
-  w_dist = 380; cyc(); cyc(); w_dist = 240; cyc(); cyc(); CHECK(APP_SCAN_STOPPED == g_state, "second obstacle -> STOPPED");
+  /* NO_PATH */
+  w_dist = 380; cyc(); cyc(); w_dist = 240; cyc(); cyc(); CHECK("S5-U08", APP_SCAN_STOPPED == g_state, "second obstacle -> STOPPED");
   g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN; w_mode = 1; w_y = 200; w_xl = -400; w_xr = 400;
-  for (int i = 0; i < 120 && APP_SCAN_BYPASS_WATCH != g_state && (i < 2 || APP_SCAN_STOPPED != g_state); i++) cyc();
-  CHECK(1 == count_ev(APP_EVT_NO_PATH) && APP_SCAN_STOPPED == g_state, "wide wall -> NO_PATH, back to STOPPED");
-  CHECK(0u != (g_fault & APP_FAULT_RANGE_CLAMP), "clipped leg sets RANGE_CLAMP");
-  /* silent sensor */
-  g_modes = APP_MODE_RESUME; cyc(); g_modes = 0; w_mode = 2; cyc(); cyc();
-  CHECK(0u == (g_fault & APP_FAULT_NO_ECHO), "2 silent pings: no fault yet");
-  cyc(); CHECK(0u != (g_fault & APP_FAULT_NO_ECHO), "3 silent pings -> FAULT_NO_ECHO");
+  for (int i = 0; i < 120 && 0 == count_ev(APP_EVT_NO_PATH); i++) cyc();
+  CHECK("S5-U08", 1 == count_ev(APP_EVT_NO_PATH) && APP_SCAN_STOPPED == g_state && 90u == g_servo, "wide wall -> NO_PATH, STOPPED, servo 90");
+  CHECK("S5-U08", 0u != (g_fault & APP_FAULT_RANGE_CLAMP), "clipped leg sets RANGE_CLAMP");
+  /* S5-U26: one good echo, then pings with no edges at all */
+  g_modes = APP_MODE_RESUME; w_mode = 0; w_dist = 600; cyc(); g_modes = 0; cyc();
+  CHECK("S5-U26", 600u == dist(), "good echo: 600 mm");
+  w_mode = 2; g_fault = 0;
+  { int ok = 1; for (int i = 0; i < 5; i++) { cyc(); if (APP_DIST_NONE_MM != dist()) ok = 0; } CHECK("S5-U26", ok, "5 silent pings all read APP_DIST_NONE_MM, never the cached 600 mm"); }
+  CHECK("S5-U26", 0u != (g_fault & APP_FAULT_NO_ECHO), "silent sensor -> FAULT_NO_ECHO");
+  /* S5-U24: echo line stuck high: no trigger, silent */
+  w_mode = 0; w_dist = 500; cyc(); cyc(); g_fault = 0; g_echo_high = true;
+  { int ok = 1; for (int i = 0; i < 5; i++) { cyc(); if (APP_DIST_NONE_MM != dist()) ok = 0; } CHECK("S5-U24", ok, "ECHO held high: no measurement accepted"); }
+  CHECK("S5-U24", 0u != (g_fault & APP_FAULT_NO_ECHO), "stuck sensor reported silent -> NO_ECHO");
+  g_echo_high = false;
+  /* S5-U17: a falling edge outside the window is never used */
+  { uint8_t done_before = g_echo_done_cnt;
+    obstacle_echo_isr(DRV_GPIO_IRQ_FALL, g_now + 100u);
+    CHECK("S5-U17", done_before == g_echo_done_cnt, "fall with the window closed is ignored");
+    g_echo_window_open = 1u; obstacle_echo_isr(DRV_GPIO_IRQ_RISE, g_now); g_ping_seq++;
+    obstacle_echo_isr(DRV_GPIO_IRQ_FALL, g_now + 1000u); g_echo_window_open = 0u;
+    CHECK("S5-U17", done_before == g_echo_done_cnt, "fall of an older ping (sequence moved on) is ignored");
+    g_echo_window_open = 1u; obstacle_echo_isr(DRV_GPIO_IRQ_RISE, g_now);
+    obstacle_echo_isr(DRV_GPIO_IRQ_FALL, g_now + 45000u); g_echo_window_open = 0u;
+    CHECK("S5-U17", done_before == g_echo_done_cnt, "fall older than the 40 ms timeout is ignored"); }
   /* lost echoes in APPROACH stop the robot */
-  w_mode = 0; w_dist = 350; g_safety = 0; cyc(); cyc(); CHECK(APP_SCAN_APPROACH == g_state, "approach again");
-  w_mode = 2; cyc(); cyc(); CHECK(APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP), "2 lost echoes in APPROACH -> ESTOP");
+  w_mode = 0; w_dist = 350; g_safety = 0; cyc(); cyc(); CHECK("S5-U08", APP_SCAN_APPROACH == g_state, "approach again");
+  w_mode = 2; cyc(); cyc(); CHECK("S5-U08", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP), "2 lost echoes in APPROACH -> ESTOP");
   printf("[TEST] S5-U08 obstacle simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
   return fail_n;
 }

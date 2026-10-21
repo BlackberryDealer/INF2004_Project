@@ -16,6 +16,13 @@
 
 #define MISSION_REQ_NONE   (0xFFu)   /* sys_request: stay in RUN */
 
+/* Motion commands mission tracks (mission_send_move) */
+#define MISSION_MV_FWD     (0u)      /* motion_move_forward(param mm)   */
+#define MISSION_MV_BACK    (1u)      /* motion_move_backward(param mm)  */
+#define MISSION_MV_LEFT    (2u)      /* motion_turn_left(param deg)     */
+#define MISSION_MV_RIGHT   (3u)      /* motion_turn_right(param deg)    */
+#define MISSION_MV_ZERO    (4u)      /* motion_reset_odometry()         */
+
 /* One event taken from K4 (or made from a button press) */
 typedef struct
 {
@@ -64,10 +71,29 @@ typedef struct
     bool     b_inhibit_pending;  /* clear inhibits at inhibit_mark */
     bool     b_fr9_running;
     bool     b_wait_standstill;  /* AVOID entry: wait for 0 speed */
-    bool     b_reset_pending;    /* FAULT: RESET seen, check next pass */
     bool     b_has_run;          /* run start values are valid */
     bool     b_post_avoid_slow;  /* FOLLOW at SLOW until inhibits clear */
     bool     b_is_quiet;         /* test matrix: no logging */
+
+    /* tracked motion command (B5.2.6 step 6) */
+    uint32_t wait_tag;           /* tag of the move mission waits for */
+    bool     b_move_pending;     /* a MOVE, TURN or ZERO is outstanding */
+    uint32_t move_start_us;      /* E5 timer: when it was sent */
+    uint32_t move_limit_ms;      /* its completion deadline */
+    bool     b_retry_pending;    /* last send refused: retry next pass */
+    uint32_t retry_kind;         /* MISSION_MV_* to retry */
+    int32_t  retry_param;
+    bool     b_motion_failed;    /* refused twice or deadline: FAULT */
+
+    /* calibration, startup, run start and recovery */
+    bool     b_imu_valid;
+    bool     b_ir_valid;
+    bool     b_wdt_enabled;      /* startup window already started */
+    bool     b_run_starting;     /* READY: RUN_START handshake running */
+    bool     b_zero_done;        /* ZERO acknowledged */
+    uint32_t run_start_set_us;   /* E5 timer: RUN_START was set */
+    bool     b_recovering;       /* common recovery (100 ms) running */
+    uint32_t recover_start_us;   /* E5 timer */
 } mission_ctx_t;
 
 /* Enters RUN at FOLLOW. */
@@ -85,6 +111,20 @@ extern void mission_run_handle(mission_ctx_t * p_ctx,
 /* Starts a RESUME pulse (FLG_MODE RESUME set now, cleared by mission.c
    MISSION_RESUME_PULSE_MS later).                                    */
 extern void mission_run_resume_pulse(mission_ctx_t * p_ctx, uint32_t now_us);
+
+/* The only way mission sends MOVE, TURN or ZERO (review V13-04): on
+   success waits for the tagged MOVE_DONE with a deadline computed from
+   the command (V14-01); a refusal is retried once on the next pass,
+   a second refusal sets APP_FAULT_MOTOR_STALL and b_motion_failed.
+   Implemented in mission.c.                                          */
+extern bool mission_send_move(mission_ctx_t * p_ctx, uint32_t kind,
+                              int32_t param, uint32_t now_us);
+
+/* motion_stop() and forget any outstanding or retried command. */
+extern void mission_stop_motion(mission_ctx_t * p_ctx);
+
+/* Completion deadline of a command, ms (host-testable, S5-U27). */
+extern uint32_t mission_move_deadline_ms(uint32_t kind, int32_t param);
 
 #if APP_TEST
 /* S5-U05: every state x every event type on a scratch context.

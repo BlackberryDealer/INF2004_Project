@@ -5,7 +5,7 @@
  *          Baseline representation (natural types).
  * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    task
- * @reqs    FR11 (buttons), FR14, FR16, FR17, NFR10b, min-bit item 7
+ * @reqs    FR11 (buttons), FR13, FR14, FR16, FR17, NFR10b, min-bit item 7
  */
 
 #include "mission.h"           /* own header first (BARR-C 4.3.c) */
@@ -96,11 +96,12 @@ static void mission_st_cal_ir(mission_ctx_t * p_ctx, uint32_t type,
                               uint32_t now_us);
 static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
                              status_board_t const * p_snap, uint32_t now_us);
-static void mission_st_fault(mission_ctx_t * p_ctx, uint32_t type,
+static void mission_st_ended(mission_ctx_t * p_ctx, uint32_t type,
                              status_board_t const * p_snap, uint32_t now_us);
-static void mission_reset_to_ready(mission_ctx_t * p_ctx,
-                                   status_board_t const * p_snap,
-                                   uint32_t now_us);
+static void mission_recover_done(mission_ctx_t * p_ctx, bool b_again,
+                                 status_board_t const * p_snap,
+                                 uint32_t now_us);
+static void mission_moves(mission_ctx_t * p_ctx, uint32_t now_us);
 static void mission_faults(mission_ctx_t * p_ctx,
                            status_board_t const * p_snap, uint32_t now_us);
 static void mission_timers(mission_ctx_t * p_ctx, uint32_t now_us);
@@ -399,7 +400,10 @@ static void mission_ctx_reset(mission_ctx_t * p_ctx)
 
 /**
  * mission_pass
- * @brief   Steps 3-6 of B5.2.6 for one pass.
+ * @brief   Steps 3-6 of B5.2.6 for one pass, plus the tracked-move rules:
+ *          a MOVE_DONE counts only if it carries the awaited tag; a
+ *          refused command is retried once; a missed deadline or a second
+ *          refusal ends in FAULT.
  * @param   p_ctx  mission context
  * @param   p_evt  K4 event of this pass (may be empty)
  * @param   p_btn  button event of this pass (may be empty)
@@ -413,15 +417,34 @@ static void mission_pass(mission_ctx_t * p_ctx,
                          status_board_t const * p_snap, uint32_t now_us)
 {
     status_board_mission_t before = {0u, 0u, 0u, 0u, false, 0u};
+    mission_evt_in_t       evt    = *p_evt;
+
+    if (evt.b_has_event && (APP_EVT_MOVE_DONE == evt.type))
+    {
+        if (p_ctx->b_move_pending && (evt.value == p_ctx->wait_tag))
+        {
+            p_ctx->b_move_pending = false;      /* the awaited command */
+        }
+        else
+        {
+            evt.b_has_event = false;            /* stale: cancelled move */
+        }
+    }
 
     mission_part(p_ctx, &before);
     mission_timers(p_ctx, now_us);
+    mission_moves(p_ctx, now_us);
     mission_faults(p_ctx, p_snap, now_us);              /* 3 */
-    mission_dispatch(p_ctx, p_evt, p_snap, now_us);     /* 4 */
+    mission_dispatch(p_ctx, &evt, p_snap, now_us);      /* 4 */
     if (p_btn->b_has_event)
     {
         mission_dispatch(p_ctx, p_btn, p_snap, now_us);
     }
+    if (p_ctx->b_motion_failed && (APP_SYS_FAULT != p_ctx->sys_state))
+    {
+        mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
+    }
+    p_ctx->b_motion_failed = false;
     mission_publish(p_ctx, &before);                    /* 5 */
     mission_forward(p_evt);                             /* 6 */
 #if APP_TEST
@@ -445,7 +468,10 @@ static void mission_dispatch(mission_ctx_t * p_ctx,
     switch (p_ctx->sys_state)
     {
         case APP_SYS_BOOT:
-            mission_enter(p_ctx, APP_SYS_CAL_IMU, p_snap, now_us);
+            if (sys_health_is_started())       /* startup window passed */
+            {
+                mission_enter(p_ctx, APP_SYS_CAL_IMU, p_snap, now_us);
+            }
             break;
         case APP_SYS_CAL_IMU:
             mission_st_cal_imu(p_ctx, type, value, p_snap, now_us);
@@ -467,14 +493,8 @@ static void mission_dispatch(mission_ctx_t * p_ctx,
             break;
         case APP_SYS_FINISHED:
         case APP_SYS_LINE_LOST_STOP:
-            if (APP_EVT_RESET == type)
-            {
-                safety_clear(SAFETY_ESTOP);  /* run may have ended in AVOID */
-                mission_reset_to_ready(p_ctx, p_snap, now_us);
-            }
-            break;
         case APP_SYS_FAULT:
-            mission_st_fault(p_ctx, type, p_snap, now_us);
+            mission_st_ended(p_ctx, type, p_snap, now_us);
             break;
         default:
             mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
@@ -491,24 +511,36 @@ static void mission_dispatch(mission_ctx_t * p_ctx,
 static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
                           status_board_t const * p_snap, uint32_t now_us)
 {
-    p_ctx->sys_state = sys_state;
-    p_ctx->substep   = 0u;
+    p_ctx->sys_state      = sys_state;
+    p_ctx->substep        = 0u;
+    p_ctx->b_run_starting = false;
+    p_ctx->b_recovering   = false;
 
     switch (sys_state)
     {
         case APP_SYS_BOOT:
-            (void) motion_stop();                 /* motors braked */
-            sys_health_enable_watchdog();
+            mission_stop_motion(p_ctx);           /* motors braked */
+            if (!p_ctx->b_wdt_enabled)
+            {
+                sys_health_enable_watchdog();     /* first boot only */
+                p_ctx->b_wdt_enabled = true;
+            }
+            mission_mode_clear(APP_MODE_ALL);
+            p_ctx->b_resume_pending = false;      /* RESUME was cleared */
+            mission_run_resume_pulse(p_ctx, now_us);
+            p_ctx->b_imu_valid = false;
+            p_ctx->b_ir_valid  = false;
             break;
         case APP_SYS_CAL_IMU:
             mission_mode_set(APP_MODE_CAL_IMU);
             p_ctx->cal_start_us = now_us;
             break;
         case APP_SYS_CAL_IR:
-            mission_mode_set(APP_MODE_CAL_IR);
+            mission_mode_set(APP_MODE_CAL_IR | APP_MODE_MOTOR_EN);
             p_ctx->cal_start_us   = now_us;
             p_ctx->sweep_start_us = now_us;
-            (void) motion_turn_left(MISSION_CAL_SWEEP_DEG);  /* in range */
+            (void) mission_send_move(p_ctx, MISSION_MV_LEFT,
+                                     MISSION_CAL_SWEEP_DEG, now_us);
             break;
         case APP_SYS_READY:
             p_ctx->b_is_warning = false;
@@ -519,18 +551,21 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
             break;
         case APP_SYS_FINISHED:
         case APP_SYS_LINE_LOST_STOP:
-            (void) motion_stop();                 /* always acts */
+            mission_stop_motion(p_ctx);
+            mission_mode_clear(APP_MODE_MOTOR_EN);  /* every RUN exit */
             mission_summary(p_ctx, p_snap, now_us);
             break;
         case APP_SYS_FAULT:
             p_ctx->end_reason = APP_END_FAULT;
-            (void) motion_stop();                 /* always acts */
+            mission_stop_motion(p_ctx);
+            mission_mode_clear(APP_MODE_MOTOR_EN);
             safety_set(SAFETY_FAULT);
             mission_summary(p_ctx, p_snap, now_us);
             break;
         default:
             p_ctx->sys_state = APP_SYS_FAULT;     /* unknown: fail safe */
-            (void) motion_stop();
+            mission_stop_motion(p_ctx);
+            mission_mode_clear(APP_MODE_MOTOR_EN);
             safety_set(SAFETY_FAULT);
             break;
     }
@@ -549,6 +584,7 @@ static void mission_st_cal_imu(mission_ctx_t * p_ctx, uint32_t type,
 
     if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IMU == value))
     {
+        p_ctx->b_imu_valid = true;
         mission_mode_clear(APP_MODE_CAL_IMU);
         mission_enter(p_ctx, APP_SYS_CAL_IR, p_snap, now_us);
     }
@@ -566,8 +602,9 @@ static void mission_st_cal_imu(mission_ctx_t * p_ctx, uint32_t type,
 
 /**
  * mission_st_cal_ir
- * @brief   CAL_IR: sweep left 30, right 60, left 30 over the line, then
- *          clear the mode; CAL_DONE(IR) -> READY. Sweep over 3 s -> stop;
+ * @brief   CAL_IR: sweep left 30, right 60, left 30 over the line (each
+ *          leg starts on the tagged MOVE_DONE), then clear CAL_IR and
+ *          MOTOR_EN; CAL_DONE(IR) -> READY. Sweep over 3 s -> stop;
  *          10 s in total -> CAL_TIMEOUT fault.
  * @context mission_task
  */
@@ -577,25 +614,37 @@ static void mission_st_cal_ir(mission_ctx_t * p_ctx, uint32_t type,
 {
     uint32_t const sweep_us = MISSION_CAL_SWEEP_MAX_MS * MISSION_US_PER_MS;
     uint32_t const limit_us = MISSION_CAL_TIMEOUT_MS * MISSION_US_PER_MS;
+    uint32_t const cal_ir   = APP_MODE_CAL_IR | APP_MODE_MOTOR_EN;
 
     if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IR == value))
     {
-        mission_mode_clear(APP_MODE_CAL_IR);
-        mission_enter(p_ctx, APP_SYS_READY, p_snap, now_us);
+        mission_stop_motion(p_ctx);
+        mission_mode_clear(cal_ir);
+        p_ctx->b_ir_valid = true;
+        if (p_ctx->b_imu_valid)
+        {
+            mission_enter(p_ctx, APP_SYS_READY, p_snap, now_us);
+        }
+        else
+        {
+            mission_enter(p_ctx, APP_SYS_BOOT, p_snap, now_us);
+        }
     }
     else if (APP_EVT_MOVE_DONE == type)
     {
         if (0u == p_ctx->substep)
         {
-            (void) motion_turn_right(2 * MISSION_CAL_SWEEP_DEG);  /* 60 */
+            (void) mission_send_move(p_ctx, MISSION_MV_RIGHT,
+                                     2 * MISSION_CAL_SWEEP_DEG, now_us);
         }
         else if (1u == p_ctx->substep)
         {
-            (void) motion_turn_left(MISSION_CAL_SWEEP_DEG);       /* 30 */
+            (void) mission_send_move(p_ctx, MISSION_MV_LEFT,
+                                     MISSION_CAL_SWEEP_DEG, now_us);
         }
         else
         {
-            mission_mode_clear(APP_MODE_CAL_IR);   /* sweep done */
+            mission_mode_clear(cal_ir);           /* sweep done */
         }
         if (p_ctx->substep < 3u)
         {
@@ -613,16 +662,16 @@ static void mission_st_cal_ir(mission_ctx_t * p_ctx, uint32_t type,
     }
     else if ((now_us - p_ctx->cal_start_us) >= limit_us)
     {
-        mission_mode_clear(APP_MODE_CAL_IR);
-        (void) motion_stop();
+        mission_mode_clear(cal_ir);
+        mission_stop_motion(p_ctx);
         fault_set(APP_FAULT_CAL_TIMEOUT);
         mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
     }
     else if ((p_ctx->substep < 3u)
              && ((now_us - p_ctx->sweep_start_us) >= sweep_us))
     {
-        (void) motion_stop();                     /* sweep took > 3 s */
-        mission_mode_clear(APP_MODE_CAL_IR);
+        mission_stop_motion(p_ctx);               /* sweep took > 3 s */
+        mission_mode_clear(cal_ir);
         p_ctx->substep = 3u;
     }
     else
@@ -633,15 +682,21 @@ static void mission_st_cal_ir(mission_ctx_t * p_ctx, uint32_t type,
 
 /**
  * mission_st_ready
- * @brief   READY: START -> 1 s warning (buzzer + LED) -> RUN.
+ * @brief   READY: START -> 1 s warning (buzzer + LED) -> run start: set
+ *          RUN_START, ZERO the odometry and wait for its tagged MOVE_DONE
+ *          (deadline 200 ms -> FAULT), hold RUN_START >= 30 ms so line,
+ *          barcode and IMU reset their per-run state, then clear it, set
+ *          MOTOR_EN and enter RUN with run_start_path = 0.
  * @context mission_task
  */
 static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
                              status_board_t const * p_snap, uint32_t now_us)
 {
     uint32_t const warn_us = MISSION_START_WARN_MS * MISSION_US_PER_MS;
+    uint32_t const hold_us = MISSION_RUN_START_HOLD_MS * MISSION_US_PER_MS;
 
-    if ((APP_EVT_START == type) && (!p_ctx->b_is_warning))
+    if ((APP_EVT_START == type) && (!p_ctx->b_is_warning)
+        && (!p_ctx->b_run_starting))
     {
         p_ctx->b_is_warning  = true;
         p_ctx->warn_start_us = now_us;
@@ -650,78 +705,116 @@ static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
     else if (p_ctx->b_is_warning
              && ((now_us - p_ctx->warn_start_us) >= warn_us))
     {
-        p_ctx->b_is_warning   = false;
+        p_ctx->b_is_warning     = false;
         hmi_set_warning(false);
-        p_ctx->run_start_us   = now_us;
-        p_ctx->run_start_path = status_board_path(p_snap);
-        p_ctx->b_has_run      = true;
-        p_ctx->end_reason     = APP_END_STOP;
-        mission_enter(p_ctx, APP_SYS_RUN, p_snap, now_us);
+        p_ctx->b_run_starting   = true;
+        p_ctx->b_zero_done      = false;
+        p_ctx->run_start_set_us = now_us;
+        mission_mode_set(APP_MODE_RUN_START);
+        (void) mission_send_move(p_ctx, MISSION_MV_ZERO, 0, now_us);
+    }
+    else if (p_ctx->b_run_starting)
+    {
+        if (APP_EVT_MOVE_DONE == type)
+        {
+            p_ctx->b_zero_done = true;            /* tagged ack arrived */
+        }
+        if (p_ctx->b_zero_done
+            && ((now_us - p_ctx->run_start_set_us) >= hold_us))
+        {
+            mission_mode_clear(APP_MODE_RUN_START);
+            p_ctx->run_start_us   = now_us;
+            p_ctx->run_start_path = 0u;           /* odometry rebased */
+            p_ctx->b_has_run      = true;
+            p_ctx->end_reason     = APP_END_STOP;
+            mission_mode_set(APP_MODE_MOTOR_EN);
+            mission_enter(p_ctx, APP_SYS_RUN, p_snap, now_us);
+        }
     }
     else
     {
-        /* waiting for START or for the warning to end */
+        /* waiting for START */
     }
 }
 
 /**
- * mission_st_fault
- * @brief   FAULT: RESET clears faults (not the Wi-Fi bit, the bridge owns
- *          it) and safety bits; one pass later READY unless a stop fault
- *          came back, in which case the robot stays in FAULT.
+ * mission_st_ended
+ * @brief   FINISHED, LINE_LOST_STOP and FAULT: RESET starts the common
+ *          recovery (review V13-02): stop, clear faults (not Wi-Fi, the
+ *          bridge owns it), safety bits and modes, pulse RESUME, then wait
+ *          100 ms as a mission timer (the feeder never sleeps). Anything
+ *          set again -> FAULT; else FAULT goes to BOOT (recalibration),
+ *          FINISHED / LINE_LOST_STOP go to READY.
  * @context mission_task
  */
-static void mission_st_fault(mission_ctx_t * p_ctx, uint32_t type,
+static void mission_st_ended(mission_ctx_t * p_ctx, uint32_t type,
                              status_board_t const * p_snap, uint32_t now_us)
 {
-    if (p_ctx->b_reset_pending)
+    uint32_t const wait_us = MISSION_RECOVER_MS * MISSION_US_PER_MS;
+    bool           b_again = false;
+
+    if (p_ctx->b_recovering)
     {
-        p_ctx->b_reset_pending = false;
-        if (0u != (fault_get() & APP_FAULT_STOP_MASK))
+        if ((now_us - p_ctx->recover_start_us) >= wait_us)
         {
-            (void) motion_stop();                 /* stay in FAULT */
-            safety_set(SAFETY_FAULT);
-        }
-        else
-        {
-            mission_reset_to_ready(p_ctx, p_snap, now_us);
+            p_ctx->b_recovering = false;
+            b_again = (0u != (fault_get() & APP_FAULT_STOP_MASK))
+                      || (0u != safety_get());
+            mission_recover_done(p_ctx, b_again, p_snap, now_us);
         }
     }
     else if (APP_EVT_RESET == type)
     {
+        mission_stop_motion(p_ctx);
         fault_clear(APP_FAULT_ALL & ~APP_FAULT_WIFI_LOSS);
         safety_clear(SAFETY_ALL);
-        p_ctx->b_reset_pending = true;            /* check next pass */
+        mission_mode_clear(APP_MODE_ALL);
+        p_ctx->b_resume_pending = false;          /* RESUME was cleared */
+        mission_run_resume_pulse(p_ctx, now_us);
+        p_ctx->b_recovering     = true;
+        p_ctx->recover_start_us = now_us;
     }
     else
     {
-        /* stay in FAULT */
+        /* stay until RESET */
     }
 }
 
 /**
- * mission_reset_to_ready
- * @brief   Every RESET out of FINISHED / LINE_LOST_STOP / FAULT: clear all
- *          mode requests and pulse RESUME so obstacle_task goes back to
- *          MONITOR even if the run ended mid-scan; then READY.
+ * mission_recover_done
+ * @brief   End of the 100 ms recovery wait.
+ * @param   b_again true if a stop fault or a safety bit came back
  * @context mission_task
  */
-static void mission_reset_to_ready(mission_ctx_t * p_ctx,
-                                   status_board_t const * p_snap,
-                                   uint32_t now_us)
+static void mission_recover_done(mission_ctx_t * p_ctx, bool b_again,
+                                 status_board_t const * p_snap,
+                                 uint32_t now_us)
 {
-    /* RESUME is left alone here: clearing and setting it in one pass
-       would give obstacle_task no edge (mode-bit rule).             */
-    mission_mode_clear(APP_MODE_ALL & ~APP_MODE_RESUME);
-    mission_run_resume_pulse(p_ctx, now_us);
-    p_ctx->b_has_run = false;
-    mission_enter(p_ctx, APP_SYS_READY, p_snap, now_us);
+    if (b_again && (APP_SYS_FAULT == p_ctx->sys_state))
+    {
+        mission_stop_motion(p_ctx);               /* stay in FAULT */
+        safety_set(SAFETY_FAULT);
+    }
+    else if (b_again)
+    {
+        mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
+    }
+    else if (APP_SYS_FAULT == p_ctx->sys_state)
+    {
+        p_ctx->b_has_run = false;
+        mission_enter(p_ctx, APP_SYS_BOOT, p_snap, now_us);  /* recalibrate */
+    }
+    else
+    {
+        p_ctx->b_has_run = false;
+        mission_enter(p_ctx, APP_SYS_READY, p_snap, now_us);
+    }
 }
 
 /**
  * mission_faults
- * @brief   Reports newly set fault bits to telemetry and enters FAULT on
- *          any stop fault.
+ * @brief   Reports newly set fault bits to telemetry; enters FAULT on any
+ *          stop fault, and on an IMPACT during CAL_IR or RUN (review R07).
  * @context mission_task
  */
 static void mission_faults(mission_ctx_t * p_ctx,
@@ -729,6 +822,8 @@ static void mission_faults(mission_ctx_t * p_ctx,
 {
     uint32_t const faults = fault_get();
     uint32_t const fresh  = faults & ~p_ctx->last_faults;
+    bool const     b_move = (APP_SYS_CAL_IR == p_ctx->sys_state)
+                            || (APP_SYS_RUN == p_ctx->sys_state);
 
     for (uint32_t idx = 0u; idx < APP_FAULT_COUNT; idx++)
     {
@@ -744,6 +839,150 @@ static void mission_faults(mission_ctx_t * p_ctx,
     {
         mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
     }
+    else if (b_move && (0u != (safety_get() & SAFETY_IMPACT)))
+    {
+        mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
+    }
+    else
+    {
+        /* no fault transition */
+    }
+}
+
+/**
+ * mission_moves
+ * @brief   Retries a refused command once; ends in FAULT if the awaited
+ *          MOVE_DONE misses its deadline.
+ * @context mission_task
+ */
+static void mission_moves(mission_ctx_t * p_ctx, uint32_t now_us)
+{
+    if (p_ctx->b_retry_pending)
+    {
+        (void) mission_send_move(p_ctx, p_ctx->retry_kind,
+                                 p_ctx->retry_param, now_us);
+    }
+    else if (p_ctx->b_move_pending
+             && ((now_us - p_ctx->move_start_us)
+                 >= (p_ctx->move_limit_ms * MISSION_US_PER_MS)))
+    {
+        mission_stop_motion(p_ctx);               /* deadline passed */
+        p_ctx->b_motion_failed = true;
+    }
+    else
+    {
+        /* nothing outstanding, or still in time */
+    }
+}
+
+/**
+ * mission_send_move
+ * @brief   Sends MOVE, TURN or ZERO (see mission_run.h).
+ * @param   kind   MISSION_MV_*
+ * @param   param  mm or degrees (ignored for ZERO)
+ * @param   now_us this pass
+ * @return  true if motion accepted the command
+ * @context mission_task
+ */
+bool mission_send_move(mission_ctx_t * p_ctx, uint32_t kind, int32_t param,
+                       uint32_t now_us)
+{
+    bool b_is_sent = false;
+
+    switch (kind)
+    {
+        case MISSION_MV_FWD:
+            b_is_sent = motion_move_forward(param);
+            break;
+        case MISSION_MV_BACK:
+            b_is_sent = motion_move_backward(param);
+            break;
+        case MISSION_MV_LEFT:
+            b_is_sent = motion_turn_left(param);
+            break;
+        case MISSION_MV_RIGHT:
+            b_is_sent = motion_turn_right(param);
+            break;
+        default:
+            b_is_sent = motion_reset_odometry();
+            break;
+    }
+
+    if (b_is_sent)
+    {
+        p_ctx->wait_tag        = motion_last_tag();
+        p_ctx->b_move_pending  = true;
+        p_ctx->move_start_us   = now_us;
+        p_ctx->move_limit_ms   = mission_move_deadline_ms(kind, param);
+        p_ctx->b_retry_pending = false;
+    }
+    else if (!p_ctx->b_retry_pending)
+    {
+        p_ctx->b_retry_pending = true;            /* retry next pass */
+        p_ctx->retry_kind      = kind;
+        p_ctx->retry_param     = param;
+    }
+    else
+    {
+        p_ctx->b_retry_pending = false;           /* refused twice */
+        fault_set(APP_FAULT_MOTOR_STALL);
+        p_ctx->b_motion_failed = true;
+    }
+
+    return b_is_sent;
+}
+
+/**
+ * mission_stop_motion
+ * @brief   motion_stop() (always acts) and forget any outstanding or
+ *          retried command, so a later MOVE_DONE of it is ignored.
+ * @context mission_task
+ */
+void mission_stop_motion(mission_ctx_t * p_ctx)
+{
+    (void) motion_stop();                         /* always acts */
+    p_ctx->b_move_pending  = false;
+    p_ctx->b_retry_pending = false;
+}
+
+/**
+ * mission_move_deadline_ms
+ * @brief   Completion deadline from the command itself (review V14-01):
+ *          distance (or wheel arc for a turn) / speed x 1.5 + 1 s; ZERO
+ *          200 ms. Example: 800 mm at 150 mm/s -> about 9 000 ms.
+ * @param   kind  MISSION_MV_*
+ * @param   param mm or degrees (<= 0 treated as 0)
+ * @return  ms
+ * @context mission_task (event time: division allowed)
+ */
+uint32_t mission_move_deadline_ms(uint32_t kind, int32_t param)
+{
+    /* casts: positive speed constants and a non-negative parameter */
+    uint32_t const amount = (param > 0) ? (uint32_t) param : 0u;
+    uint32_t       dist   = amount;
+    uint32_t       speed  = (uint32_t) MOTION_MOVE_SPEED_MM_S;
+    uint32_t       limit  = MISSION_ACK_TIMEOUT_MS;
+
+    if (MISSION_MV_ZERO != kind)
+    {
+        if (MISSION_MV_BACK == kind)
+        {
+            speed = (uint32_t) MOTION_REVERSE_SPEED_MM_S;
+        }
+        else if ((MISSION_MV_LEFT == kind) || (MISSION_MV_RIGHT == kind))
+        {
+            dist  = (amount * MISSION_TURN_UM_PER_DEG) / 1000u;
+            speed = (uint32_t) MOTION_TURN_SPEED_MM_S;
+        }
+        else
+        {
+            /* forward: move speed */
+        }
+        limit = (((dist * 1000u) / speed) * 3u) / 2u
+                + MISSION_MOVE_MARGIN_MS;
+    }
+
+    return limit;
 }
 
 /**
@@ -781,6 +1020,7 @@ static void mission_forward(mission_evt_in_t const * p_evt)
             case APP_EVT_HUMP:
             case APP_EVT_MOTION_CLASS:
             case APP_EVT_STALL:
+            case APP_EVT_SIDE_TOO_CLOSE:
                 (void) telem_post_event(p_evt->type, p_evt->value); /* cnt */
                 break;
             case APP_EVT_MAP:

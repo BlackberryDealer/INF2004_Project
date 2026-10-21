@@ -27,8 +27,10 @@
 
 /* ---- private data ---------------------------------------------------- */
 
-/* E5: release stamps; [0] written only by R2, [1] only by R3. */
-static volatile uint32_t g_rel_us[SYS_TICK_REL_COUNT] = {0u, 0u};
+/* Low 16 bits of the release stamps: [0] written only by R2, [1] only by
+   R3. 16 bits are enough: a latency only matters below 65 ms (it
+   saturates at 4095 us, and a longer delay also shows as an overrun). */
+static volatile uint16_t g_rel_us16[SYS_TICK_REL_COUNT] = {0u, 0u};
 
 /* Written once per task by sys_tick_register(), read by handlers. */
 static volatile ID g_tick_tid[SYS_TICK_SLOT_COUNT] = {0, 0, 0, 0};
@@ -119,8 +121,9 @@ ER sys_tick_register(uint32_t slot, ID task_id)
  */
 void sys_tick_cycle_start(uint32_t slot)
 {
-    uint32_t const now_us  = sys_tick_now_us();
-    uint32_t       rel_us  = 0u;
+    /* cast: keep the low 16 bits of the 1 MHz time */
+    uint16_t const now16   = (uint16_t) sys_tick_now_us();
+    uint16_t       rel16   = 0u;
     uint32_t       lat_us  = 0u;
     INT            queued  = 0;
     uint32_t       overrun = 0u;
@@ -129,14 +132,15 @@ void sys_tick_cycle_start(uint32_t slot)
     {
         if (slot < SYS_TICK_FAST_SLOTS)
         {
-            rel_us = g_rel_us[SYS_TICK_REL_FAST];
+            rel16 = g_rel_us16[SYS_TICK_REL_FAST];
         }
         else
         {
-            rel_us = g_rel_us[SYS_TICK_REL_SLOW];
+            rel16 = g_rel_us16[SYS_TICK_REL_SLOW];
         }
 
-        lat_us = now_us - rel_us;   /* unsigned: correct across a wrap */
+        /* cast: explicit 16-bit modular subtraction, correct across a wrap */
+        lat_us = (uint32_t) (uint16_t) (now16 - rel16);
         if (lat_us > SYS_TICK_LAT_SAT_US)
         {
             lat_us = SYS_TICK_LAT_SAT_US;
@@ -223,7 +227,8 @@ static void sys_tick_10ms_handler(void * p_exinf)
 {
     (void) p_exinf;  /* unused: no extended info */
 
-    g_rel_us[SYS_TICK_REL_FAST] = sys_tick_now_us();
+    /* cast: keep the low 16 bits */
+    g_rel_us16[SYS_TICK_REL_FAST] = (uint16_t) sys_tick_now_us();
     for (uint32_t idx = 0u; idx < SYS_TICK_FAST_SLOTS; idx++)
     {
         sys_tick_wake(idx);
@@ -240,7 +245,8 @@ static void sys_tick_60ms_handler(void * p_exinf)
 {
     (void) p_exinf;  /* unused: no extended info */
 
-    g_rel_us[SYS_TICK_REL_SLOW] = sys_tick_now_us();
+    /* cast: keep the low 16 bits */
+    g_rel_us16[SYS_TICK_REL_SLOW] = (uint16_t) sys_tick_now_us();
     sys_tick_wake(SYS_TICK_SLOT_OBSTACLE);
 }
 

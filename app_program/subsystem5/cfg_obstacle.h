@@ -42,8 +42,19 @@
 #define OBS_LOST_PINGS         (2u)      /* lost echoes in APPROACH: stop */
 #define OBS_NO_ECHO_PINGS      (3u)      /* silent: FAULT_NO_ECHO (T10)   */
 #define OBS_SETTLE_PINGS       (3u)      /* MEASURE: A9 (settle ms / 60)  */
+#define OBS_WATCH_SETTLE_PINGS (4u)      /* MEASURE: A9, worst 120 deg move */
+
+/* C.4b: the settle countdown (PRV_OBS_A SETTLE) is 3 bits, the lost and
+   silent counters (LOST, SILENT) 2 bits each.                        */
+#if ((OBS_SETTLE_PINGS > 7u) || (OBS_WATCH_SETTLE_PINGS > 7u))
+#error "Settle counts no longer fit the 3-bit SETTLE field: widen it"
+#endif
+#if ((OBS_LOST_PINGS > 3u) || (OBS_NO_ECHO_PINGS > 3u))
+#error "Lost/silent ping limits no longer fit their 2-bit counters"
+#endif
 
 /* ---- scan and bypass geometry ---------------------------------------- */
+#define OBS_LEG_MIN_MM         (20u)     /* shorter legs are rounded up   */
 #define OBS_NEAR_MM            (400u)    /* scan point counts as obstacle */
 #define OBS_SIDE_TOO_CLOSE_MM  (60u)
 #define OBS_ROBOT_HALF_W_MM    (75u)     /* MEASURE */
@@ -59,6 +70,18 @@
 #define OBS_SERVO_TRIM_US      (0)       /* MEASURE */
 #define OBS_WATCH_DEG_LEFT_PASS   (30u)  /* obstacle on robot's right */
 #define OBS_WATCH_DEG_RIGHT_PASS  (150u)
+
+/* C.4b: sentinels stay outside the valid range and fit their fields
+   (DIST 9 bits x 4 mm, profile fields 8 bits x 4 mm, A27).          */
+#if (OBS_NEAR_MM >= APP_PROFILE_CLEAR_MM)
+#error "Near threshold must stay below the profile 'clear' sentinel"
+#endif
+#if ((APP_DIST_NONE_MM / 4u) != 511u) || ((APP_PROFILE_CLEAR_MM / 4u) != 255u)
+#error "Distance sentinels no longer match their packed fields"
+#endif
+#if (OBS_LEG_LAT_MAX_MM > 1020u) || (OBS_LEG_FWD_MAX_MM > 1020u)
+#error "Bypass leg limits no longer fit LEG_LAT/LEG_FWD (8 bits x 4 mm)"
+#endif
 
 #endif /* CFG_OBSTACLE_H */
 

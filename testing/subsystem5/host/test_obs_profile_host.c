@@ -1,6 +1,6 @@
 /*
  * test_obs_profile_host.c
- * Laptop tests for obs_profile.c (S5-U01..U03). Host-only test code,
+ * Laptop tests for obs_profile.c (S5-U01..U03, U02b, U23). Host-only test code,
  * outside BARR-C scope (like host_test.h).
  * Build and run: make -C testing/subsystem5/host
  */
@@ -103,10 +103,25 @@ int main(void)
     scan[2] = 300u;
     obs_profile_build(scan, &prof);
     obs_profile_plan(&prof, &plan);
-    HOST_CHECK("S5-U02", prof.b_is_valid && (prof.x_left_mm > 125),
-               "object right of the corridor");
+    HOST_CHECK("S5-U02", !prof.b_is_valid,
+               "object right of the corridor does not block");
     HOST_CHECK("S5-U02", OBS_OUT_CONTINUE == plan.outcome,
                "clear of the path: CONTINUE");
+
+    /* S5-U02b (review R02): side object at 30 deg / 300 mm (x ~ 260,
+       nearer forward y ~ 150) and a central object at 90 deg / 200 mm.
+       The central one blocks, so it is the obstacle; not CONTINUE.     */
+    scan_clear(scan);
+    scan[0] = 300u;
+    scan_face(scan, 11u, 13u, 200);
+    obs_profile_build(scan, &prof);
+    obs_profile_plan(&prof, &plan);
+    HOST_CHECK("S5-U02b", prof.b_is_valid && (prof.angle_step >= 11u)
+               && (prof.angle_step <= 13u)
+               && in_range((int32_t) prof.nearest_mm, 197, 201),
+               "the blocking central object is chosen");
+    HOST_CHECK("S5-U02b", OBS_OUT_CONTINUE != plan.outcome,
+               "plan is not CONTINUE");
 
     /* S5-U03: centred obstacle with objects 190 mm out on both sides */
     scan_clear(scan);
@@ -132,6 +147,24 @@ int main(void)
                "clipped plan is never driven: NO_PATH");
     HOST_CHECK("S5-U03", OBS_LEG_LAT_MAX_MM == plan.leg_lateral_mm,
                "reported leg clipped to 300 mm");
+
+    /* S5-U23 (review V13-04): a run whose nearest point sits exactly on
+       the corridor edge (x_left = +125) needs shift 0; the leg must be
+       OBS_LEG_MIN_MM, never 0. Face at 250 mm from 30 to 60 deg puts
+       x_left at 250 x cot(60) = 144; use a single point at 63.4 deg
+       instead: build a scan by hand at step 6 (60 deg) with d chosen so
+       x = d x cos(60) = 125 -> d = 250.                                */
+    scan_clear(scan);
+    scan[6] = 250u;
+    scan[5] = 270u;
+    obs_profile_build(scan, &prof);
+    obs_profile_plan(&prof, &plan);
+    HOST_CHECK("S5-U23", prof.b_is_valid && (125 == prof.x_left_mm),
+               "run touches the corridor edge (x_left = 125)");
+    HOST_CHECK("S5-U23", (OBS_OUT_PLAN == plan.outcome)
+               && (APP_SIDE_LEFT == plan.side)
+               && (OBS_LEG_MIN_MM == plan.leg_lateral_mm),
+               "lateral leg = OBS_LEG_MIN_MM, never 0");
 
     return (0 == HOST_SUMMARY("subsystem5 host")) ? 0 : 1;
 }

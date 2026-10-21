@@ -56,9 +56,13 @@ static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                        status_board_t const * p_snap, uint32_t now_us);
 static void run_avoid(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                       status_board_t const * p_snap, uint32_t now_us);
+static void run_avoid_step(mission_ctx_t * p_ctx,
+                           mission_evt_in_t const * p_evt, uint32_t type,
+                           status_board_t const * p_snap, uint32_t now_us);
 static void run_avoid_wait(mission_ctx_t * p_ctx, uint32_t type,
                            status_board_t const * p_snap, uint32_t now_us);
-static void run_avoid_legs(mission_ctx_t * p_ctx, uint32_t type);
+static void run_avoid_legs(mission_ctx_t * p_ctx, uint32_t type,
+                           uint32_t now_us);
 static void run_avoid_rejoin(mission_ctx_t * p_ctx,
                              mission_evt_in_t const * p_evt,
                              status_board_t const * p_snap, uint32_t now_us);
@@ -75,9 +79,9 @@ static void run_arm(mission_ctx_t * p_ctx, uint32_t value,
                     status_board_t const * p_snap);
 static void run_request(mission_ctx_t * p_ctx, uint32_t sys_state,
                         uint32_t end_reason);
-static void run_turn(uint32_t side, int32_t angle_deg);
+static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
+                     uint32_t now_us);
 static void run_post_profile(status_board_t const * p_snap);
-static void run_back_to_wait(mission_ctx_t * p_ctx);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -201,16 +205,21 @@ static void run_goto(mission_ctx_t * p_ctx, uint32_t run_state,
             (void) motion_follow(MOTION_SLOW_MM_S);       /* review pt 4 */
             break;
         case APP_RUN_EXECUTE_TURN:
-            (void) motion_stop();                         /* always acts */
-            (void) motion_move_forward(
-                (int32_t) MISSION_JCT_ADVANCE_MM);  /* cast: 60, in range */
+            mission_stop_motion(p_ctx);
+            /* cast: 60 mm constant */
+            (void) mission_send_move(p_ctx, MISSION_MV_FWD,
+                                     (int32_t) MISSION_JCT_ADVANCE_MM, now_us);
             break;
         case APP_RUN_SEARCH_LINE:
+            /* STOP first: motion is still in FOLLOW and would only latch
+               the turn (review R06)                                     */
             p_ctx->search_start_us = now_us;
-            (void) motion_turn_left(MISSION_SEARCH_SWEEP_DEG); /* in range */
+            mission_stop_motion(p_ctx);
+            (void) mission_send_move(p_ctx, MISSION_MV_LEFT,
+                                     MISSION_SEARCH_SWEEP_DEG, now_us);
             break;
         case APP_RUN_AVOID:
-            (void) motion_stop();          /* ESTOP is already set */
+            mission_stop_motion(p_ctx);    /* ESTOP is already set */
             mission_mode_set(RUN_INHIBITS);
             p_ctx->diff_at_stop      = status_board_pos_l(p_snap)
                                        - status_board_pos_r(p_snap);
@@ -352,13 +361,16 @@ static void run_execute(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
             switch (p_ctx->armed_cmd)
             {
                 case APP_BAR_CMD_LEFT:
-                    (void) motion_turn_left(RUN_TURN_RIGHT_ANGLE_DEG);
+                    (void) mission_send_move(p_ctx, MISSION_MV_LEFT,
+                                             RUN_TURN_RIGHT_ANGLE_DEG, now_us);
                     break;
                 case APP_BAR_CMD_RIGHT:
-                    (void) motion_turn_right(RUN_TURN_RIGHT_ANGLE_DEG);
+                    (void) mission_send_move(p_ctx, MISSION_MV_RIGHT,
+                                             RUN_TURN_RIGHT_ANGLE_DEG, now_us);
                     break;
                 case APP_BAR_CMD_UTURN:
-                    (void) motion_turn_left(RUN_UTURN_DEG);
+                    (void) mission_send_move(p_ctx, MISSION_MV_LEFT,
+                                             RUN_UTURN_DEG, now_us);
                     break;
                 default:                   /* STRAIGHT: nothing to turn */
                     p_ctx->b_is_armed = false;
@@ -387,18 +399,21 @@ static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
 
     if (p_evt->b_has_event && (APP_EVT_LINE_FOUND == p_evt->type))
     {
-        (void) motion_stop();                         /* always acts */
+        mission_stop_motion(p_ctx);
         run_follow_or_armed(p_ctx, p_snap, now_us);
     }
     else if (p_evt->b_has_event && (APP_EVT_MOVE_DONE == p_evt->type))
     {
         if (RUN_SUB_FIRST == p_ctx->substep)
         {
-            (void) motion_turn_right(2 * MISSION_SEARCH_SWEEP_DEG); /* 120 */
+            (void) mission_send_move(p_ctx, MISSION_MV_RIGHT,
+                                     2 * MISSION_SEARCH_SWEEP_DEG, /* 120 */
+                                     now_us);
         }
         else if (RUN_SUB_SECOND == p_ctx->substep)
         {
-            (void) motion_turn_left(MISSION_SEARCH_SWEEP_DEG);
+            (void) mission_send_move(p_ctx, MISSION_MV_LEFT,
+                                     MISSION_SEARCH_SWEEP_DEG, now_us);
         }
         else
         {
@@ -417,7 +432,7 @@ static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
     if ((APP_RUN_SEARCH_LINE == p_ctx->run_state)
         && ((now_us - p_ctx->search_start_us) >= limit_us))
     {
-        (void) motion_stop();                         /* always acts */
+        mission_stop_motion(p_ctx);
         run_request(p_ctx, APP_SYS_LINE_LOST_STOP, APP_END_LINE_LOST);
     }
 }
@@ -444,6 +459,38 @@ static void run_avoid(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         mission_mode_set(APP_MODE_STOPPED | APP_MODE_RESCAN);
     }
 
+    if (APP_EVT_SIDE_TOO_CLOSE == type)
+    {
+        /* obstacle_task has already set ESTOP; no mid-bypass replanning:
+           the chassis no longer faces the heading of the plan (R11)    */
+        mission_stop_motion(p_ctx);
+        run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
+        p_ctx->avoid_step = APP_AVOID_WAIT_PLAN;
+    }
+    else
+    {
+        run_avoid_step(p_ctx, p_evt, type, p_snap, now_us);
+    }
+
+    if ((APP_RUN_AVOID == p_ctx->run_state) && p_ctx->b_fr9_running
+        && ((now_us - p_ctx->fr9_start_us) > fr9us)
+        && (MISSION_REQ_NONE == p_ctx->sys_request))
+    {
+        fault_set(APP_FAULT_REACQUIRE_FAIL);       /* FR9: > 5 s */
+        run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
+    }
+}
+
+/**
+ * run_avoid_step
+ * @brief   Dispatches the current AVOID step.
+ * @param   type APP_EVT_* of this pass (APP_EVT_COUNT = none)
+ * @context mission_task
+ */
+static void run_avoid_step(mission_ctx_t * p_ctx,
+                           mission_evt_in_t const * p_evt, uint32_t type,
+                           status_board_t const * p_snap, uint32_t now_us)
+{
     switch (p_ctx->avoid_step)
     {
         case APP_AVOID_WAIT_PLAN:
@@ -460,7 +507,7 @@ static void run_avoid(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         case APP_AVOID_LEG_OUT:
         case APP_AVOID_TURN_PARALLEL:
         case APP_AVOID_LEG_PASS:
-            run_avoid_legs(p_ctx, type);
+            run_avoid_legs(p_ctx, type, now_us);
             if (APP_AVOID_REJOIN == p_ctx->avoid_step)
             {
                 p_ctx->fr9_start_us  = now_us;    /* end of the pass leg */
@@ -473,14 +520,6 @@ static void run_avoid(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         default:
             run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
             break;
-    }
-
-    if ((APP_RUN_AVOID == p_ctx->run_state) && p_ctx->b_fr9_running
-        && ((now_us - p_ctx->fr9_start_us) > fr9us)
-        && (MISSION_REQ_NONE == p_ctx->sys_request))
-    {
-        fault_set(APP_FAULT_REACQUIRE_FAIL);       /* FR9: > 5 s */
-        run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
     }
 }
 
@@ -502,7 +541,7 @@ static void run_avoid_wait(mission_ctx_t * p_ctx, uint32_t type,
             p_ctx->leg_lat_mm = status_board_leg_lateral(p_snap);
             p_ctx->leg_fwd_mm = status_board_leg_forward(p_snap);
             run_post_profile(p_snap);
-            run_turn(p_ctx->side, RUN_TURN_RIGHT_ANGLE_DEG);
+            run_turn(p_ctx, p_ctx->side, RUN_TURN_RIGHT_ANGLE_DEG, now_us);
             p_ctx->avoid_step = APP_AVOID_TURN_OUT;
             break;
         case APP_EVT_CONTINUE:
@@ -522,7 +561,8 @@ static void run_avoid_wait(mission_ctx_t * p_ctx, uint32_t type,
             {
                 mission_mode_clear(APP_MODE_RESCAN);   /* keep STOPPED */
                 safety_clear(SAFETY_ESTOP);
-                (void) motion_move_backward(MOTION_REVERSE_MAX_MM);
+                (void) mission_send_move(p_ctx, MISSION_MV_BACK,
+                                         MOTION_REVERSE_MAX_MM, now_us);
                 p_ctx->avoid_step = APP_AVOID_REVERSE;
             }
             break;
@@ -533,54 +573,48 @@ static void run_avoid_wait(mission_ctx_t * p_ctx, uint32_t type,
 
 /**
  * run_avoid_legs
- * @brief   TURN_OUT -> LEG_OUT -> TURN_PARALLEL -> LEG_PASS -> REJOIN.
- *          SIDE_TOO_CLOSE on a leg stops and asks for a new scan.
- * @param   type APP_EVT_* of this pass (APP_EVT_COUNT = none)
+ * @brief   TURN_OUT -> LEG_OUT -> TURN_PARALLEL -> LEG_PASS -> REJOIN,
+ *          one step per tagged MOVE_DONE.
+ * @param   type   APP_EVT_* of this pass (APP_EVT_COUNT = none)
+ * @param   now_us this pass
  * @context mission_task
  */
-static void run_avoid_legs(mission_ctx_t * p_ctx, uint32_t type)
+static void run_avoid_legs(mission_ctx_t * p_ctx, uint32_t type,
+                           uint32_t now_us)
 {
     uint32_t const other = (APP_SIDE_LEFT == p_ctx->side)
                            ? APP_SIDE_RIGHT : APP_SIDE_LEFT;
-    bool const     b_leg = (APP_AVOID_LEG_OUT == p_ctx->avoid_step)
-                           || (APP_AVOID_LEG_PASS == p_ctx->avoid_step);
 
-    if ((APP_EVT_SIDE_TOO_CLOSE == type) && b_leg)
-    {
-        run_back_to_wait(p_ctx);
-    }
-    else if (APP_EVT_MOVE_DONE == type)
+    if (APP_EVT_MOVE_DONE == type)
     {
         switch (p_ctx->avoid_step)
         {
             case APP_AVOID_TURN_OUT:
                 /* cast: leg <= 1020 mm */
-                (void) motion_move_forward((p_ctx->leg_lat_mm > 0u)
-                                           ? (int32_t) p_ctx->leg_lat_mm
-                                           : RUN_LEG_MIN_MM);
+                (void) mission_send_move(p_ctx, MISSION_MV_FWD,
+                                         (p_ctx->leg_lat_mm > 0u)
+                                         ? (int32_t) p_ctx->leg_lat_mm
+                                         : RUN_LEG_MIN_MM, now_us);
                 p_ctx->avoid_step = APP_AVOID_LEG_OUT;
                 break;
             case APP_AVOID_LEG_OUT:
-                run_turn(other, RUN_TURN_RIGHT_ANGLE_DEG);
+                run_turn(p_ctx, other, RUN_TURN_RIGHT_ANGLE_DEG, now_us);
                 p_ctx->avoid_step = APP_AVOID_TURN_PARALLEL;
                 break;
             case APP_AVOID_TURN_PARALLEL:
-                /* cast: <= 1020 */
-                (void) motion_move_forward((p_ctx->leg_fwd_mm > 0u)
-                                           ? (int32_t) p_ctx->leg_fwd_mm
-                                           : RUN_LEG_MIN_MM);
+                /* cast: leg <= 1020 mm */
+                (void) mission_send_move(p_ctx, MISSION_MV_FWD,
+                                         (p_ctx->leg_fwd_mm > 0u)
+                                         ? (int32_t) p_ctx->leg_fwd_mm
+                                         : RUN_LEG_MIN_MM, now_us);
                 p_ctx->avoid_step = APP_AVOID_LEG_PASS;
                 break;
             default:                    /* LEG_PASS done: turn to rejoin */
-                run_turn(other, MISSION_REJOIN_DEG);
+                run_turn(p_ctx, other, MISSION_REJOIN_DEG, now_us);
                 p_ctx->avoid_step = APP_AVOID_REJOIN;
                 p_ctx->substep    = RUN_SUB_FIRST;
                 break;
         }
-    }
-    else
-    {
-        /* other events are ignored on the legs */
     }
 }
 
@@ -608,10 +642,11 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
         p_ctx->rejoin_start = status_board_path(p_snap);
         p_ctx->substep      = RUN_SUB_SECOND;
         /* cast: <= 1020 x 1.414 x 1.3 < 2047 */
-        (void) motion_move_forward((int32_t) ((p_ctx->rejoin_e_mm
-                                               * (RUN_PCT
-                                                  + MISSION_REJOIN_WIN_PCT))
-                                              / RUN_PCT));
+        (void) mission_send_move(p_ctx, MISSION_MV_FWD,
+                                 (int32_t) ((p_ctx->rejoin_e_mm
+                                             * (RUN_PCT
+                                                + MISSION_REJOIN_WIN_PCT))
+                                            / RUN_PCT), now_us);
     }
     else if ((RUN_SUB_SECOND == p_ctx->substep)
              && (APP_EVT_LINE_FOUND == type))
@@ -624,9 +659,10 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
             && (p_evt->value
                 <= (MISSION_REJOIN_WIDTH_MM + MISSION_REJOIN_WIDTH_TOL_MM)))
         {
-            (void) motion_stop();                       /* always acts */
-            (void) motion_move_forward(
-                (int32_t) MISSION_JCT_ADVANCE_MM);  /* cast: 60, in range */
+            mission_stop_motion(p_ctx);
+            /* cast: 60 mm constant */
+            (void) mission_send_move(p_ctx, MISSION_MV_FWD,
+                                     (int32_t) MISSION_JCT_ADVANCE_MM, now_us);
             p_ctx->substep = RUN_SUB_THIRD;
         }
     }
@@ -679,11 +715,13 @@ static void run_avoid_heading(mission_ctx_t * p_ctx,
         }
         if (err_cdeg > 0)
         {
-            (void) motion_turn_left(turn_deg);
+            (void) mission_send_move(p_ctx, MISSION_MV_LEFT, turn_deg,
+                                     now_us);
         }
         else
         {
-            (void) motion_turn_right(turn_deg);
+            (void) mission_send_move(p_ctx, MISSION_MV_RIGHT, turn_deg,
+                                     now_us);
         }
         p_ctx->substep = RUN_SUB_FOURTH;
     }
@@ -792,20 +830,22 @@ static void run_request(mission_ctx_t * p_ctx, uint32_t sys_state,
 
 /**
  * run_turn
- * @brief   Turns toward a side.
+ * @brief   Turns toward a side through mission_send_move().
  * @param   side      APP_SIDE_LEFT or APP_SIDE_RIGHT
  * @param   angle_deg 1..360
+ * @param   now_us    this pass
  * @context mission_task
  */
-static void run_turn(uint32_t side, int32_t angle_deg)
+static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
+                     uint32_t now_us)
 {
     if (APP_SIDE_LEFT == side)
     {
-        (void) motion_turn_left(angle_deg);    /* in range */
+        (void) mission_send_move(p_ctx, MISSION_MV_LEFT, angle_deg, now_us);
     }
     else
     {
-        (void) motion_turn_right(angle_deg);   /* in range */
+        (void) mission_send_move(p_ctx, MISSION_MV_RIGHT, angle_deg, now_us);
     }
 }
 
@@ -825,18 +865,6 @@ static void run_post_profile(status_board_t const * p_snap)
     prof.clear_right_mm = status_board_clear_right(p_snap);
     prof.side           = status_board_plan_side(p_snap);
     (void) telem_post_profile(&prof);   /* a full K7 is counted there */
-}
-
-/**
- * run_back_to_wait
- * @brief   SIDE_TOO_CLOSE on a leg: stop and ask for a new scan.
- * @context mission_task
- */
-static void run_back_to_wait(mission_ctx_t * p_ctx)
-{
-    (void) motion_stop();                             /* always acts */
-    mission_mode_set(APP_MODE_STOPPED | APP_MODE_RESCAN);
-    p_ctx->avoid_step = APP_AVOID_WAIT_PLAN;
 }
 
 /*** end of file ***/
