@@ -126,13 +126,16 @@ static bool drv_ws2812_try(PIO p_pio)
         pio_gpio_init(p_pio, PIN_RGB);
         (void) pio_sm_set_consecutive_pindirs(p_pio, g_ws_sm, PIN_RGB, 1u,
                                               true); /* valid pin */
-        cfg = ws2812_program_get_default_config((uint) offset); /* >= 0 */
+        cfg = ws2812_program_get_default_config(
+            (uint) offset);                      /* cast: offset >= 0 */
         sm_config_set_sideset_pins(&cfg, PIN_RGB);
         sm_config_set_out_shift(&cfg, false, true, DRV_WS2812_BITS);
         sm_config_set_fifo_join(&cfg, PIO_FIFO_JOIN_TX);
+        /* cast: 160 fits a byte */
         sm_config_set_clkdiv_int_frac8(&cfg, DRV_WS2812_DIV_INT,
                                        (uint8_t) DRV_WS2812_DIV_FRAC8);
-        (void) pio_sm_init(p_pio, g_ws_sm, (uint) offset, &cfg); /* valid */
+        /* cast: offset >= 0; init cannot fail with a claimed SM */
+        (void) pio_sm_init(p_pio, g_ws_sm, (uint) offset, &cfg);
         pio_sm_set_enabled(p_pio, g_ws_sm, true);
         b_is_ok = true;
     }

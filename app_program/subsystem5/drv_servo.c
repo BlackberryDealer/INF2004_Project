@@ -60,7 +60,7 @@ void drv_servo_set_deg(uint32_t angle_deg)
                            ? DRV_SERVO_DEG_MAX : angle_deg;
     int32_t        pulse = 0;
 
-    /* cast: all operands <= 2500, well inside int32_t */
+    /* casts: all operands <= 2500, well inside int32_t */
     pulse = (int32_t) OBS_SERVO_MIN_US
             + (int32_t) ((deg * (OBS_SERVO_MAX_US - OBS_SERVO_MIN_US))
                          / DRV_SERVO_DEG_MAX)

@@ -1,9 +1,10 @@
 /**
  * @file    test_mission.c
- * @brief   On-target tests for the mission queue and the tick counters.
+ * @brief   On-target tests for the mission queue, the statechart and the
+ *          tick counters.
  * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    test
- * @reqs    min-bit item 7, NFR17
+ * @reqs    min-bit item 7, NFR17, B5.2.6 (every state x every event)
  */
 
 #include "test_mission.h"      /* own header first (BARR-C 4.3.c) */
@@ -12,6 +13,7 @@
 #include "../subsystem2/fault.h"
 #include "mission.h"
 #include "sys_tick.h"
+#include "mission_run.h"
 
 #if APP_TEST
 
@@ -30,6 +32,8 @@
 #define TEST_BUSY_WAIT_MS      (1500)
 #define TEST_LAT_MIN_US        (1500u)
 #define TEST_BUSY_STACK_BYTES  (512u + APP_SYS_STACK_BYTES)
+/* (7 states + 4 RUN substates + 7 AVOID steps) x 24 event types */
+#define TEST_MATRIX_CASES      (432u)
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -38,6 +42,7 @@ static uint64_t g_test_busy_stack[TEST_BUSY_STACK_BYTES / 8u];
 /* ---- private function prototypes ------------------------------------- */
 
 static void test_mission_flood(void);
+static void test_mission_matrix(void);
 static void test_mission_latency(void);
 static void test_busy_task(INT stacd, void * p_exinf);
 
@@ -47,13 +52,14 @@ static void test_busy_task(INT stacd, void * p_exinf);
 
 /**
  * test_mission_run
- * @brief   Runs S5-U04 and S5-U06.
+ * @brief   Runs S5-U04, S5-U05 and S5-U06.
  * @context usermain (TEST=1 builds, priority 1)
  */
 void test_mission_run(void)
 {
 #if APP_TEST
     test_mission_flood();
+    test_mission_matrix();
     test_mission_latency();
 #endif
 }
@@ -116,6 +122,29 @@ static void test_mission_flood(void)
     (void) tk_dly_tsk(TEST_DRAIN_MS);       /* let mission empty K4 */
     fault_clear(APP_FAULT_QUEUE_OVERFLOW);  /* test build only */
     TEST_SUMMARY("mission K4");
+}
+
+/**
+ * test_mission_matrix
+ * @brief   S5-U05: every state x every event type gives a defined state
+ *          and no crash. Wheels must be off the ground (it issues motion
+ *          commands).
+ * @context usermain
+ */
+static void test_mission_matrix(void)
+{
+    uint32_t cases = 0u;
+    uint32_t bad   = 0u;
+
+    TEST_INIT();
+    bad = mission_test_matrix(&cases);
+    TEST_CHECK("S5-U05", TEST_MATRIX_CASES == cases,
+               "432 state/event combinations tried");
+    TEST_CHECK("S5-U05", 0u == bad, "every outcome is a defined state");
+    /* casts: both < 1000 */
+    app_log("S5-U05 cases %d undefined %d\n", (int32_t) cases,
+            (int32_t) bad, 0);
+    TEST_SUMMARY("mission matrix");
 }
 
 /**

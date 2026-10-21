@@ -98,6 +98,7 @@ void sys_health_service(void)
 
     if (E_OK == tk_ref_flg(gh_alive_flg, &rflg))
     {
+        /* cast: kernel pattern to fixed width */
         if (SYS_HEALTH_BIT_ALL
             == (((uint32_t) rflg.flgptn) & SYS_HEALTH_BIT_ALL))
         {

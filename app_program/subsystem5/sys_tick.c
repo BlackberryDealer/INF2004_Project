@@ -141,7 +141,7 @@ void sys_tick_cycle_start(uint32_t slot)
         {
             lat_us = SYS_TICK_LAT_SAT_US;
         }
-        if (lat_us > (uint32_t) g_lat_max_us[slot])
+        if (lat_us > (uint32_t) g_lat_max_us[slot])   /* cast: widen */
         {
             g_lat_max_us[slot] = (uint16_t) lat_us; /* cast: <= 4095 */
         }
@@ -149,8 +149,8 @@ void sys_tick_cycle_start(uint32_t slot)
         queued = tk_can_wup(TSK_SELF);
         if (queued > 0)
         {
-            overrun = (uint32_t) g_overruns[slot]
-                      + (uint32_t) queued;  /* cast: queued > 0 */
+            /* casts: widen; queued > 0 */
+            overrun = (uint32_t) g_overruns[slot] + (uint32_t) queued;
             if (overrun > SYS_TICK_OVR_SAT)
             {
                 overrun = SYS_TICK_OVR_SAT;
@@ -183,9 +183,9 @@ uint32_t sys_tick_latency_max_us(void)
 
     for (uint32_t idx = 0u; idx < SYS_TICK_SLOT_COUNT; idx++)
     {
-        if ((uint32_t) g_lat_max_us[idx] > worst_us)
+        if ((uint32_t) g_lat_max_us[idx] > worst_us)   /* cast: widen */
         {
-            worst_us = (uint32_t) g_lat_max_us[idx];
+            worst_us = (uint32_t) g_lat_max_us[idx];   /* cast: widen */
         }
     }
 
@@ -205,7 +205,7 @@ uint32_t sys_tick_overruns(uint32_t slot)
 
     if (slot < SYS_TICK_SLOT_COUNT)
     {
-        count = (uint32_t) g_overruns[slot];
+        count = (uint32_t) g_overruns[slot];   /* cast: widen */
     }
 
     return count;
