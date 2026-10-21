@@ -1,0 +1,17 @@
+[TEST] S1-U20 PASS  table lists every SB_/MSG_ field of app_layout.h
+[TEST] S1-U20 PASS  put/get round-trips min, max and 0 of every SB_/MSG_ field; neighbours unchanged
+[TEST] S1-U21 PASS  steering -1001 clamps to code 24 and sets the flag
+[TEST] S1-U21 PASS  steering 1000 encodes to 2024 with no clamp flag
+[TEST] S1-U21 PASS  NULL clamp-flag pointer accepted (5000 clamps to 2024)
+[TEST] S1-U21 PASS  unsigned clamp 300 -> 100 sets the flag
+[TEST] S1-U21 PASS  unsigned clamp in range is unchanged, NULL flag accepted
+[TEST] S1-U22 PASS  3+5+18+11 bits at maximum fill 5 bytes, no overflow
+[TEST] S1-U22 PASS  reader returns the same four values
+[TEST] S1-U22 PASS  stream bit n is bit n%8 of byte n/8; unused bits zero
+[TEST] S1-U22 PASS  state header byte 0 equals 1 | (0 << 3)
+[TEST] S1-U23 PASS  write past the end sets overflow and writes nothing
+[TEST] S1-U23 PASS  after an overflow later writes are ignored
+[TEST] S1-U23 PASS  width 0 or 32 is rejected as overflow
+[TEST] S1-U23 PASS  reading past the end sets overflow and returns 0
+[TEST] app_bits SUMMARY 15 passed, 0 failed
+[TEST] S1-U24 PASS  gen_layout.py rejects a too-wide field
