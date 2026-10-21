@@ -1,0 +1,4 @@
+# CSC28 PicoCar: shell scripts keep LF line endings on every OS, so
+# tools/barr_check.sh also runs from WSL / Git Bash on a Windows checkout
+# (core.autocrlf=true would otherwise give it CRLF and bash would fail).
+*.sh  text eol=lf

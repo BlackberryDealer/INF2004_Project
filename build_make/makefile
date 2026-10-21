@@ -96,3 +96,9 @@ clean:
 	-@echo ' '
 
 .PHONY: all clean dependents
+
+# CSC28 PicoCar (C12): regenerate app_program/app_layout.h from the single
+# layout source (Part D.11). Run "make layout" in build_make/.
+.PHONY: layout
+layout:
+	python3 ../tools/gen_layout.py ../tools/layout.csv

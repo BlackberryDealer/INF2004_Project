@@ -24,3 +24,7 @@ config/wifi_secrets.h
 
 # macOS
 .DS_Store
+
+# CSC28 PicoCar: host test binaries and Python caches
+testing/**/host/*.out
+__pycache__/

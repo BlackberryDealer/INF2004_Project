@@ -1,71 +1,65 @@
-/*
- *	app.h
- *	Definitions shared by the whole team.  Changed only by team agreement.
- *
- *	Anything that belongs to ONE subsystem goes in that subsystem's own
- *	header instead (app_program/subsystemN/subsystemN.h).
+/**
+ * @file    app.h
+ * @brief   Kernel-facing helpers shared by every task module.
+ * @owner   Team (integrator; change only by SHARED pull request)
+ * @kind    task
  */
 
 #ifndef APP_H
 #define APP_H
 
-#include <tk/tkernel.h>		/* micro T-Kernel API (tk_xxx_yyy) */
-#include <tm/tmonitor.h>	/* T-Monitor API: tm_printf() console output */
-#include <bsp/libbsp.h>		/* Board helpers: gpio_set_pin/val, pwm_... */
+#include <stdint.h>
+#include <stdbool.h>
+#include <tk/tkernel.h>        /* micro T-Kernel API */
 
-/* ---------------------------------------------------------------------
- *  Pins: free for projects are GP0..GP22 and GP26..GP28.  GP0/GP1 are
- *  taken by UART0 when built with "make CRASH_REPORT=1" (see README).
- *  Never use GP23/24/25/29: they are wired to the Pico W radio.
- *  Claim every pin in TEAM.md section 2 before using it.
- * --------------------------------------------------------------------- */
-
-/* ---------------------------------------------------------------------
- *  Task priorities: 1 is the highest; the kernel's USB console (3) and
- *  WiFi (4) tasks sit above every application task.  Each subsystem
- *  has its own band (TEAM.md section 4), defined in its own header.
- * --------------------------------------------------------------------- */
-#define TASK_STACK_SIZE		2048	/* bytes; tm_printf needs ~1 KB */
-
-/* Create and start a task.  prc = TP_PRC1 (core 0), TP_PRC2 (core 1), or
-   0 for "any core".  Defined in app_main.c. */
-IMPORT ID app_start_task(FP entry, PRI pri, UW prc, const char *name);
-
-/* ---------------------------------------------------------------------
- *  Every subsystem provides these.  usermain() calls ALL the _init()
- *  functions first and only then ALL the _start() functions, so every
- *  kernel object exists before any task can use it.
- *    subsystemN_init()   create this subsystem's kernel objects
- *    subsystemN_start()  create and start this subsystem's tasks
- *    subsystemN_test()   on-target tests, only in test builds (make TEST=1)
- * --------------------------------------------------------------------- */
-IMPORT ER subsystem1_init(void);
-IMPORT ER subsystem2_init(void);
-IMPORT ER subsystem3_init(void);
-IMPORT ER subsystem4_init(void);
-IMPORT ER subsystem5_init(void);
-
-IMPORT ER subsystem1_start(void);
-IMPORT ER subsystem2_start(void);
-IMPORT ER subsystem3_start(void);
-IMPORT ER subsystem4_start(void);
-IMPORT ER subsystem5_start(void);
-
-#if APP_TEST
-IMPORT void subsystem1_test(void);
-IMPORT void subsystem2_test(void);
-IMPORT void subsystem3_test(void);
-IMPORT void subsystem4_test(void);
-IMPORT void subsystem5_test(void);
+#ifndef APP_PROBE
+#define APP_PROBE   (0)
+#endif
+#ifndef APP_TEST
+#define APP_TEST    (0)
 #endif
 
-/* Print a readable message if a kernel call failed (negative error code) */
-#define CHECK(er, what)							\
-	do {								\
-		INT check_er_ = (INT)(er);	/* evaluate once */	\
-		if (check_er_ < E_OK) {					\
-			tm_printf((UB*)"ERROR %s: %d\n", (what), check_er_); \
-		}							\
-	} while (0)
+/* Task priorities (1 = highest). Kernel: USB console 3, radio 4. */
+#define APP_PRI_LINE       (12)
+#define APP_PRI_MOTION     (13)
+#define APP_PRI_IMU        (14)
+#define APP_PRI_OBSTACLE   (15)
+#define APP_PRI_MISSION    (16)
+#define APP_PRI_BARCODE    (17)
+#define APP_PRI_TELEM      (20)
+#define APP_PRI_TEST       (21)   /* usermain while running TEST=1 suites */
+
+/* Stack sizes in bytes, including the kernel's 128-byte system part
+   (with TA_USERBUF the kernel adds nothing). Multiples of 8.        */
+#define APP_SYS_STACK_BYTES       (128u)
+#define APP_STACK_LINE_BYTES      (1024u + APP_SYS_STACK_BYTES)
+#define APP_STACK_MOTION_BYTES    (1024u + APP_SYS_STACK_BYTES)
+#define APP_STACK_IMU_BYTES       (1024u + APP_SYS_STACK_BYTES)
+#define APP_STACK_OBSTACLE_BYTES  (1024u + APP_SYS_STACK_BYTES)
+#define APP_STACK_MISSION_BYTES   (2048u + APP_SYS_STACK_BYTES)
+#define APP_STACK_BARCODE_BYTES   (1024u + APP_SYS_STACK_BYTES)
+#define APP_STACK_TELEM_BYTES     (2048u + APP_SYS_STACK_BYTES)
+
+/* Create and start a task on a caller-owned static stack (TA_USERBUF).
+   Fills the stack with a pattern first so free space can be measured. */
+extern ID   app_start_task(FP p_entry, PRI priority, uint64_t * p_stack,
+                           uint32_t stack_bytes, char const * p_name);
+
+/* Print "ERROR <what>: <code>" if ercd < E_OK. Any task. */
+extern void app_check(ER ercd, char const * p_what);
+
+/* Console output (never from an ISR, a handler or the radio task in RUN).
+   p_format may use up to three %d; unused arguments are ignored.      */
+extern void app_log(char const * p_format, int32_t arg_a, int32_t arg_b,
+                    int32_t arg_c);
+
+/* GP14 timing probe; does nothing unless built with PROBE=1. */
+extern void app_probe_set(bool b_is_high);
+
+/* Stack measurement (NFR11c). */
+extern void     app_stack_report(void);          /* prints every task */
+extern uint32_t app_stack_free_pct_min(void);    /* worst task, 0-100 */
 
 #endif /* APP_H */
+
+/*** end of file ***/

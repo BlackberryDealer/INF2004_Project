@@ -39,6 +39,11 @@ WIFI ?= cyw43
 ifneq ($(filter $(WIFI),none cyw43),$(WIFI))
 $(error Unknown WIFI '$(WIFI)'; use none or cyw43)
 endif
+# CSC28 PicoCar (C2): the application uses SDK hardware drivers that are
+# compiled only in the cyw43 block below, so the radio build is mandatory.
+ifneq ($(WIFI),cyw43)
+$(error This project needs WIFI=cyw43)
+endif
 
 ifeq ($(WIFI),cyw43)
 WIFI_SUFFIX := _wifi
@@ -91,6 +96,16 @@ ifeq ($(TEST),1)
 TEST_SUFFIX := _test
 endif
 
+# PROBE=1 builds the GP14 timing probe into the image (APP_PROBE=1 in C).
+# The image gets a _probe suffix so it cannot be mistaken for the normal one.
+PROBE ?= 0
+ifneq ($(filter $(PROBE),0 1),$(PROBE))
+$(error Unknown PROBE '$(PROBE)'; use 0 or 1)
+endif
+ifeq ($(PROBE),1)
+PROBE_SUFFIX := _probe
+endif
+
 # CRASH_REPORT=1 also copies every console line to UART0 on GP0 (TX) /
 # GP1 (RX), 115200 8N1.  UART output is sent immediately, so it still shows
 # the last messages and the kernel's crash report after a crash, when the
@@ -116,7 +131,7 @@ endif
 # a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
 # only the banner in the log revealed it.
 #
-EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(TEST_SUFFIX)
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(TEST_SUFFIX)$(PROBE_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -177,6 +192,7 @@ CFLAGS  += -DCNF_SMP=1
 ASFLAGS += -DCNF_SMP=1
 endif
 CFLAGS  += -DAPP_TEST=$(TEST)
+CFLAGS  += -DAPP_PROBE=$(PROBE)
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
 CFLAGS  += -DBOARD_UART0_FREE=1
@@ -209,7 +225,7 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)
+PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-probe$(PROBE)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))
@@ -310,6 +326,19 @@ CYW43_OBJS := ./mtkernel_3/cyw43/cyw43_ll.o \
               ./mtkernel_3/cyw43/dma.o \
               ./mtkernel_3/cyw43/gpio.o
 
+# CSC28 PicoCar (C2): SDK hardware drivers used by the application.
+#   hardware_adc/adc.c            built (line_task, Buddy 3)
+#   hardware_i2c/i2c.c            NOT built: needs pico/time.h (pico_time),
+#                                 which this template does not provide;
+#                                 imu_task (Buddy 4) uses register-level I2C.
+#   hardware_watchdog/watchdog.c  NOT built: needs hardware/ticks.h and
+#                                 pico/bootrom.h, not in this template;
+#                                 sys_health (Buddy 5) uses the watchdog
+#                                 registers directly.
+# The include paths of all three stay in WIFI_INCLUDES for the register
+# definitions.
+SDK_APP_OBJS := ./mtkernel_3/sdk/adc.o
+
 WIFI_INCLUDES := -I"$(WIFIDIR)" \
                  -I"../lib/libtm/sysdepend/pico_rp2040/usb" \
                  -I"$(CYW43_DRIVER_PATH)/src" \
@@ -336,7 +365,11 @@ WIFI_INCLUDES := -I"$(WIFIDIR)" \
                  -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_sync_spin_lock/include" \
                  -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_clocks/include" \
                  -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_resets/include" \
-                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_timer/include"
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_timer/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_adc/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_pwm/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_i2c/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_watchdog/include"
 
 CFLAGS += -DTM_WIFI_CYW43=1 -DCYW43_LWIP=$(if $(filter lwip,$(NET)),1,0) -DCYW43_ENABLE_BLUETOOTH=0 \
           -DCYW43_USE_OTP_MAC=1 -DPICO_CYW43_LOGGING_ENABLED=0 \
@@ -351,8 +384,8 @@ CFLAGS += -DTM_WIFI_CYW43=1 -DCYW43_LWIP=$(if $(filter lwip,$(NET)),1,0) -DCYW43
           -DNDEBUG -ffunction-sections -fdata-sections $(WIFI_INCLUDES)
 LFLAGS += -Wl,--gc-sections
 
-OBJS += $(WIFI_LOCAL_OBJS) $(CYW43_OBJS)
-C_DEPS += $(WIFI_LOCAL_OBJS:.o=.d) $(CYW43_OBJS:.o=.d)
+OBJS += $(WIFI_LOCAL_OBJS) $(CYW43_OBJS) $(SDK_APP_OBJS)
+C_DEPS += $(WIFI_LOCAL_OBJS:.o=.d) $(CYW43_OBJS:.o=.d) $(SDK_APP_OBJS:.o=.d)
 
 mtkernel_3/lib/libwifi/sysdepend/pico_rp2040/%.o: $(WIFIDIR)/%.c
 	@echo 'Building Wi-Fi port file: $<'
@@ -384,6 +417,10 @@ mtkernel_3/cyw43/dma.o: $(PICO_SDK_PATH)/src/rp2_common/hardware_dma/dma.c
 	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
 
 mtkernel_3/cyw43/gpio.o: $(PICO_SDK_PATH)/src/rp2_common/hardware_gpio/gpio.c
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/sdk/adc.o: $(PICO_SDK_PATH)/src/rp2_common/hardware_adc/adc.c
 	@mkdir -p "$(@D)"
 	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
 
