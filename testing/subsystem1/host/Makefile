@@ -5,8 +5,10 @@
 #
 #   S1-U20..U23  test_app_bits_host.c    (app_bits.c + generated app_layout.h)
 #   S1-U24       gen_layout.py rejects a broken copy of tools/layout.csv
+#   S1-U14       gen_layout.py rejects MQ_HB.DROPS one bit wider (9 bits)
 #   S1-U01, U02 (packed), S1-U10  test_telem_bin_host.c (binary builders;
-#                writes the golden vectors in golden/)
+#                writes the golden vectors in golden/, which
+#                tools/telem_decode.py --golden must reproduce)
 #   S1-U11, U12, U30..U35  test_mqtt_bridge_host.c (mqtt_bridge.c + mock
 #                kernel; links telem_bin.c, app_bits.c, odometry.c)
 #   S1-U13, U15, U36, U37  test_mqtt_utk_host.c (radio-task mqtt_utk.c +
@@ -31,9 +33,10 @@ B       := build/app_program
 # the same number of entries.
 SB_MSG_FIELDS := $(shell grep -cE '^\#define (SB|MSG)_[A-Z0-9_]+_POS ' $(LAYOUT))
 
-.PHONY: all app_bits gen_layout_reject mqtt_bridge mqtt_utk tree \
-        telem_bin clean
-all: app_bits gen_layout_reject telem_bin mqtt_bridge mqtt_utk
+.PHONY: all app_bits gen_layout_reject gen_layout_reject_mq mqtt_bridge \
+        mqtt_utk tree telem_bin clean
+all: app_bits gen_layout_reject gen_layout_reject_mq telem_bin mqtt_bridge \
+     mqtt_utk
 
 test_app_bits_host.out: test_app_bits_host.c $(APP_DIR)/app_bits.c \
                         $(APP_DIR)/app_bits.h $(LAYOUT) ../../host/host_test.h
@@ -60,6 +63,21 @@ gen_layout_reject:
 	    exit 1; \
 	fi
 
+# S1-U14: widen MQ_HB.DROPS (0..255) from 8 to 9 bits; same expectation.
+gen_layout_reject_mq:
+	@tmp=$$(mktemp); \
+	sed 's/^MQ_HB,0,DROPS,8,/MQ_HB,0,DROPS,9,/' $(TOOLS)/layout.csv > $$tmp; \
+	if grep -q '^MQ_HB,0,DROPS,9,' $$tmp; then :; else \
+	    echo "[TEST] S1-U14 FAIL  could not build the broken CSV"; \
+	    rm -f $$tmp; exit 1; fi; \
+	$(PYTHON) $(TOOLS)/gen_layout.py --check $$tmp; rc=$$?; rm -f $$tmp; \
+	if [ $$rc -eq 1 ]; then \
+	    echo "[TEST] S1-U14 PASS  gen_layout.py rejects MQ_HB.DROPS 9 bits"; \
+	else \
+	    echo "[TEST] S1-U14 FAIL  gen_layout.py exit $$rc, expected 1"; \
+	    exit 1; \
+	fi
+
 test_telem_bin_host.out: test_telem_bin_host.c $(S1)/telem_bin.c \
                          $(S1)/telem_bin.h $(APP_DIR)/app_bits.c \
                          $(APP_DIR)/subsystem2/odometry.c $(LAYOUT)
@@ -69,6 +87,7 @@ test_telem_bin_host.out: test_telem_bin_host.c $(S1)/telem_bin.c \
 telem_bin: test_telem_bin_host.out
 	mkdir -p golden
 	./test_telem_bin_host.out
+	$(PYTHON) $(TOOLS)/telem_decode.py --golden golden
 
 tree:
 	rm -rf build
