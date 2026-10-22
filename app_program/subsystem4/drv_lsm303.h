@@ -1,6 +1,6 @@
 /**
  * @file    drv_lsm303.h
- * @brief   LSM303DLHC driver: register-level I2C1, accelerometer FIFO,
+ * @brief   LSM303D driver: register-level I2C1, accelerometer FIFO,
  *          magnetometer and the impact-interrupt configuration.
  * @owner   Buddy 4 (IMU, terrain)
  * @kind    drv
@@ -13,6 +13,14 @@
 #include <stdbool.h>
 
 #define DRV_LSM303_FIFO_MAX (4u) /* samples read per call, at most */
+
+/* LSM303D hardware identity. Spec B4.1.1 was written for the LSM303DLHC
+   (accelerometer 0x19, magnetometer 0x1E, identity 'H','4','3'); the
+   GY-511 board actually held carries an LSM303D, which answers on one
+   address with WHO_AM_I = 0x49. See SPEC-QUESTION SQ-B4-2 in
+   drv_lsm303.c. Kept in the header so the host test can lock them. */
+#define DRV_LSM303_ADDR     (0x1Du)
+#define DRV_LSM303_WHO_AM_I (0x49u)
 
 typedef struct
 {
@@ -61,7 +69,7 @@ extern int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my,
 /* Reads INT1_SRC_A, which also clears the latched interrupt so a later
    impact can raise a new edge (B4.1.1). Returns the byte or <0. */
 extern int32_t  drv_lsm303_read_int1_src(void);
-extern int32_t  drv_lsm303_identity_ok(void);   /* 1 = 'H','4','3' found */
+extern int32_t  drv_lsm303_identity_ok(void);   /* 1 = WHO_AM_I 0x49 */
 extern uint32_t drv_lsm303_fifo_overruns(void); /* saturating, for the
                                                    packed PRV_OFS_B row */
 extern void drv_lsm303_bus_reset(void);

@@ -28,7 +28,7 @@ Define a test here before running it. Test IDs never change (spec B4).
 | S4-I03 | Impact taps from front/back/left/right | FR13 | bench | 5 taps each side; log `INT1_SRC_A`; with Buddy 2 | INT1 fires every time; motors low ≤ 15 ms |
 | S4-I04 | 10 on-the-spot turns: IMU vs encoder rate | A7 | floor | turn left/right, compare rates | Within 10 % or flagged `b_is_turn_from_enc` |
 | S4-I05 | Unplug SDA | B4.2.2 step 2 | bench | pull SDA during RUN | Fault after 3 errors; recovers on reconnect |
-| S4-I06 | FIFO burst read equals single reads; identity | B4.1.1 verify wrap | bench | burst of 4 vs 4 single reads; read IRA/IRB/IRC | Equal samples; identity `H43` |
+| S4-I06 | FIFO burst read equals single reads; identity | B4.1.1 verify wrap (LSM303D: SQ-B4-2) | bench | burst of 4 vs 4 single reads; read WHO_AM_I (0x0F) | Equal samples; identity `0x49` on address 0x1D |
 | S4-I07 | A18 pull-ups on SDA/SCL | A18 | bench | meter to 3.3 V, power off | 2–10 kΩ |
 | S4-I08 | Axis signs | B4.1.2 | bench | tilt nose up; flat | `ax` rises → `IMU_X_FORWARD_SIGN`; flat `az` ≈ +1000 mg |
 | S4-I09 | I2C time on GP14 | B.3 budgets | bench | GP14 around FIFO read | Record µs for 4 samples and magnetometer; ≤ budget |
@@ -53,10 +53,49 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S4-U11 | audit commit | Faris | PASS (target build) | `test_imu.c` `test_imu_hump_clamp`, `test_imu_offset_lsb` | 127 mm is representable and does not clamp; 128 mm clamps to 127 and sets the flag `imu_clamp_fault` turns into `APP_FAULT_RANGE_CLAMP`; that bit stays out of `APP_FAULT_STOP_MASK` (A25). One `PRV_OFS_A` AX step decodes to 2 mg, the 12-bit field covers ±4094 mg and 2048 steps clamp. Pure flag checks, so live state is untouched |
 | 2026-10-22 | normal + `TEST=1` builds, `barr_check.sh` | audit commit | Faris | PASS | build logs | both images build with zero warnings after the audit; `tools/barr_check.sh`: 67 files, no findings |
 | 2026-10-22 | RAM report (Phase 5, regenerated) | audit commit | Faris | PASS (script) | `docs/ram_comparison.md` | re-measured against a fresh pre-packing baseline (`05a20af`): `.bss` −64 B, `.data` +8 B, B4 statics net **−59 B**; section 3 still pending until on-car `app_stack_report()` logs exist |
+| 2026-10-22 | S4-U14 + SQ-B4-2 register facts | LSM303D port | Faris | PASS (host) | `logs/2026-10-22_host_lsm303d.txt` | after the LSM303D port: terrain 19/19, fifo planner 8/8 (2 new checks lock address 0x1D and WHO_AM_I 0x49); normal and `TEST=1` images clean, `barr_check.sh` 85 files no findings. Hardware confirmation of the register set is S4-I06 |
 | 2026-10-22 | S4-I01, I02, I03, I04, I09 (Phase 3) | — | Faris | pending | — | integration on the car: INT1→motors low ≤15 ms with Buddy 2 (GP14), course humps vs ruler, imu_task WCET. Blocked on hardware; plan below |
 | 2026-10-22 | S4-I01–I11 | — | Faris | pending | — | bench/track: needs the physical car (placeholders kept, spec rule A.3) |
 
 ## SPEC-QUESTION
+
+**SQ-B4-2: the board is an LSM303D, not the LSM303DLHC — OPEN.**
+
+Reported by Buddy 5, measured on the actual GY-511: the part answers on a
+**single address 0x1D** and its **WHO_AM_I (0x0F) = 0x49**. Address 0x19,
+which B4.1.1 gives as the accelerometer, does not respond at all. 0x49 is
+the LSM303D identity; the DLHC would give 'H','4','3' at 0x0A-0x0C.
+
+Consequence with the unmodified driver: the first write to 0x19 NACKs, the
+identity check fails, three errors in a row put the monitor into
+TERRAIN_FAULT and raise APP_FAULT_IMU, so the IMU would never work on the
+real car. The code was not wrong — B4.1.1 named the wrong part.
+
+Buddy 5's recommendation, which Buddy 4 accepted: **adapt the driver**
+rather than buy a discontinued DLHC board. That work is done on branch
+`b4-lsm303d` and covers all five points he listed:
+
+| Point | What changed |
+|---|---|
+| Single address | `DRV_LSM303_ADDR` is 0x1D; the two-address split is gone |
+| New registers | LSM303D control map: CTRL0/1/2/3/5/6/7, FIFO_CTRL/FIFO_SRC, IG_CFG1/IG_SRC1/IG_THS1/IG_DUR1 |
+| 16-bit scaling | 0.122 mg/LSB at +-4 g, applied as the fraction 61/500 in `imu.c` |
+| Different INT1 setup | interrupt generator 1 on INT1 (CTRL3 bit 5), `IMU_IMPACT_THS` into IG_THS1 |
+| Other timings | byte counts unchanged (same FIFO status + burst reads), so the 550/750/800 us budget stands; re-measured in S4-I09 |
+
+Two sub-questions the team still has to settle:
+
+1. **IG_THS1 weight.** The register chapter does not publish mg/LSB for
+   IG_THS1, so the "1.5 g" in `cfg_imu.h` is nominal. S4-I03 measures it
+   and the TUNE marker is honoured there.
+2. **E4 row width.** `E_IMU_SAMPLE,16,RAW_SAMPLE,12` documents a 12-bit
+   register image, but the LSM303D sample is a true 16-bit value. That row
+   is a documentation-only class-E entry (no macros are generated from
+   it), so nothing breaks, but `tools/layout.csv` should be corrected to
+   16 bits in a `SHARED:` PR once the team agrees.
+
+Unchanged on purpose: `FIFO_SRC` bit layout is identical between the two
+parts, so `drv_lsm303_fifo_plan` and its host test needed no change.
 
 **SQ-B4-1: E_IMU_SAMPLE group — RESOLVED, Buddy 1 accepts the split.**
 B4.4 lists the three E_IMU rows in one group with mixed `group_bits`
@@ -69,10 +108,8 @@ Buddy 1 keeps the generator check and accepts `E_IMU_SAMPLE`. Per the
 C.6 rule that `tools/layout.csv` changes only through a `SHARED:` pull
 request, the layout rows plus the three generated files are reviewed in
 branch `shared-b4-layout-rows` (commit `36da4ae`), where the deviation
-from B4.4 is written up. Merge that PR before or together with `b4-imu`;
-the rows are identical on both branches, so the merge is a duplicate
-addition and needs no manual fix-up. After it merges, rebase `b4-imu`
-onto `main` so its own PR diff no longer carries the layout rows.
+from B4.4 is written up. That PR is merged, so the rows are on `main` and
+`b4-imu` carries them too; no merge conflict results.
 
 ## Audit pass (review of Phases 1–5)
 

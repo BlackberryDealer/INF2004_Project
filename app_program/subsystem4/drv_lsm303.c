@@ -1,10 +1,23 @@
 /**
  * @file    drv_lsm303.c
- * @brief   Register-level LSM303DLHC driver on I2C1 (400 kHz): accelerometer
+ * @brief   Register-level LSM303D driver on I2C1 (400 kHz): accelerometer
  *          FIFO stream, magnetometer, impact interrupt (INT1), bus reset.
  * @owner   Buddy 4 (IMU, terrain)
  * @kind    drv
  * @reqs    FR4, FR5, FR13, FR18, NFR7
+ *
+ * SPEC-QUESTION SQ-B4-2: spec B4.1.1 targets the LSM303DLHC (accelerometer
+ * at 0x19, magnetometer at 0x1E, identity 'H','4','3'). The GY-511 board
+ * the team actually holds carries an LSM303D: single address 0x1D and
+ * WHO_AM_I (0x0F) = 0x49. Measured on the board by Buddy 5, so this file
+ * was ported to that part instead of guessing. Differences from B4.1.1:
+ * one I2C address for both sensors; the LSM303D control bit layouts in
+ * CTRL0..CTRL7; 16-bit acceleration at 0.122 mg/LSB for +-4 g (B4.1.1
+ * assumed 12-bit left-justified at 2 mg/LSB after /16); the impact
+ * interrupt is interrupt generator 1 (IG_CFG1/IG_SRC1/IG_THS1/IG_DUR1);
+ * the magnetometer reads 0x08..0x0D as plain little-endian X, Y, Z. The
+ * FIFO_SRC bit layout happens to be identical, so the FIFO planner and
+ * its host test are unchanged. Pending team decision before merge.
  *
  * The template cannot link the SDK's i2c.c (see build_make/pico_rp2040.mk,
  * CSC28 note C2), so every bus transaction is done here against the
@@ -16,7 +29,9 @@
  * Timing at 400 kHz (22.5 us per byte): FIFO status read = 4 bytes
  * (90 us), 2 samples = 15 bytes (338 us), 4 samples = 27 bytes (608 us),
  * magnetometer = 9 bytes (203 us). Budgets (B.3): 550 us normal, 750 us
- * magnetometer cycle, 800 us backlog.
+ * magnetometer cycle, 800 us backlog. Re-measured for this part in
+ * S4-I09 because the byte counts are unchanged but the register set is
+ * not.
  */
 
 #include "drv_lsm303.h" /* own header first (BARR-C 4.3.c) */
@@ -33,47 +48,46 @@ extern uint32_t sys_tick_now_us(void);
 
 /* ---- private constants and types ------------------------------------ */
 
-#define LSM303_ADDR_ACC (0x19u)
-#define LSM303_ADDR_MAG (0x1Eu)
+#define LSM303_ADDR (DRV_LSM303_ADDR) /* one address for accel and mag */
 
-/* Accelerometer registers (LSM303DLHC datasheet) */
-#define LSM303_REG_CTRL1_A     (0x20u)
-#define LSM303_REG_CTRL3_A     (0x22u)
-#define LSM303_REG_CTRL4_A     (0x23u)
-#define LSM303_REG_CTRL5_A     (0x24u)
-#define LSM303_REG_OUT_X_L_A   (0x28u)
-#define LSM303_REG_FIFO_CTRL_A (0x2Eu)
-#define LSM303_REG_FIFO_SRC_A  (0x2Fu)
-#define LSM303_REG_INT1_CFG_A  (0x30u)
-#define LSM303_REG_INT1_SRC_A  (0x31u)
-#define LSM303_REG_INT1_THS_A  (0x32u)
-#define LSM303_REG_INT1_DUR_A  (0x33u)
+/* Registers (LSM303D datasheet, DocID023312; register names and bit
+   positions verified against the ST register map, not assumed) */
+#define LSM303_REG_CTRL0     (0x1Fu)
+#define LSM303_REG_CTRL1     (0x20u)
+#define LSM303_REG_CTRL2     (0x21u)
+#define LSM303_REG_CTRL3     (0x22u)
+#define LSM303_REG_CTRL5     (0x24u)
+#define LSM303_REG_CTRL6     (0x25u)
+#define LSM303_REG_CTRL7     (0x26u)
+#define LSM303_REG_OUT_X_L_A (0x28u)
+#define LSM303_REG_FIFO_CTRL (0x2Eu)
+#define LSM303_REG_FIFO_SRC  (0x2Fu)
+#define LSM303_REG_IG_CFG1   (0x30u)
+#define LSM303_REG_IG_SRC1   (0x31u)
+#define LSM303_REG_IG_THS1   (0x32u)
+#define LSM303_REG_IG_DUR1   (0x33u)
 
-/* Magnetometer registers */
-#define LSM303_REG_CRA_M     (0x00u)
-#define LSM303_REG_CRB_M     (0x01u)
-#define LSM303_REG_MR_M      (0x02u)
-#define LSM303_REG_OUT_X_H_M (0x03u)
-#define LSM303_REG_IRA_M     (0x0Au)
+/* Magnetometer data and identity */
+#define LSM303_REG_OUT_X_L_M (0x08u)
+#define LSM303_REG_WHO_AM_I  (0x0Fu)
 
-/* Register values (B4.1.1 table) */
-#define LSM303_VAL_CTRL1_A     (0x67u) /* 200 Hz, XYZ on             */
-#define LSM303_VAL_CTRL3_A     (0x40u) /* AOI1 interrupt on INT1     */
-#define LSM303_VAL_CTRL4_A     (0x98u) /* BDU, +-4 g, high resolution */
-#define LSM303_VAL_CTRL5_A     (0x40u) /* FIFO enable                */
-#define LSM303_VAL_FIFO_CTRL_A (0x80u) /* stream mode                */
-#define LSM303_VAL_INT1_CFG_A  (0x0Au) /* X-high or Y-high event     */
-#define LSM303_VAL_INT1_DUR_A  (0x00u)
-#define LSM303_VAL_CRA_M       (0x18u) /* 75 Hz                      */
-#define LSM303_VAL_CRB_M       (0x20u) /* +-1.3 gauss                */
-#define LSM303_VAL_MR_M        (0x00u) /* continuous                 */
+/* Register values (LSM303D; each bit position taken from the datasheet
+   register tables on pages 34-43 of DocID023312) */
+#define LSM303_VAL_CTRL0     (0x40u) /* FIFO_EN, bit 6                  */
+#define LSM303_VAL_CTRL1     (0x7Fu) /* AODR 200 Hz, BDU, X/Y/Z on      */
+#define LSM303_VAL_CTRL2     (0x08u) /* AFS = +-4 g, ABW 773 Hz         */
+#define LSM303_VAL_CTRL3     (0x20u) /* INT1_IG1, bit 5                 */
+#define LSM303_VAL_CTRL5     (0x65u) /* M high-res, M_ODR 50 Hz, LIR1   */
+#define LSM303_VAL_CTRL6     (0x00u) /* MFS = +-2 gauss                 */
+#define LSM303_VAL_CTRL7     (0x00u) /* MD = continuous conversion      */
+#define LSM303_VAL_FIFO_CTRL (0x40u) /* FM = stream mode                */
+#define LSM303_VAL_IG_CFG1   (0x0Au) /* OR, X-high or Y-high event      */
+#define LSM303_VAL_IG_DUR1   (0x00u)
 
-/* Identity bytes expected from IRA/IRB/IRC */
-#define LSM303_ID_H (0x48u)
-#define LSM303_ID_4 (0x34u)
-#define LSM303_ID_3 (0x33u)
+/* Identity byte expected from WHO_AM_I (0x0F) */
+#define LSM303_WHO_AM_I_D (DRV_LSM303_WHO_AM_I)
 
-/* FIFO_SRC_REG_A bits */
+/* FIFO_SRC bits (LSM303D Table 60: FTH, OVRN, EMPTY, FSS[4:0]) */
 #define LSM303_FIFO_SRC_FSS_MASK (0x1Fu) /* unread samples, bits 0-4   */
 #define LSM303_FIFO_SRC_OVRN     (0x40u) /* overrun, bit 6             */
 
@@ -148,7 +162,7 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
         max_samples = DRV_LSM303_FIFO_MAX; /* API cap */
     }
 
-    ercd = lsm303_rx(LSM303_ADDR_ACC, LSM303_REG_FIFO_SRC_A, &fifo_src, 1u);
+    ercd = lsm303_rx(LSM303_ADDR, LSM303_REG_FIFO_SRC, &fifo_src, 1u);
     if (0 != ercd)
     {
         return ercd;
@@ -162,9 +176,8 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
     {
         /* Discard up to 4 samples so the stream can continue; no sample
            from this cycle is used (review R14). */
-        ercd =
-            lsm303_rx(LSM303_ADDR_ACC, (uint8_t)(LSM303_REG_OUT_X_L_A | 0x80u),
-                      burst, LSM303_SAMPLES_BYTES);
+        ercd = lsm303_rx(LSM303_ADDR, (uint8_t)(LSM303_REG_OUT_X_L_A | 0x80u),
+                         burst, LSM303_SAMPLES_BYTES);
         if (0 != ercd)
         {
             return ercd;
@@ -177,7 +190,7 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
         return 0; /* no new data this cycle */
     }
 
-    ercd = lsm303_rx(LSM303_ADDR_ACC, (uint8_t)(LSM303_REG_OUT_X_L_A | 0x80u),
+    ercd = lsm303_rx(LSM303_ADDR, (uint8_t)(LSM303_REG_OUT_X_L_A | 0x80u),
                      burst, take * 6u);
     if (0 != ercd)
     {
@@ -205,8 +218,9 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
 
 /**
  * drv_lsm303_read_mag
- * @brief   One magnetometer read (6 bytes from OUT_X_H_M in the datasheet
- *          order X_H, X_L, Z_H, Z_L, Y_H, Y_L).
+ * @brief   One magnetometer read: 6 bytes from OUT_X_L_M, in the LSM303D
+ *          order X_L, X_H, Y_L, Y_H, Z_L, Z_H (little-endian, plain XYZ;
+ *          the DLHC's X/Z/Y order does not apply here).
  * @param   p_mx  out: X field
  * @param   p_my  out: Y field
  * @param   p_mz  out: Z field
@@ -218,15 +232,15 @@ int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my, int16_t * p_mz)
     uint8_t buf[6u] = {0};
     int32_t ercd    = 0;
 
-    ercd = lsm303_rx(LSM303_ADDR_MAG, LSM303_REG_OUT_X_H_M, buf, 6u);
+    ercd = lsm303_rx(LSM303_ADDR, LSM303_REG_OUT_X_L_M, buf, 6u);
     if (0 != ercd)
     {
         return ercd;
     }
 
-    *p_mx = (int16_t)(((uint16_t)buf[0] << 8) | (uint16_t)buf[1]);
-    *p_mz = (int16_t)(((uint16_t)buf[2] << 8) | (uint16_t)buf[3]);
-    *p_my = (int16_t)(((uint16_t)buf[4] << 8) | (uint16_t)buf[5]);
+    *p_mx = (int16_t)((uint16_t)buf[0] | ((uint16_t)buf[1] << 8));
+    *p_my = (int16_t)((uint16_t)buf[2] | ((uint16_t)buf[3] << 8));
+    *p_mz = (int16_t)((uint16_t)buf[4] | ((uint16_t)buf[5] << 8));
     /* casts: 16-bit register image */
 
     return 0;
@@ -234,17 +248,17 @@ int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my, int16_t * p_mz)
 
 /**
  * drv_lsm303_read_int1_src
- * @brief   Reads INT1_SRC_A. The LSM303DLHC latches the interrupt until
- *          this register is read, so calling it after every impact is
- *          what lets a repeated tap generate a new rising edge on INT1
- *          (B4.1.1 register table, S4-I03).
- * @return  the INT1_SRC_A byte, or <0 on an I2C error
+ * @brief   Reads IG_SRC1. Reading it clears the IA bit and the interrupt
+ *          line, and (with LIR1 set in CTRL5) releases the latch, so
+ *          calling it after every impact is what lets a repeated tap
+ *          generate a new edge on INT1 (LSM303D datasheet 8.31, S4-I03).
+ * @return  the IG_SRC1 byte, or <0 on an I2C error
  * @context imu_task
  */
 int32_t drv_lsm303_read_int1_src(void)
 {
     uint8_t src  = 0u;
-    int32_t ercd = lsm303_rx(LSM303_ADDR_ACC, LSM303_REG_INT1_SRC_A, &src, 1u);
+    int32_t ercd = lsm303_rx(LSM303_ADDR, LSM303_REG_IG_SRC1, &src, 1u);
 
     if (0 != ercd)
     {
@@ -255,22 +269,20 @@ int32_t drv_lsm303_read_int1_src(void)
 
 /**
  * drv_lsm303_identity_ok
- * @brief   Reads the magnetometer identity registers IRA/IRB/IRC.
- * @return  1 when 'H','4','3' are found, 0 on a mismatch, <0 on an
- *          I2C error
+ * @brief   Reads WHO_AM_I and compares it with the LSM303D value 0x49.
+ * @return  1 when 0x49 is found, 0 on a mismatch, <0 on an I2C error
  * @context imu_task or a test
  */
 int32_t drv_lsm303_identity_ok(void)
 {
-    uint8_t id_bytes[3u] = {0, 0, 0};
-    int32_t ercd = lsm303_rx(LSM303_ADDR_MAG, LSM303_REG_IRA_M, id_bytes, 3u);
+    uint8_t id_byte = 0u;
+    int32_t ercd    = lsm303_rx(LSM303_ADDR, LSM303_REG_WHO_AM_I, &id_byte, 1u);
 
     if (0 != ercd)
     {
         return ercd;
     }
-    if ((LSM303_ID_H == id_bytes[0]) && (LSM303_ID_4 == id_bytes[1]) &&
-        (LSM303_ID_3 == id_bytes[2]))
+    if (LSM303_WHO_AM_I_D == id_byte)
     {
         return 1;
     }
@@ -354,8 +366,11 @@ static void lsm303_hw_setup(void)
 
 /**
  * lsm303_hw_write_config
- * @brief   Writes every register from the B4.1.1 table, accelerometer
- *          first, then magnetometer.
+ * @brief   Writes the LSM303D control registers: accelerometer 200 Hz at
+ *          +-4 g with the FIFO in stream mode, interrupt generator 1 on
+ *          INT1 for the impact threshold, magnetometer at 50 Hz high
+ *          resolution. Register and value choices are in the define
+ *          block above.
  * @return  0 or the first I2C error
  * @context imu_task or usermain
  */
@@ -363,54 +378,49 @@ static int32_t lsm303_hw_write_config(void)
 {
     int32_t ercd = 0;
 
-    ercd = lsm303_tx2(LSM303_ADDR_ACC, LSM303_REG_CTRL1_A, LSM303_VAL_CTRL1_A);
+    ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL0, LSM303_VAL_CTRL0);
     if (0 == ercd)
     {
-        ercd =
-            lsm303_tx2(LSM303_ADDR_ACC, LSM303_REG_CTRL4_A, LSM303_VAL_CTRL4_A);
+        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL1, LSM303_VAL_CTRL1);
+    }
+    if (0 == ercd)
+    {
+        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL2, LSM303_VAL_CTRL2);
+    }
+    if (0 == ercd)
+    {
+        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL5, LSM303_VAL_CTRL5);
+    }
+    if (0 == ercd)
+    {
+        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL6, LSM303_VAL_CTRL6);
+    }
+    if (0 == ercd)
+    {
+        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL7, LSM303_VAL_CTRL7);
     }
     if (0 == ercd)
     {
         ercd =
-            lsm303_tx2(LSM303_ADDR_ACC, LSM303_REG_CTRL5_A, LSM303_VAL_CTRL5_A);
+            lsm303_tx2(LSM303_ADDR, LSM303_REG_FIFO_CTRL, LSM303_VAL_FIFO_CTRL);
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR_ACC, LSM303_REG_FIFO_CTRL_A,
-                          LSM303_VAL_FIFO_CTRL_A);
+        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL3, LSM303_VAL_CTRL3);
     }
     if (0 == ercd)
     {
-        ercd =
-            lsm303_tx2(LSM303_ADDR_ACC, LSM303_REG_CTRL3_A, LSM303_VAL_CTRL3_A);
+        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_IG_CFG1, LSM303_VAL_IG_CFG1);
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR_ACC, LSM303_REG_INT1_CFG_A,
-                          LSM303_VAL_INT1_CFG_A);
-    }
-    if (0 == ercd)
-    {
-        ercd = lsm303_tx2(LSM303_ADDR_ACC, LSM303_REG_INT1_THS_A,
+        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_IG_THS1,
                           (uint8_t)IMU_IMPACT_THS);
         /* cast: threshold is 0..127 */
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR_ACC, LSM303_REG_INT1_DUR_A,
-                          LSM303_VAL_INT1_DUR_A);
-    }
-    if (0 == ercd)
-    {
-        ercd = lsm303_tx2(LSM303_ADDR_MAG, LSM303_REG_CRA_M, LSM303_VAL_CRA_M);
-    }
-    if (0 == ercd)
-    {
-        ercd = lsm303_tx2(LSM303_ADDR_MAG, LSM303_REG_CRB_M, LSM303_VAL_CRB_M);
-    }
-    if (0 == ercd)
-    {
-        ercd = lsm303_tx2(LSM303_ADDR_MAG, LSM303_REG_MR_M, LSM303_VAL_MR_M);
+        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_IG_DUR1, LSM303_VAL_IG_DUR1);
     }
 
     return ercd;
