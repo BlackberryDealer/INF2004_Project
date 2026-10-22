@@ -1082,6 +1082,108 @@
 #error "Group SH_IMU no longer fits in 8 bits"
 #endif
 
+/* PRV_TEL: 32-bit word */
+#define PRV_TEL_DROPS_POS               (0u)
+#define PRV_TEL_DROPS_BITS              (8u)
+#define PRV_TEL_DROPS_MIN               (0)
+#define PRV_TEL_DROPS_MAX               (255)
+#define PRV_TEL_DROPS_OFFSET            (0)
+#define PRV_TEL_DROPS_KIND              (APP_KIND_SAT)
+#define PRV_TEL_HB_DIV_POS              (PRV_TEL_DROPS_POS + PRV_TEL_DROPS_BITS)
+#define PRV_TEL_HB_DIV_BITS             (3u)
+#define PRV_TEL_HB_DIV_MIN              (0)
+#define PRV_TEL_HB_DIV_MAX              (4)
+#define PRV_TEL_HB_DIV_OFFSET           (0)
+#define PRV_TEL_HB_DIV_KIND             (APP_KIND_RNG)
+#define PRV_TEL_UPTIME_HI_POS           (PRV_TEL_HB_DIV_POS + PRV_TEL_HB_DIV_BITS)
+#define PRV_TEL_UPTIME_HI_BITS          (16u)
+#define PRV_TEL_UPTIME_HI_MIN           (0)
+#define PRV_TEL_UPTIME_HI_MAX           (65535)
+#define PRV_TEL_UPTIME_HI_OFFSET        (0)
+#define PRV_TEL_UPTIME_HI_KIND          (APP_KIND_SAT)
+#define PRV_TEL_USED_BITS               (PRV_TEL_UPTIME_HI_POS + PRV_TEL_UPTIME_HI_BITS)
+#if (PRV_TEL_USED_BITS > 32u)
+#error "Group PRV_TEL no longer fits in 32 bits"
+#endif
+
+/* PRV_TEL_K7: 8-bit word */
+#define PRV_TEL_K7_DROPS_POS            (0u)
+#define PRV_TEL_K7_DROPS_BITS           (8u)
+#define PRV_TEL_K7_DROPS_MIN            (0)
+#define PRV_TEL_K7_DROPS_MAX            (255)
+#define PRV_TEL_K7_DROPS_OFFSET         (0)
+#define PRV_TEL_K7_DROPS_KIND           (APP_KIND_SAT)
+#define PRV_TEL_K7_USED_BITS            (PRV_TEL_K7_DROPS_POS + PRV_TEL_K7_DROPS_BITS)
+#if (PRV_TEL_K7_USED_BITS > 8u)
+#error "Group PRV_TEL_K7 no longer fits in 8 bits"
+#endif
+
+/* PRV_BRIDGE: 32-bit word */
+#define PRV_BRIDGE_CMD_DROPS_POS        (0u)
+#define PRV_BRIDGE_CMD_DROPS_BITS       (8u)
+#define PRV_BRIDGE_CMD_DROPS_MIN        (0)
+#define PRV_BRIDGE_CMD_DROPS_MAX        (255)
+#define PRV_BRIDGE_CMD_DROPS_OFFSET     (0)
+#define PRV_BRIDGE_CMD_DROPS_KIND       (APP_KIND_SAT)
+#define PRV_BRIDGE_PUB_DROPS_POS        (PRV_BRIDGE_CMD_DROPS_POS + PRV_BRIDGE_CMD_DROPS_BITS)
+#define PRV_BRIDGE_PUB_DROPS_BITS       (8u)
+#define PRV_BRIDGE_PUB_DROPS_MIN        (0)
+#define PRV_BRIDGE_PUB_DROPS_MAX        (255)
+#define PRV_BRIDGE_PUB_DROPS_OFFSET     (0)
+#define PRV_BRIDGE_PUB_DROPS_KIND       (APP_KIND_SAT)
+#define PRV_BRIDGE_CMD_SEEN_POS         (PRV_BRIDGE_PUB_DROPS_POS + PRV_BRIDGE_PUB_DROPS_BITS)
+#define PRV_BRIDGE_CMD_SEEN_BITS        (4u)
+#define PRV_BRIDGE_CMD_SEEN_MIN         (0)
+#define PRV_BRIDGE_CMD_SEEN_MAX         (15)
+#define PRV_BRIDGE_CMD_SEEN_OFFSET      (0)
+#define PRV_BRIDGE_CMD_SEEN_KIND        (APP_KIND_RAW)
+#define PRV_BRIDGE_USED_BITS            (PRV_BRIDGE_CMD_SEEN_POS + PRV_BRIDGE_CMD_SEEN_BITS)
+#if (PRV_BRIDGE_USED_BITS > 32u)
+#error "Group PRV_BRIDGE no longer fits in 32 bits"
+#endif
+
+/* PRV_MQTT: 16-bit word */
+#define PRV_MQTT_BACKOFF_POS            (0u)
+#define PRV_MQTT_BACKOFF_BITS           (2u)
+#define PRV_MQTT_BACKOFF_MIN            (0)
+#define PRV_MQTT_BACKOFF_MAX            (3)
+#define PRV_MQTT_BACKOFF_OFFSET         (0)
+#define PRV_MQTT_BACKOFF_KIND           (APP_KIND_RNG)
+#define PRV_MQTT_PEND_TRIES_POS         (PRV_MQTT_BACKOFF_POS + PRV_MQTT_BACKOFF_BITS)
+#define PRV_MQTT_PEND_TRIES_BITS        (2u)
+#define PRV_MQTT_PEND_TRIES_MIN         (0)
+#define PRV_MQTT_PEND_TRIES_MAX         (2)
+#define PRV_MQTT_PEND_TRIES_OFFSET      (0)
+#define PRV_MQTT_PEND_TRIES_KIND        (APP_KIND_RNG)
+#define PRV_MQTT_PEND_LEN_POS           (PRV_MQTT_PEND_TRIES_POS + PRV_MQTT_PEND_TRIES_BITS)
+#define PRV_MQTT_PEND_LEN_BITS          (5u)
+#define PRV_MQTT_PEND_LEN_MIN           (0)
+#define PRV_MQTT_PEND_LEN_MAX           (20)
+#define PRV_MQTT_PEND_LEN_OFFSET        (0)
+#define PRV_MQTT_PEND_LEN_KIND          (APP_KIND_RNG)
+#define PRV_MQTT_PEND_TYPE_POS          (PRV_MQTT_PEND_LEN_POS + PRV_MQTT_PEND_LEN_BITS)
+#define PRV_MQTT_PEND_TYPE_BITS         (5u)
+#define PRV_MQTT_PEND_TYPE_MIN          (0)
+#define PRV_MQTT_PEND_TYPE_MAX          (31)
+#define PRV_MQTT_PEND_TYPE_OFFSET       (0)
+#define PRV_MQTT_PEND_TYPE_KIND         (APP_KIND_ENUM)
+#define PRV_MQTT_USED_BITS              (PRV_MQTT_PEND_TYPE_POS + PRV_MQTT_PEND_TYPE_BITS)
+#if (PRV_MQTT_USED_BITS > 16u)
+#error "Group PRV_MQTT no longer fits in 16 bits"
+#endif
+
+/* PRV_CMD_T: 16-bit word */
+#define PRV_CMD_T_LAST_POS              (0u)
+#define PRV_CMD_T_LAST_BITS             (16u)
+#define PRV_CMD_T_LAST_MIN              (0)
+#define PRV_CMD_T_LAST_MAX              (65535)
+#define PRV_CMD_T_LAST_OFFSET           (0)
+#define PRV_CMD_T_LAST_KIND             (APP_KIND_RAW)
+#define PRV_CMD_T_USED_BITS             (PRV_CMD_T_LAST_POS + PRV_CMD_T_LAST_BITS)
+#if (PRV_CMD_T_USED_BITS > 16u)
+#error "Group PRV_CMD_T no longer fits in 16 bits"
+#endif
+
 #endif /* APP_LAYOUT_H */
 
 /*** end of file ***/

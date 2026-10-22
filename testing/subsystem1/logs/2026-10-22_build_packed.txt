@@ -1,0 +1,12 @@
+# 2026-10-22 firmware builds at commit 5bb213b (b1-comms), make SMP=0 NET=lwip MQTT=1 [args]
+# app flags: -std=c99 -Wall -Wextra -pedantic -Wconversion -Wsign-conversion -Werror
+[] rc 0 warnings 0 errors 0
+ 354424	    288	  89736	 444448	  6c820	mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.elf
+[TEST=1] rc 0 warnings 0 errors 0
+ 359604	    288	  90376	 450268	  6dedc	mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_test.elf
+[TEST=1 PROBE=1] rc 0 warnings 0 errors 0
+ 359764	    288	  90376	 450428	  6df7c	mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_test_probe.elf
+
+barr_check:
+barr_check: 91 files, no findings
+layout.csv: OK, 155 rows

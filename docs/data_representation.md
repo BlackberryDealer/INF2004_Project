@@ -51,6 +51,18 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PAD | MQ_HB | 0..0 × 1 - | 1 | 0 | 4 | PAD | S | Zero |
 | CHAR | MQ_MAP | 0..42 × 1 code | 1 | 6 | 6 | ENUM | S | Byte 1 of a MAP command |
 | CMD | MQ_MAP | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | Byte 1 of a MAP command |
+| DROPS | PRV_TEL | 0..255 × 1 count | 1 | 8 | 8 | SAT | P | K11 drops; telem_task only |
+| HB_DIV | PRV_TEL | 0..4 × 1 count | 1 | 3 | 3 | RNG | P | State cycles since heartbeat |
+| UPTIME_HI | PRV_TEL | 0..65535 × 1 s | 1 | 16 | 16 | SAT | P | Uptime seconds |
+| DROPS | PRV_TEL_K7 | 0..255 × 1 count | 1 | 8 | 8 | SAT | P | K7 drops; written only in mission_task context |
+| CMD_DROPS | PRV_BRIDGE | 0..255 × 1 count | 1 | 8 | 8 | SAT | P | Rejected or rate-limited commands |
+| PUB_DROPS | PRV_BRIDGE | 0..255 × 1 count | 1 | 8 | 8 | SAT | P | Payloads abandoned after 2 publish tries |
+| CMD_SEEN | PRV_BRIDGE | 0..15 × 1 mask | 1 | 4 | 4 | RAW | P | One bit per command type (START STOP RESET MAP) set at its first acceptance; a mask so RAW; radio task only |
+| BACKOFF | PRV_MQTT | 0..3 × 1 exponent | 1 | 2 | 2 | RNG | P | Back-off 1 2 4 8 s; radio task only |
+| PEND_TRIES | PRV_MQTT | 0..2 × 1 count | 1 | 2 | 2 | RNG | P | Publish tries of the pending payload |
+| PEND_LEN | PRV_MQTT | 0..20 × 1 byte | 1 | 5 | 5 | RNG | P | Pending payload length (0 = none) |
+| PEND_TYPE | PRV_MQTT | 0..31 × 1 code | 1 | 5 | 5 | ENUM | P | APP_MQ_TYPE_* of the pending payload |
+| LAST | PRV_CMD_T | 0..65535 × 10 ms | 10 | 16 | 16 | RAW | P | Last accepted command time x4 (START STOP RESET MAP); 10 ms units; wraps; radio task only |
 
 ## B2
 
@@ -229,6 +241,11 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_OFS_A | 24 | 32 |
 | PRV_OFS_B | 20 | 32 |
 | SH_IMU | 8 | 8 |
+| PRV_TEL | 27 | 32 |
+| PRV_TEL_K7 | 8 | 8 |
+| PRV_BRIDGE | 20 | 32 |
+| PRV_MQTT | 14 | 16 |
+| PRV_CMD_T | 16 | 16 |
 
 ## Range assumptions
 

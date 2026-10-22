@@ -1,0 +1,4 @@
+field,value
+UPTIME_S,65535
+DROPS,255
+LAT_MAX_US,4095

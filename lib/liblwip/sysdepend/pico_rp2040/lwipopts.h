@@ -51,9 +51,18 @@
  * sys_timeout() user above the stack has to be added here or the pool runs
  * dry and lwip_utk_assert() halts with "pool MEMP_SYS_TIMEOUT is empty":
  * mqtt.c arms its own cyclic keepalive timer per client, and mqtt_utk.c adds
- * the heartbeat chain plus a connect-retry timer. Four covers those with
- * room to spare; each slot is only a few bytes. */
+ * the 50 ms publish-drain chain plus a connect-retry timer. Four covers those
+ * with room to spare; each slot is only a few bytes. */
 #define MEMP_NUM_SYS_TIMEOUT        (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 4)
+
+/* CSC28 B1.2.5a: run mqtt.c's cyclic timer every 1 s (lwIP default 5 s).
+ * lwIP 2.2.1 src/apps/mqtt/mqtt.c, mqtt_cyclic_timer(), line 599: the
+ * server is declared unresponsive when
+ *     server_watchdog * MQTT_CYCLIC_TIMER_INTERVAL > keep_alive + keep_alive/2
+ * With keep_alive = 4 s (mqtt_utk.c) that is 4 + 2 = 6, true on the 7th
+ * 1 s tick, so a silent broker is detected <= 7 s after its last packet
+ * (NFR9a 7.5 s). keep_alive = 5 would give 8 s and fail. */
+#define MQTT_CYCLIC_TIMER_INTERVAL  1
 
 #define LWIP_ARP                    1
 #define LWIP_ETHERNET               1
