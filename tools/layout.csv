@@ -109,3 +109,36 @@ MQ_HB,0,LAT_MAX_US,12,1,us,0,4095,0,SAT,S,B1,sys_tick_latency_max_us()
 MQ_HB,0,PAD,4,1,-,0,0,0,PAD,S,B1,Zero
 MQ_MAP,8,CHAR,6,1,code,0,42,0,ENUM,S,B1,Byte 1 of a MAP command
 MQ_MAP,8,CMD,2,1,code,0,3,0,ENUM,S,B1,Byte 1 of a MAP command
+PRV_IMU_A,32,STATE,3,1,code,0,4,0,ENUM,P,B4,Terrain state
+PRV_IMU_A,32,HYST,4,1,sample,0,15,0,SAT,P,B4,Hysteresis count
+PRV_IMU_A,32,I2C_ERR,2,1,count,0,3,0,SAT,P,B4,I2C errors in a row
+PRV_IMU_A,32,GOOD_CNT,2,1,count,0,3,0,SAT,P,B4,Good reads in FAULT
+PRV_IMU_A,32,CLASS_GAP,5,1,tick,0,31,0,SAT,P,B4,Ticks since MOTION_CLASS
+PRV_IMU_A,32,LAST_CLASS,3,1,code,0,6,0,ENUM,P,B4,Last posted class
+PRV_IMU_A,32,MAG_DIV,3,1,tick,0,4,0,RNG,P,B4,Cycles to next magnetometer read
+PRV_IMU_A,32,IMPACT_HOLD,5,1,tick,0,31,0,SAT,P,B4,Impact class hold
+PRV_IMU_A,32,IMPACT_SEQ,4,1,count,0,15,0,RAW,P,B4,Last seen INT1 sequence (low bits)
+PRV_IMU_B,32,CAL_CNT,8,1,sample,0,200,0,RNG,P,B4,Calibration samples
+PRV_IMU_B,32,CLIMB_CNT,11,1,count,0,2047,0,SAT,P,B4,Climb distance
+PRV_IMU_B,32,HIST_IDX,3,1,slot,0,4,0,RNG,P,B4,Speed history index
+PRV_IMU_B,32,PEAK_NOW,7,1,mm,0,127,0,RNG,P,B4,Peak of this hump (A25)
+PRV_IMU_C,32,PREV_HDG,12,1,0.1 deg,0,3599,0,RNG,P,B4,Previous magnetometer heading (wrapped 0..3599)
+PRV_IMU_C,32,PREV_HDG_VALID,1,1,flag,0,1,0,FLAG,P,B4,PREV_HDG is from the previous 50 ms read
+PRV_IMU_C,32,PITCH_MAX,10,1,0.1 deg,-450,450,512,RNG,P,B4,Max pitch this hump (A24)
+PRV_IMU_C,32,RUN_PEAK,7,1,mm,0,127,0,RNG,P,B4,Highest hump this run
+PRV_IMU_D,32,PREV_DIFF,19,1,count,-262142,262142,262144,RNG,P,B4,pos_l-pos_r 50 ms ago
+PRV_IMU_E,32,PREV_POS_L,18,1,count,-131071,131071,131072,RNG,P,B4,Previous left position
+PRV_IMU_F,32,PREV_POS_R,18,1,count,-131071,131071,131072,RNG,P,B4,Previous right position
+PRV_HIST_A,32,H0,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 0
+PRV_HIST_A,32,H1,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 1
+PRV_HIST_A,32,H2,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 2
+PRV_HIST_A,32,H3,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 3
+PRV_HIST_B,32,H4,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 4
+PRV_OFS_A,32,AX,12,2,mg,-2047,2047,2048,RNG,P,B4,Accelerometer X offset
+PRV_OFS_A,32,AY,12,2,mg,-2047,2047,2048,RNG,P,B4,Accelerometer Y offset
+PRV_OFS_B,32,AZ,12,2,mg,-2047,2047,2048,RNG,P,B4,Accelerometer Z offset
+PRV_OFS_B,32,FIFO_OVR,8,1,count,0,255,0,SAT,P,B4,FIFO overruns
+E_IMU,32,ACC,28,1,um x mg,0,0,0,RAW,E,B4,E2 height accumulator: arithmetic headroom
+E_IMU,32,CAL_SUM,20,1,code,0,0,0,RAW,E,B4,E2 calibration sums x3 (live 2 s only)
+E_IMU_SAMPLE,16,RAW_SAMPLE,12,1,code,0,0,0,RAW,E,B4,E4 accelerometer register image (own E group; SPEC-QUESTION in TEST_LOG)
+SH_IMU,8,IMPACT_SEQ,8,1,count,0,255,0,RAW,S,B4,R1 callback -> imu_task; wraps
