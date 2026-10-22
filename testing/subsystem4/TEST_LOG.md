@@ -48,6 +48,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S4-U13, normal+TEST=1 builds | Phase 2 commit | Faris | PASS (target build) | `logs/2026-10-22_host_phase2.txt` | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.elf` and `_test.elf` build with zero warnings |
 | 2026-10-22 | S4-U01, U02, U03, U06, U07, U12, U13, U10 | Phase 4 commit | Faris | PASS (host, packed) | `logs/2026-10-22_host_phase4_packed.txt` | terrain 19/19 (incl. S4-U10 pitch pack), fifo 6/6; packed terrain.c/imu.c build into normal and TEST=1 images with zero warnings |
 | 2026-10-22 | S4-U11 | — | Faris | pending | — | hump 127/128 → RANGE_CLAMP lives in Buddy 5's packed status-board writer (and imu.c raises it when the run peak reaches 127); runs once B5 merges |
+| 2026-10-22 | RAM report (Phase 5) | Phase 5 commit | Faris | PASS (script) | `docs/ram_comparison.md` | real baseline-vs-packed ELFs from this branch: B4 statics net −63 B; section 3 stays pending until on-car `app_stack_report()` logs exist |
 | 2026-10-22 | S4-I01, I02, I03, I04, I09 (Phase 3) | — | Faris | pending | — | integration on the car: INT1→motors low ≤15 ms with Buddy 2 (GP14), course humps vs ruler, imu_task WCET. Blocked on hardware; plan below |
 | 2026-10-22 | S4-I01–I11 | — | Faris | pending | — | bench/track: needs the physical car (placeholders kept, spec rule A.3) |
 
