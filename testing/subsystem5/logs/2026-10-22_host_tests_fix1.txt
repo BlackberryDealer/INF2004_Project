@@ -1,0 +1,143 @@
+# B5 host tests, commit 7d4af51 (merged with main 3b69327), gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+# make -C testing/subsystem5/host
+[TEST] S5-U01 PASS  profile valid
+[TEST] S5-U01 PASS  width ~ 132 mm
+[TEST] S5-U01 PASS  nearest ~ 300 mm
+[TEST] S5-U01 PASS  lateral extent
+[TEST] S5-U01 PASS  no other objects: both sides clear
+[TEST] S5-U01 PASS  outcome PLAN
+[TEST] S5-U01 PASS  picks the smaller shift (left)
+[TEST] S5-U01 PASS  lateral leg = corridor + 52
+[TEST] S5-U01 PASS  forward leg = nearest + depth + length
+[TEST] S5-U01 PASS  legs within NFR16
+[TEST] S5-U01 PASS  left gap too small
+[TEST] S5-U01 PASS  falls back to the right
+[TEST] S5-U02 PASS  empty scan: no profile
+[TEST] S5-U02 PASS  empty scan: CONTINUE
+[TEST] S5-U02 PASS  object right of the corridor does not block
+[TEST] S5-U02 PASS  clear of the path: CONTINUE
+[TEST] S5-U02b PASS  the blocking central object is chosen
+[TEST] S5-U02b PASS  plan is not CONTINUE
+[TEST] S5-U03 PASS  both gaps too small
+[TEST] S5-U03 PASS  both sides blocked: NO_PATH
+[TEST] S5-U03 PASS  not a clamp case
+[TEST] S5-U03 PASS  lateral leg over its limit
+[TEST] S5-U03 PASS  clipped plan is never driven: NO_PATH
+[TEST] S5-U03 PASS  reported leg clipped to 300 mm
+[TEST] S5-U23 PASS  run touches the corridor edge (x_left = 125)
+[TEST] S5-U23 PASS  lateral leg = OBS_LEG_MIN_MM, never 0
+[TEST] subsystem5 host SUMMARY 26 passed, 0 failed
+[TEST] S5-U07 PASS  BOOT: watchdog startup window, modes cleared, RESUME pulse
+[TEST] S5-U07 PASS  BOOT waits for the first check-ins
+[TEST] S5-U07 PASS  started -> CAL_IMU
+[TEST] S5-U07 PASS  CAL_IR: CAL_IR|MOTOR_EN, sweep left 30
+[TEST] S5-U07 PASS  MOVE_DONE with a stale tag is ignored
+[TEST] S5-U07 PASS  tagged MOVE_DONE -> right 60
+[TEST] S5-U07 PASS  left 30
+[TEST] S5-U07 PASS  sweep done clears CAL_IR and MOTOR_EN
+[TEST] S5-U07 PASS  both calibrations valid -> READY
+[TEST] S5-U07 PASS  START: 1 s warning
+[TEST] S5-U07 PASS  still warning
+[TEST] S5-U20 PASS  run start: RUN_START set, ZERO sent
+[TEST] S5-U20 PASS  ZERO acked, RUN_START held for 30 ms
+[TEST] S5-U20 PASS  -> RUN: RUN_START cleared, MOTOR_EN set, path 0, FOLLOW cruise
+[TEST] S5-U07 PASS  BARCODE(RIGHT) -> ARMED slow
+[TEST] S5-U07 PASS  JUNCTION -> stop, advance 60 (tracked)
+[TEST] S5-U07 PASS  turn right 90
+[TEST] S5-U07 PASS  turn done -> FOLLOW cruise; FOLLOW is never tracked
+[TEST] S5-U15 PASS  LINE_LOST -> STOP first, then turn left 60
+[TEST] S5-U15 PASS  next leg on the tagged MOVE_DONE: right 120
+[TEST] S5-U15 PASS  LINE_FOUND during a leg -> FOLLOW, pending cleared
+[TEST] S5-U07 PASS  OBSTACLE -> AVOID, standstill -> scan request
+[TEST] S5-U07 PASS  PLAN -> ESTOP off, profile, turn left 90
+[TEST] S5-U07 PASS  lateral leg 176
+[TEST] S5-U07 PASS  turn parallel
+[TEST] S5-U27 PASS  pass leg 632 mm; deadline long enough for it
+[TEST] S5-U27 PASS  a healthy 632 mm leg is not faulted at 5 s
+[TEST] S5-U07 PASS  turn 45 toward the line, FR9 starts
+[TEST] S5-U07 PASS  rejoin move e x 1.3
+[TEST] S5-U07 PASS  LINE_FOUND in the window -> advance 60
+[TEST] S5-U07 PASS  heading +8 deg -> turn left 8
+   log: FR9 40 ms
+[TEST] S5-U07 PASS  bypass done -> FOLLOW slow, RESUME
+[TEST] S5-U07 PASS  RESUME cleared after 150 ms
+[TEST] S5-U07 PASS  inhibits cleared 150 mm later, cruise
+[TEST] S5-U21 PASS  STOP in WAIT_PLAN -> FINISHED, MOTOR_EN off, ESTOP still set
+[TEST] S5-U21 PASS  RESET: common recovery clears ESTOP, pulses RESUME
+[TEST] S5-U21 PASS  recovery waits 100 ms (mission keeps looping)
+[TEST] S5-U21 PASS  -> READY
+[TEST] S5-U21 PASS  the next run starts
+[TEST] S5-U07 PASS  SIDE_TOO_CLOSE on a leg -> FAULT, forwarded to telemetry
+[TEST] S5-U16 PASS  RESET from FAULT -> BOOT (recalibration), not READY
+[TEST] S5-U16 PASS  watchdog startup window only on the first boot
+[TEST] S5-U16 PASS  recalibration starts, IMU not valid yet
+[TEST] S5-U16 PASS  recalibrated -> READY
+[TEST] S5-U16 PASS  IMPACT during FOLLOW -> FAULT
+[TEST] S5-U18 PASS  stop fault set again during recovery -> stay in FAULT
+[TEST] S5-U07 PASS  clean RESET -> BOOT -> READY
+[TEST] S5-U22 PASS  first refusal: retry pending
+[TEST] S5-U22 PASS  retried on the next pass and accepted
+[TEST] S5-U22 PASS  refused twice -> MOTOR_STALL, FAULT
+[TEST] S5-U22 PASS  run start waits for ZERO
+[TEST] S5-U22 PASS  still waiting 180 ms after ZERO
+[TEST] S5-U22 PASS  no ZERO acknowledgement -> FAULT after 200 ms
+[TEST] S5-U27 PASS  800 mm at 150 mm/s -> ~9 000 ms
+[TEST] S5-U27 PASS  2 047 mm move gets > 20 s
+[TEST] S5-U27 PASS  ZERO: 200 ms
+[TEST] S5-U27 PASS  reverse (100 mm/s) gets longer than forward
+[TEST] S5-U27 PASS  60 deg turn (deadline ~1.65 s) still in time at 1.5 s
+[TEST] S5-U27 PASS  a turn that never completes (blocked wheel) ends in FAULT at its deadline
+[TEST] S5-U07 PASS  Wi-Fi loss is not a transition
+[TEST] S5-U07 mission simulation SUMMARY 60 passed, 0 failed
+[TEST] S5-U04 PASS  K4 holds 16 events (real capacity: 256 B / (4 + 12))
+[TEST] S5-U04 PASS  extra posts are refused
+[TEST] S5-U04 PASS  every post uses TMO_POL: a refused post returns at once
+[TEST] S5-U04 PASS  QUEUE_OVERFLOW fault set
+[TEST] S5-U04 PASS  high-water mark = whole buffer
+[TEST] S5-U04 PASS  unknown event type refused
+[TEST] S5-U05 PASS  432 state/event combinations tried
+[TEST] S5-U05 PASS  every outcome is a defined state
+[TEST] S5-U04/U05 mission host tests SUMMARY 8 passed, 0 failed
+[TEST] S5-U14 PASS  580 us -> 100 mm
+[TEST] S5-U14 PASS  5800 us -> 1000 mm
+[TEST] S5-U14 PASS  40 000 us (saturated width) -> APP_DIST_NONE_MM
+[TEST] S5-U14 PASS  readings stored in 4 mm steps
+[TEST] S5-U08 PASS  far object: MONITOR, 1000 mm measured
+[TEST] S5-U08 PASS  300 mm, not yet confirmed
+[TEST] S5-U08 PASS  two agreeing readings < 400 -> OBSTACLE_AHEAD
+[TEST] S5-U08 PASS  245 right after 300 is not confirmed
+[TEST] S5-U08 PASS  confirmed < 251 -> OBSTACLE, STOPPED
+[TEST] S5-U08 PASS  ESTOP set before OBSTACLE was posted
+[TEST] S5-U08 PASS  RESCAN rise -> COARSE at 30 deg
+   log: SCAN 3120 ms out 1 inferred 0xdb0c36
+[TEST] S5-U25 PASS  scan done -> WATCH_SETTLE, servo at watch angle, PLAN not posted yet
+[TEST] S5-U25 PASS  no PLAN before OBS_WATCH_SETTLE_PINGS cycles
+[TEST] S5-U25 PASS  PLAN(left) after exactly 4 cycles -> BYPASS_WATCH
+[TEST] S5-U08 PASS  legs on the board (4 mm steps) before PLAN
+[TEST] S5-U08 PASS  width at 5 deg resolution (face -60..+80)
+[TEST] S5-U08 PASS  unmeasured steps marked inferred
+[TEST] S5-U08 PASS  side 200 mm: fine
+[TEST] S5-U08 PASS  side 50 mm: ESTOP, then SIDE_TOO_CLOSE once, STOPPED
+[TEST] S5-U08 PASS  RESUME rise -> MONITOR, servo 90
+[TEST] S5-U08 PASS  second obstacle -> STOPPED
+   log: SCAN 3120 ms out 2 inferred 0x1b6db0
+[TEST] S5-U08 PASS  wide wall -> NO_PATH, STOPPED, servo 90
+[TEST] S5-U08 PASS  clipped leg sets RANGE_CLAMP
+[TEST] S5-U26 PASS  good echo: 600 mm
+[TEST] S5-U26 PASS  5 silent pings all read APP_DIST_NONE_MM, never the cached 600 mm
+[TEST] S5-U26 PASS  silent sensor -> FAULT_NO_ECHO
+[TEST] S5-U24 PASS  ECHO held high: no measurement accepted
+[TEST] S5-U24 PASS  stuck sensor reported silent -> NO_ECHO
+[TEST] S5-U17 PASS  fall with the window closed is ignored
+[TEST] S5-U17 PASS  fall of an older ping (sequence moved on) is ignored
+[TEST] S5-U17 PASS  fall older than the 40 ms timeout is ignored
+[TEST] S5-U17 PASS  RISE+FALL in one entry, pin low: both discarded, no 0 mm echo
+[TEST] S5-U17 PASS  RISE+FALL in one entry, pin high: kept as a rise only
+[TEST] S5-U17 PASS  ... and its real fall then measures normally (100 mm)
+[TEST] S5-U08 PASS  approach again
+[TEST] S5-U08 PASS  2 lost echoes in APPROACH -> ESTOP
+[TEST] S5-U08 obstacle simulation SUMMARY 36 passed, 0 failed
+
+# make -C testing/host (all buddies): rc=0
+# tools/barr_check.sh: barr_check: 80 files, no findings
+# firmware: make SMP=0 NET=lwip MQTT=1 (normal, TEST=1, PROBE=1): rc=0, 0 warnings

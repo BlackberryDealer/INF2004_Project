@@ -1,7 +1,7 @@
 /**
  * @file    status_board.h
- * @brief   Status board K6 + MTX_STATUS: one writer per part, getters.
- * @owner   Buddy 5 (shared services)
+ * @brief   Status board K6: shared snapshot of every subsystem's state.
+ * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    task
  */
 

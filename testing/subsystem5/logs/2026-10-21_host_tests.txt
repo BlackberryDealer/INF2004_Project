@@ -1,0 +1,30 @@
+Buddy 5 host tests, commit e74d623, 2026-10-21 (gcc 13.3.0, Linux)
+make -C testing/subsystem5/host
+[TEST] S5-U01 PASS  profile valid
+[TEST] S5-U01 PASS  width ~ 132 mm
+[TEST] S5-U01 PASS  nearest ~ 300 mm
+[TEST] S5-U01 PASS  lateral extent
+[TEST] S5-U01 PASS  no other objects: both sides clear
+[TEST] S5-U01 PASS  outcome PLAN
+[TEST] S5-U01 PASS  picks the smaller shift (left)
+[TEST] S5-U01 PASS  lateral leg = corridor + 52
+[TEST] S5-U01 PASS  forward leg = nearest + depth + length
+[TEST] S5-U01 PASS  legs within NFR16
+[TEST] S5-U01 PASS  left gap too small
+[TEST] S5-U01 PASS  falls back to the right
+[TEST] S5-U02 PASS  empty scan: no profile
+[TEST] S5-U02 PASS  empty scan: CONTINUE
+[TEST] S5-U02 PASS  object right of the corridor
+[TEST] S5-U02 PASS  clear of the path: CONTINUE
+[TEST] S5-U03 PASS  both gaps too small
+[TEST] S5-U03 PASS  both sides blocked: NO_PATH
+[TEST] S5-U03 PASS  not a clamp case
+[TEST] S5-U03 PASS  lateral leg over its limit
+[TEST] S5-U03 PASS  clipped plan is never driven: NO_PATH
+[TEST] S5-U03 PASS  reported leg clipped to 300 mm
+[TEST] subsystem5 host SUMMARY 22 passed, 0 failed
+   log: FR9 60 ms
+[TEST] S5-U07 mission simulation SUMMARY 54 passed, 0 failed
+   log: SCAN 3120 ms out 1 side 0
+   log: SCAN 2160 ms out 2 side 0
+[TEST] S5-U08 obstacle simulation SUMMARY 25 passed, 0 failed

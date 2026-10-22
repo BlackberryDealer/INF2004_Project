@@ -1,7 +1,8 @@
 /**
  * @file    sys_health.h
- * @brief   FLG_ALIVE (K8) task check-ins and the hardware watchdog.
- * @owner   Buddy 5 (shared services)
+ * @brief   K8 FLG_ALIVE check-ins and the hardware watchdog (startup 500 ms,
+ *          then 30 ms).
+ * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    task
  */
 
