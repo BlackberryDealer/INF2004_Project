@@ -3,7 +3,7 @@
  * Laptop simulation of obstacle.c (echo window and freshness counters,
  * confirmation, scanner, profile and plan) against a simple world: a
  * flat face in front of the robot. Covers S5-U14 (distance conversion)
- * and the host parts of S5-U17, S5-U24, S5-U25 and S5-U26.
+ * and the host parts of S5-U17, S5-U24, S5-U25, S5-U26 and S5-U30.
  * Host-only test code, outside BARR-C scope. Run: make -C testing/subsystem5/host
  */
 #include <stdio.h>
@@ -78,6 +78,21 @@ int main(void) {
   CHECK("S5-U14", 1000u == obstacle_width_to_mm(5800u / 4u), "5800 us -> 1000 mm");
   CHECK("S5-U14", APP_DIST_NONE_MM == obstacle_width_to_mm(4095u), "40 000 us (saturated width) -> APP_DIST_NONE_MM");
   CHECK("S5-U14", 0u == (obstacle_width_to_mm(300u) % 4u), "readings stored in 4 mm steps");
+  /* S5-U30: power-up grace. The car's HC-SR04P stays silent for a while
+     after power-up; that must not latch NO_ECHO, but a dead sensor must. */
+  { int ok = 1;
+    w_mode = 2; g_fault = 0;
+    for (int i = 0; i < 5; i++) { cyc(); if (g_fault & APP_FAULT_NO_ECHO) ok = 0; }
+    w_mode = 0; w_dist = 1000; cyc();
+    CHECK("S5-U30", ok && 0u == (g_fault & APP_FAULT_NO_ECHO) && 0u == g_warmup_left, "5 silent pings after boot, then an echo: no NO_ECHO, grace ends");
+    w_mode = 2; cyc(); cyc(); cyc();
+    CHECK("S5-U30", 0u != (g_fault & APP_FAULT_NO_ECHO), "after the first echo, 3 silent pings raise NO_ECHO as before");
+    g_fault = 0; g_silent = 0; g_warmup_left = OBS_WARMUP_PINGS; ok = 1;
+    for (uint32_t i = 0; i < OBS_WARMUP_PINGS; i++) { cyc(); if (g_fault & APP_FAULT_NO_ECHO) ok = 0; }
+    CHECK("S5-U30", ok, "sensor never answers: no NO_ECHO during the 34-ping grace (~2 s)");
+    cyc(); cyc(); cyc();
+    CHECK("S5-U30", 0u != (g_fault & APP_FAULT_NO_ECHO), "sensor never answers: NO_ECHO 3 pings after the grace");
+    g_fault = 0; g_silent = 0; w_mode = 0; }
   w_mode = 0; w_dist = 1000; cyc(); cyc();
   CHECK("S5-U08", APP_SCAN_MONITOR == g_state && 0 == nev && 1000u == dist(), "far object: MONITOR, 1000 mm measured");
   w_dist = 300; cyc(); CHECK("S5-U08", 300u == dist() && APP_SCAN_MONITOR == g_state, "300 mm, not yet confirmed");
