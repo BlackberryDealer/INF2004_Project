@@ -22,6 +22,8 @@
 #define DRV_GPIO_IRQ_INTR0      (IO_BANK0_BASE + 0x0F0u) /* write 1 clears */
 #define DRV_GPIO_IRQ_INTE0      (IO_BANK0_BASE + 0x100u) /* proc0 enable  */
 #define DRV_GPIO_IRQ_INTS0      (IO_BANK0_BASE + 0x120u) /* proc0 status  */
+#define DRV_GPIO_IRQ_PROC_BYTES (0x030u) /* PROC1_INTE0 - PROC0_INTE0     */
+#define DRV_GPIO_IRQ_CPUID_MASK (1u)     /* SIO CPUID: 0 = core 0, 1 = 1  */
 #define DRV_GPIO_IRQ_REG_SHIFT  (3u)    /* 8 GPIOs per register: pin >> 3 */
 #define DRV_GPIO_IRQ_PIN_MASK   (7u)    /* position in register: pin & 7  */
 #define DRV_GPIO_IRQ_BITS_SHIFT (2u)    /* 4 bits per GPIO                */
@@ -41,6 +43,13 @@ typedef struct
 static drv_gpio_irq_entry_t g_irq_table[DRV_GPIO_IRQ_MAX];
 static volatile uint32_t    g_irq_count = 0u;
 
+/* Byte offset of the PROCn INTE/INTS set of the core whose NVIC enabled
+   IO_IRQ_BANK0 (0 = proc0, 0x30 = proc1). The NVIC is per core and
+   usermain may run on either core in the SMP build, so the edges must be
+   routed to the core that actually unmasked the IRQ. Written once in
+   drv_gpio_irq_init(), before any pin is attached.                     */
+static UW g_proc_offset = 0u;
+
 /* ---- private function prototypes ------------------------------------- */
 
 static void gpio_bank0_isr(UINT intno);
@@ -51,14 +60,19 @@ static uint32_t drv_gpio_irq_shift(uint32_t pin);
 
 /**
  * drv_gpio_irq_init
- * @brief   Registers R1 for IO_IRQ_BANK0 and enables it at level 2.
+ * @brief   Registers R1 for IO_IRQ_BANK0 and enables it at level 2 on
+ *          the calling core, and records that core so attach() and R1
+ *          use its PROCn INTE/INTS registers. The core ID read and the
+ *          NVIC enable run with interrupts masked, so the task cannot
+ *          migrate between them (no dispatch without PendSV).
  * @return  E_OK, or the kernel error
  * @context usermain (init phase)
  */
 ER drv_gpio_irq_init(void)
 {
-    T_DINT dint = {0};
-    ER     ercd = E_OK;
+    T_DINT dint   = {0};
+    ER     ercd   = E_OK;
+    UW     intsts = 0u;
 
     dint.intatr = TA_HLNG;
     dint.inthdr = (FP) gpio_bank0_isr;   /* cast: kernel handler type (D6) */
@@ -66,7 +80,11 @@ ER drv_gpio_irq_init(void)
 
     if (E_OK == ercd)
     {
+        DI(intsts);
+        g_proc_offset = (in_w(SIO_CPUID_ADDR) & DRV_GPIO_IRQ_CPUID_MASK)
+                        * DRV_GPIO_IRQ_PROC_BYTES;
         EnableInt(BOARD_IRQ_GPIO_BANK0, BOARD_IRQ_PRI_GPIO);
+        EI(intsts);
     }
 
     return ercd;
@@ -105,7 +123,7 @@ ER drv_gpio_irq_attach(uint32_t pin, uint32_t edges,
         /* clear stale edges, then enable (atomic set alias) */
         out_w(drv_gpio_irq_reg(DRV_GPIO_IRQ_INTR0, pin),
               mask << drv_gpio_irq_shift(pin));
-        set_w(drv_gpio_irq_reg(DRV_GPIO_IRQ_INTE0, pin),
+        set_w(drv_gpio_irq_reg(DRV_GPIO_IRQ_INTE0 + g_proc_offset, pin),
               mask << drv_gpio_irq_shift(pin));   /* ... then the IRQ */
     }
 
@@ -134,7 +152,7 @@ static void gpio_bank0_isr(UINT intno)
 
     for (uint32_t idx = 0u; idx < count; idx++)
     {
-        events = (in_w(drv_gpio_irq_reg(DRV_GPIO_IRQ_INTS0,
+        events = (in_w(drv_gpio_irq_reg(DRV_GPIO_IRQ_INTS0 + g_proc_offset,
                                         g_irq_table[idx].pin))
                   >> drv_gpio_irq_shift(g_irq_table[idx].pin))
                  & DRV_GPIO_IRQ_BOTH;
