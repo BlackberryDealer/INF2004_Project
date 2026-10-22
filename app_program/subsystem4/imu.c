@@ -43,7 +43,8 @@
 
 #define IMU_STACK_WORDS        (APP_STACK_IMU_BYTES / 8u)
 #define IMU_AVG_Q15_ONE        (32768)
-#define IMU_MG_RAW_SHIFT       (16) /* raw / 16: high-resolution mode */
+#define IMU_MG_NUM             (61) /* 0.122 mg/LSB at +-4 g: 61/500  */
+#define IMU_MG_DEN             (500)
 #define IMU_MAG_DIV_PERIOD     (IMU_MAG_EVERY_N - 1u)
 #define IMU_MAG_BACKLOG_LIMIT  (2u) /* more samples: postpone the mag  */
 #define IMU_GOOD_READS_RECOVER (3u)
@@ -138,7 +139,7 @@ static void     imu_clamp_fault(bool b_was_clamped);
 
 /**
  * imu_init
- * @brief   Initialises the LSM303DLHC driver (I2C1, 400 kHz, all
+ * @brief   Initialises the LSM303D driver (I2C1, 400 kHz, all
  *          registers from the B4.1.1 table). imu_task owns no kernel
  *          objects: everything it needs comes from the shared services.
  * @return  0 (E_OK) or a negative I2C error from the driver
@@ -451,8 +452,8 @@ static bool imu_read_acc(uint32_t * p_n_samples)
             }
             /* Signed average: (sum x recip[n]) / 32768, never >> on a
                signed value (review F-07). |sum| <= 4 x 32768, so the
-               product fits int32. High-resolution mode keeps the 12
-               bits << 4, so the average fits an int16 (E4 image). */
+               product fits int32. The LSM303D delivers a plain 16-bit
+               sample, so the average fits an int16 (E4 image). */
             g_avg_raw_x =
                 (int16_t)((sum_x * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
             g_avg_raw_y =
@@ -460,15 +461,12 @@ static bool imu_read_acc(uint32_t * p_n_samples)
             g_avg_raw_z =
                 (int16_t)((sum_z * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
             g_avg_ax_mg =
-                (((int32_t)g_avg_raw_x / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB) -
-                ofs_ax;
+                (((int32_t)g_avg_raw_x * IMU_MG_NUM) / IMU_MG_DEN) - ofs_ax;
             g_avg_ax_mg = g_avg_ax_mg * IMU_X_FORWARD_SIGN;
             g_avg_ay_mg =
-                (((int32_t)g_avg_raw_y / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB) -
-                ofs_ay;
+                (((int32_t)g_avg_raw_y * IMU_MG_NUM) / IMU_MG_DEN) - ofs_ay;
             g_avg_az_mg =
-                (((int32_t)g_avg_raw_z / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB) -
-                ofs_az;
+                (((int32_t)g_avg_raw_z * IMU_MG_NUM) / IMU_MG_DEN) - ofs_az;
         }
     }
 
@@ -644,15 +642,14 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
 
         /* Event-time division by the sample count (once per mode). The
            sums are in raw register units, so each average is converted
-           to mg exactly like imu_read_sensors does before it can be
-           subtracted there: mg = (raw / 16) x IMU_MG_PER_LSB. */
+           to mg exactly like imu_read_acc does before it can be
+           subtracted there: mg = raw x 61 / 500 (0.122 mg/LSB). */
         avg_raw_x = g_cal_sum_x / (int32_t)IMU_CAL_SAMPLES;
         avg_raw_y = g_cal_sum_y / (int32_t)IMU_CAL_SAMPLES;
         avg_raw_z = g_cal_sum_z / (int32_t)IMU_CAL_SAMPLES;
-        ofs_ax    = (avg_raw_x / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB;
-        ofs_ay    = (avg_raw_y / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB;
-        ofs_az =
-            ((avg_raw_z / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB) - IMU_REST_AZ_MG;
+        ofs_ax    = ((avg_raw_x * IMU_MG_NUM) / IMU_MG_DEN);
+        ofs_ay    = ((avg_raw_y * IMU_MG_NUM) / IMU_MG_DEN);
+        ofs_az    = ((avg_raw_z * IMU_MG_NUM) / IMU_MG_DEN) - IMU_REST_AZ_MG;
 
         /* Offsets are stored in 2 mg steps, so the conversion divides by
            IMU_OFFSET_LSB_MG (a power of two; never >> on a signed
