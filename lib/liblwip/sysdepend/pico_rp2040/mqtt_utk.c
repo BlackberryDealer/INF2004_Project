@@ -23,7 +23,7 @@
 #include <tm/tmonitor.h>
 
 #define MQTT_UTK_HEARTBEAT_MS   5000
-#define MQTT_UTK_KEEPALIVE_S    60
+#define MQTT_UTK_KEEPALIVE_S    4	/* loss detected <= 7 s, lwipopts.h */
 #define MQTT_UTK_RETRY_MS       3000
 
 /* Inbound message staging. A publish arrives as one topic callback followed by
