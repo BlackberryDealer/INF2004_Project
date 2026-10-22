@@ -1,9 +1,9 @@
 /**
  * @file    test_line.c
- * @brief   Phase 1 on-target ADC verification and bench measurement helpers.
+ * @brief   On-target unit tests for line_track (S3-U01, S3-U02, S3-U06, S3-U14).
  * @owner   Buddy 3 (line, barcode)
  * @kind    test
- * @reqs    FR1, NFR1
+ * @reqs    FR1, FR19, NFR1, NFR4
  */
 
 #include "test_line.h"
@@ -14,147 +14,125 @@
 #include <stddef.h>
 #include "../test_report.h"
 #include "cfg_line.h"
-#include "drv_ir_adc.h"
+#include "line_track.h"
 
 /* ---- private constants and types ------------------------------------ */
 
-#define TEST_LINE_ADC_MAX_CODE       (4095u)
-#define TEST_LINE_BENCH_SAMPLES      (10u)
-#define TEST_LINE_NOISE_SAMPLES      (1000u)
-#define TEST_LINE_ENABLE_NOISE_BENCH (0)
+#define TEST_CAL_LO        (500u)
+#define TEST_CAL_HI        (3500u)
+#define TEST_CAL_MID       (2000u)
+#define TEST_MIN_COUNTS    (29u)
+#define TEST_CONF_COUNTS   (86u)
 
 /* ---- private data ---------------------------------------------------- */
 
 /* ---- private function prototypes ------------------------------------- */
 
-static void test_line_adc_sanity(void);
-static void test_line_noise_bench(void);
+static void test_line_u01_u06(void);
+static void test_line_u02_u14(void);
 
 /* ---- public functions ------------------------------------------------- */
 
 /**
  * test_line_run
- * @brief   Runs Phase 1 on-target checks for drv_ir_adc.
+ * @brief   Runs on-target unit checks for line_track.
  * @return  none
  * @context usermain (APP_PRI_TEST)
  */
 void test_line_run(void)
 {
     TEST_INIT();
-    test_line_adc_sanity();
-    test_line_noise_bench();
+    test_line_u01_u06();
+    test_line_u02_u14();
     TEST_SUMMARY("line");
 }
 
 /* ---- private functions ------------------------------------------------ */
 
 /**
- * test_line_adc_sanity
- * @brief   Verifies drv_ir_adc_read returns 12-bit values and logs samples
- *          for S3-I05 contrast bench checks.
+ * test_line_u01_u06
+ * @brief   Verifies S3-U01 and S3-U06 normalisation, endpoints, and steering.
  * @return  none
  * @context usermain (APP_PRI_TEST)
  */
-static void test_line_adc_sanity(void)
+static void test_line_u01_u06(void)
 {
-    uint32_t raw_l    = 0u;
-    uint32_t raw_r    = 0u;
-    uint32_t idx      = 0u;
-    bool     b_in_rng = true;
+    line_track_cal_t cal    = {0u, 0u, 0u, 0u, 0u, 0u};
+    bool             b_ok   = false;
+    uint32_t         norm_w = 0u;
+    uint32_t         norm_b = 0u;
+    uint32_t         norm_m = 0u;
 
-    drv_ir_adc_init();
+    b_ok = line_track_cal_finish(&cal, TEST_CAL_LO, TEST_CAL_HI,
+                                 TEST_CAL_HI, TEST_CAL_LO);
+    TEST_CHECK("S3-U06", b_ok, "cal_finish accepts both polarities");
 
-    for (idx = 0u; idx < TEST_LINE_BENCH_SAMPLES; idx++)
-    {
-        drv_ir_adc_read(&raw_l, &raw_r);
-        if ((raw_l > TEST_LINE_ADC_MAX_CODE) ||
-            (raw_r > TEST_LINE_ADC_MAX_CODE))
-        {
-            b_in_rng = false;
-        }
-        else
-        {
-            /* within valid 12-bit ADC range */
-        }
-        app_log("S3-I05 sample %d: L=%d R=%d\n",
-                (int32_t) idx,   /* cast: idx < 10 fits int32_t */
-                (int32_t) raw_l, /* cast: 12-bit ADC fits int32_t */
-                (int32_t) raw_r  /* cast: 12-bit ADC fits int32_t */);
-        (void) tk_dly_tsk(10); /* ignored: bench delay only */
-    }
+    norm_w = line_track_normalise(TEST_CAL_LO, cal.white_l, cal.black_l,
+                                  cal.recip_l_q16);
+    norm_b = line_track_normalise(TEST_CAL_HI, cal.white_l, cal.black_l,
+                                  cal.recip_l_q16);
+    norm_m = line_track_normalise(TEST_CAL_MID, cal.white_l, cal.black_l,
+                                  cal.recip_l_q16);
 
-    /* Null pointer safety check */
-    drv_ir_adc_read(&raw_l, NULL);
-    drv_ir_adc_read(NULL, &raw_r);
-
-    TEST_CHECK("S3-I05-SANITY", b_in_rng, "ADC reads within 12-bit range");
+    TEST_CHECK("S3-U01", (0u == norm_w) && (1000u == norm_b),
+               "exact endpoints 0 and 1000");
+    TEST_CHECK("S3-U01", (500u == norm_m), "midpoint normalises to 500");
+    TEST_CHECK("S3-U01", (1000 == line_track_steering(1000u, 0u)) &&
+                         (-1000 == line_track_steering(0u, 1000u)),
+               "steering sign convention +left -right");
 }
 
 /**
- * test_line_noise_bench
- * @brief   Optional 1000-sample min/max/mean logger for S3-I06 (A19 noise).
+ * test_line_u02_u14
+ * @brief   Verifies S3-U02 junction classification and S3-U14 branch orders.
  * @return  none
  * @context usermain (APP_PRI_TEST)
  */
-static void test_line_noise_bench(void)
+static void test_line_u02_u14(void)
 {
-#if (0 != TEST_LINE_ENABLE_NOISE_BENCH)
-    uint32_t idx   = 0u;
-    uint32_t min_l = TEST_LINE_ADC_MAX_CODE;
-    uint32_t max_l = 0u;
-    uint32_t min_r = TEST_LINE_ADC_MAX_CODE;
-    uint32_t max_r = 0u;
+    line_track_jct_t    jct = {0u, 0u, false, false, 0u};
+    line_track_jct_in_t in  = {0u, 0u, 0u, 0u, TEST_MIN_COUNTS,
+                               TEST_CONF_COUNTS, false};
+    uint32_t            cls = APP_JCT_NONE;
 
-    for (idx = 0u; idx < TEST_LINE_NOISE_SAMPLES; idx++)
-    {
-        uint32_t raw_l = 0u;
-        uint32_t raw_r = 0u;
+    /* Early branch (b_branch_recent = true) + left saturation + white after -> T */
+    line_track_jct_reset(&jct);
+    in.norm_l          = 950u;
+    in.norm_r          = 500u;
+    in.path_counts     = 100u;
+    in.branch_seq      = 1u;
+    in.b_branch_recent = true;
+    (void) line_track_jct_step(&jct, &in);
 
-        drv_ir_adc_read(&raw_l, &raw_r);
-        if (raw_l < min_l)
-        {
-            min_l = raw_l;
-        }
-        else
-        {
-            /* keep min_l */
-        }
-        if (raw_l > max_l)
-        {
-            max_l = raw_l;
-        }
-        else
-        {
-            /* keep max_l */
-        }
-        if (raw_r < min_r)
-        {
-            min_r = raw_r;
-        }
-        else
-        {
-            /* keep min_r */
-        }
-        if (raw_r > max_r)
-        {
-            max_r = raw_r;
-        }
-        else
-        {
-            /* keep max_r */
-        }
-        (void) tk_dly_tsk(1); /* ignored: yield between samples */
-    }
+    in.norm_l          = 100u;
+    in.norm_r          = 100u;
+    in.path_counts     = 140u;
+    in.b_branch_recent = false;
+    (void) line_track_jct_step(&jct, &in);
 
-    app_log("S3-I06 L min=%d max=%d span=%d\n",
-            (int32_t) min_l, /* cast: 12-bit fits int32_t */
-            (int32_t) max_l, /* cast: 12-bit fits int32_t */
-            (int32_t) (max_l - min_l) /* cast: 12-bit fits int32_t */);
-    app_log("S3-I06 R min=%d max=%d span=%d\n",
-            (int32_t) min_r, /* cast: 12-bit fits int32_t */
-            (int32_t) max_r, /* cast: 12-bit fits int32_t */
-            (int32_t) (max_r - min_r) /* cast: 12-bit fits int32_t */);
-#endif
+    in.path_counts = 230u;
+    cls            = line_track_jct_step(&jct, &in);
+    TEST_CHECK("S3-U14", (APP_JCT_T == cls),
+               "early barcode branch + left sat classifies T");
+
+    /* Late branch (branch_seq changes during CONFIRM) + line present -> CROSS */
+    line_track_jct_reset(&jct);
+    in.norm_l      = 950u;
+    in.norm_r      = 500u;
+    in.path_counts = 300u;
+    in.branch_seq  = 1u;
+    (void) line_track_jct_step(&jct, &in);
+
+    in.norm_l      = 500u;
+    in.norm_r      = 500u;
+    in.path_counts = 340u;
+    (void) line_track_jct_step(&jct, &in);
+
+    in.branch_seq  = 2u;
+    in.path_counts = 430u;
+    cls            = line_track_jct_step(&jct, &in);
+    TEST_CHECK("S3-U02", (APP_JCT_CROSS == cls),
+               "late barcode branch + left sat + line present -> CROSS");
 }
 
 #else /* 0 == APP_TEST */
