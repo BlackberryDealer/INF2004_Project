@@ -20,6 +20,8 @@
  *	no tk_* function. Changes: 4 s keepalive, 1/2/4/8 s reconnect
  *	back-off, retained last will, command topic subscription, and a
  *	50 ms drain that publishes queued telemetry with one pending payload.
+ *	Packed build (B1.4): back-off and pending-payload state live in the
+ *	16-bit PRV_MQTT word (tools/layout.csv), radio task only.
  */
 
 #include "lwip/apps/mqtt.h"
@@ -29,6 +31,8 @@
 #include "mqtt_utk.h"
 #include "../../../../app_program/subsystem1/mqtt_bridge.h"
 #include "../../../../app_program/app_types.h"
+#include "../../../../app_program/app_layout.h"
+#include "../../../../app_program/app_bits.h"
 #include <tm/tmonitor.h>
 
 #define MQTT_UTK_KEEPALIVE_S    4	/* loss detected <= 7 s, lwipopts.h */
@@ -38,6 +42,12 @@
 #define MQTT_UTK_DRAIN_BURST    2	/* publishes per drain call */
 #define MQTT_UTK_PEND_TRIES_MAX 2	/* then the payload is dropped */
 #define MQTT_UTK_AVAIL_MAX      16
+
+#if (MQTT_UTK_BACKOFF_MAX > PRV_MQTT_BACKOFF_MAX) || \
+    (MQTT_UTK_PEND_TRIES_MAX > PRV_MQTT_PEND_TRIES_MAX) || \
+    (APP_MQ_PAYLOAD_MAX > PRV_MQTT_PEND_LEN_MAX)
+#error "PRV_MQTT fields no longer hold the radio state: widen them"
+#endif
 
 /* Inbound message staging. A publish arrives as one topic callback followed by
  * one or more data callbacks, so the topic has to be kept until the fragment
@@ -50,14 +60,12 @@
 static mqtt_client_t	*client;
 static ip_addr_t	broker_addr;
 static u8_t		connecting;
-static u8_t		backoff_exp;		/* 0..3: retry in 1 << n s */
 
-/* One pending payload: taken from the bridge, kept until it is sent or
- * refused twice. */
-static u8_t		pend_buf[MQTT_BRIDGE_TX_MAX];
-static u8_t		pend_len;
-static u8_t		pend_type;
-static u8_t		pend_tries;
+/* PRV_MQTT: BACKOFF (retry in 1 << n s), PEND_TRIES, PEND_LEN (0 = none)
+ * and PEND_TYPE of the one pending payload, which is kept in pend_buf
+ * until it is sent or refused twice. */
+static u16_t		prv_mqtt;
+static u8_t		pend_buf[APP_MQ_PAYLOAD_MAX];
 
 /* Last-will payload; must outlive mqtt_client_connect(). */
 static u8_t		will_buf[MQTT_UTK_AVAIL_MAX];
@@ -69,6 +77,16 @@ static u8_t		rx_truncated;
 
 static void drain_timeout(void *arg);
 static void retry_arm(void);
+
+static u32_t mq_get(u32_t pos, u32_t bits)
+{
+	return app_bits_get(prv_mqtt, pos, bits);
+}
+
+static void mq_put(u32_t pos, u32_t bits, u32_t value)
+{
+	prv_mqtt = (u16_t)app_bits_put(prv_mqtt, pos, bits, value);
+}
 
 /* mqtt.c NUL-terminates the topic before handing it over, but it is only
  * valid for the duration of this call -- copy it out. */
@@ -141,8 +159,8 @@ static void publish_done_cb(void *arg, err_t result)
 
 static void pend_clear(void)
 {
-	pend_len = 0;
-	pend_tries = 0;
+	mq_put(PRV_MQTT_PEND_LEN_POS, PRV_MQTT_PEND_LEN_BITS, 0);
+	mq_put(PRV_MQTT_PEND_TRIES_POS, PRV_MQTT_PEND_TRIES_BITS, 0);
 }
 
 /* Every 50 ms while the chain lives: up to two publishes, one pending
@@ -153,7 +171,9 @@ static void drain_timeout(void *arg)
 	const char	*topic;
 	u8_t		qos;
 	bool		retain;
+	u8_t		type;
 	u32_t		len;
+	u32_t		tries;
 	err_t		err;
 	int		n;
 
@@ -161,23 +181,34 @@ static void drain_timeout(void *arg)
 
 	for(n = 0; n < MQTT_UTK_DRAIN_BURST
 		   && mqtt_client_is_connected(client); n++) {
-		if(pend_len == 0) {
+		len = mq_get(PRV_MQTT_PEND_LEN_POS, PRV_MQTT_PEND_LEN_BITS);
+		if(len == 0) {
 			len = mqtt_bridge_take(pend_buf, sizeof(pend_buf),
-					       &pend_type);
+					       &type);
 			if(len == 0) {
 				break;
 			}
-			pend_len = (u8_t)len;	/* <= MQTT_BRIDGE_TX_MAX */
-			pend_tries = 0;
+			/* a new payload starts with no tries (S1-U15) */
+			mq_put(PRV_MQTT_PEND_LEN_POS, PRV_MQTT_PEND_LEN_BITS,
+			       len);	/* <= APP_MQ_PAYLOAD_MAX */
+			mq_put(PRV_MQTT_PEND_TYPE_POS, PRV_MQTT_PEND_TYPE_BITS,
+			       type);
+			mq_put(PRV_MQTT_PEND_TRIES_POS,
+			       PRV_MQTT_PEND_TRIES_BITS, 0);
 		}
-		mqtt_bridge_route(pend_type, &topic, &qos, &retain);
-		err = mqtt_publish(client, topic, pend_buf, pend_len, qos,
+		type = (u8_t)mq_get(PRV_MQTT_PEND_TYPE_POS,
+				    PRV_MQTT_PEND_TYPE_BITS);
+		mqtt_bridge_route(type, &topic, &qos, &retain);
+		err = mqtt_publish(client, topic, pend_buf, (u16_t)len, qos,
 				   retain? 1: 0, publish_done_cb, NULL);
 		if(err == ERR_OK) {
 			pend_clear();
 		} else {
-			pend_tries++;
-			if(pend_tries >= MQTT_UTK_PEND_TRIES_MAX) {
+			tries = mq_get(PRV_MQTT_PEND_TRIES_POS,
+				       PRV_MQTT_PEND_TRIES_BITS) + 1;
+			mq_put(PRV_MQTT_PEND_TRIES_POS,
+			       PRV_MQTT_PEND_TRIES_BITS, tries);
+			if(tries >= MQTT_UTK_PEND_TRIES_MAX) {
 				mqtt_bridge_count_publish_drop();
 				pend_clear();
 			}
@@ -201,13 +232,14 @@ static void retry_timeout(void *arg)
  * timer fires, so the poll loop's mqtt_utk_start() cannot skip the wait. */
 static void retry_arm(void)
 {
-	u32_t	delay_ms = (u32_t)MQTT_UTK_RETRY_BASE_MS << backoff_exp;
+	u32_t	exp = mq_get(PRV_MQTT_BACKOFF_POS, PRV_MQTT_BACKOFF_BITS);
+	u32_t	delay_ms = (u32_t)MQTT_UTK_RETRY_BASE_MS << exp;
 
 	connecting = 1;
 	sys_untimeout(retry_timeout, NULL);
 	sys_timeout(delay_ms, retry_timeout, NULL);
-	if(backoff_exp < MQTT_UTK_BACKOFF_MAX) {
-		backoff_exp++;
+	if(exp < MQTT_UTK_BACKOFF_MAX) {
+		mq_put(PRV_MQTT_BACKOFF_POS, PRV_MQTT_BACKOFF_BITS, exp + 1);
 	}
 	tm_printf((UB*)"mqtt: retry in %d ms\n", (int)delay_ms);
 }
@@ -239,7 +271,7 @@ static void connection_cb(mqtt_client_t *c, void *arg, mqtt_connection_status_t 
 		 * is allowed to reconnect. Leaving it set would wedge the client
 		 * permanently after the first disconnect. */
 		connecting = 0;
-		backoff_exp = 0;
+		mq_put(PRV_MQTT_BACKOFF_POS, PRV_MQTT_BACKOFF_BITS, 0);
 
 		tm_printf((UB*)"mqtt: connected to " MQTT_BROKER_IP "\n");
 		mqtt_bridge_link_changed(true);

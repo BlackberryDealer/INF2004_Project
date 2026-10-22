@@ -228,6 +228,9 @@ char const * mqtt_bridge_cmd_topic(void)
 
 /* ---- helpers ---------------------------------------------------------- */
 
+#define PEND_LEN()   mq_get(PRV_MQTT_PEND_LEN_POS, PRV_MQTT_PEND_LEN_BITS)
+#define PEND_TRIES() mq_get(PRV_MQTT_PEND_TRIES_POS, PRV_MQTT_PEND_TRIES_BITS)
+
 static void queue_payloads(uint8_t first_a, uint8_t first_b)
 {
     g_take_first[0] = first_a;
@@ -292,7 +295,7 @@ int main(void)
     g_pub_calls    = 0u;
     g_conn_cb(&g_client_obj, NULL, MQTT_CONNECT_ACCEPTED);
     HOST_CHECK("S1-U37", (1 == g_link_up) && (0u == connecting)
-                         && (0u == backoff_exp),
+                         && (0u == mq_get(PRV_MQTT_BACKOFF_POS, PRV_MQTT_BACKOFF_BITS)),
                "accepted: link up, back-off reset");
     HOST_CHECK("S1-U37", (1u == g_pub_calls) && (0x29u == g_pub_first[0])
                          && (0 == strcmp(g_pub_topic[0], "avail"))
@@ -322,11 +325,11 @@ int main(void)
     g_pub_script[0] = ERR_MEM;
     g_pub_script[1] = ERR_MEM;
     drain_timeout(NULL);   /* try 1 of A, stop for this call */
-    HOST_CHECK("S1-U13", (1u == g_pub_calls) && (3u == pend_len)
-                         && (1u == pend_tries),
+    HOST_CHECK("S1-U13", (1u == g_pub_calls) && (3u == PEND_LEN())
+                         && (1u == PEND_TRIES()),
                "first refusal keeps A pending");
     drain_timeout(NULL);   /* try 2 of A: dropped */
-    HOST_CHECK("S1-U13", (1u == g_pub_drops) && (0u == pend_len),
+    HOST_CHECK("S1-U13", (1u == g_pub_drops) && (0u == PEND_LEN()),
                "second refusal drops A and counts it");
     drain_timeout(NULL);   /* B is taken and sent */
     HOST_CHECK("S1-U13", (3u == g_pub_calls) && (1u == g_pub_ok)
@@ -343,8 +346,8 @@ int main(void)
     g_pub_script[3] = ERR_OK;    /* B try 2 */
     drain_timeout(NULL);
     drain_timeout(NULL);   /* A sent, B taken, tries 0 -> refused once */
-    HOST_CHECK("S1-U15", (3u == g_pub_calls) && (3u == pend_len)
-                         && (1u == pend_tries) && (0u == g_pub_drops),
+    HOST_CHECK("S1-U15", (3u == g_pub_calls) && (3u == PEND_LEN())
+                         && (1u == PEND_TRIES()) && (0u == g_pub_drops),
                "B starts at 0 tries: one refusal keeps it pending");
     drain_timeout(NULL);
     HOST_CHECK("S1-U15", (4u == g_pub_calls) && (2u == g_pub_ok)
