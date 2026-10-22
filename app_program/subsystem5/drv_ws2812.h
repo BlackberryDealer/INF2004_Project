@@ -12,7 +12,8 @@
 #include <stdbool.h>
 
 /* Loads the 4-instruction program into PIO1 or PIO0 (never resets a
-   block). false (and APP_FAULT_PIO_LOAD) if no space: run without RGB. */
+   block). false if no space: the caller raises APP_FAULT_PIO_LOAD and the
+   robot runs without RGB.                                               */
 extern bool drv_ws2812_init(void);
 extern void drv_ws2812_set(uint32_t red, uint32_t green, uint32_t blue);
 

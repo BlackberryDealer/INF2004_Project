@@ -15,7 +15,7 @@
 #define HMI_RUN_PRESS    (1u)   /* stable pressed 3 polls, then released */
 #define HMI_RESET_HOLD   (2u)   /* stable pressed 200 polls (2 s)        */
 
-extern void     hmi_init(void);                 /* mission_task, once  */
+extern bool     hmi_init(void);   /* mission_task, once; false = no RGB */
 extern uint32_t hmi_poll(void);                 /* mission, every 10 ms */
 extern void     hmi_show(uint32_t sys_state, uint32_t now_us);
 

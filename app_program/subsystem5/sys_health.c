@@ -29,14 +29,9 @@
  * (B5.0.3 fallback).
  */
 
-/* SDK headers come before our own header here (exception to BARR-C
-   4.3.c): the kernel's rp2040 sysdef.h, pulled in by app.h, defines
-   GPIO_IN/GPIO_OUT and other hardware macros that break the SDK
-   headers if they are parsed afterwards. See SPEC-QUESTION Q1.     */
-#include "hardware/address_mapped.h"   /* hw_set_bits, hw_clear_bits */
-#include "hardware/structs/watchdog.h"
-#include "hardware/structs/psm.h"
-#include "sys_health.h"        /* own header, after the SDK (Q1) */
+/* Kernel side only (build rule, BARR_C_DEVIATIONS.md): no SDK headers;
+   the watchdog and PSM registers are reached with in_w/out_w/set_w.  */
+#include "sys_health.h"        /* own header first (BARR-C 4.3.c) */
 #include "drv_led_alive.h"
 #include "sys_tick.h"
 
@@ -46,6 +41,27 @@
                                  | SYS_HEALTH_BIT_IMU)
 #define SYS_HEALTH_US_PER_MS    (1000u)
 
+/* Watchdog and PSM registers (values as in the SDK's regs/watchdog.h,
+   regs/psm.h, addressmap.h), driven with the kernel's in_w/out_w and the
+   atomic set_w/clr_w aliases.                                          */
+#define SYS_HEALTH_WDT_BASE         (0x40058000u)
+#define SYS_HEALTH_WDT_CTRL         (SYS_HEALTH_WDT_BASE + 0x00u)
+#define SYS_HEALTH_WDT_LOAD         (SYS_HEALTH_WDT_BASE + 0x04u)
+#define SYS_HEALTH_WDT_REASON       (SYS_HEALTH_WDT_BASE + 0x08u)
+#define SYS_HEALTH_WDT_SCRATCH0     (SYS_HEALTH_WDT_BASE + 0x0Cu)
+#define SYS_HEALTH_WDT_REG_BYTES    (4u)
+#define SYS_HEALTH_WDT_CTRL_ENABLE  (0x40000000u)
+#define SYS_HEALTH_WDT_PAUSE_JTAG   (0x01000000u)
+#define SYS_HEALTH_WDT_PAUSE_DBG0   (0x02000000u)
+#define SYS_HEALTH_WDT_PAUSE_DBG1   (0x04000000u)
+#define SYS_HEALTH_WDT_LOAD_MASK    (0x00FFFFFFu)
+#define SYS_HEALTH_WDT_REASON_TIMER (0x00000001u)
+#define SYS_HEALTH_WDT_REASON_FORCE (0x00000002u)
+#define SYS_HEALTH_PSM_WDSEL        (0x40010000u + 0x08u)
+#define SYS_HEALTH_PSM_WDSEL_ALL    (0x0001FFFFu)
+#define SYS_HEALTH_PSM_WDSEL_ROSC   (0x00000001u)
+#define SYS_HEALTH_PSM_WDSEL_XOSC   (0x00000002u)
+
 /* RP2040 erratum E1: the counter decrements twice per 1 us tick, so the
    load is 2 x the delay in us (the SDK's WATCHDOG_XFACTOR).           */
 #define SYS_HEALTH_WDT_XFACTOR  (2u)
@@ -54,15 +70,15 @@
 #define SYS_HEALTH_LOAD_START   (SYS_HEALTH_WDT_START_MS                  \
                                  * SYS_HEALTH_US_PER_MS                   \
                                  * SYS_HEALTH_WDT_XFACTOR)
-#define SYS_HEALTH_WDT_DBG_BITS (WATCHDOG_CTRL_PAUSE_DBG0_BITS            \
-                                 | WATCHDOG_CTRL_PAUSE_DBG1_BITS          \
-                                 | WATCHDOG_CTRL_PAUSE_JTAG_BITS)
+#define SYS_HEALTH_WDT_DBG_BITS (SYS_HEALTH_WDT_PAUSE_DBG0                \
+                                 | SYS_HEALTH_WDT_PAUSE_DBG1              \
+                                 | SYS_HEALTH_WDT_PAUSE_JTAG)
 #define SYS_HEALTH_WDT_NONBOOT  (0x6ab73121u)  /* SDK: "not a reboot" */
 #define SYS_HEALTH_SCRATCH_IDX  (4u)
-#define SYS_HEALTH_REASON_BITS  (WATCHDOG_REASON_TIMER_BITS               \
-                                 | WATCHDOG_REASON_FORCE_BITS)
+#define SYS_HEALTH_REASON_BITS  (SYS_HEALTH_WDT_REASON_TIMER              \
+                                 | SYS_HEALTH_WDT_REASON_FORCE)
 
-#if (SYS_HEALTH_LOAD_START > WATCHDOG_LOAD_BITS)
+#if (SYS_HEALTH_LOAD_START > SYS_HEALTH_WDT_LOAD_MASK)
 #error "Watchdog startup window too long for the 24-bit LOAD field"
 #endif
 #if (SYS_HEALTH_LOAD_NORMAL >= SYS_HEALTH_LOAD_START)
@@ -112,7 +128,8 @@ ER sys_health_init(void)
     drv_led_alive_init();
     /* cast: hardware reason bits, 2 bits */
     app_log("RESET cause watchdog %d\n",
-            (int32_t) (watchdog_hw->reason & SYS_HEALTH_REASON_BITS), 0, 0);
+            (int32_t) (in_w(SYS_HEALTH_WDT_REASON)
+                       & SYS_HEALTH_REASON_BITS), 0, 0);
 
     return ercd;
 }
@@ -171,7 +188,7 @@ void sys_health_service(void)
     }
     else if (b_fast && (age_us <= limit_us))
     {
-        watchdog_hw->load = g_wdt_load;                   /* feed */
+        out_w(SYS_HEALTH_WDT_LOAD, g_wdt_load);           /* feed */
         b_feed            = true;
     }
     else
@@ -225,15 +242,17 @@ bool sys_health_is_started(void)
 static void sys_health_wdt_start(uint32_t load)
 {
     g_wdt_load = load;
-    watchdog_hw->scratch[SYS_HEALTH_SCRATCH_IDX] = SYS_HEALTH_WDT_NONBOOT;
-    hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
+    out_w(SYS_HEALTH_WDT_SCRATCH0
+          + (SYS_HEALTH_WDT_REG_BYTES * SYS_HEALTH_SCRATCH_IDX),
+          SYS_HEALTH_WDT_NONBOOT);
+    clr_w(SYS_HEALTH_WDT_CTRL, SYS_HEALTH_WDT_CTRL_ENABLE);
     /* reset everything except the oscillators when it fires */
-    hw_set_bits(&psm_hw->wdsel,
-                PSM_WDSEL_BITS
-                & ~(PSM_WDSEL_ROSC_BITS | PSM_WDSEL_XOSC_BITS));
-    hw_set_bits(&watchdog_hw->ctrl, SYS_HEALTH_WDT_DBG_BITS);
-    watchdog_hw->load = load;
-    hw_set_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
+    set_w(SYS_HEALTH_PSM_WDSEL,
+          SYS_HEALTH_PSM_WDSEL_ALL
+          & ~(SYS_HEALTH_PSM_WDSEL_ROSC | SYS_HEALTH_PSM_WDSEL_XOSC));
+    set_w(SYS_HEALTH_WDT_CTRL, SYS_HEALTH_WDT_DBG_BITS);
+    out_w(SYS_HEALTH_WDT_LOAD, load);
+    set_w(SYS_HEALTH_WDT_CTRL, SYS_HEALTH_WDT_CTRL_ENABLE);
 }
 
 /*** end of file ***/

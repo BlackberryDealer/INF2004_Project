@@ -4,7 +4,9 @@
  * v1.5.1) with mocked neighbours: kernel, motion (tagged commands),
  * safety, fault, telem, odometry, sys_health. Drives whole runs and
  * checks every motion command, mode bit and transition, including the
- * host parts of S5-U15, U16, U20, U21, U22 and U27.
+ * host parts of S5-U15, U16, U20, U21, U22 and U27, plus S5-U04 (K4
+ * flood) and S5-U05 (state x event matrix), moved here from the target
+ * because they changed live state (fix brief, Fix 2/3).
  * Host-only test code, outside BARR-C scope. Run: make -C testing/subsystem5/host
  */
 #include <stdio.h>
@@ -18,14 +20,21 @@ ID tk_cre_flg(T_CFLG const *p) { flg[nflg] = p->iflgptn; return nflg++; }
 ER tk_set_flg(ID id, UINT p) { flg[id] |= p; return E_OK; }
 ER tk_clr_flg(ID id, UINT p) { flg[id] &= p; return E_OK; }
 ER tk_ref_flg(ID id, T_RFLG *r) { r->flgptn = flg[id]; return E_OK; }
+/* K4 mock with the kernel's sizing (kernel/tkernel/messagebuf.h): each
+   message takes HEADERSZ (4) + ROUNDSZ(msgsz) bytes of bufsz; a send fits
+   only if HEADERSZ + msgsz <= free bytes. TMO_POL never waits. */
 static mission_evt_t q[64]; static int qn = 0;
-ID tk_cre_mbf(T_CMBF const *p) { (void) p; return 1; }
-ER tk_snd_mbf(ID id, void const *m, INT sz, TMO t) { (void) id; (void) sz; (void) t;
-  if (qn >= 16) { return E_TMOUT; }
-  memcpy(&q[qn++], m, sizeof(mission_evt_t)); return E_OK; }
+static int mbf_bufsz, mbf_used, mbf_waits;
+#define MBF_ENTRY(sz) (4 + (((sz) + 3) & ~3))
+ID tk_cre_mbf(T_CMBF const *p) { mbf_bufsz = p->bufsz; mbf_used = 0; return 1; }
+ER tk_snd_mbf(ID id, void const *m, INT sz, TMO t) { (void) id;
+  if (TMO_POL != t) { mbf_waits++; }
+  if (4 + sz > mbf_bufsz - mbf_used) { return E_TMOUT; }
+  memcpy(&q[qn++], m, sizeof(mission_evt_t)); mbf_used += MBF_ENTRY(sz); return E_OK; }
 INT tk_rcv_mbf(ID id, void *m, TMO t) { (void) id; (void) t; if (!qn) return E_TMOUT;
-  memcpy(m, &q[0], sizeof(mission_evt_t)); memmove(q, q + 1, (size_t)(--qn) * sizeof(q[0])); return 12; }
-ER tk_ref_mbf(ID id, T_RMBF *r) { (void) id; r->frbufsz = 256 - qn * 16; return E_OK; }
+  memcpy(m, &q[0], sizeof(mission_evt_t)); memmove(q, q + 1, (size_t)(--qn) * sizeof(q[0]));
+  mbf_used -= MBF_ENTRY(12); return 12; }
+ER tk_ref_mbf(ID id, T_RMBF *r) { (void) id; r->frbufsz = mbf_bufsz - mbf_used; return E_OK; }
 ID tk_cre_mtx(T_CMTX const *p) { (void) p; return 1; }
 ER tk_loc_mtx(ID id, TMO t) { (void) id; (void) t; return E_OK; }
 ER tk_unl_mtx(ID id) { (void) id; return E_OK; }
@@ -67,10 +76,15 @@ static int g_wdt_enables; static bool g_started;
 void sys_health_enable_watchdog(void) { g_wdt_enables++; }
 bool sys_health_is_started(void) { return g_started; }
 uint32_t sys_tick_now_us(void) { return g_now; }
-void hmi_init(void) {}
+bool hmi_init(void) { return true; }
 uint32_t hmi_poll(void) { return 0u; }
 void hmi_show(uint32_t s, uint32_t n) { (void) s; (void) n; }
 static bool g_warn; void hmi_set_warning(bool b) { g_warn = b; }
+/* S5-U05: every matrix case starts from fresh mocks (Fix 2) */
+void mission_host_case_reset(void) {
+  memset(flg, 0, sizeof(flg)); qn = 0; mbf_used = 0; g_safety = 0; g_fault = 0;
+  g_refuse = 0; g_wdt_enables = 0; g_started = false; g_warn = false;
+  mlog[0] = 0; alog[0] = 0; tlog[0] = 0; }
 /* ---------------- harness ---------------- */
 static int pass_n, fail_n;
 #define CHECK(id, c, d) do { if (c) { pass_n++; printf("[TEST] %s PASS  %s\n", id, d); } else { fail_n++; printf("[TEST] %s FAIL  %s (line %d) mlog='%s' sys=%u run=%u av=%u sub=%u pend=%d\n", id, d, __LINE__, mlog, g_ctx.sys_state, g_ctx.run_state, g_ctx.avoid_step, g_ctx.substep, g_ctx.b_move_pending); } } while (0)
@@ -187,5 +201,23 @@ int main(void) {
   g_fault = 0; g_safety = 0; EV(APP_EVT_RESET, 0); idle_ms(110); fault_set(APP_FAULT_WIFI_LOSS); NONE();
   CHECK("S5-U07", APP_SYS_FAULT != g_ctx.sys_state, "Wi-Fi loss is not a transition");
   printf("[TEST] S5-U07 mission simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
+  { int p0 = pass_n, f0 = fail_n;
+    /* S5-U04 (moved from target, Fix 3): flood K4 from one task */
+    int sent = 0, refused = 0, waits0 = mbf_waits; uint32_t hw = 0;
+    qn = 0; mbf_used = 0; g_queue_high_water = 0; g_fault = 0;
+    for (uint32_t i = 0; i < 20u; i++) { if (mission_post_event(APP_EVT_SUMMARY, i)) sent++; else refused++; }
+    hw = mission_queue_high_water();
+    CHECK("S5-U04", 16 == sent, "K4 holds 16 events (real capacity: 256 B / (4 + 12))");
+    CHECK("S5-U04", 4 == refused, "extra posts are refused");
+    CHECK("S5-U04", waits0 == mbf_waits, "every post uses TMO_POL: a refused post returns at once");
+    CHECK("S5-U04", 0u != (g_fault & APP_FAULT_QUEUE_OVERFLOW), "QUEUE_OVERFLOW fault set");
+    CHECK("S5-U04", 256u == hw, "high-water mark = whole buffer");
+    CHECK("S5-U04", !mission_post_event(APP_EVT_COUNT, 0), "unknown event type refused");
+    qn = 0; mbf_used = 0;
+    /* S5-U05 (moved from target, Fix 2): every state x every event type */
+    { uint32_t cases = 0u, bad = mission_test_matrix(&cases);
+      CHECK("S5-U05", 432u == cases, "432 state/event combinations tried");
+      CHECK("S5-U05", 0u == bad, "every outcome is a defined state"); }
+    printf("[TEST] S5-U04/U05 mission host tests SUMMARY %d passed, %d failed\n", pass_n - p0, fail_n - f0); }
   return fail_n;
 }

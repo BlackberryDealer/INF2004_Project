@@ -1,6 +1,7 @@
 # Buddy 5 host (laptop) tests.
 #   test_obs_profile_host : S5-U01..U03, pure obs_profile.c
-#   sim_mission_host      : statechart simulation (mission.c, mission_run.c)
+#   sim_mission_host      : statechart simulation (mission.c, mission_run.c),
+#                           plus S5-U04 and S5-U05 (-DMISSION_HOST_TEST)
 #   sim_obstacle_host     : obstacle_task simulation (obstacle.c + profile)
 # The simulations compile copies of the real sources in build/ next to a
 # mock app.h, so "../app.h" inside them resolves to the mock.
@@ -38,7 +39,7 @@ tree:
 	cp $(S5)/*.c $(S5)/*.h $(B)/subsystem5/
 
 sim_mission_host.out: sim_mission_host.c tree
-	$(CC) $(SIMFLAGS) -o $@ sim_mission_host.c \
+	$(CC) $(SIMFLAGS) -DMISSION_HOST_TEST -o $@ sim_mission_host.c \
 	    $(B)/subsystem5/mission_run.c $(B)/subsystem5/status_board.c
 
 sim_obstacle_host.out: sim_obstacle_host.c tree

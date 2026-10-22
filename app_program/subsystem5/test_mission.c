@@ -1,29 +1,22 @@
 /**
  * @file    test_mission.c
- * @brief   On-target tests for the mission queue, the statechart and the
- *          tick counters.
+ * @brief   On-target tests for the tick counters and the 1 us time base.
+ *          S5-U04 (K4 flood) and S5-U05 (state x event matrix) changed
+ *          live system state, so they run on the host instead
+ *          (testing/subsystem5/host/sim_mission_host.c, fix brief Fix 2/3).
  * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    test
- * @reqs    min-bit item 7, NFR17, B5.2.6 (every state x every event)
+ * @reqs    NFR17, NFR10b (time base)
  */
 
 #include "test_mission.h"      /* own header first (BARR-C 4.3.c) */
 #include "../test_report.h"
-#include "../app_types.h"
-#include "../subsystem2/fault.h"
-#include "mission.h"
 #include "sys_tick.h"
-#include "mission_run.h"
 
 #if APP_TEST
 
 /* ---- private constants and types ------------------------------------ */
 
-#define TEST_K4_ENTRIES        (16u)    /* baseline K4 depth           */
-#define TEST_K4_BYTES          (256u)   /* baseline K4 buffer          */
-#define TEST_FLOOD_POSTS       (20u)    /* more than K4 can hold       */
-#define TEST_POST_MAX_US       (200u)   /* a failed post must not wait */
-#define TEST_DRAIN_MS          (300)    /* mission empties K4          */
 #define TEST_BUSY_PRI          (11)     /* above every periodic task   */
 #define TEST_BUSY_US           (2000u)  /* S5-U06: 2 ms busy loop      */
 #define TEST_BUSY_ROUNDS       (40u)
@@ -32,8 +25,9 @@
 #define TEST_BUSY_WAIT_MS      (1500)
 #define TEST_LAT_MIN_US        (1500u)
 #define TEST_BUSY_STACK_BYTES  (512u + APP_SYS_STACK_BYTES)
-/* (7 states + 4 RUN substates + 7 AVOID steps) x 24 event types */
-#define TEST_MATRIX_CASES      (432u)
+#define TEST_TIMER_DLY_MS      (1000)   /* S5-U29: 1 s kernel delay    */
+#define TEST_TIMER_MIN_US      (990000u)
+#define TEST_TIMER_MAX_US      (1020000u)
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -41,8 +35,7 @@ static uint64_t g_test_busy_stack[TEST_BUSY_STACK_BYTES / 8u];
 
 /* ---- private function prototypes ------------------------------------- */
 
-static void test_mission_flood(void);
-static void test_mission_matrix(void);
+static void test_mission_timer(void);
 static void test_mission_latency(void);
 static void test_busy_task(INT stacd, void * p_exinf);
 
@@ -52,14 +45,14 @@ static void test_busy_task(INT stacd, void * p_exinf);
 
 /**
  * test_mission_run
- * @brief   Runs S5-U04, S5-U05 and S5-U06.
- * @context usermain (TEST=1 builds, priority 1)
+ * @brief   Runs S5-U29 (time base) and S5-U06 (latency). Touches no
+ *          shared state (no faults, modes, safety bits or motion).
+ * @context usermain (TEST=1 builds, priority 21)
  */
 void test_mission_run(void)
 {
 #if APP_TEST
-    test_mission_flood();
-    test_mission_matrix();
+    test_mission_timer();
     test_mission_latency();
 #endif
 }
@@ -69,82 +62,28 @@ void test_mission_run(void)
 /* ---- private functions ------------------------------------------------ */
 
 /**
- * test_mission_flood
- * @brief   S5-U04: flooding K4 fails without blocking and sets
- *          APP_FAULT_QUEUE_OVERFLOW. usermain (priority 1) posts, so
- *          mission_task (16) cannot drain K4 during the flood.
+ * test_mission_timer
+ * @brief   S5-U29 (fix brief, Fix 4): sys_tick_now_us() advances about
+ *          1 000 000 us across a 1 s kernel delay, so the watchdog tick
+ *          that drives the TIMER is running.
  * @context usermain
  */
-static void test_mission_flood(void)
+static void test_mission_timer(void)
 {
-    uint32_t sent       = 0u;
-    uint32_t failed     = 0u;
-    uint32_t worst_us   = 0u;
-    uint32_t start_us   = 0u;
-    uint32_t took_us    = 0u;
-    bool     b_was_sent = false;
+    uint32_t start_us = 0u;
+    uint32_t diff_us  = 0u;
 
     TEST_INIT();
-    fault_clear(APP_FAULT_QUEUE_OVERFLOW);   /* test build only */
+    start_us = sys_tick_now_us();
+    (void) tk_dly_tsk(TEST_TIMER_DLY_MS);   /* cannot fail */
+    diff_us  = sys_tick_now_us() - start_us;
 
-    for (uint32_t idx = 0u; idx < TEST_FLOOD_POSTS; idx++)
-    {
-        start_us   = sys_tick_now_us();
-        b_was_sent = mission_post_event(APP_EVT_SUMMARY, idx);
-        took_us    = sys_tick_now_us() - start_us;
-        if (b_was_sent)
-        {
-            sent++;
-        }
-        else
-        {
-            failed++;
-            if (took_us > worst_us)
-            {
-                worst_us = took_us;
-            }
-        }
-    }
-
-    TEST_CHECK("S5-U04", TEST_K4_ENTRIES == sent, "K4 holds 16 events");
-    TEST_CHECK("S5-U04", (TEST_FLOOD_POSTS - TEST_K4_ENTRIES) == failed,
-               "extra posts are refused");
-    TEST_CHECK("S5-U04", worst_us < TEST_POST_MAX_US,
-               "a refused post returns at once");
-    TEST_CHECK("S5-U04",
-               0u != (fault_get() & APP_FAULT_QUEUE_OVERFLOW),
-               "QUEUE_OVERFLOW fault set");
-    TEST_CHECK("S5-U04", TEST_K4_BYTES == mission_queue_high_water(),
-               "high-water mark = whole buffer");
-    app_log("S5-U04 worst refused post %d us\n",
-            (int32_t) worst_us, 0, 0);   /* cast: < 2^31 */
-
-    (void) tk_dly_tsk(TEST_DRAIN_MS);       /* let mission empty K4 */
-    fault_clear(APP_FAULT_QUEUE_OVERFLOW);  /* test build only */
-    TEST_SUMMARY("mission K4");
-}
-
-/**
- * test_mission_matrix
- * @brief   S5-U05: every state x every event type gives a defined state
- *          and no crash. Wheels must be off the ground (it issues motion
- *          commands).
- * @context usermain
- */
-static void test_mission_matrix(void)
-{
-    uint32_t cases = 0u;
-    uint32_t bad   = 0u;
-
-    TEST_INIT();
-    bad = mission_test_matrix(&cases);
-    TEST_CHECK("S5-U05", TEST_MATRIX_CASES == cases,
-               "432 state/event combinations tried");
-    TEST_CHECK("S5-U05", 0u == bad, "every outcome is a defined state");
-    /* casts: both < 1000 */
-    app_log("S5-U05 cases %d undefined %d\n", (int32_t) cases,
-            (int32_t) bad, 0);
-    TEST_SUMMARY("mission matrix");
+    TEST_CHECK("S5-U29", (diff_us >= TEST_TIMER_MIN_US)
+               && (diff_us <= TEST_TIMER_MAX_US),
+               "timer advances ~1 000 000 us in 1 s");
+    app_log("S5-U29 timer diff %d us\n",
+            (int32_t) diff_us, 0, 0);   /* cast: < 2^31 */
+    TEST_SUMMARY("time base");
 }
 
 /**

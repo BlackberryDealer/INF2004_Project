@@ -7,12 +7,9 @@
  * @reqs    NFR1, NFR2, NFR17 (release latency), NFR11
  */
 
-/* SDK headers come before our own header here (exception to BARR-C
-   4.3.c): the kernel's rp2040 sysdef.h, pulled in by app.h, defines
-   GPIO_IN/GPIO_OUT and other hardware macros that break the SDK
-   headers if they are parsed afterwards. See SPEC-QUESTION Q1.     */
-#include "hardware/timer.h"    /* time_us_32(): 1 MHz system timer */
-#include "sys_tick.h"          /* own header, after the SDK (Q1) */
+/* Kernel side only (build rule, BARR_C_DEVIATIONS.md): no SDK headers;
+   the 1 MHz timer is read with in_w(TIMER_TIMERAWL).                 */
+#include "sys_tick.h"          /* own header first (BARR-C 4.3.c) */
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -24,6 +21,15 @@
 #define SYS_TICK_FAST_SLOTS  (3u)     /* slots 0..2 are woken by R2 */
 #define SYS_TICK_LAT_SAT_US  (4095u)  /* 12 bits (E7)  */
 #define SYS_TICK_OVR_SAT     (255u)   /* 8 bits        */
+
+/* The TIMER counts only from the watchdog tick generator (RP2040
+   datasheet 4.7.2). The SDK starts it in runtime_init_clocks.c, which
+   this template does not link, and nothing in the kernel starts it
+   (fix brief, Fix 4). clk_ref = 12 MHz XOSC (cpu_clock.c), so 12
+   cycles = 1 us. Writing the same value again is harmless.           */
+#define SYS_TICK_WDT_TICK        (0x40058000u + 0x2Cu)  /* WATCHDOG_TICK */
+#define SYS_TICK_WDT_TICK_ENABLE (0x00000200u)
+#define SYS_TICK_CLK_REF_MHZ     (12u)                  /* XOSC, cpu_clock.c */
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -56,14 +62,18 @@ static void sys_tick_wake(uint32_t slot);
 
 /**
  * sys_tick_init
- * @brief   Creates R2 (10 ms) and R3 (60 ms), both stopped.
+ * @brief   Starts the 1 us timer tick, then creates R2 (10 ms) and R3
+ *          (60 ms), both stopped.
  * @return  E_OK, or the first kernel error
- * @context usermain (init phase)
+ * @context usermain (init phase, before anything reads the timer)
  */
 ER sys_tick_init(void)
 {
-    ER ercd = sys_tick_create((FP) sys_tick_10ms_handler, /* cast: kernel */
-                              SYS_TICK_FAST_MS, &gh_r2_cyc);
+    ER ercd = E_OK;
+
+    out_w(SYS_TICK_WDT_TICK, SYS_TICK_WDT_TICK_ENABLE | SYS_TICK_CLK_REF_MHZ);
+    ercd = sys_tick_create((FP) sys_tick_10ms_handler, /* cast: kernel */
+                           SYS_TICK_FAST_MS, &gh_r2_cyc);
 
     if (E_OK == ercd)
     {
@@ -172,7 +182,8 @@ void sys_tick_cycle_start(uint32_t slot)
  */
 uint32_t sys_tick_now_us(void)
 {
-    return time_us_32();
+    return (uint32_t) in_w(TIMER_TIMERAWL);  /* cast: UW is 32-bit; raw low
+                                               word, no latch side effect */
 }
 
 /**

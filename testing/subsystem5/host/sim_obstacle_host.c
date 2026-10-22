@@ -44,6 +44,7 @@ void fault_set(uint32_t b) { g_fault |= b; }
 uint32_t odometry_counts_to_mm(uint32_t c) { return (c * 349u) / 1000u; }
 bool mission_mode_is_set(uint32_t b) { return 0u != (g_modes & b); }
 bool gpio_get(uint32_t pin) { (void) pin; return g_echo_high; }
+uint32_t in_w(uint32_t port) { (void) port; return g_echo_high ? (1u << PIN_US_ECHO) : 0u; }
 /* world */
 static int w_mode;                 /* 0 = fixed distance, 1 = face, 2 = silent */
 static uint32_t w_dist = 1000;
@@ -128,7 +129,19 @@ int main(void) {
     CHECK("S5-U17", done_before == g_echo_done_cnt, "fall of an older ping (sequence moved on) is ignored");
     g_echo_window_open = 1u; obstacle_echo_isr(DRV_GPIO_IRQ_RISE, g_now);
     obstacle_echo_isr(DRV_GPIO_IRQ_FALL, g_now + 45000u); g_echo_window_open = 0u;
-    CHECK("S5-U17", done_before == g_echo_done_cnt, "fall older than the 40 ms timeout is ignored"); }
+    CHECK("S5-U17", done_before == g_echo_done_cnt, "fall older than the 40 ms timeout is ignored");
+    /* Fix 5: both edges in one R1 entry are never measured as 0 mm */
+    { uint8_t rise_before = g_echo_rise_cnt;
+      g_echo_window_open = 1u; g_echo_high = false;
+      obstacle_echo_isr(DRV_GPIO_IRQ_BOTH, g_now + 2000u);
+      CHECK("S5-U17", done_before == g_echo_done_cnt && rise_before == g_echo_rise_cnt && !gb_is_rise_armed, "RISE+FALL in one entry, pin low: both discarded, no 0 mm echo");
+      g_echo_high = true;
+      obstacle_echo_isr(DRV_GPIO_IRQ_BOTH, g_now + 3000u);
+      CHECK("S5-U17", done_before == g_echo_done_cnt && (uint8_t) (rise_before + 1u) == g_echo_rise_cnt && gb_is_rise_armed && g_now + 3000u == g_rise_us, "RISE+FALL in one entry, pin high: kept as a rise only");
+      g_echo_high = false;
+      obstacle_echo_isr(DRV_GPIO_IRQ_FALL, g_now + 3000u + 580u);
+      CHECK("S5-U17", (uint8_t) (done_before + 1u) == g_echo_done_cnt && g_echo.b_is_valid && 100u == obstacle_width_to_mm(g_echo.width_4us), "... and its real fall then measures normally (100 mm)");
+      g_echo_window_open = 0u; gb_is_rise_armed = false; } }
   /* lost echoes in APPROACH stop the robot */
   w_mode = 0; w_dist = 350; g_safety = 0; cyc(); cyc(); CHECK("S5-U08", APP_SCAN_APPROACH == g_state, "approach again");
   w_mode = 2; cyc(); cyc(); CHECK("S5-U08", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP), "2 lost echoes in APPROACH -> ESTOP");

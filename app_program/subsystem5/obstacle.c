@@ -9,11 +9,9 @@
  * @reqs    FR6, FR7, FR8 (scan + plan), NFR6, NFR10b, NFR17
  */
 
-/* SDK header first (exception to BARR-C 4.3.c): the kernel's rp2040
-   sysdef.h, pulled in by app.h, defines GPIO_IN/GPIO_OUT macros that
-   break hardware/gpio.h if it is parsed afterwards (SPEC-QUESTION Q1). */
-#include "hardware/gpio.h"     /* gpio_get: echo already high? */
-#include "obstacle.h"          /* own header, after the SDK (Q1) */
+/* Kernel side only (build rule, BARR_C_DEVIATIONS.md): no SDK headers;
+   the echo pin is read through the kernel's in_w(GPIO_IN).           */
+#include "obstacle.h"          /* own header first (BARR-C 4.3.c) */
 #include "../board_pins.h"
 #include "../app_types.h"
 #include "../subsystem2/safety.h"
@@ -74,6 +72,8 @@ typedef struct
     bool     b_is_lost;      /* no completed echo this ping            */
     bool     b_is_confirmed; /* agrees with the previous reading       */
 } obstacle_reading_t;
+
+#define OBS_ECHO_PIN_MASK   (1u << PIN_US_ECHO)
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -300,8 +300,27 @@ static void obstacle_cycle(void)
 static void obstacle_echo_isr(uint32_t events, uint32_t now_us)
 {
     uint32_t width = 0u;
+    uint32_t edges = events;
 
-    if (0u != (events & DRV_GPIO_IRQ_RISE))
+    /* Both edges in one R1 entry (R1 late by more than the shortest
+       echo): their order is unknown and now_us - g_rise_us would be a
+       false 0 mm width (fix brief, Fix 5). Do not measure. Pin high:
+       the last edge was a rise, keep it (the fall before it is lost).
+       Pin low: discard both; the ping counts as silent.               */
+    if (DRV_GPIO_IRQ_BOTH == (edges & DRV_GPIO_IRQ_BOTH))
+    {
+        if (0u != (in_w(GPIO_IN) & OBS_ECHO_PIN_MASK))
+        {
+            edges = DRV_GPIO_IRQ_RISE;
+        }
+        else
+        {
+            edges            = 0u;
+            gb_is_rise_armed = false;
+        }
+    }
+
+    if (0u != (edges & DRV_GPIO_IRQ_RISE))
     {
         if (0u == g_echo_window_open)
         {
@@ -320,7 +339,7 @@ static void obstacle_echo_isr(uint32_t events, uint32_t now_us)
         }
     }
 
-    if (0u != (events & DRV_GPIO_IRQ_FALL))
+    if (0u != (edges & DRV_GPIO_IRQ_FALL))
     {
         width = now_us - g_rise_us;         /* unsigned: wrap-safe */
         if ((0u != g_echo_window_open) && gb_is_rise_armed
@@ -370,7 +389,7 @@ static void obstacle_ping(obstacle_reading_t * p_rd)
         /* drop a stale token (maxsem 1: at most one) */
     }
 
-    if (!gpio_get(PIN_US_ECHO))
+    if (0u == (in_w(GPIO_IN) & OBS_ECHO_PIN_MASK))   /* SIO GPIO_IN */
     {
         g_ping_seq++;                       /* 8-bit wrap */
         rise0              = g_echo_rise_cnt;

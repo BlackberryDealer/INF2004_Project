@@ -10,10 +10,8 @@
 #include "drv_ws2812.h"        /* own header first (BARR-C 4.3.c) */
 #include <stddef.h>            /* NULL */
 #include "../board_pins.h"
-#include "hardware/pio.h"      /* SDK before app.h (fault.h): see Q1 */
+#include "hardware/pio.h"      /* SDK side only: no kernel headers */
 #include "ws2812.pio.h"
-#include "../app_types.h"
-#include "../subsystem2/fault.h"
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -54,18 +52,7 @@ bool drv_ws2812_init(void)
         gb_is_ws_ready = drv_ws2812_try(pio_try[idx]);
     }
 
-    if (gb_is_ws_ready)
-    {
-        app_log("RGB PIO%d SM %d\n",
-                (int32_t) pio_get_index(gp_ws_pio), /* cast: 0 or 1 */
-                (int32_t) g_ws_sm, 0);              /* cast: 0..3   */
-    }
-    else
-    {
-        fault_set(APP_FAULT_PIO_LOAD);
-    }
-
-    return gb_is_ws_ready;
+    return gb_is_ws_ready;   /* false: caller raises APP_FAULT_PIO_LOAD */
 }
 
 /**

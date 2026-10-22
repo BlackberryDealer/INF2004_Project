@@ -7,19 +7,25 @@
  * @reqs    NFR5a (edge timing), A12 (R1 < 20 us); deviation D6
  */
 
-/* SDK headers come before our own header here (exception to BARR-C
-   4.3.c): the kernel's rp2040 sysdef.h, pulled in by app.h, defines
-   GPIO_IN/GPIO_OUT and other hardware macros that break the SDK
-   headers if they are parsed afterwards. See SPEC-QUESTION Q1.     */
-#include "hardware/gpio.h"
-#include "drv_gpio_irq.h"      /* own header, after the SDK (Q1) */
-#include <stddef.h>             /* NULL */
+#include "drv_gpio_irq.h"      /* own header first (BARR-C 4.3.c) */
+#include <bsp/libbsp.h>         /* gpio_set_pin(): SIO input */
 #include "../board_pins.h"
 #include "sys_tick.h"
 
 /* ---- private constants and types ------------------------------------ */
 
 #define DRV_GPIO_IRQ_MAX   (4u)
+
+/* IO_BANK0 interrupt registers (RP2040 datasheet 2.19.6; offsets as in the
+   SDK's regs/io_bank0.h). 4 bits per GPIO, 8 GPIOs per register; bit 2 =
+   EDGE_LOW (fall), bit 3 = EDGE_HIGH (rise), the DRV_GPIO_IRQ_* values.  */
+#define DRV_GPIO_IRQ_INTR0      (IO_BANK0_BASE + 0x0F0u) /* write 1 clears */
+#define DRV_GPIO_IRQ_INTE0      (IO_BANK0_BASE + 0x100u) /* proc0 enable  */
+#define DRV_GPIO_IRQ_INTS0      (IO_BANK0_BASE + 0x120u) /* proc0 status  */
+#define DRV_GPIO_IRQ_REG_SHIFT  (3u)    /* 8 GPIOs per register: pin >> 3 */
+#define DRV_GPIO_IRQ_PIN_MASK   (7u)    /* position in register: pin & 7  */
+#define DRV_GPIO_IRQ_BITS_SHIFT (2u)    /* 4 bits per GPIO                */
+#define DRV_GPIO_IRQ_REG_BYTES  (4u)
 
 typedef struct
 {
@@ -38,6 +44,8 @@ static volatile uint32_t    g_irq_count = 0u;
 /* ---- private function prototypes ------------------------------------- */
 
 static void gpio_bank0_isr(UINT intno);
+static UW   drv_gpio_irq_reg(UW base, uint32_t pin);
+static uint32_t drv_gpio_irq_shift(uint32_t pin);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -90,12 +98,15 @@ ER drv_gpio_irq_attach(uint32_t pin, uint32_t edges,
     }
     else
     {
-        gpio_init(pin);
-        gpio_set_dir(pin, false);
+        (void) gpio_set_pin(pin, GPIO_MODE_IN);   /* pin < 30: cannot fail */
         g_irq_table[count].pin        = pin;      /* entry first ...      */
         g_irq_table[count].p_callback = p_callback;
         g_irq_count                   = count + 1u;
-        gpio_set_irq_enabled(pin, mask, true);    /* ... then the IRQ    */
+        /* clear stale edges, then enable (atomic set alias) */
+        out_w(drv_gpio_irq_reg(DRV_GPIO_IRQ_INTR0, pin),
+              mask << drv_gpio_irq_shift(pin));
+        set_w(drv_gpio_irq_reg(DRV_GPIO_IRQ_INTE0, pin),
+              mask << drv_gpio_irq_shift(pin));   /* ... then the IRQ */
     }
 
     return ercd;
@@ -123,11 +134,14 @@ static void gpio_bank0_isr(UINT intno)
 
     for (uint32_t idx = 0u; idx < count; idx++)
     {
-        events = gpio_get_irq_event_mask(g_irq_table[idx].pin)
+        events = (in_w(drv_gpio_irq_reg(DRV_GPIO_IRQ_INTS0,
+                                        g_irq_table[idx].pin))
+                  >> drv_gpio_irq_shift(g_irq_table[idx].pin))
                  & DRV_GPIO_IRQ_BOTH;
         if (0u != events)
         {
-            gpio_acknowledge_irq(g_irq_table[idx].pin, events);
+            out_w(drv_gpio_irq_reg(DRV_GPIO_IRQ_INTR0, g_irq_table[idx].pin),
+                  events << drv_gpio_irq_shift(g_irq_table[idx].pin));
             g_irq_table[idx].p_callback(events, now_us);
         }
     }
@@ -135,6 +149,31 @@ static void gpio_bank0_isr(UINT intno)
 #if (APP_PROBE != 0)
     app_probe_set(false);
 #endif
+}
+
+/**
+ * drv_gpio_irq_reg
+ * @brief   Address of the IO_BANK0 register holding a pin's 4 bits.
+ * @param   base  DRV_GPIO_IRQ_INTR0 / _INTE0 / _INTS0
+ * @param   pin   GPIO 0..29
+ * @return  register address
+ * @context any (also R1)
+ */
+static UW drv_gpio_irq_reg(UW base, uint32_t pin)
+{
+    return (base + ((pin >> DRV_GPIO_IRQ_REG_SHIFT) * DRV_GPIO_IRQ_REG_BYTES));
+}
+
+/**
+ * drv_gpio_irq_shift
+ * @brief   Bit position of a pin's 4 bits inside its register.
+ * @param   pin  GPIO 0..29
+ * @return  0, 4, ... 28
+ * @context any (also R1)
+ */
+static uint32_t drv_gpio_irq_shift(uint32_t pin)
+{
+    return ((pin & DRV_GPIO_IRQ_PIN_MASK) << DRV_GPIO_IRQ_BITS_SHIFT);
 }
 
 /*** end of file ***/

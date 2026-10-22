@@ -81,10 +81,14 @@ static bool     hmi_is_pressed(uint32_t pin);
  * hmi_init
  * @brief   Buttons as inputs with pull-ups, buzzer silent, RGB loaded
  *          (runs on without RGB if no PIO space is left).
+ * @return  true if the RGB LED is usable; false: mission_task raises
+ *          APP_FAULT_PIO_LOAD (this file is SDK side, no fault.h)
  * @context mission_task, before its loop
  */
-void hmi_init(void)
+bool hmi_init(void)
 {
+    bool b_is_rgb_ok = false;
+
     gpio_init(PIN_BTN_RUN);
     gpio_set_dir(PIN_BTN_RUN, false);
     gpio_pull_up(PIN_BTN_RUN);
@@ -92,7 +96,9 @@ void hmi_init(void)
     gpio_set_dir(PIN_BTN_RESET, false);
     gpio_pull_up(PIN_BTN_RESET);
     drv_buzzer_init();
-    (void) drv_ws2812_init();   /* false: fault set inside, no RGB */
+    b_is_rgb_ok = drv_ws2812_init();   /* false: no PIO space, no RGB */
+
+    return b_is_rgb_ok;
 }
 
 /**

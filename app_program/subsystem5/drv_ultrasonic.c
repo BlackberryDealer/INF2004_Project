@@ -8,8 +8,8 @@
 
 #include "drv_ultrasonic.h"    /* own header first (BARR-C 4.3.c) */
 #include "../board_pins.h"
-#include "hardware/gpio.h"     /* before app.h (sys_tick.h): see Q1 */
-#include "sys_tick.h"
+#include "hardware/gpio.h"     /* SDK side only: no kernel headers */
+#include "hardware/timer.h"    /* time_us_32(): inline timer read */
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -40,12 +40,12 @@ void drv_ultrasonic_init(void)
  */
 void drv_ultrasonic_trigger(void)
 {
-    uint32_t const start_us = sys_tick_now_us();
+    uint32_t const start_us = time_us_32();
 
     gpio_put(PIN_US_TRIG, true);
-    while ((sys_tick_now_us() - start_us) < DRV_US_TRIG_PULSE_US)
+    while ((time_us_32() - start_us) <= DRV_US_TRIG_PULSE_US)
     {
-        /* busy: 10 us, allowed (<= 20 us) */
+        /* busy: 10..11 us, allowed (<= 20 us) */
     }
     gpio_put(PIN_US_TRIG, false);
 }

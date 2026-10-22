@@ -304,11 +304,16 @@ static void mission_task(INT stacd, void * p_exinf)
     uint32_t         now_us   = 0u;
     uint32_t         hmi_us   = 0u;
     uint32_t         press    = HMI_NONE;
+    bool             b_is_rgb_ok = false;
 
     (void) stacd;    /* unused: kernel start code */
     (void) p_exinf;  /* unused: no extended info  */
 
-    hmi_init();
+    b_is_rgb_ok = hmi_init();
+    if (!b_is_rgb_ok)
+    {
+        app_log("RGB: no PIO space, running without RGB\n", 0, 0, 0);
+    }
     mission_ctx_reset(&g_ctx);
     status_board_read(&snap);
     now_us = sys_tick_now_us();
@@ -338,6 +343,10 @@ static void mission_task(INT stacd, void * p_exinf)
 
         /* 7. LED, buzzer and watchdog */
         hmi_show(g_ctx.sys_state, now_us);
+        if (!b_is_rgb_ok)
+        {
+            fault_set(APP_FAULT_PIO_LOAD);   /* again every pass (D.13) */
+        }
         sys_health_service();
     }
 }
@@ -1167,17 +1176,19 @@ static void mission_log_ignored(mission_ctx_t const * p_ctx,
 }
 #endif /* APP_TEST */
 
-#if APP_TEST
+#if defined(MISSION_HOST_TEST)
 /**
  * mission_test_matrix
  * @brief   S5-U05: feeds every event type to every state (RUN: every
  *          substate; AVOID: every step) on a scratch copy of the context
- *          and checks the result is a defined state. Side effects (motion
- *          commands, mode bits, faults) are undone afterwards. The live
- *          mission context is not touched. Run with the wheels lifted.
+ *          and checks the result is a defined state. Host test only
+ *          (MISSION_HOST_TEST): the side effects (motion commands, mode
+ *          bits, faults, watchdog) are real on the target, so S5-U05
+ *          never runs there (fix brief, Fix 2). The host harness gives
+ *          each case fresh mocks through mission_host_case_reset().
  * @param   p_cases number of combinations tried
  * @return  number of combinations with an undefined outcome
- * @context usermain (TEST=1, priority 1: mission_task cannot interleave)
+ * @context host test (sim_mission_host.c)
  */
 uint32_t mission_test_matrix(uint32_t * p_cases)
 {
@@ -1202,6 +1213,7 @@ uint32_t mission_test_matrix(uint32_t * p_cases)
             {
                 for (uint32_t type = 0u; type < APP_EVT_COUNT; type++)
                 {
+                    mission_host_case_reset();
                     mission_ctx_reset(&ctx);
                     ctx.b_is_quiet  = true;
                     ctx.sys_state   = sys;
@@ -1222,15 +1234,10 @@ uint32_t mission_test_matrix(uint32_t * p_cases)
         }
     }
 
-    (void) motion_stop();                             /* undo side effects */
-    safety_clear(SAFETY_ALL);
-    mission_mode_clear(APP_MODE_ALL);
-    fault_clear(APP_FAULT_ALL & ~APP_FAULT_WIFI_LOSS);
-    hmi_set_warning(false);
     *p_cases = cases;
 
     return bad;
 }
-#endif /* APP_TEST */
+#endif /* MISSION_HOST_TEST */
 
 /*** end of file ***/

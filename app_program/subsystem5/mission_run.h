@@ -126,10 +126,13 @@ extern void mission_stop_motion(mission_ctx_t * p_ctx);
 /* Completion deadline of a command, ms (host-testable, S5-U27). */
 extern uint32_t mission_move_deadline_ms(uint32_t kind, int32_t param);
 
-#if APP_TEST
-/* S5-U05: every state x every event type on a scratch context.
-   Returns the number of combinations with an undefined outcome.     */
+#if defined(MISSION_HOST_TEST)
+/* S5-U05 (host only, Fix 2): every state x every event type on a
+   scratch context. Returns the number of combinations with an
+   undefined outcome. The harness provides mission_host_case_reset(),
+   called before each case to give it fresh mocks.                    */
 extern uint32_t mission_test_matrix(uint32_t * p_cases);
+extern void     mission_host_case_reset(void);
 #endif
 
 #endif /* MISSION_RUN_H */
