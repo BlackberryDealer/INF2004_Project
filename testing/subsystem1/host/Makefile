@@ -6,6 +6,8 @@
 #   S1-U20..U23  test_app_bits_host.c    (app_bits.c + generated app_layout.h)
 #   S1-U24       gen_layout.py rejects a broken copy of tools/layout.csv
 #   S1-U01, U02  test_telem_json_host.c  (baseline JSON builders)
+#   S1-U01, U02 (packed), S1-U10  test_telem_bin_host.c (binary builders;
+#                writes the golden vectors in golden/)
 #   S1-U12, U30..U35  test_mqtt_bridge_host.c (mqtt_bridge.c + mock kernel)
 #   S1-U13, U15, U36, U37  test_mqtt_utk_host.c (radio-task mqtt_utk.c +
 #                mock lwIP in mock_lwip/ + mock bridge)
@@ -30,8 +32,8 @@ B       := build/app_program
 SB_MSG_FIELDS := $(shell grep -cE '^\#define (SB|MSG)_[A-Z0-9_]+_POS ' $(LAYOUT))
 
 .PHONY: all app_bits gen_layout_reject telem_json mqtt_bridge mqtt_utk tree \
-        clean
-all: app_bits gen_layout_reject telem_json mqtt_bridge mqtt_utk
+        telem_bin clean
+all: app_bits gen_layout_reject telem_json telem_bin mqtt_bridge mqtt_utk
 
 test_app_bits_host.out: test_app_bits_host.c $(APP_DIR)/app_bits.c \
                         $(APP_DIR)/app_bits.h $(LAYOUT) ../../host/host_test.h
@@ -66,6 +68,16 @@ test_telem_json_host.out: test_telem_json_host.c $(S1)/telem_json.c \
 
 telem_json: test_telem_json_host.out
 	./test_telem_json_host.out
+
+test_telem_bin_host.out: test_telem_bin_host.c $(S1)/telem_bin.c \
+                         $(S1)/telem_bin.h $(APP_DIR)/app_bits.c \
+                         $(APP_DIR)/subsystem2/odometry.c $(LAYOUT)
+	$(CC) $(CFLAGS) -o $@ test_telem_bin_host.c $(S1)/telem_bin.c \
+	    $(APP_DIR)/app_bits.c $(APP_DIR)/subsystem2/odometry.c
+
+telem_bin: test_telem_bin_host.out
+	mkdir -p golden
+	./test_telem_bin_host.out
 
 tree:
 	rm -rf build

@@ -1,8 +1,8 @@
 /**
  * @file    telem_bin.h
- * @brief   Telemetry input structs (pure, host-safe): the two contract
- *          structs (D.9) and the state snapshot telem_task builds.
- *          The binary payload builders follow in Phase 4.
+ * @brief   Binary MQTT payload builders (pure, host-safe): every payload
+ *          is the MQ_HDR byte followed by its MQ_* layout group, written
+ *          LSB-first with the app_bits stream writer (B1.4 step 2).
  * @owner   Buddy 1 (communications)
  * @kind    algo
  */
@@ -52,6 +52,36 @@ typedef struct
     uint32_t motion_class;     /* APP_MCLASS_* */
     uint32_t faults;           /* APP_FAULT_* mask, 10 bits */
 } telem_bin_state_t;
+
+/* Every builder returns the payload length in bytes, or 0 if p_buf is
+   too small. Values are clamped to their layout range, never wrapped. */
+
+/* MQ_STATE (18 B). *pb_was_clamped (may be NULL) is set true when an RNG
+   field was clamped; the caller then sets APP_FAULT_RANGE_CLAMP.       */
+extern uint32_t telem_bin_state(telem_bin_state_t const * p_state,
+                                uint8_t * p_buf, uint32_t size,
+                                bool * pb_was_clamped);
+
+/* MQ_EVT (3 B): the 16-bit app event word (MSG_EVT layout). */
+extern uint32_t telem_bin_event(uint32_t evt_word, uint8_t * p_buf,
+                                uint32_t size);
+
+/* MQ_PROF (6 B); distances in mm, stored in 4 mm steps. */
+extern uint32_t telem_bin_profile(telem_bin_profile_t const * p_prof,
+                                  uint8_t * p_buf, uint32_t size);
+
+/* MQ_SUMM (7 B). */
+extern uint32_t telem_bin_summary(telem_bin_summary_t const * p_summ,
+                                  uint8_t * p_buf, uint32_t size);
+
+/* MQ_HB (6 B). */
+extern uint32_t telem_bin_heartbeat(uint32_t uptime_s, uint32_t drops,
+                                    uint32_t lat_max_us, uint8_t * p_buf,
+                                    uint32_t size);
+
+/* Byte 0 of a payload: APP_MQ_VERSION | (mq_type << 3). Also the whole
+   1-byte availability payload (APP_MQ_TYPE_ONLINE / OFFLINE).          */
+extern uint32_t telem_bin_header(uint32_t mq_type);
 
 #endif /* TELEM_BIN_H */
 
