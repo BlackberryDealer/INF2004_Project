@@ -10,8 +10,10 @@
 
 #include "../app_types.h"
 
-#define LINE_BLACK_IS_HIGH       (true)  /* MEASURE: A1 */
-#define LINE_CAL_MIN_SPAN        (400u)  /* ADC codes; below => cal fails */
+#ifndef LINE_BLACK_IS_HIGH
+#define LINE_BLACK_IS_HIGH       (true) /* MEASURE: A1 */
+#endif
+#define LINE_CAL_MIN_SPAN        (400u) /* ADC codes; below => cal fails */
 #define LINE_NORM_MAX            (1000u)
 #define LINE_WHITE_THRESHOLD     (300u)  /* normalised; below = white   */
 #define LINE_BLACK_THRESHOLD     (700u)  /* normalised; above = black   */

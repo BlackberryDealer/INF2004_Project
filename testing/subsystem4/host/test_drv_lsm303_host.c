@@ -15,7 +15,7 @@ int main(void)
 
     {
         uint32_t take = 99u;
-        uint32_t ovr = 0u;
+        uint32_t ovr  = 0u;
 
         ovr = drv_lsm303_fifo_plan(0x00u, 4u, &take, ovr);
         HOST_CHECK("S4-U14", (0u == take) && (0u == ovr),
@@ -23,7 +23,7 @@ int main(void)
     }
     {
         uint32_t take = 99u;
-        uint32_t ovr = 0u;
+        uint32_t ovr  = 0u;
 
         ovr = drv_lsm303_fifo_plan(0x02u, 4u, &take, ovr);
         HOST_CHECK("S4-U14", (2u == take) && (0u == ovr),
@@ -31,7 +31,7 @@ int main(void)
     }
     {
         uint32_t take = 99u;
-        uint32_t ovr = 0u;
+        uint32_t ovr  = 0u;
 
         ovr = drv_lsm303_fifo_plan(0x06u, 4u, &take, ovr);
         HOST_CHECK("S4-U14", (4u == take) && (0u == ovr),
@@ -43,7 +43,7 @@ int main(void)
     }
     {
         uint32_t take = 99u;
-        uint32_t ovr = 7u;
+        uint32_t ovr  = 7u;
 
         ovr = drv_lsm303_fifo_plan(0x45u, 4u, &take, ovr);
         HOST_CHECK("S4-U14", (0u == take) && (8u == ovr),
@@ -51,12 +51,20 @@ int main(void)
     }
     {
         uint32_t take = 99u;
-        uint32_t ovr = 255u;
+        uint32_t ovr  = 255u;
 
         ovr = drv_lsm303_fifo_plan(0x40u, 4u, &take, ovr);
         HOST_CHECK("S4-U14", (0u == take) && (255u == ovr),
                    "overrun counter saturates at 255");
     }
+
+    /* SQ-B4-2: the driver talks to an LSM303D, not the LSM303DLHC that
+       spec B4.1.1 assumes. Lock the two facts measured on the board so a
+       later edit cannot silently restore the DLHC addresses. */
+    HOST_CHECK("S4-U14", (0x1Du == DRV_LSM303_ADDR),
+               "LSM303D answers on the single address 0x1D");
+    HOST_CHECK("S4-U14", (0x49u == DRV_LSM303_WHO_AM_I),
+               "LSM303D WHO_AM_I is 0x49, not the DLHC 'H','4','3'");
 
     return (0 == HOST_SUMMARY("drv_lsm303")) ? 0 : 1;
 }

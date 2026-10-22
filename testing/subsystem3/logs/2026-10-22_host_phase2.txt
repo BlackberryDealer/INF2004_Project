@@ -1,0 +1,56 @@
+make: Entering directory '/c/SIT/embedded system/project/testing/subsystem3/host'
+rm -f *.out
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -I../../host -I../../../app_program -I../../../app_program/subsystem3 -o test_line_track_host.out test_line_track_host.c ../../../app_program/subsystem3/line_track.c
+./test_line_track_host.out
+[TEST] S3-U06 PASS  cal_finish succeeds with valid spans
+[TEST] S3-U06 PASS  high-is-black: raw == lo gives exact 0
+[TEST] S3-U06 PASS  high-is-black: raw == hi gives exact 1000 (span 3000)
+[TEST] S3-U06 PASS  high-is-black: raw == hi-1 does not overshoot 1000
+[TEST] S3-U06 PASS  low-is-black: raw == hi (white) gives exact 0
+[TEST] S3-U06 PASS  low-is-black: raw == lo (black) gives exact 1000
+[TEST] S3-U01 PASS  low-is-black: midpoint gives 500
+[TEST] S3-U06 PASS  cal_finish orders reversed endpoints without underflow
+[TEST] S3-U06 PASS  cal_finish rejects span < LINE_CAL_MIN_SPAN (399 < 400)
+[TEST] S3-U01 PASS  raw below white clamps to 0
+[TEST] S3-U01 PASS  raw above black clamps to 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  equal sensors give 0 steering
+[TEST] S3-U01 PASS  left full black, right white gives +1000
+[TEST] S3-U01 PASS  right full black, left white gives -1000
+[TEST] S3-U02 PASS  T-junction trace classified as APP_JCT_T once
+[TEST] S3-U02 PASS  Cross-junction trace classified as APP_JCT_CROSS once
+[TEST] S3-U02 PASS  Left branch trace classified as APP_JCT_SIDE_L once
+[TEST] S3-U02 PASS  Right branch trace classified as APP_JCT_SIDE_R once
+[TEST] S3-U02 PASS  Curve trace produces no junction event
+[TEST] S3-U02 PASS  Short extra-black noise (< min_counts) ignored
+[TEST] S3-U14 PASS  Early barcode branch (b_branch_recent) sets barcode-side flag
+[TEST] S3-U14 PASS  Late barcode branch (in CONFIRM) sets barcode-side flag
+[TEST] line_track SUMMARY 23 passed, 0 failed
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -I../../host -I../../../app_program -I../../../app_program/subsystem3 -o test_code39_host.out test_code39_host.c ../../../app_program/subsystem3/code39.c
+./test_code39_host.out
+[TEST] S3-U03 PASS  full-scale forward decodes all 43 Code 39 characters
+[TEST] S3-U03 PASS  full-scale reverse decodes all 43 Code 39 characters
+[TEST] S3-U03 PASS  code39_char_ascii maps indices and out-of-range
+[TEST] S3-U04 PASS  half-scale forward decodes all 43 Code 39 characters
+[TEST] S3-U04 PASS  half-scale reverse decodes all 43 Code 39 characters
+[TEST] S3-U05 PASS  every Code 39 pattern has exactly three wide (1) bits
+[TEST] S3-U05 PASS  all 44 Code 39 patterns are unique
+[TEST] S3-U05 PASS  28-element capture is rejected
+[TEST] S3-U05 PASS  30-element capture is rejected
+[TEST] S3-U05 PASS  NULL widths pointer is rejected
+[TEST] S3-U05 PASS  wide/narrow ratio < 1.8 is rejected
+[TEST] S3-U05 PASS  wide inter-character gap is rejected
+[TEST] code39 SUMMARY 12 passed, 0 failed
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -I../../host -I../../../app_program -I../../../app_program/subsystem3 -Imock -o test_line_barcode_sim_host.out test_line_barcode_sim_host.c \
+    ../../../app_program/subsystem3/line_track.c ../../../app_program/subsystem3/code39.c ../../../app_program/subsystem2/odometry.c
+./test_line_barcode_sim_host.out
+[TEST] S3-U07 PASS  29th element triggers immediate APP_EVT_BARCODE without quiet zone wait
+[TEST] S3-U08 PASS  invalid map_set rejected and valid remap of 'A' -> UTURN visible
+[TEST] S3-U08 PASS  newly mapped character 'E' -> RIGHT decoded and posted
+[TEST] S3-U09 PASS  rejoin mode reports both the rejected mark and the real line
+[TEST] S3-U09 PASS  first LINE_FOUND ~10 mm, second LINE_FOUND ~45 mm
+[TEST] S3-U14 PASS  16 mm single bar increments barcode_branch_seq on trailing edge
+[TEST] S3-U14 PASS  full task replay: early barcode branch + left sat -> APP_JCT_T
+[TEST] S3-U14 PASS  full task replay: late barcode branch + left sat -> APP_JCT_CROSS
+[TEST] line_barcode_sim SUMMARY 8 passed, 0 failed
+make: Leaving directory '/c/SIT/embedded system/project/testing/subsystem3/host'

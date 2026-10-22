@@ -1,142 +1,90 @@
 /**
  * @file    test_barcode.c
- * @brief   Phase 1 on-target barcode edge-timing bench harness (S3-I07).
+ * @brief   On-target unit tests for code39 and barcode_map_set (S3-U03..U08).
  * @owner   Buddy 3 (line, barcode)
  * @kind    test
- * @reqs    FR2, NFR5
- *
- * Kernel side only (no SDK headers): PIN_BAR_DO is owned by Buddy 5's
- * drv_gpio_irq (R1) and read through the kernel's in_w(GPIO_IN).
- * When TEST_BARCODE_ENABLE_BENCH is 1, attaches a bench callback to
- * drv_gpio_irq on PIN_BAR_DO and logs edge timestamps while pushing the
- * robot over sample barcodes (B3.1.2 S3-I07).
+ * @reqs    FR2, FR3, NFR5
  */
 
 #include "test_barcode.h"      /* own header first (BARR-C 4.3.c) */
 #include "../app.h"
 
 #if (0 != APP_TEST)
-#include "../board_pins.h"
-#include "../subsystem5/drv_gpio_irq.h"
+
 #include "../test_report.h"
 #include "barcode.h"
 #include "cfg_barcode.h"
-#endif
+#include "code39.h"
 
 /* ---- private constants and types ------------------------------------ */
 
-#if (0 != APP_TEST)
-#define TEST_BAR_PIN_MASK     (1u << PIN_BAR_DO)
-#define TEST_BAR_ENABLE_BENCH (0)
-#define TEST_BAR_BENCH_EDGES  (30u)
-#define TEST_BAR_BENCH_POLL_MS (20)
-#endif
+#define TEST_NARROW_W (20u)
+#define TEST_WIDE_W   (50u)
+#define TEST_CHAR_A   (10u)
 
 /* ---- private data ---------------------------------------------------- */
 
-#if (0 != APP_TEST) && (0 != TEST_BAR_ENABLE_BENCH)
-static volatile uint32_t g_bench_edge_cnt = 0u;
-static volatile uint32_t g_bench_last_us  = 0u;
-static volatile uint32_t g_bench_dt_us    = 0u;
-static volatile uint32_t g_bench_level    = 0u;
-
-static void test_barcode_bench_isr(uint32_t events, uint32_t now_us)
+/* '*A*' forward widths: '*' (0x094), gap, 'A' (0x109), gap, '*' (0x094) */
+static uint8_t const g_test_star_a_star[BAR_ELEMENTS] =
 {
-    bool const b_pin_high = (0u != (in_w(GPIO_IN) & TEST_BAR_PIN_MASK));
-
-    (void) events;
-    g_bench_dt_us   = now_us - g_bench_last_us;
-    g_bench_last_us = now_us;
-    g_bench_level   = (BAR_DO_BLACK_IS_HIGH == b_pin_high) ? 1u : 0u;
-    g_bench_edge_cnt++;
-}
-#endif
+    /* '*' = 010010100 */
+    TEST_NARROW_W, TEST_WIDE_W,   TEST_NARROW_W,
+    TEST_NARROW_W, TEST_WIDE_W,   TEST_NARROW_W,
+    TEST_WIDE_W,   TEST_NARROW_W, TEST_NARROW_W,
+    /* inter-char gap */
+    TEST_NARROW_W,
+    /* 'A' = 100001001 */
+    TEST_WIDE_W,   TEST_NARROW_W, TEST_NARROW_W,
+    TEST_NARROW_W, TEST_NARROW_W, TEST_WIDE_W,
+    TEST_NARROW_W, TEST_NARROW_W, TEST_WIDE_W,
+    /* inter-char gap */
+    TEST_NARROW_W,
+    /* '*' = 010010100 */
+    TEST_NARROW_W, TEST_WIDE_W,   TEST_NARROW_W,
+    TEST_NARROW_W, TEST_WIDE_W,   TEST_NARROW_W,
+    TEST_WIDE_W,   TEST_NARROW_W, TEST_NARROW_W
+};
 
 /* ---- private function prototypes ------------------------------------- */
 
-#if (0 != APP_TEST)
-static void test_barcode_edge_bench(void);
-#endif
+#endif /* APP_TEST */
 
 /* ---- public functions ------------------------------------------------- */
 
 /**
  * test_barcode_run
- * @brief   Runs Phase 1 on-target barcode checks and optional S3-I07 bench
- *          edge logger.
+ * @brief   Runs on-target barcode decode and map validation checks.
  * @return  none
  * @context usermain (APP_PRI_TEST)
  */
 void test_barcode_run(void)
 {
 #if (0 != APP_TEST)
-    bool const     b_pin_high = (0u != (in_w(GPIO_IN) & TEST_BAR_PIN_MASK));
-    uint32_t const is_black   = (BAR_DO_BLACK_IS_HIGH == b_pin_high) ? 1u : 0u;
-    uint32_t const seq0       = barcode_branch_seq();
+    uint32_t char_idx = 0u;
+    uint32_t rc_ok    = 0u;
+    uint32_t rc_short = 0u;
 
     TEST_INIT();
 
-    app_log("S3-I07 PIN_BAR_DO raw=%d black=%d seq=%d\n",
-            (int32_t) b_pin_high, /* cast: bool 0/1 fits int32_t */
-            (int32_t) is_black,   /* cast: 0/1 fits int32_t */
-            (int32_t) seq0        /* cast: 8-bit seq fits int32_t */);
+    rc_ok    = code39_decode(g_test_star_a_star, BAR_ELEMENTS, &char_idx);
+    rc_short = code39_decode(g_test_star_a_star, 28u, &char_idx);
 
-    test_barcode_edge_bench();
+    TEST_CHECK("S3-U03", (CODE39_OK == rc_ok) && (TEST_CHAR_A == char_idx),
+               "code39 decodes *A* to index 10");
+    TEST_CHECK("S3-U05", (CODE39_INVALID == rc_short),
+               "28-element capture rejected");
 
-    TEST_CHECK("S3-I07",
-               (0u == seq0) &&
-               (E_PAR == drv_gpio_irq_attach(PIN_BAR_DO, DRV_GPIO_IRQ_BOTH,
-                                             NULL)),
-               "barcode branch seq starts at 0 and R1 validates PIN_BAR_DO");
+    /* S3-U08: out-of-range arguments rejected, valid set accepted. */
+    barcode_map_set(43u, APP_BAR_CMD_LEFT);
+    barcode_map_set(TEST_CHAR_A, 4u);
+    barcode_map_set(TEST_CHAR_A, APP_BAR_CMD_LEFT);
+    TEST_CHECK("S3-U08", (0u == barcode_branch_seq()),
+               "barcode_map_set boundary calls safe");
+
     TEST_SUMMARY("barcode");
 #endif
 }
 
 /* ---- private functions ------------------------------------------------ */
-
-#if (0 != APP_TEST)
-/**
- * test_barcode_edge_bench
- * @brief   When TEST_BAR_ENABLE_BENCH != 0, attaches a callback via
- *          drv_gpio_irq_attach(PIN_BAR_DO, DRV_GPIO_IRQ_BOTH, ...) and
- *          logs edge intervals for S3-I07 bench characterization.
- * @return  none
- * @context usermain (APP_PRI_TEST)
- */
-static void test_barcode_edge_bench(void)
-{
-#if (0 != TEST_BAR_ENABLE_BENCH)
-    uint32_t seen = 0u;
-    ER const ercd = drv_gpio_irq_attach(PIN_BAR_DO, DRV_GPIO_IRQ_BOTH,
-                                        test_barcode_bench_isr);
-
-    if (E_OK == ercd)
-    {
-        while (seen < TEST_BAR_BENCH_EDGES)
-        {
-            uint32_t const cur = g_bench_edge_cnt;
-
-            if (cur != seen)
-            {
-                seen = cur;
-                app_log("S3-I07 edge=%d dt_us=%d level=%d\n",
-                        (int32_t) seen,           /* cast: count fits int32_t */
-                        (int32_t) g_bench_dt_us,  /* cast: dt fits int32_t */
-                        (int32_t) g_bench_level   /* cast: 0/1 fits int32_t */);
-            }
-            else
-            {
-                /* Wait for next barcode edge. */
-            }
-            (void) tk_dly_tsk(TEST_BAR_BENCH_POLL_MS);
-        }
-    }
-    else
-    {
-        /* PIN_BAR_DO already attached by barcode_start. */
-    }
-#endif
-}
-#endif /* APP_TEST */
 
 /*** end of file ***/
