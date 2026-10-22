@@ -21,6 +21,16 @@
  *  - Startup (500 ms window). Nothing is fed until all four tasks have
  *    checked in once; then the window switches to 30 ms. A task that
  *    never starts resets the board 500 ms after BOOT.
+ *  - Radio bring-up (SHARED fix, flash audit 2026-10-22). The CYW43 task
+ *    runs at priority 4, above every application task, and its bring-up
+ *    holds the CPU for long stretches (firmware download, a busy wait of
+ *    up to 150 ms in cyw43_ll.c). A 30 ms window armed during that time
+ *    would reset the board on every boot. So after the first check-ins
+ *    the 500 ms window stays and is fed (same fresh-check-in rule) until
+ *    the radio reports init_complete, or SYS_HEALTH_RADIO_WAIT_MS has
+ *    passed since BOOT; only then does it switch to 30 ms. mission stays
+ *    in BOOT (motors braked) for that time, so the 95 ms RUN bound is
+ *    unchanged. Builds without the radio (WIFI=none) switch at once.
  *
  * The SDK's watchdog.c does not build in this template (it pulls in
  * pico/bootrom.h -> pico/flash.h, which the template lacks), so the
@@ -34,6 +44,10 @@
 #include "sys_health.h"        /* own header first (BARR-C 4.3.c) */
 #include "drv_led_alive.h"
 #include "sys_tick.h"
+#if defined(TM_WIFI_CYW43) && (TM_WIFI_CYW43 != 0)
+/* Plain stdint header (no SDK or kernel types): radio init status. */
+#include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
+#endif
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -98,10 +112,12 @@ static volatile uint8_t  gb_obs_has_checked_in = 0u;
 static bool     gb_is_wdt_active = false;
 static bool     gb_is_started    = false;
 static uint32_t g_wdt_load       = SYS_HEALTH_LOAD_START;
+static uint32_t g_boot_us        = 0u;   /* sys_health_enable_watchdog() */
 
 /* ---- private function prototypes ------------------------------------- */
 
 static void sys_health_wdt_start(uint32_t load);
+static bool sys_health_radio_settled(void);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -181,9 +197,16 @@ void sys_health_service(void)
     {
         if (b_fast && (0u != gb_obs_has_checked_in) && gb_is_wdt_active)
         {
-            sys_health_wdt_start(SYS_HEALTH_LOAD_NORMAL); /* 30 ms window */
-            gb_is_started = true;
-            b_feed        = true;
+            if (sys_health_radio_settled())
+            {
+                sys_health_wdt_start(SYS_HEALTH_LOAD_NORMAL); /* 30 ms */
+                gb_is_started = true;
+            }
+            else
+            {
+                out_w(SYS_HEALTH_WDT_LOAD, g_wdt_load); /* feed 500 ms */
+            }
+            b_feed = true;
         }
     }
     else if (b_fast && (age_us <= limit_us))
@@ -212,6 +235,7 @@ void sys_health_service(void)
  */
 void sys_health_enable_watchdog(void)
 {
+    g_boot_us = sys_tick_now_us();
     sys_health_wdt_start(SYS_HEALTH_LOAD_START);
     gb_is_wdt_active = true;
 }
@@ -253,6 +277,31 @@ static void sys_health_wdt_start(uint32_t load)
     set_w(SYS_HEALTH_WDT_CTRL, SYS_HEALTH_WDT_DBG_BITS);
     out_w(SYS_HEALTH_WDT_LOAD, load);
     set_w(SYS_HEALTH_WDT_CTRL, SYS_HEALTH_WDT_CTRL_ENABLE);
+}
+
+/**
+ * sys_health_radio_settled
+ * @brief   True once the CYW43 task has finished its bring-up (success or
+ *          failure, init_complete), or SYS_HEALTH_RADIO_WAIT_MS after BOOT
+ *          so a radio that never reports cannot hold BOOT forever.
+ * @return  true when the 30 ms window may be armed
+ * @context mission_task
+ */
+static bool sys_health_radio_settled(void)
+{
+    bool b_is_settled = true;
+
+#if defined(TM_WIFI_CYW43) && (TM_WIFI_CYW43 != 0)
+    T_CYW43_UTK_STATUS status = {0};
+    uint32_t const     age_us = sys_tick_now_us() - g_boot_us; /* wraps */
+
+    cyw43_utk_get_status(&status);
+    b_is_settled = (0u != status.init_complete)
+                   || (age_us >= (SYS_HEALTH_RADIO_WAIT_MS
+                                  * SYS_HEALTH_US_PER_MS));
+#endif
+
+    return b_is_settled;
 }
 
 /*** end of file ***/

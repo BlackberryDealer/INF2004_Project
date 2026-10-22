@@ -20,6 +20,7 @@
 #define SYS_HEALTH_WDT_MS        (30u)   /* hang -> reset <= 65 + 30 ms  */
 #define SYS_HEALTH_OBS_MAX_AGE_MS (65u)   /* 60 ms period + 5 ms jitter   */
 #define SYS_HEALTH_WDT_START_MS  (500u)  /* first check-ins must arrive  */
+#define SYS_HEALTH_RADIO_WAIT_MS (5000u) /* max BOOT wait for CYW43 init */
 
 extern ER   sys_health_init(void);              /* creates K8 */
 /* T1-T4, once per cycle, right after sys_tick_cycle_start() (before any
@@ -32,7 +33,9 @@ extern void sys_health_check_in(uint32_t task_bit);
 extern void sys_health_service(void);
 /* mission, in BOOT: starts the STARTUP window (SYS_HEALTH_WDT_START_MS),
    switches to the normal 30 ms window by itself once every task has
-   checked in for the first time.                                       */
+   checked in for the first time and the radio has finished its bring-up
+   (or SYS_HEALTH_RADIO_WAIT_MS has passed); until then it feeds the
+   startup window with the same fresh-check-in rule.                    */
 extern void sys_health_enable_watchdog(void);
 extern bool sys_health_is_started(void);  /* all four first check-ins */
 
