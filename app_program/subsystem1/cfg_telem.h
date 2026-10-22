@@ -23,12 +23,12 @@
 /* ---- remote commands ---------------------------------------------------- */
 #define TELEM_CMD_MIN_GAP_MS    (100u)     /* one command per type per 100 ms */
 
-/* ---- topics (baseline) -------------------------------------------------- */
-#define TELEM_TOPIC_STATE   "picocar/csc28-car/state"   /* baseline topics */
-#define TELEM_TOPIC_EVENT   "picocar/csc28-car/event"
-#define TELEM_TOPIC_HB      "picocar/csc28-car/hb"
-#define TELEM_TOPIC_AVAIL   "picocar/csc28-car/status"
-#define TELEM_TOPIC_CMD     "picocar/csc28-car/cmd"
+/* ---- topics (B1.4.1: short topics; baseline was picocar/csc28-car/...) */
+#define TELEM_TOPIC_STATE   "c28/s"
+#define TELEM_TOPIC_EVENT   "c28/e"
+#define TELEM_TOPIC_HB      "c28/h"
+#define TELEM_TOPIC_AVAIL   "c28/a"
+#define TELEM_TOPIC_CMD     "c28/c"
 
 #endif /* CFG_TELEM_H */
 
