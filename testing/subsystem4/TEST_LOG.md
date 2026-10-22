@@ -45,5 +45,23 @@ Add a new row for every run. Never edit or delete old rows.
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
 | 2026-10-22 | S4-U01, U02, U03, U06, U07, U12, U13, U14 | Phase 2 commit | Faris | PASS (host) | `logs/2026-10-22_host_phase2.txt` | terrain 18/18, fifo planner 6/6; S4-U13 pure parts (mode-driven half needs B5's mission) |
+| 2026-10-22 | S4-U13, normal+TEST=1 builds | Phase 2 commit | Faris | PASS (target build) | `logs/2026-10-22_host_phase2.txt` | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.elf` and `_test.elf` build with zero warnings |
+| 2026-10-22 | S4-I01, I02, I03, I04, I09 (Phase 3) | — | Faris | pending | — | integration on the car: INT1→motors low ≤15 ms with Buddy 2 (GP14), course humps vs ruler, imu_task WCET. Blocked on hardware; plan below |
 | 2026-10-22 | S4-I01–I11 | — | Faris | pending | — | bench/track: needs the physical car (placeholders kept, spec rule A.3) |
+
+## Phase 3 integration plan (pending hardware)
+
+- **INT1 → motors low ≤ 15 ms:** with Buddy 2's motion merged, tap the
+  chassis; probe GP14 and the motor pins. The path is
+  R1 → `imu_int1_isr` → `safety_set_from_isr(SAFETY_IMPACT)` → motion's
+  step 3 brake, inside one 10 ms cycle (B4.2.2 step 3 timing note).
+- **Humps on the course vs a ruler:** run S4-I02 profiles; the terrain
+  monitor's integrated peak was host-validated at 20 mm ± 5 mm.
+- **imu_task WCET:** GP14 around the three paths (2 samples, magnetometer
+  cycle, 4-sample backlog) plus the I2C-failure path; record in the WCET
+  table for Phase 5.
+- The mode-driven half of S4-U13 (mission sets `APP_MODE_RUN_START` for
+  30 ms) validates once Buddy 5's mission.c is merged; imu_task's
+  run-start handler and the `terrain_ds_counts` rebase guard are already
+  in place.
 
