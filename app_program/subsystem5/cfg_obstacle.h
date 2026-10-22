@@ -41,6 +41,12 @@
 #define OBS_AGREE_MM           (30u)     /* two pings agree within        */
 #define OBS_LOST_PINGS         (2u)      /* lost echoes in APPROACH: stop */
 #define OBS_NO_ECHO_PINGS      (3u)      /* silent: FAULT_NO_ECHO (T10)   */
+/* Power-up grace (S5-U30): the HC-SR04P on the car answers only some
+   time after power-up, and the first silent pings latched NO_ECHO at
+   every boot (measured 2026-10-22). Silence is not counted until the
+   first echo edge, or until this many pings (~2 s at 60 ms) have
+   passed, so an unplugged sensor still raises NO_ECHO.               */
+#define OBS_WARMUP_PINGS       (34u)     /* MEASURE: first echo after boot */
 #define OBS_SETTLE_PINGS       (3u)      /* MEASURE: A9 (settle ms / 60)  */
 #define OBS_WATCH_SETTLE_PINGS (4u)      /* MEASURE: A9, worst 120 deg move */
 

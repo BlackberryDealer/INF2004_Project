@@ -44,6 +44,7 @@ Define a test here before running it. Test IDs never change.
 | S5-U28 | Watchdog startup window | `sys_health.c`, NFR10b | manual (target) | Normal boot; then a test build with obstacle_task not started | 30 ms window only after all four first check-ins; without obstacle the board resets after 500 ms; reset cause printed at boot |
 | S5-I02b | Obstacle hang | `sys_health.c` | manual (target) | Hang obstacle_task right after its check-in at several phases of mission's pass | reset ≤ 100 ms after the hang every time |
 | S5-U29 | 1 µs time base runs | `sys_tick_init` (watchdog tick), `sys_tick_now_us` | auto (target) | `test_mission.c` (TEST=1): `sys_tick_now_us()`, `tk_dly_tsk(1000)`, again (fix brief Fix 4) | difference 990 000 to 1 020 000 µs, value printed |
+| S5-U30 | Power-up grace for the ultrasonic | `obstacle.c`, `OBS_WARMUP_PINGS`, T10 | auto (host, in S5-U08) + manual (target) | Host: silent pings right after boot, then an echo; a sensor that never answers. Target: power up with the team firmware, no FAULT from NO_ECHO | No NO_ECHO before the first echo or within 34 pings (~2 s); after that 3 silent pings raise NO_ECHO as before; a dead sensor raises it 3 pings after the grace |
 | S5-I02r | Every task hangs (revised S5-I02) | `sys_health.c`, NFR10b | manual (target) | Hang line, motion, imu, obstacle and mission right after a check-in, at 6 phases of the 60 ms period | reset ≤ 100 ms after the hang every time (normal bound 95 ms) |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
@@ -81,6 +82,8 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S5-U04 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5; now a host test (Fix 3) |
 | 2026-10-22 | S5-U05 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5; now a host test (Fix 2), 432 cases |
 | 2026-10-22 | S5-U17 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 (host part only: Fix 5 cases); signal-generator part not run yet |
+| 2026-10-22 | S5-U08 | `e123850` + diag | AfifLotfi | FAIL | on-car diagnostic build (LED-coded fault bit) | NO_ECHO latched at every boot: echo edges reach R1 (all in the window, none skipped), but the first pings after power-up get no echo at all (sensor not up yet) |
+| 2026-10-22 | S5-U30 | (this branch) | AfifLotfi | PASS | `make -C testing/subsystem5/host` | host: 4 new checks pass, S5-U24/U26 unchanged; on-car confirmation pending |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 
@@ -101,4 +104,10 @@ Add a new row for every run. Never edit or delete old rows.
   RP2040 watchdog tick that drives the TIMER, so `sys_tick_init()` now starts
   it (12 cycles of the 12 MHz clk_ref = 1 µs). This affects the whole template
   (the radio driver uses the same timer). Measurement on the board pending.
+- **NO_ECHO at power-up (S5-U30, 2026-10-22).** On the car the HC-SR04P stays
+  silent for the first pings after power-up, which latched NO_ECHO and sent
+  the car to FAULT at every boot. `obstacle.c` now ignores silence until the
+  first echo edge or `OBS_WARMUP_PINGS` (34 pings, ~2 s), whichever comes
+  first. This adds one rule to B5.2.3 / T10, and one private counter (a
+  candidate PRV_OBS field for Phase 4; 6 bits).
 

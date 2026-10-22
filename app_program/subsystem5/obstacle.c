@@ -98,6 +98,7 @@ static uint32_t           g_state         = APP_SCAN_MONITOR;
 static uint32_t           g_prev_mm       = APP_DIST_NONE_MM;
 static uint32_t           g_lost          = 0u;
 static uint32_t           g_silent        = 0u;
+static uint32_t           g_warmup_left   = OBS_WARMUP_PINGS; /* S5-U30 */
 static uint32_t           g_far           = 0u;
 static uint32_t           g_mode_seen     = 0u;
 static uint32_t           g_step          = 0u;
@@ -410,12 +411,18 @@ static void obstacle_ping(obstacle_reading_t * p_rd)
         && (rec.seq == ((uint32_t) g_ping_seq & OBS_SEQ_LOW_MASK)))
     {
         g_silent          = 0u;             /* echo complete */
+        g_warmup_left     = 0u;             /* sensor is up */
         p_rd->b_is_lost   = false;
         p_rd->distance_mm = obstacle_width_to_mm(rec.width_4us);
     }
     else if (b_rise)
     {
-        g_silent = 0u;                      /* still high: nothing in range */
+        g_silent      = 0u;                 /* still high: nothing in range */
+        g_warmup_left = 0u;                 /* an edge: sensor is up */
+    }
+    else if (0u != g_warmup_left)
+    {
+        g_warmup_left--;                    /* power-up grace (S5-U30) */
     }
     else
     {
