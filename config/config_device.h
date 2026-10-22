@@ -26,7 +26,9 @@
  */
 
 #define DEVCNF_USE_SER		1		// Serial communication device 
-#define DEVCNF_USE_ADC		1		// A/D conversion device
+#define DEVCNF_USE_ADC		0		// A/D conversion device
+		/* Off: line_task (subsystem3) owns the ADC through the Pico SDK;
+		   the kernel ADC driver would install its own interrupt. */
 #define DEVCNF_USE_IIC		0		// I2C communication device
 		/* Off by default so no pins are claimed at boot.  To use I2C,
 		   set this to 1 and choose the pins in

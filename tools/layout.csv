@@ -1,0 +1,111 @@
+group,group_bits,field,bits,lsb,unit,min,max,offset,kind,class,owner,description
+SB_LINE0,32,STEERING,11,1,permille,-1000,1000,1024,RNG,S,B3,Steering error L-R; + = line left
+SB_LINE0,32,STATUS,2,1,code,0,3,0,ENUM,S,B3,APP_LINE_*
+SB_LINE0,32,JUNCTION,3,1,code,0,4,0,ENUM,S,B3,APP_JCT_* last junction class
+SB_LINE0,32,CALIBRATED,1,1,flag,0,1,0,FLAG,S,B3,IR calibration done
+SB_MOT0,32,SPEED_L,8,1,count/50ms,-127,127,128,RNG,S,B2,Left wheel speed (approx 7 mm/s per LSB)
+SB_MOT0,32,SPEED_R,8,1,count/50ms,-127,127,128,RNG,S,B2,Right wheel speed
+SB_MOT0,32,STATE,3,1,code,0,7,0,ENUM,S,B2,APP_MOT_*
+SB_MOT1,32,POS_L,18,1,count,-131071,131071,131072,RNG,S,B2,Left encoder position (A23)
+SB_MOT2,32,POS_R,18,1,count,-131071,131071,131072,RNG,S,B2,Right encoder position (A23)
+SB_MOT3,32,PATH,17,1,count,0,131071,0,RNG,S,B2,Path length sum of |travel| (A23)
+SB_IMU0,32,PITCH,10,1,0.1 deg,-450,450,512,RNG,S,B4,Pitch (A24)
+SB_IMU0,32,HUMP_NOW,7,1,mm,0,127,0,RNG,S,B4,Current hump height (A25)
+SB_IMU0,32,HUMP_PEAK,7,1,mm,0,127,0,RNG,S,B4,Highest hump this run (A25)
+SB_IMU0,32,MCLASS,3,1,code,0,6,0,ENUM,S,B4,APP_MCLASS_*
+SB_IMU0,32,TURN_SRC,1,1,flag,0,1,0,FLAG,S,B4,1 = turn rate from encoders (A7)
+SB_IMU1,32,TURN_RATE,10,1,deg/s,-360,360,512,RNG,S,B4,Turn rate (A26)
+SB_OBS0,32,DIST,9,4,mm,0,511,0,SAT,S,B5,Forward distance; 511 = nothing in range
+SB_OBS0,32,SCAN_STATE,3,1,code,0,7,0,ENUM,S,B5,APP_SCAN_*
+SB_OBS0,32,ANGLE_STEP,5,1,5 deg,0,24,0,RNG,S,B5,Obstacle angle = 30 + 5 x step
+SB_OBS0,32,PLAN_SIDE,1,1,flag,0,1,0,FLAG,S,B5,APP_SIDE_*
+SB_OBS0,32,PROFILE_VALID,1,1,flag,0,1,0,FLAG,S,B5,Profile fields are valid
+SB_OBS1,32,WIDTH,8,4,mm,0,255,0,SAT,S,B5,Obstacle width; 255 = clear (A27)
+SB_OBS1,32,NEAREST,8,4,mm,0,255,0,SAT,S,B5,Closest point
+SB_OBS1,32,CLEAR_L,8,4,mm,0,255,0,SAT,S,B5,Left clearance
+SB_OBS1,32,CLEAR_R,8,4,mm,0,255,0,SAT,S,B5,Right clearance
+SB_OBS2,32,LEG_LAT,8,4,mm,0,255,0,RNG,S,B5,Planned lateral leg (NFR16)
+SB_OBS2,32,LEG_FWD,8,4,mm,0,255,0,RNG,S,B5,Planned forward leg (NFR16)
+SB_MIS0,32,SYS,3,1,code,0,7,0,ENUM,S,B5,APP_SYS_*
+SB_MIS0,32,RUN,3,1,code,0,4,0,ENUM,S,B5,APP_RUN_*
+SB_MIS0,32,AVOID,3,1,code,0,6,0,ENUM,S,B5,APP_AVOID_*
+SB_MIS0,32,END_REASON,2,1,code,0,3,0,ENUM,S,B5,APP_END_*
+SB_MIS0,32,ARMED,1,1,flag,0,1,0,FLAG,S,B5,A barcode command is stored
+SB_MIS0,32,ARMED_CMD,2,1,code,0,3,0,ENUM,S,B5,APP_BAR_CMD_*
+MSG_CMD,16,PARAM,11,1,mm|deg|mm/s,0,2047,0,RNG,S,B2,K5 command parameter
+MSG_CMD,16,TYPE,3,1,code,0,6,0,ENUM,S,B2,APP_CMD_*
+MSG_CMD,16,TAG,2,1,count,0,3,0,RAW,S,B2,Command tag; echoed in MOVE_DONE; wraps
+MSG_EVT,16,VALUE,11,1,per type,0,2047,0,RNG,S,B5,K4/K7 event value (width per EVT_ group)
+MSG_EVT,16,TYPE,5,1,code,0,23,0,ENUM,S,B5,APP_EVT_*
+MSG_ECHO,16,WIDTH,12,4,us,0,4095,0,SAT,S,B5,Echo pulse width; 4095 = no echo
+MSG_ECHO,16,SEQ,2,1,count,0,3,0,RAW,S,B5,Ping sequence (wraps by design)
+MSG_ECHO,16,VALID,1,1,flag,0,1,0,FLAG,S,B5,Width is a complete measurement
+MSG_ECHO,16,PAD,1,1,-,0,0,0,PAD,S,B5,Zero
+MSG_EDGE,16,GAP,15,16,us,0,32767,0,SAT,S,B3,Gap since previous accepted edge; 32767 = stopped
+MSG_EDGE,16,LEVEL,1,1,flag,0,1,0,FLAG,S,B3,DO level after the edge (1 = black)
+EVT_JUNCTION,11,CLASS,3,1,code,0,4,0,ENUM,S,B3,APP_JCT_*
+EVT_LINE_FOUND,11,CROSS_MM,8,1,mm,0,255,0,SAT,S,B3,Black crossing length
+EVT_BARCODE,11,CHAR,6,1,code,0,42,0,ENUM,S,B3,Code 39 character index
+EVT_BARCODE,11,CMD,2,1,code,0,3,0,ENUM,S,B3,APP_BAR_CMD_*
+EVT_UNMAPPED,11,CHAR,6,1,code,0,42,0,ENUM,S,B3,Code 39 character index
+EVT_PLAN,11,SIDE,1,1,flag,0,1,0,FLAG,S,B5,APP_SIDE_*
+EVT_MOVE_DONE,11,TAG,2,1,count,0,3,0,RAW,S,B2,Tag of the finished command
+EVT_STALL,11,LEFT,1,1,flag,0,1,0,FLAG,S,B2,Left wheel stalled
+EVT_STALL,11,RIGHT,1,1,flag,0,1,0,FLAG,S,B2,Right wheel stalled
+EVT_HUMP,11,PEAK_MM,7,1,mm,0,127,0,RNG,S,B4,Peak of this hump (A25)
+EVT_MCLASS,11,CLASS,3,1,code,0,6,0,ENUM,S,B4,APP_MCLASS_*
+EVT_CAL_DONE,11,SOURCE,1,1,code,0,1,0,ENUM,S,B5,APP_CAL_SRC_*
+EVT_SFAULT,11,FAULT_IDX,4,1,code,0,9,0,ENUM,S,B5,APP_FAULT_IDX_*
+EVT_STATE,11,SYS,3,1,code,0,7,0,ENUM,S,B5,APP_SYS_*
+EVT_STATE,11,RUN,3,1,code,0,4,0,ENUM,S,B5,APP_RUN_*
+EVT_MAP,11,CHAR,6,1,code,0,42,0,ENUM,S,B5,Character to remap
+EVT_MAP,11,CMD,2,1,code,0,3,0,ENUM,S,B5,New command
+K7_PROF,0,ANGLE_STEP,5,1,5 deg,0,24,0,RNG,S,B5,Profile angle step
+K7_PROF,0,WIDTH,8,4,mm,0,255,0,SAT,S,B5,Width
+K7_PROF,0,NEAREST,8,4,mm,0,255,0,SAT,S,B5,Closest point
+K7_PROF,0,CLEAR_L,8,4,mm,0,255,0,SAT,S,B5,Left clearance
+K7_PROF,0,CLEAR_R,8,4,mm,0,255,0,SAT,S,B5,Right clearance
+K7_PROF,0,SIDE,1,1,flag,0,1,0,FLAG,S,B5,Chosen side
+K7_SUMM,0,END_REASON,2,1,code,0,3,0,ENUM,S,B5,APP_END_*
+K7_SUMM,0,HUMP_PEAK,7,1,mm,0,127,0,RNG,S,B5,Highest hump of the run
+K7_SUMM,0,ODO_MM,15,1,mm,0,32767,0,RNG,S,B5,Distance travelled (A23)
+K7_SUMM,0,FAULTS,10,1,mask,0,1023,0,RAW,S,B5,APP_FAULT_* mask
+K7_SUMM,0,RUN_S,10,1,s,0,1023,0,RNG,S,B5,Run time (A28)
+MQ_HDR,8,VER,3,1,code,0,7,0,ENUM,S,B1,APP_MQ_VERSION
+MQ_HDR,8,TYPE,5,1,code,0,31,0,ENUM,S,B1,APP_MQ_TYPE_*
+MQ_STATE,0,SYS,3,1,code,0,7,0,ENUM,S,B1,from SB_MIS0
+MQ_STATE,0,RUN,3,1,code,0,4,0,ENUM,S,B1,from SB_MIS0
+MQ_STATE,0,MOT,3,1,code,0,7,0,ENUM,S,B1,from SB_MOT0
+MQ_STATE,0,SPEED_L,8,1,count/50ms,-127,127,128,RNG,S,B1,from SB_MOT0
+MQ_STATE,0,SPEED_R,8,1,count/50ms,-127,127,128,RNG,S,B1,from SB_MOT0
+MQ_STATE,0,POS_L,18,1,count,-131071,131071,131072,RNG,S,B1,from SB_MOT1
+MQ_STATE,0,POS_R,18,1,count,-131071,131071,131072,RNG,S,B1,from SB_MOT2
+MQ_STATE,0,LINE,2,1,code,0,3,0,ENUM,S,B1,from SB_LINE0 status
+MQ_STATE,0,STEER,11,1,permille,-1000,1000,1024,RNG,S,B1,from SB_LINE0
+MQ_STATE,0,ODO_MM,15,1,mm,0,32767,0,RNG,S,B1,path x um/count / 1000
+MQ_STATE,0,PITCH,10,1,0.1 deg,-450,450,512,RNG,S,B1,from SB_IMU0
+MQ_STATE,0,HUMP_PEAK,7,1,mm,0,127,0,RNG,S,B1,from SB_IMU0
+MQ_STATE,0,TURN,10,1,deg/s,-360,360,512,RNG,S,B1,from SB_IMU1
+MQ_STATE,0,MCLASS,3,1,code,0,6,0,ENUM,S,B1,from SB_IMU0
+MQ_STATE,0,FAULTS,10,1,mask,0,1023,0,RAW,S,B1,fault_get()
+MQ_STATE,0,PAD,7,1,-,0,0,0,PAD,S,B1,Zero to the byte boundary
+MQ_EVT,0,WORD,16,1,word,0,65535,0,RAW,S,B1,The 16-bit app event word
+MQ_PROF,0,ANGLE_STEP,5,1,5 deg,0,24,0,RNG,S,B1,as K7_PROF
+MQ_PROF,0,WIDTH,8,4,mm,0,255,0,SAT,S,B1,as K7_PROF
+MQ_PROF,0,NEAREST,8,4,mm,0,255,0,SAT,S,B1,as K7_PROF
+MQ_PROF,0,CLEAR_L,8,4,mm,0,255,0,SAT,S,B1,as K7_PROF
+MQ_PROF,0,CLEAR_R,8,4,mm,0,255,0,SAT,S,B1,as K7_PROF
+MQ_PROF,0,SIDE,1,1,flag,0,1,0,FLAG,S,B1,as K7_PROF
+MQ_PROF,0,PAD,2,1,-,0,0,0,PAD,S,B1,Zero
+MQ_SUMM,0,END_REASON,2,1,code,0,3,0,ENUM,S,B1,as K7_SUMM
+MQ_SUMM,0,HUMP_PEAK,7,1,mm,0,127,0,RNG,S,B1,as K7_SUMM
+MQ_SUMM,0,ODO_MM,15,1,mm,0,32767,0,RNG,S,B1,as K7_SUMM
+MQ_SUMM,0,FAULTS,10,1,mask,0,1023,0,RAW,S,B1,as K7_SUMM
+MQ_SUMM,0,RUN_S,10,1,s,0,1023,0,RNG,S,B1,as K7_SUMM
+MQ_SUMM,0,PAD,4,1,-,0,0,0,PAD,S,B1,Zero
+MQ_HB,0,UPTIME_S,16,1,s,0,65535,0,SAT,S,B1,Seconds since boot
+MQ_HB,0,DROPS,8,1,count,0,255,0,SAT,S,B1,telem_drops()
+MQ_HB,0,LAT_MAX_US,12,1,us,0,4095,0,SAT,S,B1,sys_tick_latency_max_us()
+MQ_HB,0,PAD,4,1,-,0,0,0,PAD,S,B1,Zero
+MQ_MAP,8,CHAR,6,1,code,0,42,0,ENUM,S,B1,Byte 1 of a MAP command
+MQ_MAP,8,CMD,2,1,code,0,3,0,ENUM,S,B1,Byte 1 of a MAP command
