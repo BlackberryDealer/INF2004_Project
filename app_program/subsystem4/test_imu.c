@@ -19,6 +19,8 @@
 #if APP_TEST
 #include "../test_report.h"
 #include "../app_types.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "terrain.h"
 #endif
 
@@ -26,6 +28,7 @@
 
 #if APP_TEST
 static bool test_imu_terrain_reset(void);
+static bool test_imu_pitch_pack(void);
 #endif
 
 /* ---- public functions ------------------------------------------------- */
@@ -51,6 +54,14 @@ void test_imu_run(void)
     TEST_CHECK("S4-U13", 4u == terrain_ds_counts(4, 20),
                "ds is the slower wheel's delta");
 
+    /* S4-U10: packed pitch storage (same checks as the host build). */
+    TEST_CHECK("S4-U10", test_imu_pitch_pack(),
+               "pitch pack/unpack at -45/0/+45 deg and clamp beyond");
+
+    /* S4-U11 (hump 127/128 sets RANGE_CLAMP) lands with Buddy 5's
+       packed status board: the clamp lives in the board writer, not in
+       imu.c. See testing/subsystem4/TEST_LOG.md. */
+
     TEST_SUMMARY("imu");
 #endif
 }
@@ -60,8 +71,9 @@ void test_imu_run(void)
 #if APP_TEST
 /**
  * test_imu_terrain_reset
- * @brief   Seeds a dirty monitor, resets it, steps it once while flat
- *          and checks that every field is back to the run-start state.
+ * @brief   Seeds a dirty monitor (packed words), resets it, steps it
+ *          once while flat and checks that every field is back to the
+ *          run-start state.
  * @return  true when every field is cleared
  * @context usermain (test only)
  */
@@ -72,12 +84,19 @@ static bool test_imu_terrain_reset(void)
     terrain_output_t out;
     bool             b_ok = true;
 
-    ter.state          = TERRAIN_DESCENDING;
-    ter.hyst           = 3u;
-    ter.acc_um_mg      = 123456;
-    ter.climb_counts   = 77u;
-    ter.peak_now_mm    = 12u;
-    ter.pitch_max_ddeg = 320;
+    ter.word_state = app_bits_put(0u, PRV_IMU_A_STATE_POS, PRV_IMU_A_STATE_BITS,
+                                  TERRAIN_DESCENDING);
+    ter.word_state = app_bits_put(ter.word_state, PRV_IMU_A_HYST_POS,
+                                  PRV_IMU_A_HYST_BITS, 3u);
+    ter.word_prog  = app_bits_put(0u, PRV_IMU_B_CLIMB_CNT_POS,
+                                  PRV_IMU_B_CLIMB_CNT_BITS, 77u);
+    ter.word_prog  = app_bits_put(ter.word_prog, PRV_IMU_B_PEAK_NOW_POS,
+                                  PRV_IMU_B_PEAK_NOW_BITS, 12u);
+    ter.word_pitch = app_bits_put(
+        0u, PRV_IMU_C_PITCH_MAX_POS, PRV_IMU_C_PITCH_MAX_BITS,
+        app_bits_encode(320, PRV_IMU_C_PITCH_MAX_MIN, PRV_IMU_C_PITCH_MAX_MAX,
+                        PRV_IMU_C_PITCH_MAX_OFFSET, NULL));
+    ter.acc_um_mg = 123456;
 
     terrain_reset(&ter);
 
@@ -87,11 +106,13 @@ static bool test_imu_terrain_reset(void)
     in.ds_counts = 0u;
     terrain_step(&ter, &in, &out);
 
-    if (TERRAIN_FLAT != ter.state)
+    if (TERRAIN_FLAT !=
+        app_bits_get(ter.word_state, PRV_IMU_A_STATE_POS, PRV_IMU_A_STATE_BITS))
     {
         b_ok = false;
     }
-    if (0u != ter.hyst)
+    if (0u !=
+        app_bits_get(ter.word_state, PRV_IMU_A_HYST_POS, PRV_IMU_A_HYST_BITS))
     {
         b_ok = false;
     }
@@ -99,15 +120,20 @@ static bool test_imu_terrain_reset(void)
     {
         b_ok = false;
     }
-    if (0u != ter.climb_counts)
+    if (0u != app_bits_get(ter.word_prog, PRV_IMU_B_CLIMB_CNT_POS,
+                           PRV_IMU_B_CLIMB_CNT_BITS))
     {
         b_ok = false;
     }
-    if (0u != ter.peak_now_mm)
+    if (0u != app_bits_get(ter.word_prog, PRV_IMU_B_PEAK_NOW_POS,
+                           PRV_IMU_B_PEAK_NOW_BITS))
     {
         b_ok = false;
     }
-    if (0 != ter.pitch_max_ddeg)
+    if (0 !=
+        app_bits_decode(app_bits_get(ter.word_pitch, PRV_IMU_C_PITCH_MAX_POS,
+                                     PRV_IMU_C_PITCH_MAX_BITS),
+                        PRV_IMU_C_PITCH_MAX_OFFSET))
     {
         b_ok = false;
     }
@@ -120,6 +146,54 @@ static bool test_imu_terrain_reset(void)
         b_ok = false;
     }
     if (0u != out.hump_done_mm)
+    {
+        b_ok = false;
+    }
+
+    return b_ok;
+}
+
+/**
+ * test_imu_pitch_pack
+ * @brief   S4-U10 (host side, also run on target): SB_IMU0 pitch
+ *          pack/unpack at -45.0, 0 and +45.0 deg and the clamp beyond.
+ * @return  true when the stored codes match the generated layout
+ * @context usermain (test only)
+ */
+static bool test_imu_pitch_pack(void)
+{
+    bool     b_ok      = true;
+    bool     b_clamped = false;
+    uint32_t raw       = 0u;
+
+    raw = app_bits_encode(-450, SB_IMU0_PITCH_MIN, SB_IMU0_PITCH_MAX,
+                          SB_IMU0_PITCH_OFFSET, &b_clamped);
+    if ((b_clamped) || (app_bits_decode(raw, SB_IMU0_PITCH_OFFSET) != -450))
+    {
+        b_ok = false;
+    }
+    raw = app_bits_encode(0, SB_IMU0_PITCH_MIN, SB_IMU0_PITCH_MAX,
+                          SB_IMU0_PITCH_OFFSET, &b_clamped);
+    if ((b_clamped) || (app_bits_decode(raw, SB_IMU0_PITCH_OFFSET) != 0))
+    {
+        b_ok = false;
+    }
+    raw = app_bits_encode(450, SB_IMU0_PITCH_MIN, SB_IMU0_PITCH_MAX,
+                          SB_IMU0_PITCH_OFFSET, &b_clamped);
+    if ((b_clamped) || (app_bits_decode(raw, SB_IMU0_PITCH_OFFSET) != 450))
+    {
+        b_ok = false;
+    }
+    raw = app_bits_encode(451, SB_IMU0_PITCH_MIN, SB_IMU0_PITCH_MAX,
+                          SB_IMU0_PITCH_OFFSET, &b_clamped);
+    if ((!b_clamped) || (app_bits_decode(raw, SB_IMU0_PITCH_OFFSET) != 450))
+    {
+        b_ok = false;
+    }
+    b_clamped = false;
+    raw       = app_bits_encode(-451, SB_IMU0_PITCH_MIN, SB_IMU0_PITCH_MAX,
+                                SB_IMU0_PITCH_OFFSET, &b_clamped);
+    if ((!b_clamped) || (app_bits_decode(raw, SB_IMU0_PITCH_OFFSET) != -450))
     {
         b_ok = false;
     }

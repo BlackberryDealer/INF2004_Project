@@ -21,9 +21,11 @@ all: terrain fifo
 test_terrain_host.out: test_terrain_host.c $(S4_DIR)/terrain.c \
                        $(S4_DIR)/terrain.h $(S4_DIR)/cfg_imu.h \
                        $(S2_DIR)/odometry.c $(S2_DIR)/odometry.h \
-                       $(APP_DIR)/app_types.h ../../host/host_test.h
+                       $(APP_DIR)/app_types.h $(APP_DIR)/app_bits.c \
+                       $(APP_DIR)/app_bits.h $(APP_DIR)/app_layout.h \
+                       ../../host/host_test.h
 	$(CC) $(CFLAGS) -o $@ test_terrain_host.c $(S4_DIR)/terrain.c \
-	    $(S2_DIR)/odometry.c -lm
+	    $(S2_DIR)/odometry.c $(APP_DIR)/app_bits.c -lm
 
 terrain: test_terrain_host.out
 	./test_terrain_host.out

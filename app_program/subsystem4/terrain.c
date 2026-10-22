@@ -11,10 +11,22 @@
  * gcc -std=c99 and never includes app.h or the tk, tm, bsp, hardware
  * or pico headers. It may include the pure odometry module (D.6) for
  * the mm-to-counts conversion of the ramp limit.
+ *
+ * Phase 4 (packed): the monitor and speed-history fields are stored in
+ * the PRV_IMU_* / PRV_HIST_* words generated from tools/layout.csv via
+ * app_bits. The baseline build stored the same information in natural
+ * types; only the storage changed, and the host tests must pass on both.
+ * Clamps inside this module are silent by design: the only overflow that
+ * matters to the mission (a hump peak reaching 127 mm, assumption A25)
+ * is reported by imu.c when it packs the run peak and posts the event,
+ * because a pure module cannot call fault_set.
  */
 
 #include "terrain.h" /* own header first (BARR-C 4.3.c) */
+#include <stddef.h>  /* NULL for the clamp-flag arguments */
 #include "cfg_imu.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "../subsystem2/odometry.h"
 
 /* ---- private constants and types ------------------------------------ */
@@ -23,11 +35,12 @@
    is at most APP_TICK_COUNTS_MAX counts. */
 #define TERRAIN_DS_DELTA_MAX (4u * APP_TICK_COUNTS_MAX)
 
-#define TERRAIN_DDEG_CIRCLE (3600)
-#define TERRAIN_DDEG_HALF   (1800)
-#define TERRAIN_Q14_ONE     (16384)
-#define TERRAIN_ATAN_K_MAX  (32)
-#define TERRAIN_ATAN_SCALE  (1024)
+#define TERRAIN_DDEG_CIRCLE  (3600)
+#define TERRAIN_DDEG_HALF    (1800)
+#define TERRAIN_Q14_ONE      (16384)
+#define TERRAIN_ATAN_K_MAX   (32)
+#define TERRAIN_ATAN_SCALE   (1024)
+#define TERRAIN_HIST_ENTRIES (5u)
 
 /* Height conversion: acc is ds_um x (ax - a_fwd) summed over the hump.
    h_mm = acc / 1 000 000 approx: (acc >> 10) x 1074 >> 20 = acc x
@@ -61,6 +74,22 @@ static int32_t const g_sin_tab[91] = {
 
 /* ---- private function prototypes ------------------------------------- */
 
+static uint32_t terrain_state_get(terrain_t const * p_ter);
+static void     terrain_state_set(terrain_t * p_ter, uint32_t state);
+static uint32_t terrain_hyst_get(terrain_t const * p_ter);
+static void     terrain_hyst_set(terrain_t * p_ter, uint32_t hyst);
+static uint32_t terrain_climb_get(terrain_t const * p_ter);
+static void     terrain_climb_set(terrain_t * p_ter, uint32_t counts);
+static uint32_t terrain_peak_get(terrain_t const * p_ter);
+static void     terrain_peak_set(terrain_t * p_ter, uint32_t peak_mm);
+static int32_t  terrain_pitch_max_get(terrain_t const * p_ter);
+static void     terrain_pitch_max_set(terrain_t * p_ter, int32_t pitch);
+static uint32_t terrain_hist_idx_get(terrain_speed_hist_t const * p_hist);
+static void terrain_hist_idx_set(terrain_speed_hist_t * p_hist, uint32_t idx);
+static int32_t  terrain_hist_get(terrain_speed_hist_t const * p_hist,
+                                 uint32_t                     slot);
+static void     terrain_hist_put(terrain_speed_hist_t * p_hist, uint32_t slot,
+                                 int32_t speed_cpw);
 static uint32_t terrain_acc_to_mm(int32_t acc_um_mg);
 static uint32_t terrain_climb_limit_counts(void);
 static uint32_t terrain_sin_q14_deg(uint32_t deg, uint32_t rem_ddeg);
@@ -261,21 +290,19 @@ int32_t terrain_heading_delta_ddeg(uint32_t prev_wrap, uint32_t now_wrap)
 
 /**
  * terrain_speed_hist_reset
- * @brief   Empties the 5-entry speed history (run start).
+ * @brief   Empties the 5-entry speed history (run start): every entry
+ *          reads 0 cpw and the index returns to slot 0.
  * @param   p_hist  history
  * @return  none
  * @context any
  */
 void terrain_speed_hist_reset(terrain_speed_hist_t * p_hist)
 {
-    uint32_t idx = 0u;
-
-    for (idx = 0u; idx < 5u; idx++)
-    {
-        p_hist->speed[idx] = 0;
-    }
-    p_hist->idx   = 0u;
-    p_hist->count = 0u;
+    /* Encoded zero: the PRV_HIST_* rows store speed as value + 128, so
+       a zero word would decode as -128. Each slot gets encode(0) = 128,
+       and the index returns to slot 0. */
+    p_hist->word_a = 0x80808080u;
+    p_hist->word_b = 0x00000080u;
 }
 
 /**
@@ -283,8 +310,8 @@ void terrain_speed_hist_reset(terrain_speed_hist_t * p_hist)
  * @brief   Pushes one cycle's speed (cpw) and returns the forward
  *          acceleration: the difference across the FULL 50 ms window
  *          (never 10 ms), scaled by TERRAIN_AFWD_MG_PER_CPW_Q10 / 1024.
- *          Returns 0 until the window has filled once, so no stale
- *          pre-run data can become a false acceleration.
+ *          A fresh history is zero-filled by reset, so the first pushes
+ *          measure against standstill.
  * @param   p_hist     history
  * @param   speed_cpw  this cycle's speed, -127..127
  * @return  a_fwd in mg
@@ -293,16 +320,12 @@ void terrain_speed_hist_reset(terrain_speed_hist_t * p_hist)
 int32_t terrain_speed_hist_push(terrain_speed_hist_t * p_hist,
                                 int32_t                speed_cpw)
 {
-    int32_t speed_old = p_hist->speed[p_hist->idx];
+    uint32_t idx       = terrain_hist_idx_get(p_hist);
+    int32_t  speed_old = terrain_hist_get(p_hist, idx);
 
-    p_hist->speed[p_hist->idx] = speed_cpw;
-    p_hist->idx                = (p_hist->idx + 1u) % 5u;
-
-    if (p_hist->count < 5u)
-    {
-        p_hist->count++;
-        return 0;
-    }
+    terrain_hist_put(p_hist, idx, speed_cpw);
+    idx = (idx + 1u) % TERRAIN_HIST_ENTRIES;
+    terrain_hist_idx_set(p_hist, idx);
 
     /* The slot we just overwrote is exactly 50 ms old. The gain is
        14576 (< 2^31) and the speed difference is at most 254, so the
@@ -348,12 +371,12 @@ uint32_t terrain_ds_counts(int32_t delta_pos_l, int32_t delta_pos_r)
  */
 void terrain_reset(terrain_t * p_ter)
 {
-    p_ter->state          = TERRAIN_FLAT;
-    p_ter->hyst           = 0u;
-    p_ter->acc_um_mg      = 0;
-    p_ter->climb_counts   = 0u;
-    p_ter->peak_now_mm    = 0u;
-    p_ter->pitch_max_ddeg = 0;
+    p_ter->word_state = 0u;
+    p_ter->word_prog  = 0u;
+    p_ter->word_pitch = 0u;
+    p_ter->acc_um_mg  = 0;
+    terrain_state_set(p_ter, TERRAIN_FLAT);
+    terrain_pitch_max_set(p_ter, 0); /* encoded zero: value + 512 */
 }
 
 /**
@@ -376,16 +399,17 @@ void terrain_step(terrain_t * p_ter, terrain_input_t const * p_in,
     uint32_t ds_um = p_in->ds_counts * APP_UM_PER_COUNT;
     int32_t  da    = p_in->ax_mg - p_in->a_fwd_mg;
     int32_t  accum = 0;
+    uint32_t climb = 0u;
 
     p_out->pitch_ddeg   = pitch;
     p_out->hump_now_mm  = terrain_acc_to_mm(p_ter->acc_um_mg);
     p_out->hump_done_mm = 0u;
     p_out->hump_geo_mm  = 0u;
 
-    switch (p_ter->state)
+    switch (terrain_state_get(p_ter))
     {
     case TERRAIN_FLAT:
-        if (p_ter->climb_counts > 0u)
+        if (terrain_climb_get(p_ter) > 0u)
         {
             /* Ramp latch (S4-U02): after a climb longer than
                TERRAIN_MAX_CLIMB_MM was rejected as a ramp, do not
@@ -394,35 +418,35 @@ void terrain_step(terrain_t * p_ter, terrain_input_t const * p_in,
                for TERRAIN_HYST_SAMPLES cycles. */
             if (terrain_abs(pitch) <= (uint32_t)TERRAIN_LEVEL_DDEG)
             {
-                p_ter->hyst++;
-                if (p_ter->hyst >= TERRAIN_HYST_SAMPLES)
+                terrain_hyst_set(p_ter, terrain_hyst_get(p_ter) + 1u);
+                if (terrain_hyst_get(p_ter) >= TERRAIN_HYST_SAMPLES)
                 {
-                    p_ter->climb_counts = 0u;
-                    p_ter->hyst         = 0u;
+                    terrain_climb_set(p_ter, 0u);
+                    terrain_hyst_set(p_ter, 0u);
                 }
             }
             else
             {
-                p_ter->hyst = 0u;
+                terrain_hyst_set(p_ter, 0u);
             }
             break;
         }
         if (pitch >= TERRAIN_CLIMB_START_DDEG)
         {
-            p_ter->hyst++;
-            if (p_ter->hyst >= TERRAIN_HYST_SAMPLES)
+            terrain_hyst_set(p_ter, terrain_hyst_get(p_ter) + 1u);
+            if (terrain_hyst_get(p_ter) >= TERRAIN_HYST_SAMPLES)
             {
-                p_ter->state          = TERRAIN_CLIMBING;
-                p_ter->hyst           = 0u;
-                p_ter->acc_um_mg      = 0;
-                p_ter->climb_counts   = 0u;
-                p_ter->peak_now_mm    = 0u;
-                p_ter->pitch_max_ddeg = 0;
+                terrain_state_set(p_ter, TERRAIN_CLIMBING);
+                terrain_hyst_set(p_ter, 0u);
+                p_ter->acc_um_mg = 0;
+                terrain_climb_set(p_ter, 0u);
+                terrain_peak_set(p_ter, 0u);
+                terrain_pitch_max_set(p_ter, 0);
             }
         }
         else
         {
-            p_ter->hyst = 0u;
+            terrain_hyst_set(p_ter, 0u);
         }
         break;
 
@@ -433,37 +457,38 @@ void terrain_step(terrain_t * p_ter, terrain_input_t const * p_in,
                            ((int32_t)ds_um * da); /* cast: <= 5235, positive */
         p_ter->acc_um_mg = accum;
         p_out->hump_now_mm = terrain_acc_to_mm(accum);
-        p_ter->climb_counts += p_in->ds_counts;
-        if (p_out->hump_now_mm > p_ter->peak_now_mm)
+        climb              = terrain_climb_get(p_ter) + p_in->ds_counts;
+        terrain_climb_set(p_ter, climb);
+        if (p_out->hump_now_mm > terrain_peak_get(p_ter))
         {
-            p_ter->peak_now_mm = p_out->hump_now_mm;
+            terrain_peak_set(p_ter, p_out->hump_now_mm);
         }
-        if (pitch > p_ter->pitch_max_ddeg)
+        if (pitch > terrain_pitch_max_get(p_ter))
         {
-            p_ter->pitch_max_ddeg = pitch;
+            terrain_pitch_max_set(p_ter, pitch);
         }
 
-        if (p_ter->climb_counts > terrain_climb_limit_counts())
+        if (terrain_climb_get(p_ter) > terrain_climb_limit_counts())
         {
             /* A ramp, not a hump: no report. Set the latch so the
                still-pitched surface cannot immediately re-arm a new
                climb (S4-U02). */
             terrain_reset(p_ter);
-            p_ter->climb_counts = 1u;
+            terrain_climb_set(p_ter, 1u);
             break;
         }
         if (pitch <= TERRAIN_LEVEL_DDEG)
         {
-            p_ter->hyst++;
-            if (p_ter->hyst >= TERRAIN_HYST_SAMPLES)
+            terrain_hyst_set(p_ter, terrain_hyst_get(p_ter) + 1u);
+            if (terrain_hyst_get(p_ter) >= TERRAIN_HYST_SAMPLES)
             {
-                p_ter->state = TERRAIN_DESCENDING;
-                p_ter->hyst  = 0u;
+                terrain_state_set(p_ter, TERRAIN_DESCENDING);
+                terrain_hyst_set(p_ter, 0u);
             }
         }
         else
         {
-            p_ter->hyst = 0u;
+            terrain_hyst_set(p_ter, 0u);
         }
         break;
 
@@ -477,12 +502,12 @@ void terrain_step(terrain_t * p_ter, terrain_input_t const * p_in,
 
         if (terrain_abs(pitch) <= (uint32_t)TERRAIN_LEVEL_DDEG)
         {
-            p_ter->hyst++;
-            if (p_ter->hyst >= TERRAIN_HYST_SAMPLES)
+            terrain_hyst_set(p_ter, terrain_hyst_get(p_ter) + 1u);
+            if (terrain_hyst_get(p_ter) >= TERRAIN_HYST_SAMPLES)
             {
                 uint32_t h_geo =
                     ((uint32_t)TERRAIN_WHEELBASE_MM *
-                     (uint32_t)terrain_sin_q14(p_ter->pitch_max_ddeg)) /
+                     (uint32_t)terrain_sin_q14(terrain_pitch_max_get(p_ter))) /
                     (uint32_t)TERRAIN_Q14_ONE;
                 /* casts: wheelbase >= 0 and, as
                    pitch_max >= CLIMB_START > 0, the
@@ -490,23 +515,23 @@ void terrain_step(terrain_t * p_ter, terrain_input_t const * p_in,
                    power of two (never >> on a signed
                    value) */
 
-                p_ter->state     = TERRAIN_FLAT;
-                p_ter->hyst      = 0u;
+                terrain_state_set(p_ter, TERRAIN_FLAT);
+                terrain_hyst_set(p_ter, 0u);
                 p_ter->acc_um_mg = 0; /* keep hump_now = 0 in FLAT */
-                if (p_ter->peak_now_mm >= TERRAIN_HUMP_MIN_MM)
+                if (terrain_peak_get(p_ter) >= TERRAIN_HUMP_MIN_MM)
                 {
                     p_out->hump_done_mm =
-                        terrain_hump_report(p_ter->peak_now_mm, h_geo);
+                        terrain_hump_report(terrain_peak_get(p_ter), h_geo);
                     p_out->hump_geo_mm = h_geo;
                 }
-                p_ter->climb_counts   = 0u;
-                p_ter->peak_now_mm    = 0u;
-                p_ter->pitch_max_ddeg = 0;
+                terrain_climb_set(p_ter, 0u);
+                terrain_peak_set(p_ter, 0u);
+                terrain_pitch_max_set(p_ter, 0);
             }
         }
         else
         {
-            p_ter->hyst = 0u;
+            terrain_hyst_set(p_ter, 0u);
         }
         break;
 
@@ -561,6 +586,203 @@ uint32_t terrain_classify(uint32_t terrain_state, bool b_impact_hold,
 }
 
 /* ---- private functions ------------------------------------------------ */
+
+/**
+ * terrain_state_get / _set
+ * @brief   PRV_IMU_A STATE field (0..4, enum).
+ * @context any
+ */
+static uint32_t terrain_state_get(terrain_t const * p_ter)
+{
+    return app_bits_get(p_ter->word_state, PRV_IMU_A_STATE_POS,
+                        PRV_IMU_A_STATE_BITS);
+}
+
+static void terrain_state_set(terrain_t * p_ter, uint32_t state)
+{
+    p_ter->word_state = app_bits_put(p_ter->word_state, PRV_IMU_A_STATE_POS,
+                                     PRV_IMU_A_STATE_BITS, state);
+}
+
+/**
+ * terrain_hyst_get / _set
+ * @brief   PRV_IMU_A HYST field (0..15, saturating by design).
+ * @context any
+ */
+static uint32_t terrain_hyst_get(terrain_t const * p_ter)
+{
+    return app_bits_get(p_ter->word_state, PRV_IMU_A_HYST_POS,
+                        PRV_IMU_A_HYST_BITS);
+}
+
+static void terrain_hyst_set(terrain_t * p_ter, uint32_t hyst)
+{
+    p_ter->word_state = app_bits_put(p_ter->word_state, PRV_IMU_A_HYST_POS,
+                                     PRV_IMU_A_HYST_BITS, hyst);
+}
+
+/**
+ * terrain_climb_get / _set
+ * @brief   PRV_IMU_B CLIMB_CNT field (0..2047, saturating by design:
+ *          the ramp check fires far below the top code).
+ * @context any
+ */
+static uint32_t terrain_climb_get(terrain_t const * p_ter)
+{
+    return app_bits_get(p_ter->word_prog, PRV_IMU_B_CLIMB_CNT_POS,
+                        PRV_IMU_B_CLIMB_CNT_BITS);
+}
+
+static void terrain_climb_set(terrain_t * p_ter, uint32_t counts)
+{
+    p_ter->word_prog = app_bits_put(p_ter->word_prog, PRV_IMU_B_CLIMB_CNT_POS,
+                                    PRV_IMU_B_CLIMB_CNT_BITS, counts);
+}
+
+/**
+ * terrain_peak_get / _set
+ * @brief   PRV_IMU_B PEAK_NOW field (0..127). A value that would exceed
+ *          127 clamps silently here: the A25 fault is raised by imu.c
+ *          when it packs the run peak and posts the HUMP event (a pure
+ *          module cannot call fault_set).
+ * @context any
+ */
+static uint32_t terrain_peak_get(terrain_t const * p_ter)
+{
+    return app_bits_get(p_ter->word_prog, PRV_IMU_B_PEAK_NOW_POS,
+                        PRV_IMU_B_PEAK_NOW_BITS);
+}
+
+static void terrain_peak_set(terrain_t * p_ter, uint32_t peak_mm)
+{
+    uint32_t raw = app_bits_encode((int32_t)peak_mm, PRV_IMU_B_PEAK_NOW_MIN,
+                                   PRV_IMU_B_PEAK_NOW_MAX,
+                                   PRV_IMU_B_PEAK_NOW_OFFSET, NULL);
+    /* silent clamp: see above */
+
+    p_ter->word_prog = app_bits_put(p_ter->word_prog, PRV_IMU_B_PEAK_NOW_POS,
+                                    PRV_IMU_B_PEAK_NOW_BITS, raw);
+}
+
+/**
+ * terrain_pitch_max_get / _set
+ * @brief   PRV_IMU_C PITCH_MAX field (-450..450). Clamped silently:
+ *          steeper pitches only feed the geometric cross-check on a
+ *          hump that ends, and course humps stay far below 45 deg.
+ * @context any
+ */
+static int32_t terrain_pitch_max_get(terrain_t const * p_ter)
+{
+    return app_bits_decode(app_bits_get(p_ter->word_pitch,
+                                        PRV_IMU_C_PITCH_MAX_POS,
+                                        PRV_IMU_C_PITCH_MAX_BITS),
+                           PRV_IMU_C_PITCH_MAX_OFFSET);
+}
+
+static void terrain_pitch_max_set(terrain_t * p_ter, int32_t pitch)
+{
+    uint32_t raw =
+        app_bits_encode(pitch, PRV_IMU_C_PITCH_MAX_MIN, PRV_IMU_C_PITCH_MAX_MAX,
+                        PRV_IMU_C_PITCH_MAX_OFFSET, NULL);
+    /* silent clamp: see above */
+
+    p_ter->word_pitch = app_bits_put(p_ter->word_pitch, PRV_IMU_C_PITCH_MAX_POS,
+                                     PRV_IMU_C_PITCH_MAX_BITS, raw);
+}
+
+/**
+ * terrain_hist_idx_get / _set
+ * @brief   PRV_IMU_B HIST_IDX field carried in the history word_b.
+ * @context any
+ */
+static uint32_t terrain_hist_idx_get(terrain_speed_hist_t const * p_hist)
+{
+    return app_bits_get(p_hist->word_b, PRV_IMU_B_HIST_IDX_POS,
+                        PRV_IMU_B_HIST_IDX_BITS);
+}
+
+static void terrain_hist_idx_set(terrain_speed_hist_t * p_hist, uint32_t idx)
+{
+    p_hist->word_b = app_bits_put(p_hist->word_b, PRV_IMU_B_HIST_IDX_POS,
+                                  PRV_IMU_B_HIST_IDX_BITS, idx);
+}
+
+/**
+ * terrain_hist_get / _put
+ * @brief   One speed-history slot: H0..H3 in word_a, H4 in word_b,
+ *          stored with the PRV_HIST_* offset encoding (-127..127 + 128).
+ * @context any
+ */
+static int32_t terrain_hist_get(terrain_speed_hist_t const * p_hist,
+                                uint32_t                     slot)
+{
+    uint32_t raw = 0u;
+
+    switch (slot)
+    {
+    case 0u:
+        raw =
+            app_bits_get(p_hist->word_a, PRV_HIST_A_H0_POS, PRV_HIST_A_H0_BITS);
+        break;
+    case 1u:
+        raw =
+            app_bits_get(p_hist->word_a, PRV_HIST_A_H1_POS, PRV_HIST_A_H1_BITS);
+        break;
+    case 2u:
+        raw =
+            app_bits_get(p_hist->word_a, PRV_HIST_A_H2_POS, PRV_HIST_A_H2_BITS);
+        break;
+    case 3u:
+        raw =
+            app_bits_get(p_hist->word_a, PRV_HIST_A_H3_POS, PRV_HIST_A_H3_BITS);
+        break;
+    case 4u:
+        raw =
+            app_bits_get(p_hist->word_b, PRV_HIST_B_H4_POS, PRV_HIST_B_H4_BITS);
+        break;
+    default:
+        raw = 0u; /* unreachable: slots are 0..4 */
+        break;
+    }
+
+    return app_bits_decode(raw, PRV_HIST_A_H0_OFFSET);
+}
+
+static void terrain_hist_put(terrain_speed_hist_t * p_hist, uint32_t slot,
+                             int32_t speed_cpw)
+{
+    uint32_t raw =
+        app_bits_encode(speed_cpw, PRV_HIST_A_H0_MIN, PRV_HIST_A_H0_MAX,
+                        PRV_HIST_A_H0_OFFSET, NULL);
+    /* silent: the window speed is
+       -127..127 by design */
+
+    switch (slot)
+    {
+    case 0u:
+        p_hist->word_a = app_bits_put(p_hist->word_a, PRV_HIST_A_H0_POS,
+                                      PRV_HIST_A_H0_BITS, raw);
+        break;
+    case 1u:
+        p_hist->word_a = app_bits_put(p_hist->word_a, PRV_HIST_A_H1_POS,
+                                      PRV_HIST_A_H1_BITS, raw);
+        break;
+    case 2u:
+        p_hist->word_a = app_bits_put(p_hist->word_a, PRV_HIST_A_H2_POS,
+                                      PRV_HIST_A_H2_BITS, raw);
+        break;
+    case 3u:
+        p_hist->word_a = app_bits_put(p_hist->word_a, PRV_HIST_A_H3_POS,
+                                      PRV_HIST_A_H3_BITS, raw);
+        break;
+    case 4u:
+        p_hist->word_b = app_bits_put(p_hist->word_b, PRV_HIST_B_H4_POS,
+                                      PRV_HIST_B_H4_BITS, raw);
+        break;
+    default:
+        break; /* unreachable: slots are 0..4 */
+    }
+}
 
 /**
  * terrain_acc_to_mm

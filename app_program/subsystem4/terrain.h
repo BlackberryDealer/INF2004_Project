@@ -41,16 +41,21 @@ extern int32_t terrain_heading_delta_ddeg(uint32_t prev_wrap,
 
 /* ---- forward acceleration from the speed history (S4-U12) ------------ */
 
+/* Packed storage (Phase 4, B4.4): word_a carries PRV_HIST_A H0..H3,
+   word_b carries PRV_HIST_B H4 plus the PRV_IMU_B HIST_IDX field. The
+   baseline build used int32_t speed[5] + uint32_t idx with the same
+   information; only the storage changed. */
 typedef struct
 {
-    int32_t  speed[5]; /* cpw, one per cycle */
-    uint32_t idx;      /* next slot, 0..4   */
-    uint32_t count;    /* pushes so far, 0..5 */
+    uint32_t word_a; /* H0..H3, 8 bits each, offset 128 */
+    uint32_t word_b; /* H4 (0-7) and HIST_IDX (19-21) */
 } terrain_speed_hist_t;
 
 extern void terrain_speed_hist_reset(terrain_speed_hist_t * p_hist);
 /* Pushes one 50 ms-window speed and returns the forward acceleration in
-   mg (0 until the window has filled once).                              */
+   mg: the difference across the full 50 ms window (the slot overwritten
+   is exactly 50 ms old; a fresh history is zero-filled by reset, the
+   spec's "clear the speed history" behaviour).                          */
 extern int32_t terrain_speed_hist_push(terrain_speed_hist_t * p_hist,
                                        int32_t                speed_cpw);
 
@@ -63,14 +68,16 @@ extern uint32_t terrain_ds_counts(int32_t delta_pos_l, int32_t delta_pos_r);
 
 /* ---- Terrain Monitor (Figure 6.3) ------------------------------------ */
 
+/* Packed storage (Phase 4, B4.4): the baseline fields moved into the
+   PRV_IMU_A/B/C words; only the E2 accumulator keeps a natural type. The
+   functions and behaviour are unchanged. */
 typedef struct
 {
-    uint32_t state;          /* TERRAIN_* */
-    uint32_t hyst;           /* consecutive samples meeting the condition */
-    int32_t  acc_um_mg;      /* E2: sum of ds_um x (ax - a_fwd) in um x mg */
-    uint32_t climb_counts;   /* distance since CLIMBING started */
-    uint32_t peak_now_mm;    /* highest point of this hump */
-    int32_t  pitch_max_ddeg; /* for the geometric cross-check */
+    uint32_t word_state; /* PRV_IMU_A: STATE (0-2), HYST (3-6)   */
+    uint32_t word_prog;  /* PRV_IMU_B: CLIMB_CNT (8-18),
+                            PEAK_NOW (22-28)                     */
+    uint32_t word_pitch; /* PRV_IMU_C: PITCH_MAX (13-22)         */
+    int32_t  acc_um_mg;  /* E2: sum of ds_um x (ax - a_fwd)      */
 } terrain_t;
 
 typedef struct

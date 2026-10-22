@@ -46,8 +46,20 @@ Add a new row for every run. Never edit or delete old rows.
 |---|---|---|---|---|---|---|
 | 2026-10-22 | S4-U01, U02, U03, U06, U07, U12, U13, U14 | Phase 2 commit | Faris | PASS (host) | `logs/2026-10-22_host_phase2.txt` | terrain 18/18, fifo planner 6/6; S4-U13 pure parts (mode-driven half needs B5's mission) |
 | 2026-10-22 | S4-U13, normal+TEST=1 builds | Phase 2 commit | Faris | PASS (target build) | `logs/2026-10-22_host_phase2.txt` | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.elf` and `_test.elf` build with zero warnings |
+| 2026-10-22 | S4-U01, U02, U03, U06, U07, U12, U13, U10 | Phase 4 commit | Faris | PASS (host, packed) | `logs/2026-10-22_host_phase4_packed.txt` | terrain 19/19 (incl. S4-U10 pitch pack), fifo 6/6; packed terrain.c/imu.c build into normal and TEST=1 images with zero warnings |
+| 2026-10-22 | S4-U11 | — | Faris | pending | — | hump 127/128 → RANGE_CLAMP lives in Buddy 5's packed status-board writer (and imu.c raises it when the run peak reaches 127); runs once B5 merges |
 | 2026-10-22 | S4-I01, I02, I03, I04, I09 (Phase 3) | — | Faris | pending | — | integration on the car: INT1→motors low ≤15 ms with Buddy 2 (GP14), course humps vs ruler, imu_task WCET. Blocked on hardware; plan below |
 | 2026-10-22 | S4-I01–I11 | — | Faris | pending | — | bench/track: needs the physical car (placeholders kept, spec rule A.3) |
+
+## SPEC-QUESTION (to the team chat before merging Phase 4)
+
+**SQ-B4-1: E_IMU_SAMPLE group.** B4.4 lists the three E_IMU rows in one
+group with mixed `group_bits` (32, 32, 16). Buddy 1's `gen_layout.py`
+rejects mixed `group_bits` inside a group *before* its class-E exemption,
+so the 16-bit `RAW_SAMPLE` row now sits in its own documentation group
+`E_IMU_SAMPLE`. No macros are generated for either group, so nothing
+functional changes. Please decide: relax the generator's group check for
+class E rows (Buddy 1), or keep the split group as committed.
 
 ## Phase 3 integration plan (pending hardware)
 
