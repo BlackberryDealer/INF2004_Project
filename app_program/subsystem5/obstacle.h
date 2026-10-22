@@ -1,7 +1,7 @@
 /**
  * @file    obstacle.h
- * @brief   Obstacle task entry points (D.15).
- * @owner   Buddy 5 (shared services, obstacle, mission)
+ * @brief   Obstacle subsystem entry points (obstacle_task, K1 SEM_ECHO).
+ * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    task
  */
 
@@ -9,11 +9,10 @@
 #define OBSTACLE_H
 
 #include <stdint.h>
-#include <stdbool.h>
 #include "../app.h"
 
-extern ER   obstacle_init(void);
-extern ER   obstacle_start(void);
+extern ER obstacle_init(void);    /* creates K1 SEM_ECHO */
+extern ER obstacle_start(void);   /* attaches the echo ISR, starts the task */
 
 #endif /* OBSTACLE_H */
 

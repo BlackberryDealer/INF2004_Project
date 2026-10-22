@@ -1,7 +1,7 @@
 /**
  * @file    sys_tick.h
- * @brief   R2 10 ms and R3 60 ms cyclic handlers, latency, time base.
- * @owner   Buddy 5 (shared services)
+ * @brief   R2 10 ms and R3 60 ms releases, latency and overrun counters.
+ * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    task
  */
 

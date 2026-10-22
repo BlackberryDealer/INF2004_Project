@@ -1,7 +1,7 @@
 /**
  * @file    mission.h
- * @brief   Mission queue K4, mode flags K10, mission_task entry points.
- * @owner   Buddy 5 (shared services)
+ * @brief   Mission queue K4, mode flags K10 and the mission task.
+ * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    task
  */
 
@@ -26,7 +26,7 @@ extern uint32_t mission_evt_barcode_value(uint32_t cmd, uint32_t char_index);
 extern void     mission_mode_set(uint32_t bits);     /* mission_task only */
 extern void     mission_mode_clear(uint32_t bits);   /* mission_task only */
 extern bool     mission_mode_is_set(uint32_t bit);   /* any task */
-extern uint32_t mission_queue_high_water(void);  /* observed peak */
+extern uint32_t mission_queue_high_water(void);
 
 #endif /* MISSION_H */
 

@@ -1,0 +1,38 @@
+;
+; Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+; CSC28 note (Buddy 5): copied from pico-examples pio/ws2812/ws2812.pio.
+; Only the 4-instruction "ws2812" program is kept. The example's c-sdk
+; init helper (it uses float) and the ws2812_parallel program are left
+; out; drv_ws2812.c sets the state machine up with integer clock
+; dividers instead. Regenerate the header with:
+;   pioasm ws2812.pio ws2812.pio.h
+;
+.pio_version 0 // only requires PIO version 0
+
+.program ws2812
+.side_set 1
+
+; The following constants are selected for broad compatibility with WS2812,
+; WS2812B, and SK6812 LEDs. Other constants may support higher bandwidths for
+; specific LEDs, such as (7,10,8) for WS2812B LEDs.
+
+.define public T1 3
+.define public T2 3
+.define public T3 4
+
+.lang_opt python sideset_init = pico.PIO.OUT_HIGH
+.lang_opt python out_init     = pico.PIO.OUT_HIGH
+.lang_opt python out_shiftdir = 1
+
+.wrap_target
+bitloop:
+    out x, 1       side 0 [T3 - 1] ; Side-set still takes place when instruction stalls
+    jmp !x do_zero side 1 [T1 - 1] ; Branch on the bit we shifted out. Positive pulse
+do_one:
+    jmp  bitloop   side 1 [T2 - 1] ; Continue driving high, for a long pulse
+do_zero:
+    nop            side 0 [T2 - 1] ; Or drive low, for a short pulse
+.wrap

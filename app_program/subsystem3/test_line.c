@@ -6,12 +6,10 @@
  * @reqs    FR1, FR19, NFR1, NFR4
  */
 
-#include "test_line.h"
+#include "test_line.h"         /* own header first (BARR-C 4.3.c) */
 #include "../app.h"
 
 #if (0 != APP_TEST)
-
-#include <stddef.h>
 #include "../test_report.h"
 #include "cfg_line.h"
 #include "line_track.h"
@@ -41,14 +39,17 @@ static void test_line_u02_u14(void);
  */
 void test_line_run(void)
 {
+#if (0 != APP_TEST)
     TEST_INIT();
     test_line_u01_u06();
     test_line_u02_u14();
     TEST_SUMMARY("line");
+#endif
 }
 
 /* ---- private functions ------------------------------------------------ */
 
+#if (0 != APP_TEST)
 /**
  * test_line_u01_u06
  * @brief   Verifies S3-U01 and S3-U06 normalisation, endpoints, and steering.
@@ -134,20 +135,6 @@ static void test_line_u02_u14(void)
     TEST_CHECK("S3-U02", (APP_JCT_CROSS == cls),
                "late barcode branch + left sat + line present -> CROSS");
 }
-
-#else /* 0 == APP_TEST */
-
-/**
- * test_line_run
- * @brief   No-op when built without TEST=1.
- * @return  none
- * @context usermain
- */
-void test_line_run(void)
-{
-    /* empty in production build */
-}
-
 #endif /* APP_TEST */
 
 /*** end of file ***/

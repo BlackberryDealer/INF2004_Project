@@ -7,7 +7,6 @@
  */
 
 #include "drv_ir_adc.h"
-#include <stddef.h>
 #include "../board_pins.h"
 
 #ifndef DRV_IR_ADC_USE_REGS
@@ -76,7 +75,7 @@ void drv_ir_adc_read(uint32_t * p_left, uint32_t * p_right)
     uint32_t const avg_left  = drv_ir_adc_read_channel(BOARD_ADC_CH_LINE_L);
     uint32_t const avg_right = drv_ir_adc_read_channel(BOARD_ADC_CH_LINE_R);
 
-    if (NULL != p_left)
+    if (((uint32_t *) 0) != p_left)
     {
         *p_left = avg_left;
     }
@@ -85,7 +84,7 @@ void drv_ir_adc_read(uint32_t * p_left, uint32_t * p_right)
         /* Caller did not request the left channel reading. */
     }
 
-    if (NULL != p_right)
+    if (((uint32_t *) 0) != p_right)
     {
         *p_right = avg_right;
     }
