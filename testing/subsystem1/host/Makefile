@@ -7,6 +7,8 @@
 #   S1-U24       gen_layout.py rejects a broken copy of tools/layout.csv
 #   S1-U01, U02  test_telem_json_host.c  (baseline JSON builders)
 #   S1-U12, U30..U35  test_mqtt_bridge_host.c (mqtt_bridge.c + mock kernel)
+#   S1-U13, U15, U36, U37  test_mqtt_utk_host.c (radio-task mqtt_utk.c +
+#                mock lwIP in mock_lwip/ + mock bridge)
 #
 # Kernel-side files (mqtt_bridge.c) are copied into build/ next to a mock
 # app.h, so "../app.h" inside them resolves to the mock.
@@ -27,8 +29,9 @@ B       := build/app_program
 # the same number of entries.
 SB_MSG_FIELDS := $(shell grep -cE '^\#define (SB|MSG)_[A-Z0-9_]+_POS ' $(LAYOUT))
 
-.PHONY: all app_bits gen_layout_reject telem_json mqtt_bridge tree clean
-all: app_bits gen_layout_reject telem_json mqtt_bridge
+.PHONY: all app_bits gen_layout_reject telem_json mqtt_bridge mqtt_utk tree \
+        clean
+all: app_bits gen_layout_reject telem_json mqtt_bridge mqtt_utk
 
 test_app_bits_host.out: test_app_bits_host.c $(APP_DIR)/app_bits.c \
                         $(APP_DIR)/app_bits.h $(LAYOUT) ../../host/host_test.h
@@ -81,6 +84,18 @@ test_mqtt_bridge_host.out: test_mqtt_bridge_host.c tree
 
 mqtt_bridge: test_mqtt_bridge_host.out
 	./test_mqtt_bridge_host.out
+
+# mqtt_utk.c is template code (tabs, lwIP types; deviation D3): built with
+# the same warnings, in gnu99 like the rest of the template.
+MQTT_UTK := ../../../lib/liblwip/sysdepend/pico_rp2040/mqtt_utk.c
+test_mqtt_utk_host.out: test_mqtt_utk_host.c $(MQTT_UTK) $(S1)/mqtt_bridge.h \
+                        $(wildcard mock_lwip/*.h mock_lwip/*/*.h \
+                                   mock_lwip/*/*/*.h)
+	$(CC) -std=gnu99 -Wall -Wextra -Werror -I../../host -Imock_lwip \
+	    -o $@ test_mqtt_utk_host.c
+
+mqtt_utk: test_mqtt_utk_host.out
+	./test_mqtt_utk_host.out
 
 clean:
 	rm -rf *.out build
