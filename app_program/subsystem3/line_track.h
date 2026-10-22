@@ -1,6 +1,6 @@
 /**
  * @file    line_track.h
- * @brief   Pure line normalisation, steering error, and junction classification.
+ * @brief   Pure line normalisation, steering, and junction classification.
  * @owner   Buddy 3 (line, barcode)
  * @kind    algo
  */

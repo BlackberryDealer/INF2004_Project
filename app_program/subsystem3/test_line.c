@@ -1,6 +1,6 @@
 /**
  * @file    test_line.c
- * @brief   On-target unit tests for line_track (S3-U01, S3-U02, S3-U06, S3-U14).
+ * @brief   On-target unit tests for line_track (S3-U01, U02, U06, U14).
  * @owner   Buddy 3 (line, barcode)
  * @kind    test
  * @reqs    FR1, FR19, NFR1, NFR4
@@ -95,7 +95,7 @@ static void test_line_u02_u14(void)
                                TEST_CONF_COUNTS, false};
     uint32_t            cls = APP_JCT_NONE;
 
-    /* Early branch (b_branch_recent = true) + left saturation + white after -> T */
+    /* Early branch (b_branch_recent = true) + left sat + white -> T */
     line_track_jct_reset(&jct);
     in.norm_l          = 950u;
     in.norm_r          = 500u;
@@ -115,7 +115,7 @@ static void test_line_u02_u14(void)
     TEST_CHECK("S3-U14", (APP_JCT_T == cls),
                "early barcode branch + left sat classifies T");
 
-    /* Late branch (branch_seq changes during CONFIRM) + line present -> CROSS */
+    /* Late branch (branch_seq changes in CONFIRM) + line present -> CROSS */
     line_track_jct_reset(&jct);
     in.norm_l      = 950u;
     in.norm_r      = 500u;
