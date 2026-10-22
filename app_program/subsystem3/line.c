@@ -283,11 +283,23 @@ static bool line_handle_modes(uint32_t raw_l, uint32_t raw_r,
                                   g_cal_min_r, g_cal_max_r))
         {
             gb_is_calibrated = true;
+            /* casts: ADC codes 0..4095 fit int32_t */
+            app_log("IR cal OK: span L %d R %d\n",
+                    (int32_t) (g_cal_max_l - g_cal_min_l),
+                    (int32_t) (g_cal_max_r - g_cal_min_r), 0);
             (void) mission_post_event(APP_EVT_CAL_DONE, APP_CAL_SRC_IR);
         }
         else
         {
             gb_is_calibrated = false;
+            /* Bring-up diagnosis: without this line the car just waits
+               in CAL_IR until the 10 s CAL_TIMEOUT fault. casts: ADC
+               codes 0..4095 fit int32_t                                */
+            app_log("IR cal FAILED: span L %d R %d (need %d each);"
+                    " ensure both sensors cross black and white\n",
+                    (int32_t) (g_cal_max_l - g_cal_min_l),
+                    (int32_t) (g_cal_max_r - g_cal_min_r),
+                    (int32_t) LINE_CAL_MIN_SPAN);
         }
     }
     else

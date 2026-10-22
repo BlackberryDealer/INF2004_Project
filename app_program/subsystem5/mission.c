@@ -89,6 +89,21 @@ static char const * const g_fault_names[APP_FAULT_COUNT] =
     "FAULT bit 9 PIO_LOAD (no PIO space for RGB)\n",
 };
 
+/* Console state names for startup diagnosis. No % conversions. */
+#define MISSION_SYS_STATE_COUNT (APP_SYS_FAULT + 1u)
+
+static char const * const g_state_names[MISSION_SYS_STATE_COUNT] =
+{
+    "STATE BOOT (white): waiting for task check-ins and radio init\n",
+    "STATE CAL_IMU (yellow blink): keep the car still, 2 s\n",
+    "STATE CAL_IR (yellow blink): sweeping over the line\n",
+    "STATE READY (green): press and release RUN (GP20) to start\n",
+    "STATE RUN (blue): following the line\n",
+    "STATE FINISHED (green blink)\n",
+    "STATE LINE_LOST_STOP (blue blink)\n",
+    "STATE FAULT (red blink): check the FAULT console lines\n",
+};
+
 /* ---- private function prototypes ------------------------------------- */
 
 static void mission_task(INT stacd, void * p_exinf);
@@ -541,6 +556,11 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
     p_ctx->substep        = 0u;
     p_ctx->b_run_starting = false;
     p_ctx->b_recovering   = false;
+
+    if (sys_state < MISSION_SYS_STATE_COUNT)
+    {
+        app_log(g_state_names[sys_state], 0, 0, 0);
+    }
 
     switch (sys_state)
     {

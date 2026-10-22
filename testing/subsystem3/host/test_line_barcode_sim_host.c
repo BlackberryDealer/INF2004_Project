@@ -80,6 +80,15 @@ UW in_w(UW port)
     return gb_sim_bar_pin ? (1u << PIN_BAR_DO) : 0u;
 }
 
+void app_log(char const * p_format, int32_t arg_a, int32_t arg_b,
+             int32_t arg_c)
+{
+    (void) p_format;
+    (void) arg_a;
+    (void) arg_b;
+    (void) arg_c;
+}
+
 ID app_start_task(FP p_entry, PRI priority, uint64_t * p_stack,
                   uint32_t stack_bytes, char const * p_name)
 {
