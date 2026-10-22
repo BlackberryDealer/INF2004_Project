@@ -70,6 +70,16 @@ LOCAL const UW module_tbl[] = {
 	0
 };
 
+/*
+ * CSC28 PicoCar (SHARED): blocks the application drives through the SDK's
+ * header-only register access, which never releases a reset itself (the
+ * SDK runtime that normally does is not linked). RESETS powers up as
+ * 0x01ffffff, so without this PWM (motors, servo, buzzer), I2C1 (IMU) and
+ * TIMER (sys_tick_now_us, time_us_32/64) stay held in reset.
+ * Release only: a block the bootrom already released is not pulsed.
+ */
+#define CSC28_RELEASE_MASK	(RESETS_RESET_PWM | RESETS_RESET_I2C1 | RESETS_RESET_TIMER)
+
 /* 
  * Setup pin functions Tadle
  */
@@ -192,6 +202,9 @@ EXPORT void knl_startup_hw(void)
 		clr_w(RESETS_RESET, rst);
 		while((in_w(RESETS_RESET_DONE) & rst)==0);
 	}
+
+	clr_w(RESETS_RESET, CSC28_RELEASE_MASK);
+	while((in_w(RESETS_RESET_DONE) & CSC28_RELEASE_MASK) != CSC28_RELEASE_MASK);
 
 	for(p = pinfnc_tbl; p->addr != 0; p++) {
 		out_w(p->addr, p->data);
