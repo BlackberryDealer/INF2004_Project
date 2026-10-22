@@ -1,7 +1,7 @@
 /**
  * @file    test_barcode.h
- * @brief   On-target tests of the barcode subsystem (TEST=1).
- * @owner   Buddy 3 (line and barcode)
+ * @brief   On-target unit and bench measurement tests for barcode decoding.
+ * @owner   Buddy 3 (line, barcode)
  * @kind    test
  */
 
@@ -10,7 +10,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "../app.h"
 
 extern void test_barcode_run(void);
 
