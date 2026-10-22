@@ -1,7 +1,7 @@
 /**
  * @file    drv_gpio_irq.h
- * @brief   R1 gpio_bank0_isr and its per-pin callback table.
- * @owner   Buddy 5 (shared services)
+ * @brief   R1 gpio_bank0_isr: one IO_IRQ_BANK0 handler, per-pin callbacks.
+ * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    drv
  */
 

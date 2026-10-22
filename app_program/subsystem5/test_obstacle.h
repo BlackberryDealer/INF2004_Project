@@ -1,7 +1,7 @@
 /**
  * @file    test_obstacle.h
- * @brief   On-target tests of the obstacle subsystem (TEST=1).
- * @owner   Buddy 5 (shared services, obstacle, mission)
+ * @brief   On-target tests for the obstacle module (TEST=1 builds).
+ * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    test
  */
 
@@ -9,10 +9,9 @@
 #define TEST_OBSTACLE_H
 
 #include <stdint.h>
-#include <stdbool.h>
 #include "../app.h"
 
-extern void test_obstacle_run(void);
+extern void test_obstacle_run(void);   /* called by usermain in TEST=1 builds */
 
 #endif /* TEST_OBSTACLE_H */
 

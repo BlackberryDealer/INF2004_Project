@@ -12,8 +12,8 @@
 #include <stdbool.h>
 #include "../app.h"
 
-extern ER   imu_init(void);
-extern ER   imu_start(void);
+extern ER imu_init(void);
+extern ER imu_start(void);
 
 #endif /* IMU_H */
 
