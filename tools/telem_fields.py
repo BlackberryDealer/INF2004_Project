@@ -245,4 +245,26 @@ GROUPS = {
     'SH_IMU': [
         ('IMPACT_SEQ', 8, 0, 1, 'count'),
     ],
+    'PRV_TEL': [
+        ('DROPS', 8, 0, 1, 'count'),
+        ('HB_DIV', 3, 0, 1, 'count'),
+        ('UPTIME_HI', 16, 0, 1, 's'),
+    ],
+    'PRV_TEL_K7': [
+        ('DROPS', 8, 0, 1, 'count'),
+    ],
+    'PRV_BRIDGE': [
+        ('CMD_DROPS', 8, 0, 1, 'count'),
+        ('PUB_DROPS', 8, 0, 1, 'count'),
+        ('CMD_SEEN', 4, 0, 1, 'mask'),
+    ],
+    'PRV_MQTT': [
+        ('BACKOFF', 2, 0, 1, 'exponent'),
+        ('PEND_TRIES', 2, 0, 1, 'count'),
+        ('PEND_LEN', 5, 0, 1, 'byte'),
+        ('PEND_TYPE', 5, 0, 1, 'code'),
+    ],
+    'PRV_CMD_T': [
+        ('LAST', 16, 0, 10, 'ms'),
+    ],
 }
