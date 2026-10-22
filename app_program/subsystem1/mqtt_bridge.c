@@ -1,46 +1,121 @@
 /**
  * @file    mqtt_bridge.c
- * @brief   Phase 0 STUB of the radio-task bridge: nothing to publish, commands
- *          ignored.
+ * @brief   Kernel-side functions the radio task (mqtt_utk.c) calls: take the
+ *          next payload from K11, route it, build the availability payload,
+ *          validate and rate-limit remote commands, report link changes.
+ *          Baseline representation: JSON / text payloads.
  * @owner   Buddy 1 (communications)
  * @kind    task
- * @reqs    FR10, FR11, FR12, FR20
+ * @reqs    FR10, FR11, FR12, FR20, NFR9
  */
 
 #include "mqtt_bridge.h"       /* own header first (BARR-C 4.3.c) */
-#include <stddef.h>              /* NULL */
+#include "../app.h"
+#include "../app_types.h"
+#include "cfg_telem.h"
+#include "telem.h"
+#include "../subsystem2/fault.h"
+#include "../subsystem5/mission.h"
+#include "../subsystem5/sys_tick.h"
 
 /* ---- private constants and types ------------------------------------ */
 
+/* Index of each command in the rate-limit table. */
+#define BRIDGE_CMD_START      (0u)
+#define BRIDGE_CMD_STOP       (1u)
+#define BRIDGE_CMD_RESET      (2u)
+#define BRIDGE_CMD_MAP        (3u)
+#define BRIDGE_CMD_COUNT      (4u)
+#define BRIDGE_CMD_NONE       (BRIDGE_CMD_COUNT)
+
+#define BRIDGE_US_PER_10MS    (10000u)
+#define BRIDGE_CMD_GAP_10MS   (TELEM_CMD_MIN_GAP_MS / 10u)
+#define BRIDGE_DROPS_MAX      (255u)
+
+#if (BRIDGE_CMD_GAP_10MS < 1u) || (BRIDGE_CMD_GAP_10MS > 65535u)
+#error "TELEM_CMD_MIN_GAP_MS no longer fits the 16-bit 10 ms time stamps"
+#endif
+
 /* ---- private data ---------------------------------------------------- */
 
+/* Accepted baseline commands (exact bytes, no NUL). */
+static char const g_cmd_start[] = "{\"cmd\":\"START\"}";
+static char const g_cmd_stop[]  = "{\"cmd\":\"STOP\"}";
+static char const g_cmd_reset[] = "{\"cmd\":\"RESET\"}";
+
+static char const g_avail_online[]  = "online";
+static char const g_avail_offline[] = "offline";
+
+/* All written only by the radio task (rule 1). The publish-drop count is
+   read by telem_task as one byte (atomic).                              */
+static uint16_t         g_cmd_last_10ms[BRIDGE_CMD_COUNT] = {0u, 0u, 0u, 0u};
+static uint8_t          g_cmd_seen_mask   = 0u;   /* bit n: command n seen */
+static uint8_t          g_cmd_drops       = 0u;
+static volatile uint8_t g_bridge_pub_drops = 0u;
+
 /* ---- private function prototypes ------------------------------------- */
+
+static uint32_t bridge_parse_command(uint8_t const * p_payload,
+                                     uint32_t length);
+static bool     bridge_bytes_equal(uint8_t const * p_payload, uint32_t length,
+                                   char const * p_text, uint32_t text_len);
+static bool     bridge_rate_ok(uint32_t cmd_idx);
+static void     bridge_count_cmd_drop(void);
+static uint32_t bridge_copy_text(char const * p_text, uint32_t text_len,
+                                 uint8_t * p_buf, uint32_t size);
 
 /* ---- public functions ------------------------------------------------- */
 
 /**
  * mqtt_bridge_take
- * @brief   STUB: copy the next queued payload. Never blocks.
+ * @brief   Takes the next queued payload from K11 without waiting.
+ *          Baseline K11 message: byte 0 = APP_MQ_TYPE_*, then the payload.
  * @param   p_buf      output buffer
  * @param   buf_size   size of p_buf
  * @param   p_mq_type  receives APP_MQ_TYPE_*
- * @return  0 (stub: nothing queued)
+ * @return  payload length copied, 0 if nothing is queued (or it does not
+ *          fit in p_buf, then it is dropped)
  * @context radio task
  */
 uint32_t mqtt_bridge_take(uint8_t * p_buf, uint32_t buf_size,
                           uint8_t * p_mq_type)
 {
-    (void) p_buf;   /* stub: unused until the owner's version */
-    (void) buf_size;
-    (void) p_mq_type;
+    uint8_t  local[MQTT_BRIDGE_TX_MAX + 1u] = {0u};
+    uint32_t copied = 0u;
+    uint32_t idx    = 0u;
+    INT      rcv    = 0;
 
-    return 0u;
+    if ((NULL != p_buf) && (NULL != p_mq_type) && (0 < telem_k11_id()))
+    {
+        rcv = tk_rcv_mbf(telem_k11_id(), local, TMO_POL);
+    }
+    if (rcv > 1)
+    {
+        copied = (uint32_t) rcv - 1u;   /* cast: rcv > 1 */
+        if (copied <= buf_size)
+        {
+            *p_mq_type = local[0];
+            for (idx = 0u; idx < copied; idx++)
+            {
+                p_buf[idx] = local[idx + 1u];
+            }
+        }
+        else
+        {
+            copied = 0u;
+            mqtt_bridge_count_publish_drop();
+        }
+    }
+
+    return copied;
 }
 
 /**
  * mqtt_bridge_route
- * @brief   STUB: topic, QoS and retain flag for a payload type. Returns an
- *          empty topic, QoS 0, not retained.
+ * @brief   Topic, QoS and retain flag for a payload type: STATE -> state
+ *          topic QoS 0; EVENT, PROFILE, SUMMARY -> event topic QoS 1;
+ *          HEARTBEAT -> hb topic QoS 0; ONLINE/OFFLINE -> availability
+ *          topic QoS 1 retained; anything else -> event topic QoS 0.
  * @param   mq_type         APP_MQ_TYPE_*
  * @param   pp_topic        receives the topic
  * @param   p_qos           receives the QoS
@@ -51,44 +126,85 @@ uint32_t mqtt_bridge_take(uint8_t * p_buf, uint32_t buf_size,
 void mqtt_bridge_route(uint8_t mq_type, char const ** pp_topic, uint8_t * p_qos,
                        bool * pb_is_retained)
 {
-    (void) mq_type;   /* stub: one route for every type */
+    char const * p_topic       = TELEM_TOPIC_EVENT;
+    uint8_t      qos           = 0u;
+    bool         b_is_retained = false;
+
+    switch (mq_type)
+    {
+        case APP_MQ_TYPE_STATE:
+            p_topic = TELEM_TOPIC_STATE;
+            break;
+
+        case APP_MQ_TYPE_EVENT:
+        case APP_MQ_TYPE_PROFILE:
+        case APP_MQ_TYPE_SUMMARY:
+            qos = 1u;
+            break;
+
+        case APP_MQ_TYPE_HEARTBEAT:
+            p_topic = TELEM_TOPIC_HB;
+            break;
+
+        case APP_MQ_TYPE_ONLINE:
+        case APP_MQ_TYPE_OFFLINE:
+            p_topic       = TELEM_TOPIC_AVAIL;
+            qos           = 1u;
+            b_is_retained = true;
+            break;
+
+        default:
+            /* unknown: event topic, QoS 0 */
+            break;
+    }
 
     if (NULL != pp_topic)
     {
-        *pp_topic = "";
+        *pp_topic = p_topic;
     }
     if (NULL != p_qos)
     {
-        *p_qos = 0u;
+        *p_qos = qos;
     }
     if (NULL != pb_is_retained)
     {
-        *pb_is_retained = false;
+        *pb_is_retained = b_is_retained;
     }
 }
 
 /**
  * mqtt_bridge_availability
- * @brief   STUB: availability payload.
+ * @brief   Availability payload: "online" / "offline" (plain text, no NUL).
  * @param   b_is_online  true = online
  * @param   p_buf        output buffer
  * @param   size         size of p_buf
- * @return  0 (stub: empty payload)
+ * @return  payload length, 0 if it does not fit
  * @context radio task
  */
 uint32_t mqtt_bridge_availability(bool b_is_online, uint8_t * p_buf,
                                   uint32_t size)
 {
-    (void) b_is_online;   /* stub: unused until the owner's version */
-    (void) p_buf;
-    (void) size;
+    uint32_t len = 0u;
 
-    return 0u;
+    if (b_is_online)
+    {
+        len = bridge_copy_text(g_avail_online, sizeof(g_avail_online) - 1u,
+                               p_buf, size);
+    }
+    else
+    {
+        len = bridge_copy_text(g_avail_offline, sizeof(g_avail_offline) - 1u,
+                               p_buf, size);
+    }
+
+    return len;
 }
 
 /**
  * mqtt_bridge_post_command
- * @brief   STUB: validate a remote command and post it to mission.
+ * @brief   Validates a remote command (exact bytes), applies the 100 ms
+ *          per-type rate limit and posts START / STOP / RESET to the
+ *          mission queue. Anything else counts as a command drop.
  * @param   p_payload  received bytes
  * @param   length     payload length
  * @return  none
@@ -96,54 +212,238 @@ uint32_t mqtt_bridge_availability(bool b_is_online, uint8_t * p_buf,
  */
 void mqtt_bridge_post_command(uint8_t const * p_payload, uint32_t length)
 {
-    (void) p_payload;   /* stub: unused until the owner's version */
-    (void) length;
+    uint32_t const cmd_idx = bridge_parse_command(p_payload, length);
+    uint32_t       evt     = APP_EVT_START;
+
+    if (BRIDGE_CMD_NONE == cmd_idx)
+    {
+        bridge_count_cmd_drop();
+    }
+    else if (!bridge_rate_ok(cmd_idx))
+    {
+        bridge_count_cmd_drop();
+    }
+    else
+    {
+        if (BRIDGE_CMD_STOP == cmd_idx)
+        {
+            evt = APP_EVT_STOP;
+        }
+        else if (BRIDGE_CMD_RESET == cmd_idx)
+        {
+            evt = APP_EVT_RESET;
+        }
+        else
+        {
+            evt = APP_EVT_START;
+        }
+        /* a full K4 sets APP_FAULT_QUEUE_OVERFLOW inside mission */
+        (void) mission_post_event(evt, 0u);
+    }
 }
 
 /**
  * mqtt_bridge_link_changed
- * @brief   STUB: broker link went up or down.
+ * @brief   Broker link went up or down: clears or sets APP_FAULT_WIFI_LOSS.
+ *          Never posts a mission event (NFR9c: autonomy unaffected).
  * @param   b_is_up  true = broker connected
  * @return  none
  * @context radio task
  */
 void mqtt_bridge_link_changed(bool b_is_up)
 {
-    (void) b_is_up;   /* stub: unused until the owner's version */
+    if (b_is_up)
+    {
+        fault_clear(APP_FAULT_WIFI_LOSS);
+    }
+    else
+    {
+        fault_set(APP_FAULT_WIFI_LOSS);
+    }
 }
 
 /**
  * mqtt_bridge_count_publish_drop
- * @brief   STUB: count one payload the radio code gave up on.
+ * @brief   Counts one payload the radio code gave up on (saturates at 255).
  * @return  none
  * @context radio task
  */
 void mqtt_bridge_count_publish_drop(void)
 {
+    if (g_bridge_pub_drops < BRIDGE_DROPS_MAX)
+    {
+        g_bridge_pub_drops++;
+    }
 }
 
 /**
  * mqtt_bridge_publish_drops
- * @brief   STUB: publish drops so far.
- * @return  0 (stub)
+ * @brief   Publish drops so far (one-byte read, atomic).
+ * @return  0..255
  * @context any task
  */
 uint32_t mqtt_bridge_publish_drops(void)
 {
-    return 0u;
+    return (uint32_t) g_bridge_pub_drops;   /* cast: widening */
 }
 
 /**
  * mqtt_bridge_cmd_topic
- * @brief   STUB: the command topic to subscribe to.
- * @return  empty string (stub)
+ * @brief   The command topic to subscribe to.
+ * @return  NUL-terminated topic string
  * @context radio task
  */
 char const * mqtt_bridge_cmd_topic(void)
 {
-    return "";
+    return TELEM_TOPIC_CMD;
 }
 
 /* ---- private functions ------------------------------------------------ */
+
+/**
+ * bridge_parse_command
+ * @brief   Matches a payload against the accepted command texts.
+ * @param   p_payload  received bytes (may be NULL)
+ * @param   length     payload length
+ * @return  BRIDGE_CMD_* index, or BRIDGE_CMD_NONE
+ * @context radio task
+ */
+static uint32_t bridge_parse_command(uint8_t const * p_payload,
+                                     uint32_t length)
+{
+    uint32_t cmd_idx = BRIDGE_CMD_NONE;
+
+    if (bridge_bytes_equal(p_payload, length, g_cmd_start,
+                           sizeof(g_cmd_start) - 1u))
+    {
+        cmd_idx = BRIDGE_CMD_START;
+    }
+    else if (bridge_bytes_equal(p_payload, length, g_cmd_stop,
+                                sizeof(g_cmd_stop) - 1u))
+    {
+        cmd_idx = BRIDGE_CMD_STOP;
+    }
+    else if (bridge_bytes_equal(p_payload, length, g_cmd_reset,
+                                sizeof(g_cmd_reset) - 1u))
+    {
+        cmd_idx = BRIDGE_CMD_RESET;
+    }
+    else
+    {
+        cmd_idx = BRIDGE_CMD_NONE;
+    }
+
+    return cmd_idx;
+}
+
+/**
+ * bridge_bytes_equal
+ * @brief   Exact byte compare of a payload with a constant text.
+ * @param   p_payload  received bytes (may be NULL)
+ * @param   length     payload length
+ * @param   p_text     expected text
+ * @param   text_len   expected length (without NUL)
+ * @return  true if equal
+ * @context radio task
+ */
+static bool bridge_bytes_equal(uint8_t const * p_payload, uint32_t length,
+                               char const * p_text, uint32_t text_len)
+{
+    bool     b_is_equal = false;
+    uint32_t idx        = 0u;
+
+    if ((NULL != p_payload) && (length == text_len))
+    {
+        b_is_equal = true;
+        for (idx = 0u; (idx < length) && b_is_equal; idx++)
+        {
+            /* cast: compare the text's character code as a byte */
+            b_is_equal = (p_payload[idx] == (uint8_t) p_text[idx]);
+        }
+    }
+
+    return b_is_equal;
+}
+
+/**
+ * bridge_rate_ok
+ * @brief   One command per type per TELEM_CMD_MIN_GAP_MS. Times are kept
+ *          as 16-bit counts of 10 ms; only differences of 100 ms matter,
+ *          so the wrap every 655 s is harmless. Records the time when the
+ *          command is accepted.
+ * @param   cmd_idx  BRIDGE_CMD_* (< BRIDGE_CMD_COUNT)
+ * @return  true if the command may be posted
+ * @context radio task (division allowed: event time)
+ */
+static bool bridge_rate_ok(uint32_t cmd_idx)
+{
+    /* cast: keep the low 16 bits of the 10 ms count; wraps by design */
+    uint16_t const now_10ms = (uint16_t) (sys_tick_now_us()
+                                          / BRIDGE_US_PER_10MS);
+    uint8_t const  bit      = (uint8_t) (1u << cmd_idx); /* cast: < 16 */
+    bool           b_is_ok  = false;
+    uint16_t       gap      = 0u;
+
+    if (0u == (g_cmd_seen_mask & bit))
+    {
+        b_is_ok = true;
+    }
+    else
+    {
+        /* cast: unsigned 16-bit difference, wraps by design */
+        gap     = (uint16_t) (now_10ms - g_cmd_last_10ms[cmd_idx]);
+        b_is_ok = (gap >= BRIDGE_CMD_GAP_10MS);
+    }
+
+    if (b_is_ok)
+    {
+        g_cmd_last_10ms[cmd_idx] = now_10ms;
+        /* cast: four command bits, <= 0x0F */
+        g_cmd_seen_mask          = (uint8_t) (g_cmd_seen_mask | bit);
+    }
+
+    return b_is_ok;
+}
+
+/**
+ * bridge_count_cmd_drop
+ * @brief   Counts one rejected or rate-limited command (saturates at 255).
+ * @context radio task
+ */
+static void bridge_count_cmd_drop(void)
+{
+    if (g_cmd_drops < BRIDGE_DROPS_MAX)
+    {
+        g_cmd_drops++;
+    }
+}
+
+/**
+ * bridge_copy_text
+ * @brief   Copies a constant text (no NUL) into a byte buffer.
+ * @param   p_text    text
+ * @param   text_len  text length
+ * @param   p_buf     output buffer (may be NULL)
+ * @param   size      size of p_buf
+ * @return  text_len, or 0 if it does not fit
+ * @context radio task
+ */
+static uint32_t bridge_copy_text(char const * p_text, uint32_t text_len,
+                                 uint8_t * p_buf, uint32_t size)
+{
+    uint32_t len = 0u;
+    uint32_t idx = 0u;
+
+    if ((NULL != p_buf) && (text_len <= size))
+    {
+        for (idx = 0u; idx < text_len; idx++)
+        {
+            p_buf[idx] = (uint8_t) p_text[idx]; /* cast: ASCII byte */
+        }
+        len = text_len;
+    }
+
+    return len;
+}
 
 /*** end of file ***/

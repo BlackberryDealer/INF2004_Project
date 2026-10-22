@@ -1,10 +1,15 @@
 ################################################################################
-# Host (laptop) tests of subsystem 1's pure modules. Owner: Buddy 1.
+# Host (laptop) tests of subsystem 1. Owner: Buddy 1.
 # Run alone with "make -C testing/subsystem1/host", or all buddies' tests
 # with "make -C testing/host". Any FAIL fails make.
 #
-#   S1-U20..U23  test_app_bits_host.c  (app_bits.c + generated app_layout.h)
+#   S1-U20..U23  test_app_bits_host.c    (app_bits.c + generated app_layout.h)
 #   S1-U24       gen_layout.py rejects a broken copy of tools/layout.csv
+#   S1-U01, U02  test_telem_json_host.c  (baseline JSON builders)
+#   S1-U12, U30..U35  test_mqtt_bridge_host.c (mqtt_bridge.c + mock kernel)
+#
+# Kernel-side files (mqtt_bridge.c) are copied into build/ next to a mock
+# app.h, so "../app.h" inside them resolves to the mock.
 ################################################################################
 
 CC      := gcc
@@ -13,15 +18,17 @@ CFLAGS  := -std=c99 -Wall -Wextra -Werror -pedantic \
 PYTHON  := python3
 
 APP_DIR := ../../../app_program
+S1      := $(APP_DIR)/subsystem1
 TOOLS   := ../../../tools
 LAYOUT  := $(APP_DIR)/app_layout.h
+B       := build/app_program
 
 # Every SB_/MSG_ field has one _POS macro; the test checks its table has
 # the same number of entries.
 SB_MSG_FIELDS := $(shell grep -cE '^\#define (SB|MSG)_[A-Z0-9_]+_POS ' $(LAYOUT))
 
-.PHONY: all app_bits gen_layout_reject
-all: app_bits gen_layout_reject
+.PHONY: all app_bits gen_layout_reject telem_json mqtt_bridge tree clean
+all: app_bits gen_layout_reject telem_json mqtt_bridge
 
 test_app_bits_host.out: test_app_bits_host.c $(APP_DIR)/app_bits.c \
                         $(APP_DIR)/app_bits.h $(LAYOUT) ../../host/host_test.h
@@ -47,3 +54,33 @@ gen_layout_reject:
 	    echo "[TEST] S1-U24 FAIL  gen_layout.py exit $$rc, expected 1"; \
 	    exit 1; \
 	fi
+
+test_telem_json_host.out: test_telem_json_host.c $(S1)/telem_json.c \
+                          $(S1)/telem_json.h $(S1)/telem_bin.h \
+                          $(APP_DIR)/subsystem2/odometry.c $(LAYOUT)
+	$(CC) $(CFLAGS) -o $@ test_telem_json_host.c $(S1)/telem_json.c \
+	    $(APP_DIR)/subsystem2/odometry.c
+
+telem_json: test_telem_json_host.out
+	./test_telem_json_host.out
+
+tree:
+	rm -rf build
+	mkdir -p $(B)/subsystem1 $(B)/subsystem2 $(B)/subsystem5
+	cp mock/app.h $(B)/app.h
+	cp $(APP_DIR)/app_types.h $(APP_DIR)/app_layout.h $(APP_DIR)/app_bits.h \
+	   $(B)/
+	cp $(S1)/*.c $(S1)/*.h $(B)/subsystem1/
+	cp $(APP_DIR)/subsystem2/fault.h $(B)/subsystem2/
+	cp $(APP_DIR)/subsystem5/mission.h $(APP_DIR)/subsystem5/sys_tick.h \
+	   $(B)/subsystem5/
+
+test_mqtt_bridge_host.out: test_mqtt_bridge_host.c tree
+	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic -I../../host \
+	    -I$(B)/subsystem1 -o $@ test_mqtt_bridge_host.c
+
+mqtt_bridge: test_mqtt_bridge_host.out
+	./test_mqtt_bridge_host.out
+
+clean:
+	rm -rf *.out build
