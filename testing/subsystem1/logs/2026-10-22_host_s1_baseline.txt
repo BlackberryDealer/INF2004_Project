@@ -1,0 +1,76 @@
+# 2026-10-22 host tests at commit 6932292 (w10-baseline candidate): make -C testing/subsystem1/host
+[TEST] S1-U20 PASS  table lists every SB_/MSG_ field of app_layout.h
+[TEST] S1-U20 PASS  put/get round-trips min, max and 0 of every SB_/MSG_ field; neighbours unchanged
+[TEST] S1-U21 PASS  steering -1001 clamps to code 24 and sets the flag
+[TEST] S1-U21 PASS  steering 1000 encodes to 2024 with no clamp flag
+[TEST] S1-U21 PASS  NULL clamp-flag pointer accepted (5000 clamps to 2024)
+[TEST] S1-U21 PASS  unsigned clamp 300 -> 100 sets the flag
+[TEST] S1-U21 PASS  unsigned clamp in range is unchanged, NULL flag accepted
+[TEST] S1-U22 PASS  3+5+18+11 bits at maximum fill 5 bytes, no overflow
+[TEST] S1-U22 PASS  reader returns the same four values
+[TEST] S1-U22 PASS  stream bit n is bit n%8 of byte n/8; unused bits zero
+[TEST] S1-U22 PASS  state header byte 0 equals 1 | (0 << 3)
+[TEST] S1-U23 PASS  write past the end sets overflow and writes nothing
+[TEST] S1-U23 PASS  after an overflow later writes are ignored
+[TEST] S1-U23 PASS  width 0 or 32 is rejected as overflow
+[TEST] S1-U23 PASS  reading past the end sets overflow and returns 0
+[TEST] app_bits SUMMARY 15 passed, 0 failed
+[TEST] S1-U24 PASS  gen_layout.py rejects a too-wide field
+[TEST] S1-U01 PASS  state JSON equals the expected string exactly
+[TEST] S1-U01 PASS  state JSON fits one K11 message
+[TEST] S1-U01 PASS  odometry text clamped to 32767 mm
+[TEST] S1-U01 PASS  int32 extremes print correctly
+[TEST] S1-U02 PASS  event JSON
+[TEST] S1-U02 PASS  profile JSON (angle = 30 + 5 x step)
+[TEST] S1-U02 PASS  summary JSON
+[TEST] S1-U02 PASS  heartbeat JSON
+[TEST] S1-U02 PASS  heartbeat JSON with zeros
+[TEST] S1-U02 PASS  summary one byte short returns 0
+[TEST] S1-U02 PASS  summary exact size fits
+[TEST] S1-U02 PASS  state one byte short returns 0
+[TEST] S1-U02 PASS  zero-size buffer returns 0
+[TEST] telem_json SUMMARY 13 passed, 0 failed
+[TEST] S1-U12 PASS  two STOPs 50 ms apart: one STOP event posted
+[TEST] S1-U12 PASS  two STOPs 50 ms apart: one command drop
+[TEST] S1-U12 PASS  STOP 100 ms later is accepted
+[TEST] S1-U12 PASS  rate limit is per command type
+[TEST] S1-U12 PASS  same 16-bit stamp after a wrap is rate-limited
+[TEST] S1-U12 PASS  accepted 100 ms later
+[TEST] S1-U35 PASS  malformed baseline commands rejected and counted
+[TEST] S1-U35 PASS  command drops saturate
+[TEST] S1-U30 PASS  empty K11 returns 0
+[TEST] S1-U30 PASS  take returns the route and the JSON bytes
+[TEST] S1-U30 PASS  payload larger than the caller's buffer is dropped
+[TEST] S1-U31 PASS  state route
+[TEST] S1-U31 PASS  summary route
+[TEST] S1-U31 PASS  heartbeat route
+[TEST] S1-U31 PASS  availability route
+[TEST] S1-U31 PASS  unknown route
+[TEST] S1-U32 PASS  online payload
+[TEST] S1-U32 PASS  offline payload
+[TEST] S1-U32 PASS  availability that does not fit returns 0
+[TEST] S1-U33 PASS  link down sets WIFI_LOSS
+[TEST] S1-U33 PASS  link up clears WIFI_LOSS; no mission event (NFR9c)
+[TEST] S1-U34 PASS  publish drops saturate at 255
+[TEST] S1-U34 PASS  command topic
+[TEST] mqtt_bridge SUMMARY 23 passed, 0 failed
+[TEST] S1-U37 PASS  connect uses the 4 s keepalive
+[TEST] S1-U37 PASS  retained QoS 1 last will carries the offline payload
+[TEST] S1-U36 PASS  retries at 1, 2, 4, 8, 8 s; poll loop cannot cut the wait
+[TEST] S1-U36 PASS  refused link reported down
+[TEST] S1-U36 PASS  an immediate connect failure takes the back-off path
+[TEST] S1-U37 PASS  accepted: link up, back-off reset
+[TEST] S1-U37 PASS  accepted: retained online availability published
+[TEST] S1-U37 PASS  subscribed to the bridge's command topic at QoS 1
+[TEST] S1-U37 PASS  drain chain started
+[TEST] S1-U37 PASS  binary command bytes forwarded unfiltered
+[TEST] S1-U37 PASS  other topics are ignored
+[TEST] S1-U13 PASS  first refusal keeps A pending
+[TEST] S1-U13 PASS  second refusal drops A and counts it
+[TEST] S1-U13 PASS  next payload is still sent
+[TEST] S1-U15 PASS  B starts at 0 tries: one refusal keeps it pending
+[TEST] S1-U15 PASS  B is retried and sent, not dropped
+[TEST] S1-U13 PASS  at most 2 publishes per call
+[TEST] S1-U13 PASS  no publish while disconnected
+[TEST] S1-U13 PASS  late publish failure (publish_done_cb) counted
+[TEST] mqtt_utk SUMMARY 19 passed, 0 failed
