@@ -69,6 +69,18 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-21 | S5-U08 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
 | 2026-10-21 | S5-U14 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
 | 2026-10-21 | S5-U27 | `b0e8196` | AfifLotfi | PASS | `logs/2026-10-21_host_tests_v151.txt` | host run (gcc), spec v1.5.1; target and track tests not run yet |
+| 2026-10-22 | S5-U01 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 |
+| 2026-10-22 | S5-U02 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 |
+| 2026-10-22 | S5-U02b | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 |
+| 2026-10-22 | S5-U03 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 |
+| 2026-10-22 | S5-U23 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 |
+| 2026-10-22 | S5-U14 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 |
+| 2026-10-22 | S5-U07 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 |
+| 2026-10-22 | S5-U27 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 |
+| 2026-10-22 | S5-U08 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 |
+| 2026-10-22 | S5-U04 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5; now a host test (Fix 3) |
+| 2026-10-22 | S5-U05 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5; now a host test (Fix 2), 432 cases |
+| 2026-10-22 | S5-U17 | `7d4af51` | AfifLotfi | PASS | `logs/2026-10-22_host_tests_fix1.txt` | host run (gcc) after merging main and fix brief 1-5 (host part only: Fix 5 cases); signal-generator part not run yet |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 
