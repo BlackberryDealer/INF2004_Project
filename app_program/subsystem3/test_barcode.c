@@ -47,9 +47,7 @@ static uint8_t const g_test_star_a_star[BAR_ELEMENTS] =
 
 /* ---- private function prototypes ------------------------------------- */
 
-#if (0 != APP_TEST)
-static void test_barcode_edge_bench(void);
-#endif
+#endif /* APP_TEST */
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -61,6 +59,7 @@ static void test_barcode_edge_bench(void);
  */
 void test_barcode_run(void)
 {
+#if (0 != APP_TEST)
     uint32_t char_idx = 0u;
     uint32_t rc_ok    = 0u;
     uint32_t rc_short = 0u;
@@ -87,50 +86,5 @@ void test_barcode_run(void)
 }
 
 /* ---- private functions ------------------------------------------------ */
-
-#if (0 != APP_TEST)
-/**
- * test_barcode_edge_bench
- * @brief   When TEST_BAR_ENABLE_BENCH != 0, attaches a callback via
- *          drv_gpio_irq_attach(PIN_BAR_DO, DRV_GPIO_IRQ_BOTH, ...) and
- *          logs edge intervals for S3-I07 bench characterization.
- * @return  none
- * @context usermain (APP_PRI_TEST)
- */
-static void test_barcode_edge_bench(void)
-{
-#if (0 != TEST_BAR_ENABLE_BENCH)
-    uint32_t seen = 0u;
-    ER const ercd = drv_gpio_irq_attach(PIN_BAR_DO, DRV_GPIO_IRQ_BOTH,
-                                        test_barcode_bench_isr);
-
-    if (E_OK == ercd)
-    {
-        while (seen < TEST_BAR_BENCH_EDGES)
-        {
-            uint32_t const cur = g_bench_edge_cnt;
-
-            if (cur != seen)
-            {
-                seen = cur;
-                app_log("S3-I07 edge=%d dt_us=%d level=%d\n",
-                        (int32_t) seen,           /* cast: count fits int32_t */
-                        (int32_t) g_bench_dt_us,  /* cast: dt fits int32_t */
-                        (int32_t) g_bench_level   /* cast: 0/1 fits int32_t */);
-            }
-            else
-            {
-                /* Wait for next barcode edge. */
-            }
-            (void) tk_dly_tsk(TEST_BAR_BENCH_POLL_MS);
-        }
-    }
-    else
-    {
-        /* PIN_BAR_DO already attached by barcode_start. */
-    }
-#endif
-}
-#endif /* APP_TEST */
 
 /*** end of file ***/

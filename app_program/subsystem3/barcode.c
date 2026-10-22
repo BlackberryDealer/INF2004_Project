@@ -15,11 +15,11 @@
 #include "../subsystem5/status_board.h"
 #include "cfg_barcode.h"
 #include "code39.h"
-#include "hardware/gpio.h"
 
 /* ---- private constants and types ------------------------------------ */
 
 #define BARCODE_STACK_WORDS  (APP_STACK_BARCODE_BYTES / 8u)
+#define BAR_DO_PIN_MASK      (1u << PIN_BAR_DO)
 #define BAR_SEM_TIMEOUT_MS   (10)
 #define BAR_GAP_SHIFT        (4u)
 #define BAR_GAP_MAX          (32767u)
@@ -271,7 +271,7 @@ static void barcode_edge_isr(uint32_t events, uint32_t now_us)
     if (dt_us >= BAR_EDGE_REJECT_US)
     {
         uint32_t       gap        = dt_us >> BAR_GAP_SHIFT;
-        bool const     b_pin_high = gpio_get(PIN_BAR_DO);
+        bool const     b_pin_high = (0u != (in_w(GPIO_IN) & BAR_DO_PIN_MASK));
         uint32_t const level =
             (BAR_DO_BLACK_IS_HIGH == b_pin_high) ? 1u : 0u;
         uint8_t const  head = g_bar_head;

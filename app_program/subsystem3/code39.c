@@ -7,12 +7,13 @@
  */
 
 #include "code39.h"
-#include <stddef.h>
 #include "cfg_barcode.h"
 
 /* ---- private constants and types ------------------------------------ */
 
 #define CODE39_TABLE_SIZE      (44u)
+#define CODE39_WIDTHS_NULL     ((uint8_t const *) 0)
+#define CODE39_CHAR_NULL       ((uint32_t *) 0)
 #define CODE39_CHAR_ELEMENTS   (9u)
 #define CODE39_CHAR0_START     (0u)
 #define CODE39_GAP1_IDX        (9u)
@@ -67,7 +68,6 @@ static uint32_t code39_lookup_pattern(uint16_t pattern);
 static uint32_t code39_try_direction(uint8_t const * p_widths,
                                      uint32_t threshold,
                                      uint32_t * p_char_index);
-
 static uint32_t code39_try_both(uint8_t const * p_widths,
                                 uint32_t threshold,
                                 uint32_t * p_char_index);
@@ -89,7 +89,8 @@ uint32_t code39_decode(uint8_t const * p_widths, uint32_t count,
 {
     uint32_t result = CODE39_INVALID;
 
-    if ((NULL != p_widths) && (NULL != p_char_index) &&
+    if ((CODE39_WIDTHS_NULL != p_widths) &&
+        (CODE39_CHAR_NULL != p_char_index) &&
         (BAR_ELEMENTS == count))
     {
         uint8_t  sorted[BAR_ELEMENTS] = {0u};

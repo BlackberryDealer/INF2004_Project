@@ -7,12 +7,14 @@
  */
 
 #include "line_track.h"
-#include <stddef.h>
 #include "cfg_line.h"
 
 /* ---- private constants and types ------------------------------------ */
 
 #define LINE_RECIP_SHIFT (16u)
+#define LINE_CAL_NULL    ((line_track_cal_t *) 0)
+#define LINE_JCT_NULL    ((line_track_jct_t *) 0)
+#define LINE_JCT_IN_NULL ((line_track_jct_in_t const *) 0)
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -76,7 +78,7 @@ bool line_track_cal_finish(line_track_cal_t * p_cal,
     span_l = hi_l - lo_l;
     span_r = hi_r - lo_r;
 
-    if ((NULL != p_cal) && (span_l >= LINE_CAL_MIN_SPAN) &&
+    if ((LINE_CAL_NULL != p_cal) && (span_l >= LINE_CAL_MIN_SPAN) &&
         (span_r >= LINE_CAL_MIN_SPAN))
     {
         p_cal->white_l = lo_l;
@@ -191,7 +193,7 @@ int32_t line_track_steering(uint32_t norm_l, uint32_t norm_r)
  */
 void line_track_jct_reset(line_track_jct_t * p_jct)
 {
-    if (NULL != p_jct)
+    if (LINE_JCT_NULL != p_jct)
     {
         p_jct->state       = LINE_JCT_STATE_IDLE;
         p_jct->mark_counts = 0u;
@@ -218,7 +220,7 @@ uint32_t line_track_jct_step(line_track_jct_t * p_jct,
 {
     uint32_t jct_class = APP_JCT_NONE;
 
-    if ((NULL != p_jct) && (NULL != p_in))
+    if ((LINE_JCT_NULL != p_jct) && (LINE_JCT_IN_NULL != p_in))
     {
         switch (p_jct->state)
         {

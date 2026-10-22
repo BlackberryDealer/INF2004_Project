@@ -26,8 +26,10 @@
 
 /* ---- private function prototypes ------------------------------------- */
 
-static void test_line_u01_u06(void);
-static void test_line_u02_u14(void);
+static bool test_line_early_branch(void);
+static bool test_line_late_branch(void);
+
+#endif /* APP_TEST */
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -40,29 +42,13 @@ static void test_line_u02_u14(void);
 void test_line_run(void)
 {
 #if (0 != APP_TEST)
-    TEST_INIT();
-    test_line_u01_u06();
-    test_line_u02_u14();
-    TEST_SUMMARY("line");
-#endif
-}
-
-/* ---- private functions ------------------------------------------------ */
-
-#if (0 != APP_TEST)
-/**
- * test_line_u01_u06
- * @brief   Verifies S3-U01 and S3-U06 normalisation, endpoints, and steering.
- * @return  none
- * @context usermain (APP_PRI_TEST)
- */
-static void test_line_u01_u06(void)
-{
     line_track_cal_t cal    = {0u, 0u, 0u, 0u, 0u, 0u};
     bool             b_ok   = false;
     uint32_t         norm_w = 0u;
     uint32_t         norm_b = 0u;
     uint32_t         norm_m = 0u;
+
+    TEST_INIT();
 
     b_ok = line_track_cal_finish(&cal, TEST_CAL_LO, TEST_CAL_HI,
                                  TEST_CAL_HI, TEST_CAL_LO);
@@ -81,22 +67,31 @@ static void test_line_u01_u06(void)
     TEST_CHECK("S3-U01", (1000 == line_track_steering(1000u, 0u)) &&
                          (-1000 == line_track_steering(0u, 1000u)),
                "steering sign convention +left -right");
+    TEST_CHECK("S3-U14", test_line_early_branch(),
+               "early barcode branch + left sat classifies T");
+    TEST_CHECK("S3-U02", test_line_late_branch(),
+               "late barcode branch + left sat + line present -> CROSS");
+
+    TEST_SUMMARY("line");
+#endif
 }
 
+/* ---- private functions ------------------------------------------------ */
+
+#if (0 != APP_TEST)
 /**
- * test_line_u02_u14
- * @brief   Verifies S3-U02 junction classification and S3-U14 branch orders.
- * @return  none
+ * test_line_early_branch
+ * @brief   Verifies S3-U14 early barcode branch + left sat + white -> T.
+ * @return  true if classified as APP_JCT_T, else false.
  * @context usermain (APP_PRI_TEST)
  */
-static void test_line_u02_u14(void)
+static bool test_line_early_branch(void)
 {
     line_track_jct_t    jct = {0u, 0u, false, false, 0u};
     line_track_jct_in_t in  = {0u, 0u, 0u, 0u, TEST_MIN_COUNTS,
                                TEST_CONF_COUNTS, false};
     uint32_t            cls = APP_JCT_NONE;
 
-    /* Early branch (b_branch_recent = true) + left sat + white -> T */
     line_track_jct_reset(&jct);
     in.norm_l          = 950u;
     in.norm_r          = 500u;
@@ -113,10 +108,23 @@ static void test_line_u02_u14(void)
 
     in.path_counts = 230u;
     cls            = line_track_jct_step(&jct, &in);
-    TEST_CHECK("S3-U14", (APP_JCT_T == cls),
-               "early barcode branch + left sat classifies T");
 
-    /* Late branch (branch_seq changes in CONFIRM) + line present -> CROSS */
+    return (APP_JCT_T == cls);
+}
+
+/**
+ * test_line_late_branch
+ * @brief   Verifies S3-U02 late barcode branch + left sat + line -> CROSS.
+ * @return  true if classified as APP_JCT_CROSS, else false.
+ * @context usermain (APP_PRI_TEST)
+ */
+static bool test_line_late_branch(void)
+{
+    line_track_jct_t    jct = {0u, 0u, false, false, 0u};
+    line_track_jct_in_t in  = {0u, 0u, 0u, 0u, TEST_MIN_COUNTS,
+                               TEST_CONF_COUNTS, false};
+    uint32_t            cls = APP_JCT_NONE;
+
     line_track_jct_reset(&jct);
     in.norm_l      = 950u;
     in.norm_r      = 500u;
@@ -132,8 +140,8 @@ static void test_line_u02_u14(void)
     in.branch_seq  = 2u;
     in.path_counts = 430u;
     cls            = line_track_jct_step(&jct, &in);
-    TEST_CHECK("S3-U02", (APP_JCT_CROSS == cls),
-               "late barcode branch + left sat + line present -> CROSS");
+
+    return (APP_JCT_CROSS == cls);
 }
 #endif /* APP_TEST */
 
