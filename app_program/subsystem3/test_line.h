@@ -1,7 +1,7 @@
 /**
  * @file    test_line.h
- * @brief   On-target tests of the line subsystem (TEST=1).
- * @owner   Buddy 3 (line and barcode)
+ * @brief   On-target unit and bench measurement tests for line sensing.
+ * @owner   Buddy 3 (line, barcode)
  * @kind    test
  */
 
@@ -10,7 +10,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "../app.h"
 
 extern void test_line_run(void);
 
