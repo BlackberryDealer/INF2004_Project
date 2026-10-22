@@ -1,0 +1,33 @@
+﻿make: Entering directory '/c/Users/faris/OneDrive/Documents/ES Proj/INF2004_Project/testing/subsystem4/host'
+./test_terrain_host.out
+[TEST] S4-U03 PASS  atan2 1-deg grid error <= 0.2 deg
+[TEST] S4-U03 PASS  atan2 cardinal and diagonal points
+[TEST] S4-U03 PASS  sin/cos table points at 0, 30, 60, 90 deg
+[TEST] S4-U03 PASS  heading wrap and shortest-delta maths
+[TEST] S4-U13 PASS  ds from the slower wheel; rebase gives 0
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U12 PASS  fresh (zero-filled) history: a_fwd = speed x gain
+[TEST] S4-U12 PASS  40 - 0 over 50 ms = 569 mg (hand calculation)
+[TEST] S4-U12 PASS  40 - 10 over 50 ms = 427 mg
+[TEST] S4-U12 PASS  0 - 20 over 50 ms = -284 mg
+[TEST] S4-U12 PASS  0 - 30 over 50 ms = -427 mg
+[TEST] S4-U01 PASS  one hump reported for the recorded profile
+[TEST] S4-U01 PASS  20 mm ruler hump within +-20 % / +-5 mm
+[TEST] S4-U01 PASS  climb pitch was seen (>= 4.5 deg)
+[TEST] S4-U02 PASS  ramp longer than TERRAIN_MAX_CLIMB_MM: no hump
+[TEST] S4-U06 PASS  long hump at ~150 mm/s is not rejected
+[TEST] S4-U06 PASS  long-hump peak within tolerance
+[TEST] S4-U07 PASS  slip replay still reports the hump
+[TEST] S4-U07 PASS  slip changes the height by <= 10 %
+[TEST] terrain SUMMARY 19 passed, 0 failed
+./test_drv_lsm303_host.out
+[TEST] S4-U14 PASS  empty FIFO: take 0, no overrun
+[TEST] S4-U14 PASS  two unread samples: take 2
+[TEST] S4-U14 PASS  backlog of 6: take 4 now
+[TEST] S4-U14 PASS  backlog of 2 next cycle: take 2
+[TEST] S4-U14 PASS  overrun: no samples used, counter +1
+[TEST] S4-U14 PASS  overrun counter saturates at 255
+[TEST] S4-U14 PASS  LSM303D answers on the single address 0x1D
+[TEST] S4-U14 PASS  LSM303D WHO_AM_I is 0x49, not the DLHC 'H','4','3'
+[TEST] drv_lsm303 SUMMARY 8 passed, 0 failed
+make: Leaving directory '/c/Users/faris/OneDrive/Documents/ES Proj/INF2004_Project/testing/subsystem4/host'
