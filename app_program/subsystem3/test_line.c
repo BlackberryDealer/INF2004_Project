@@ -6,29 +6,32 @@
  * @reqs    FR1, NFR1
  */
 
-#include "test_line.h"
+#include "test_line.h"         /* own header first (BARR-C 4.3.c) */
 #include "../app.h"
 
 #if (0 != APP_TEST)
-
-#include <stddef.h>
 #include "../test_report.h"
 #include "cfg_line.h"
 #include "drv_ir_adc.h"
+#endif
 
 /* ---- private constants and types ------------------------------------ */
 
+#if (0 != APP_TEST)
 #define TEST_LINE_ADC_MAX_CODE       (4095u)
 #define TEST_LINE_BENCH_SAMPLES      (10u)
 #define TEST_LINE_NOISE_SAMPLES      (1000u)
 #define TEST_LINE_ENABLE_NOISE_BENCH (0)
+#endif
 
 /* ---- private data ---------------------------------------------------- */
 
 /* ---- private function prototypes ------------------------------------- */
 
-static void test_line_adc_sanity(void);
+#if (0 != APP_TEST)
+static bool test_line_adc_sanity(void);
 static void test_line_noise_bench(void);
+#endif
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -40,22 +43,26 @@ static void test_line_noise_bench(void);
  */
 void test_line_run(void)
 {
+#if (0 != APP_TEST)
     TEST_INIT();
-    test_line_adc_sanity();
+    TEST_CHECK("S3-I05", test_line_adc_sanity(),
+               "drv_ir_adc_read returns 12-bit codes on both channels");
     test_line_noise_bench();
     TEST_SUMMARY("line");
+#endif
 }
 
 /* ---- private functions ------------------------------------------------ */
 
+#if (0 != APP_TEST)
 /**
  * test_line_adc_sanity
  * @brief   Verifies drv_ir_adc_read returns 12-bit values and logs samples
  *          for S3-I05 contrast bench checks.
- * @return  none
+ * @return  true if all samples are within 0..4095
  * @context usermain (APP_PRI_TEST)
  */
-static void test_line_adc_sanity(void)
+static bool test_line_adc_sanity(void)
 {
     uint32_t raw_l    = 0u;
     uint32_t raw_r    = 0u;
@@ -83,16 +90,16 @@ static void test_line_adc_sanity(void)
         (void) tk_dly_tsk(10); /* ignored: bench delay only */
     }
 
-    /* Null pointer safety check */
+    /* Null pointer safety check (NULL from kernel headers via app.h) */
     drv_ir_adc_read(&raw_l, NULL);
     drv_ir_adc_read(NULL, &raw_r);
 
-    TEST_CHECK("S3-I05-SANITY", b_in_rng, "ADC reads within 12-bit range");
+    return b_in_rng;
 }
 
 /**
  * test_line_noise_bench
- * @brief   Optional 1000-sample min/max/mean logger for S3-I06 (A19 noise).
+ * @brief   Optional 1000-sample min/max/span logger for S3-I06 (A19 noise).
  * @return  none
  * @context usermain (APP_PRI_TEST)
  */
@@ -156,20 +163,6 @@ static void test_line_noise_bench(void)
             (int32_t) (max_r - min_r) /* cast: 12-bit fits int32_t */);
 #endif
 }
-
-#else /* 0 == APP_TEST */
-
-/**
- * test_line_run
- * @brief   No-op when built without TEST=1.
- * @return  none
- * @context usermain
- */
-void test_line_run(void)
-{
-    /* empty in production build */
-}
-
 #endif /* APP_TEST */
 
 /*** end of file ***/

@@ -10,8 +10,8 @@
 
 #include "../app_types.h"
 
-#define LINE_BLACK_IS_HIGH       (true) /* MEASURE: A1 */
-#define LINE_CAL_MIN_SPAN        (400u) /* ADC codes; below => cal fails */
+#define LINE_BLACK_IS_HIGH       (true)  /* MEASURE: A1 */
+#define LINE_CAL_MIN_SPAN        (400u)  /* ADC codes; below => cal fails */
 #define LINE_NORM_MAX            (1000u)
 #define LINE_WHITE_THRESHOLD     (300u)  /* normalised; below = white   */
 #define LINE_BLACK_THRESHOLD     (700u)  /* normalised; above = black   */
@@ -20,6 +20,8 @@
 #define LINE_LOST_CYCLES         (20u)   /* 200 ms, NFR4 definition     */
 #define LINE_JUNCTION_MIN_MM     (10u)   /* TUNE from A22 logs          */
 #define LINE_JUNCTION_CONFIRM_MM (30u)   /* TUNE from A22 logs          */
+/* SPEC-QUESTION: LINE_BRANCH_EARLY_MM (40u) is from spec v1.5.3 (finding F-03,
+   B3.2.1) for a barcode-side branch reported ahead of the line sensors. */
 #define LINE_BRANCH_EARLY_MM     (40u)   /* MEASURE: barcode sensor lead */
 #define LINE_FOUND_MAX_MM        (255u)
 #define LINE_BARCODE_SIDE        (APP_SIDE_RIGHT) /* MEASURE: A2 */
