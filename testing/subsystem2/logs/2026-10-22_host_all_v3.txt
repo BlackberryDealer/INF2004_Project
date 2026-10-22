@@ -1,0 +1,73 @@
+# make -C testing/subsystem2/host   (2026-10-22, gcc 13.3.0), after follow-up fix
+[TEST] S2-U01 PASS  placeholder um per count is 349 (hand calc basis)
+[TEST] S2-U01 PASS  0 counts = 0 mm
+[TEST] S2-U01 PASS  585 counts (one rev) = (585x349+500)/1000 = 204 mm
+[TEST] S2-U01 PASS  131071 counts = 45744 mm
+[TEST] S2-U01 PASS  1000 mm = (1000000+174)/349 = 2865 counts
+[TEST] S2-U01 PASS  2047 mm (longest move) = 5865 counts
+[TEST] S2-U01 PASS  36 cpw = 36x349/50 = 251 mm/s
+[TEST] S2-U01 PASS  -36 cpw = -251 mm/s (truncates toward zero)
+[TEST] S2-U01 PASS  250 mm/s = (12500+174)/349 = 36 cpw
+[TEST] S2-U01 PASS  -250 mm/s = -36 cpw (rounded, sign kept)
+[TEST] S2-U01 PASS  150 mm/s = 7500/349 = 21.49 -> 21 cpw
+[TEST] S2-U01 PASS  90 deg = (90x3125+500)/1000 = 281 counts per wheel
+[TEST] S2-U01 PASS  360 deg = 1125 counts per wheel
+[TEST] S2-U01 PASS  heading(+313, -313) ~= +10009 cdeg (+-1 %)
+[TEST] S2-U01 PASS  heading(-313, +313) ~= -10009 cdeg (+-1 %), sign kept
+[TEST] S2-U01 PASS  heading(0, 0) = 0
+[TEST] S2-U01 PASS  heading(-1, 0) = -1599/100 = -15 cdeg: stays negative
+[TEST] S2-U11 PASS  deltas +-63 stored unchanged
+[TEST] S2-U11 PASS  deltas +-64 clamped to +-63
+[TEST] S2-U11 PASS  normal 50 ms window: speed = sum (50, -35)
+[TEST] S2-U11 PASS  index wraps 4 -> 0 without %
+[TEST] S2-U11 PASS  3 late ticks (span 140 ms): 50 x 50 / 140 = 17 cpw
+[TEST] S2-U11 PASS  empty window (span 0) = speed 0
+[TEST] S2-U11 PASS  dt 200 ms clamped to 63
+[TEST] odometry SUMMARY 24 passed, 0 failed
+[TEST] S2-U02 PASS  step to 36 cpw (250 mm/s)
+[TEST] S2-U02 PASS  step to 21 cpw (150 mm/s)
+[TEST] S2-U02 PASS  step to -14 cpw (reverse)
+[TEST] S2-U02 PASS  step to 43 cpw (300 mm/s)
+[TEST] speed_pid SUMMARY 4 passed, 0 failed
+[TEST] S2-U13 PASS  fault_init creates K12
+[TEST] S2-U13 PASS  no fault after init
+[TEST] S2-U13 PASS  ENCODER and STALL set
+[TEST] S2-U13 PASS  clear STALL -> only ENCODER left (inverted-mask clear)
+[TEST] S2-U13 PASS  bits outside the 10-bit mask are ignored
+[TEST] S2-U13 PASS  clear all -> 0
+[TEST] S2-U14 PASS  safety_init creates K3
+[TEST] S2-U14 PASS  not active after init
+[TEST] S2-U14 PASS  set from a task -> active
+[TEST] S2-U14 PASS  ISR set adds IMPACT, ESTOP kept
+[TEST] S2-U14 PASS  clear ESTOP leaves IMPACT: still active
+[TEST] S2-U14 PASS  clear -> safety_is_active() false
+[TEST] S2-U14 PASS  bits outside SAFETY_ALL are ignored
+[TEST] S2-U13 PASS  K3 and K12 are separate objects
+[TEST] flags SUMMARY 14 passed, 0 failed
+[TEST] S2-U03 PASS  MOVE_FWD started
+[TEST] S2-U03 PASS  LEFT while moving waits in the latch
+[TEST] S2-U03 PASS  STOP brakes in the cycle it arrives and clears the latch
+[TEST] S2-U12 PASS  FOLLOW drives the wheels
+[TEST] S2-U12 PASS  STOP during FOLLOW: braked after one cycle
+[TEST] S2-U12 PASS  STOP during MOVE: braked after one cycle
+[TEST] S2-U15 PASS  1000 mm MOVE near path saturation completes, MOVE_DONE tag 2
+[TEST] S2-U15 PASS  path saturates at 2 x 131071 and reports RANGE_CLAMP
+[TEST] S2-U15 PASS  left wheel travelled the 2865 counts of 1000 mm
+[TEST] S2-U16 PASS  run 1 moved the wheels
+[TEST] S2-U16 PASS  ZERO in BRAKE: positions and path 0, MOVE_DONE tag 2
+[TEST] S2-U16 PASS  ZERO during FOLLOW waits in the latch
+[TEST] S2-U17 PASS  FOLLOW with MOTOR_EN clear: never drives
+[TEST] S2-U17 PASS  setting MOTOR_EN later does not start the dropped command
+[TEST] S2-U17 PASS  clearing MOTOR_EN brakes
+[TEST] S2-U18 PASS  no MOVE_DONE for the cancelled MOVE; next one carries tag 3
+[TEST] S2-U19 PASS  5000-count glitch does not complete the 1 m MOVE
+[TEST] S2-U19 PASS  rejected read adds nothing to progress or position
+[TEST] S2-U19 PASS  a single glitch raises no ENCODER fault
+[TEST] S2-U19 PASS  MOVE then completes at the real distance (2865 counts)
+[TEST] S2-U19 PASS  jump that persists: ENCODER fault on the 2nd read
+[TEST] S2-U19 PASS  no premature MOVE_DONE; the jump is left out of position
+[TEST] S2-U19 PASS  late (30 ms) glitched read is rejected
+[TEST] S2-U19 PASS  valid recovery read after a late tick: no ENCODER fault
+[TEST] S2-U19 PASS  recovery read accepted with its 40 ms of movement
+[TEST] S2-U19 PASS  no resync; position equals the counter read: nothing lost
+[TEST] motion_task SUMMARY 26 passed, 0 failed

@@ -1,0 +1,35 @@
+# make -C testing/subsystem2/host   (2026-10-21, gcc 13.3.0)
+[TEST] S2-U01 PASS  placeholder um per count is 349 (hand calc basis)
+[TEST] S2-U01 PASS  0 counts = 0 mm
+[TEST] S2-U01 PASS  585 counts (one rev) = (585x349+500)/1000 = 204 mm
+[TEST] S2-U01 PASS  131071 counts = 45744 mm
+[TEST] S2-U01 PASS  1000 mm = (1000000+174)/349 = 2865 counts
+[TEST] S2-U01 PASS  2047 mm (longest move) = 5865 counts
+[TEST] S2-U01 PASS  36 cpw = 36x349/50 = 251 mm/s
+[TEST] S2-U01 PASS  -36 cpw = -251 mm/s (truncates toward zero)
+[TEST] S2-U01 PASS  250 mm/s = (12500+174)/349 = 36 cpw
+[TEST] S2-U01 PASS  -250 mm/s = -36 cpw (rounded, sign kept)
+[TEST] S2-U01 PASS  150 mm/s = 7500/349 = 21.49 -> 21 cpw
+[TEST] S2-U01 PASS  90 deg = (90x3125+500)/1000 = 281 counts per wheel
+[TEST] S2-U01 PASS  360 deg = 1125 counts per wheel
+[TEST] S2-U01 PASS  heading(+313, -313) ~= +10009 cdeg (+-1 %)
+[TEST] S2-U01 PASS  heading(-313, +313) ~= -10009 cdeg (+-1 %), sign kept
+[TEST] S2-U01 PASS  heading(0, 0) = 0
+[TEST] S2-U01 PASS  heading(-1, 0) = -1599/100 = -15 cdeg: stays negative
+[TEST] S2-U11 PASS  deltas +-63 stored unchanged
+[TEST] S2-U11 PASS  deltas +-64 clamped to +-63
+[TEST] S2-U11 PASS  normal 50 ms window: speed = sum (50, -35)
+[TEST] S2-U11 PASS  index wraps 4 -> 0 without %
+[TEST] S2-U11 PASS  3 late ticks (span 140 ms): 50 x 50 / 140 = 17 cpw
+[TEST] S2-U11 PASS  empty window (span 0) = speed 0
+[TEST] S2-U11 PASS  dt 200 ms clamped to 63
+[TEST] odometry SUMMARY 24 passed, 0 failed
+  sp 36: final speed x16 3 after the stop step
+[TEST] S2-U02 PASS  step to 36 cpw (250 mm/s)
+  sp 21: final speed x16 3 after the stop step
+[TEST] S2-U02 PASS  step to 21 cpw (150 mm/s)
+  sp -14: final speed x16 -3 after the stop step
+[TEST] S2-U02 PASS  step to -14 cpw (reverse)
+  sp 43: final speed x16 3 after the stop step
+[TEST] S2-U02 PASS  step to 43 cpw (300 mm/s)
+[TEST] speed_pid SUMMARY 4 passed, 0 failed
