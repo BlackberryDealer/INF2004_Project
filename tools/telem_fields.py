@@ -193,4 +193,56 @@ GROUPS = {
         ('CHAR', 6, 0, 1, 'code'),
         ('CMD', 2, 0, 1, 'code'),
     ],
+    'PRV_IMU_A': [
+        ('STATE', 3, 0, 1, 'code'),
+        ('HYST', 4, 0, 1, 'sample'),
+        ('I2C_ERR', 2, 0, 1, 'count'),
+        ('GOOD_CNT', 2, 0, 1, 'count'),
+        ('CLASS_GAP', 5, 0, 1, 'tick'),
+        ('LAST_CLASS', 3, 0, 1, 'code'),
+        ('MAG_DIV', 3, 0, 1, 'tick'),
+        ('IMPACT_HOLD', 5, 0, 1, 'tick'),
+        ('IMPACT_SEQ', 4, 0, 1, 'count'),
+    ],
+    'PRV_IMU_B': [
+        ('CAL_CNT', 8, 0, 1, 'sample'),
+        ('CLIMB_CNT', 11, 0, 1, 'count'),
+        ('HIST_IDX', 3, 0, 1, 'slot'),
+        ('PEAK_NOW', 7, 0, 1, 'mm'),
+    ],
+    'PRV_IMU_C': [
+        ('PREV_HDG', 12, 0, 1, '0.1 deg'),
+        ('PREV_HDG_VALID', 1, 0, 1, 'flag'),
+        ('PITCH_MAX', 10, 512, 1, '0.1 deg'),
+        ('RUN_PEAK', 7, 0, 1, 'mm'),
+    ],
+    'PRV_IMU_D': [
+        ('PREV_DIFF', 19, 262144, 1, 'count'),
+    ],
+    'PRV_IMU_E': [
+        ('PREV_POS_L', 18, 131072, 1, 'count'),
+    ],
+    'PRV_IMU_F': [
+        ('PREV_POS_R', 18, 131072, 1, 'count'),
+    ],
+    'PRV_HIST_A': [
+        ('H0', 8, 128, 1, 'count/50ms'),
+        ('H1', 8, 128, 1, 'count/50ms'),
+        ('H2', 8, 128, 1, 'count/50ms'),
+        ('H3', 8, 128, 1, 'count/50ms'),
+    ],
+    'PRV_HIST_B': [
+        ('H4', 8, 128, 1, 'count/50ms'),
+    ],
+    'PRV_OFS_A': [
+        ('AX', 12, 2048, 2, 'mg'),
+        ('AY', 12, 2048, 2, 'mg'),
+    ],
+    'PRV_OFS_B': [
+        ('AZ', 12, 2048, 2, 'mg'),
+        ('FIFO_OVR', 8, 0, 1, 'count'),
+    ],
+    'SH_IMU': [
+        ('IMPACT_SEQ', 8, 0, 1, 'count'),
+    ],
 }

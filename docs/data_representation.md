@@ -97,6 +97,39 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | TURN_RATE | SB_IMU1 | -360..360 × 1 deg/s | 1 | 10 | 10 | RNG | S | Turn rate (A26) |
 | PEAK_MM | EVT_HUMP | 0..127 × 1 mm | 1 | 7 | 7 | RNG | S | Peak of this hump (A25) |
 | CLASS | EVT_MCLASS | 0..6 × 1 code | 1 | 3 | 3 | ENUM | S | APP_MCLASS_* |
+| STATE | PRV_IMU_A | 0..4 × 1 code | 1 | 3 | 3 | ENUM | P | Terrain state |
+| HYST | PRV_IMU_A | 0..15 × 1 sample | 1 | 4 | 4 | SAT | P | Hysteresis count |
+| I2C_ERR | PRV_IMU_A | 0..3 × 1 count | 1 | 2 | 2 | SAT | P | I2C errors in a row |
+| GOOD_CNT | PRV_IMU_A | 0..3 × 1 count | 1 | 2 | 2 | SAT | P | Good reads in FAULT |
+| CLASS_GAP | PRV_IMU_A | 0..31 × 1 tick | 1 | 5 | 5 | SAT | P | Ticks since MOTION_CLASS |
+| LAST_CLASS | PRV_IMU_A | 0..6 × 1 code | 1 | 3 | 3 | ENUM | P | Last posted class |
+| MAG_DIV | PRV_IMU_A | 0..4 × 1 tick | 1 | 3 | 3 | RNG | P | Cycles to next magnetometer read |
+| IMPACT_HOLD | PRV_IMU_A | 0..31 × 1 tick | 1 | 5 | 5 | SAT | P | Impact class hold |
+| IMPACT_SEQ | PRV_IMU_A | 0..15 × 1 count | 1 | 4 | 4 | RAW | P | Last seen INT1 sequence (low bits) |
+| CAL_CNT | PRV_IMU_B | 0..200 × 1 sample | 1 | 8 | 8 | RNG | P | Calibration samples |
+| CLIMB_CNT | PRV_IMU_B | 0..2047 × 1 count | 1 | 11 | 11 | SAT | P | Climb distance |
+| HIST_IDX | PRV_IMU_B | 0..4 × 1 slot | 1 | 3 | 3 | RNG | P | Speed history index |
+| PEAK_NOW | PRV_IMU_B | 0..127 × 1 mm | 1 | 7 | 7 | RNG | P | Peak of this hump (A25) |
+| PREV_HDG | PRV_IMU_C | 0..3599 × 1 0.1 deg | 1 | 12 | 12 | RNG | P | Previous magnetometer heading (wrapped 0..3599) |
+| PREV_HDG_VALID | PRV_IMU_C | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | PREV_HDG is from the previous 50 ms read |
+| PITCH_MAX | PRV_IMU_C | -450..450 × 1 0.1 deg | 1 | 10 | 10 | RNG | P | Max pitch this hump (A24) |
+| RUN_PEAK | PRV_IMU_C | 0..127 × 1 mm | 1 | 7 | 7 | RNG | P | Highest hump this run |
+| PREV_DIFF | PRV_IMU_D | -262142..262142 × 1 count | 1 | 19 | 19 | RNG | P | pos_l-pos_r 50 ms ago |
+| PREV_POS_L | PRV_IMU_E | -131071..131071 × 1 count | 1 | 18 | 18 | RNG | P | Previous left position |
+| PREV_POS_R | PRV_IMU_F | -131071..131071 × 1 count | 1 | 18 | 18 | RNG | P | Previous right position |
+| H0 | PRV_HIST_A | -127..127 × 1 count/50ms | 1 | 8 | 8 | RNG | P | Speed history 0 |
+| H1 | PRV_HIST_A | -127..127 × 1 count/50ms | 1 | 8 | 8 | RNG | P | Speed history 1 |
+| H2 | PRV_HIST_A | -127..127 × 1 count/50ms | 1 | 8 | 8 | RNG | P | Speed history 2 |
+| H3 | PRV_HIST_A | -127..127 × 1 count/50ms | 1 | 8 | 8 | RNG | P | Speed history 3 |
+| H4 | PRV_HIST_B | -127..127 × 1 count/50ms | 1 | 8 | 8 | RNG | P | Speed history 4 |
+| AX | PRV_OFS_A | -2047..2047 × 2 mg | 2 | 12 | 12 | RNG | P | Accelerometer X offset |
+| AY | PRV_OFS_A | -2047..2047 × 2 mg | 2 | 12 | 12 | RNG | P | Accelerometer Y offset |
+| AZ | PRV_OFS_B | -2047..2047 × 2 mg | 2 | 12 | 12 | RNG | P | Accelerometer Z offset |
+| FIFO_OVR | PRV_OFS_B | 0..255 × 1 count | 1 | 8 | 8 | SAT | P | FIFO overruns |
+| ACC | E_IMU | 0..0 × 1 um x mg | 1 | 0 | 32 | RAW | E | E2 height accumulator: arithmetic headroom |
+| CAL_SUM | E_IMU | 0..0 × 1 code | 1 | 0 | 32 | RAW | E | E2 calibration sums x3 (live 2 s only) |
+| RAW_SAMPLE | E_IMU_SAMPLE | 0..0 × 1 code | 1 | 0 | 16 | RAW | E | E4 accelerometer register image (own E group; SPEC-QUESTION in TEST_LOG) |
+| IMPACT_SEQ | SH_IMU | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | R1 callback -> imu_task; wraps |
 
 ## B5
 
@@ -185,6 +218,17 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | MQ_SUMM | 48 | 48 |
 | MQ_HB | 40 | 40 |
 | MQ_MAP | 8 | 8 |
+| PRV_IMU_A | 31 | 32 |
+| PRV_IMU_B | 29 | 32 |
+| PRV_IMU_C | 30 | 32 |
+| PRV_IMU_D | 19 | 32 |
+| PRV_IMU_E | 18 | 32 |
+| PRV_IMU_F | 18 | 32 |
+| PRV_HIST_A | 32 | 32 |
+| PRV_HIST_B | 8 | 32 |
+| PRV_OFS_A | 24 | 32 |
+| PRV_OFS_B | 20 | 32 |
+| SH_IMU | 8 | 8 |
 
 ## Range assumptions
 
