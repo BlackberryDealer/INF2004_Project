@@ -62,86 +62,32 @@ static void build_frame(uint32_t char_idx, uint8_t narrow_w, uint8_t wide_w,
     }
 }
 
-static void test_s3_u03_full_scale(void)
+static bool check_all_chars(uint8_t narrow_w, uint8_t wide_w, bool b_reverse)
 {
-    /* Full scale: narrow = 3.0 mm (30 in 0.1 mm), wide = 7.5 mm (75) */
-    uint32_t ch         = 0u;
-    bool     b_all_fwd  = true;
-    bool     b_all_rev  = true;
+    uint32_t ch    = 0u;
+    bool     b_all = true;
 
     for (ch = 0u; ch < APP_C39_CHAR_COUNT; ch++)
     {
         uint8_t  widths[BAR_ELEMENTS] = {0u};
         uint32_t out_idx              = 99u;
 
-        build_frame(ch, 30u, 75u, false, widths);
+        build_frame(ch, narrow_w, wide_w, b_reverse, widths);
         if ((CODE39_OK != code39_decode(widths, BAR_ELEMENTS, &out_idx)) ||
             (out_idx != ch))
         {
-            b_all_fwd = false;
-        }
-
-        out_idx = 99u;
-        build_frame(ch, 30u, 75u, true, widths);
-        if ((CODE39_OK != code39_decode(widths, BAR_ELEMENTS, &out_idx)) ||
-            (out_idx != ch))
-        {
-            b_all_rev = false;
+            b_all = false;
         }
     }
 
-    HOST_CHECK("S3-U03", b_all_fwd,
-               "full-scale forward decodes all 43 Code 39 characters");
-    HOST_CHECK("S3-U03", b_all_rev,
-               "full-scale reverse decodes all 43 Code 39 characters");
-    HOST_CHECK("S3-U03",
-               ((uint32_t) 'A' == code39_char_ascii(10u)) &&
-               ((uint32_t) '*' == code39_char_ascii(CODE39_STAR)) &&
-               ((uint32_t) '?' == code39_char_ascii(99u)),
-               "code39_char_ascii maps indices and out-of-range");
+    return b_all;
 }
 
-static void test_s3_u04_half_scale(void)
+static void check_pattern_table(bool * p_three_bits, bool * p_unique)
 {
-    /* Half scale: narrow = 1.5 mm (15 in 0.1 mm), wide = 3.8 mm (38) */
-    uint32_t ch         = 0u;
-    bool     b_all_fwd  = true;
-    bool     b_all_rev  = true;
-
-    for (ch = 0u; ch < APP_C39_CHAR_COUNT; ch++)
-    {
-        uint8_t  widths[BAR_ELEMENTS] = {0u};
-        uint32_t out_idx              = 99u;
-
-        build_frame(ch, 15u, 38u, false, widths);
-        if ((CODE39_OK != code39_decode(widths, BAR_ELEMENTS, &out_idx)) ||
-            (out_idx != ch))
-        {
-            b_all_fwd = false;
-        }
-
-        out_idx = 99u;
-        build_frame(ch, 15u, 38u, true, widths);
-        if ((CODE39_OK != code39_decode(widths, BAR_ELEMENTS, &out_idx)) ||
-            (out_idx != ch))
-        {
-            b_all_rev = false;
-        }
-    }
-
-    HOST_CHECK("S3-U04", b_all_fwd,
-               "half-scale forward decodes all 43 Code 39 characters");
-    HOST_CHECK("S3-U04", b_all_rev,
-               "half-scale reverse decodes all 43 Code 39 characters");
-}
-
-static void test_s3_u05_table_and_rejections(void)
-{
-    uint8_t  widths[BAR_ELEMENTS] = {0u};
-    uint32_t out_idx              = 0u;
-    uint32_t idx_a                = 0u;
-    bool     b_three_bits         = true;
-    bool     b_unique             = true;
+    uint32_t idx_a        = 0u;
+    bool     b_three_bits = true;
+    bool     b_unique     = true;
 
     for (idx_a = 0u; idx_a < TABLE_COUNT; idx_a++)
     {
@@ -171,6 +117,38 @@ static void test_s3_u05_table_and_rejections(void)
         }
     }
 
+    *p_three_bits = b_three_bits;
+    *p_unique     = b_unique;
+}
+
+int main(void)
+{
+    uint8_t  widths[BAR_ELEMENTS] = {0u};
+    uint32_t out_idx              = 0u;
+    bool     b_three_bits         = false;
+    bool     b_unique             = false;
+
+    HOST_INIT();
+
+    /* S3-U03: Full scale (narrow = 3.0 mm = 30, wide = 7.5 mm = 75) */
+    HOST_CHECK("S3-U03", check_all_chars(30u, 75u, false),
+               "full-scale forward decodes all 43 Code 39 characters");
+    HOST_CHECK("S3-U03", check_all_chars(30u, 75u, true),
+               "full-scale reverse decodes all 43 Code 39 characters");
+    HOST_CHECK("S3-U03",
+               ((uint32_t) 'A' == code39_char_ascii(10u)) &&
+               ((uint32_t) '*' == code39_char_ascii(CODE39_STAR)) &&
+               ((uint32_t) '?' == code39_char_ascii(99u)),
+               "code39_char_ascii maps indices and out-of-range");
+
+    /* S3-U04: Half scale (narrow = 1.5 mm = 15, wide = 3.8 mm = 38) */
+    HOST_CHECK("S3-U04", check_all_chars(15u, 38u, false),
+               "half-scale forward decodes all 43 Code 39 characters");
+    HOST_CHECK("S3-U04", check_all_chars(15u, 38u, true),
+               "half-scale reverse decodes all 43 Code 39 characters");
+
+    /* S3-U05: Table invariants and invalid inputs */
+    check_pattern_table(&b_three_bits, &b_unique);
     HOST_CHECK("S3-U05", b_three_bits,
                "every Code 39 pattern has exactly three wide (1) bits");
     HOST_CHECK("S3-U05", b_unique,
@@ -184,7 +162,8 @@ static void test_s3_u05_table_and_rejections(void)
                CODE39_INVALID == code39_decode(widths, 30u, &out_idx),
                "30-element capture is rejected");
     HOST_CHECK("S3-U05",
-               CODE39_INVALID == code39_decode(NULL, BAR_ELEMENTS, &out_idx),
+               CODE39_INVALID == code39_decode((uint8_t const *) 0,
+                                               BAR_ELEMENTS, &out_idx),
                "NULL widths pointer is rejected");
 
     /* Low wide/narrow ratio: 20 and 35 -> 35/20 = 1.75 < 1.8 */
@@ -199,13 +178,6 @@ static void test_s3_u05_table_and_rejections(void)
     HOST_CHECK("S3-U05",
                CODE39_INVALID == code39_decode(widths, BAR_ELEMENTS, &out_idx),
                "wide inter-character gap is rejected");
-}
 
-int main(void)
-{
-    HOST_INIT();
-    test_s3_u03_full_scale();
-    test_s3_u04_half_scale();
-    test_s3_u05_table_and_rejections();
     return (0 == HOST_SUMMARY("code39")) ? 0 : 1;
 }

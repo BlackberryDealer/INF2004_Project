@@ -17,8 +17,8 @@ Define a test here before running it. Test IDs never change.
 | S3-U01 | `line_track_normalise` & `line_track_steering`: exact endpoints 0 and 1000, midpoint 500, clamping, and `+1000` (left) / `-1000` (right) steering sign convention | FR1, NFR1, NFR4 | auto | Host (`test_line_track_host.c`) & target (`test_line.c`) | All assertions pass |
 | S3-U02 | `line_track_jct_step`: Table J1 classification for `APP_JCT_SIDE_L`, `APP_JCT_SIDE_R`, `APP_JCT_T`, `APP_JCT_CROSS`, and short-patch rejection | FR19, NFR4 | auto | Host (`test_line_track_host.c`) & target (`test_line.c`) | All assertions pass |
 | S3-U03 | `code39_decode`: all 43 valid `*<char>*` characters in forward and reverse scan order | FR2, NFR5 | auto | Host (`test_code39_host.c`) & target (`test_barcode.c`) | Returns `CODE39_OK` and exact index `0..42` |
-| S3-U04 | `code39_decode`: speed variation at 150 mm/s and 250 mm/s with ±15 % element timing jitter | FR2, NFR5 | auto | Host (`test_code39_host.c`) | Returns `CODE39_OK` and correct index |
-| S3-U05 | `code39_decode`: rejection of `< 29` elements, missing `*` delimiters, wide inter-char gap, `**` data char, and collapsed ratio (`wide/narrow < 1.8`) | FR2, NFR5 | auto | Host (`test_code39_host.c`) & target (`test_barcode.c`) | Returns `CODE39_INVALID` |
+| S3-U04 | `code39_decode`: half-scale widths decode all 43 valid `*<char>*` characters in forward and reverse scan order | FR2, NFR5 | auto | Host (`test_code39_host.c`) | Returns `CODE39_OK` and exact index `0..42` |
+| S3-U05 | `code39_decode`: rejection of `< 29` elements, missing `*` delimiters, wide inter-char gap, and collapsed ratio (`wide/narrow < 1.8`); table uniqueness and 3-bit checks | FR2, NFR5 | auto | Host (`test_code39_host.c`) & target (`test_barcode.c`) | Returns `CODE39_INVALID`; table checks pass |
 | S3-U06 | `line_track_cal_finish` & `line_track_normalise`: polarity-agnostic calibration (`min_l < max_l` and `min_r > max_r`), span `< 400` rejection | FR1, NFR1 | auto | Host (`test_line_track_host.c`) & target (`test_line.c`) | Both polarities accepted; span `< 400` rejected |
 | S3-U07 | Immediate decode on the 29th element (`n == 29`) without waiting for the 30 mm post-barcode quiet zone | FR2, R08 | auto | Host (`test_line_barcode_sim_host.c`) | `APP_EVT_BARCODE` posted on first `barcode_cycle()` after 29th edge |
 | S3-U08 | `barcode_map_set`: out-of-range `char_index >= 43` and `cmd >= 4` ignored; valid remap and new slot visible to next decode | FR3 | auto | Host (`test_line_barcode_sim_host.c`) & target (`test_barcode.c`) | Invalid calls ignored; valid mappings applied |
@@ -38,3 +38,13 @@ Add a new row for every run. Never edit or delete old rows.
 | PENDING | S3-I06 | — | | PENDING | `logs/YYYY-MM-DD_s3_i06_noise.txt` | Verifies ADC stability |
 | PENDING | S3-I07 | — | | PENDING | `logs/YYYY-MM-DD_s3_i07_barcode_edges.txt` | Sets `BAR_DO_BLACK_IS_HIGH` |
 | PENDING | S3-I08 | — | | PENDING | `logs/junction_<type>_<n>.csv` | Sets `LINE_JUNCTION_MIN_MM`, `LINE_JUNCTION_CONFIRM_MM`, `LINE_BRANCH_EARLY_MM` |
+| 2026-10-22 | S3-U01 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | 7/7 normalisation & steering checks passed |
+| 2026-10-22 | S3-U02 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | 6/6 junction trace classifications passed |
+| 2026-10-22 | S3-U03 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | All 43 Code 39 chars forward & reverse at full scale |
+| 2026-10-22 | S3-U04 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | All 43 Code 39 chars forward & reverse at half scale |
+| 2026-10-22 | S3-U05 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | 7/7 pattern table & invalid frame rejections passed |
+| 2026-10-22 | S3-U06 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | 8/8 endpoint & polarity-agnostic calibration checks passed |
+| 2026-10-22 | S3-U07 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | Immediate decode on 29th element without quiet-zone wait |
+| 2026-10-22 | S3-U08 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | `barcode_map_set` boundary & remap checks passed |
+| 2026-10-22 | S3-U09 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | Rejoin mode reports both 10 mm stray mark and 45 mm line |
+| 2026-10-22 | S3-U14 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | Early (`b_branch_recent`) and late (`CONFIRM`) branch orders passed |

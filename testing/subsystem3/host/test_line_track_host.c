@@ -61,80 +61,13 @@ static uint32_t replay_trace(jct_sample_t const * p_trace, uint32_t len,
     return last_cls;
 }
 
-static void test_s3_u01_u06(void)
+int main(void)
 {
-    line_track_cal_t cal  = {0u, 0u, 0u, 0u, 0u, 0u};
-    line_track_cal_t cal2 = {0u, 0u, 0u, 0u, 0u, 0u};
-    bool             b_ok = false;
-
-    /* Span 3000 (500..3500): truncated reciprocal would give 999 at hi;
-       rounded-up reciprocal (V13-09) must give exact 0 and 1000. */
-    b_ok = line_track_cal_finish(&cal, 500u, 3500u, 400u, 2400u);
-    HOST_CHECK("S3-U06", b_ok, "cal_finish succeeds with valid spans");
-    HOST_CHECK("S3-U06",
-               0u == line_track_normalise(500u, cal.white_l, cal.black_l,
-                                          cal.recip_l_q16),
-               "high-is-black: raw == lo gives exact 0");
-    HOST_CHECK("S3-U06",
-               1000u == line_track_normalise(3500u, cal.white_l, cal.black_l,
-                                             cal.recip_l_q16),
-               "high-is-black: raw == hi gives exact 1000 (span 3000)");
-    HOST_CHECK("S3-U06",
-               1000u == line_track_normalise(3499u, cal.white_l, cal.black_l,
-                                             cal.recip_l_q16) ||
-               999u == line_track_normalise(3499u, cal.white_l, cal.black_l,
-                                            cal.recip_l_q16),
-               "high-is-black: raw == hi-1 does not overshoot 1000");
-
-    /* Reversed polarity passed to normalise (white=3500, black=500) */
-    HOST_CHECK("S3-U06",
-               0u == line_track_normalise(3500u, 3500u, 500u, cal.recip_l_q16),
-               "low-is-black: raw == hi (white) gives exact 0");
-    HOST_CHECK("S3-U06",
-               1000u == line_track_normalise(500u, 3500u, 500u,
-                                             cal.recip_l_q16),
-               "low-is-black: raw == lo (black) gives exact 1000");
-    HOST_CHECK("S3-U01",
-               500u == line_track_normalise(2000u, 3500u, 500u,
-                                            cal.recip_l_q16),
-               "low-is-black: midpoint gives 500");
-
-    /* Reversed min/max order passed to cal_finish (R13) */
-    b_ok = line_track_cal_finish(&cal2, 3500u, 500u, 2400u, 400u);
-    HOST_CHECK("S3-U06", b_ok && (500u == cal2.white_l) &&
-                         (3500u == cal2.black_l),
-               "cal_finish orders reversed endpoints without underflow");
-    HOST_CHECK("S3-U06",
-               !line_track_cal_finish(&cal2, 1000u, 1399u, 400u, 2400u),
-               "cal_finish rejects span < LINE_CAL_MIN_SPAN (399 < 400)");
-
-    /* Out-of-range clamping and midpoint (S3-U01) */
-    HOST_CHECK("S3-U01",
-               0u == line_track_normalise(100u, cal.white_l, cal.black_l,
-                                          cal.recip_l_q16),
-               "raw below white clamps to 0");
-    HOST_CHECK("S3-U01",
-               1000u == line_track_normalise(4095u, cal.white_l, cal.black_l,
-                                             cal.recip_l_q16),
-               "raw above black clamps to 1000");
-    HOST_CHECK("S3-U01",
-               500u == line_track_normalise(2000u, cal.white_l, cal.black_l,
-                                            cal.recip_l_q16),
-               "midpoint normalises to 500");
-
-    /* Steering conventions: +1000 = line under left sensor */
-    HOST_CHECK("S3-U01", 0 == line_track_steering(500u, 500u),
-               "equal sensors give 0 steering");
-    HOST_CHECK("S3-U01", 1000 == line_track_steering(1000u, 0u),
-               "left full black, right white gives +1000");
-    HOST_CHECK("S3-U01", -1000 == line_track_steering(0u, 1000u),
-               "right full black, left white gives -1000");
-}
-
-static void test_s3_u02_u14(void)
-{
-    uint32_t fires = 0u;
-    uint32_t cls   = APP_JCT_NONE;
+    line_track_cal_t cal   = {0u, 0u, 0u, 0u, 0u, 0u};
+    line_track_cal_t cal2  = {0u, 0u, 0u, 0u, 0u, 0u};
+    bool             b_ok  = false;
+    uint32_t         fires = 0u;
+    uint32_t         cls   = APP_JCT_NONE;
 
     /* 1. T-junction: both sensors saturate over bar, white after confirm */
     static jct_sample_t const trace_t[] =
@@ -217,6 +150,71 @@ static void test_s3_u02_u14(void)
         { 100u, 100u, 145u, 4u, false }  /* both sat + white -> T */
     };
 
+    HOST_INIT();
+
+    /* Span 3000 (500..3500): truncated reciprocal would give 999 at hi;
+       rounded-up reciprocal (V13-09) must give exact 0 and 1000. */
+    b_ok = line_track_cal_finish(&cal, 500u, 3500u, 400u, 2400u);
+    HOST_CHECK("S3-U06", b_ok, "cal_finish succeeds with valid spans");
+    HOST_CHECK("S3-U06",
+               0u == line_track_normalise(500u, cal.white_l, cal.black_l,
+                                          cal.recip_l_q16),
+               "high-is-black: raw == lo gives exact 0");
+    HOST_CHECK("S3-U06",
+               1000u == line_track_normalise(3500u, cal.white_l, cal.black_l,
+                                             cal.recip_l_q16),
+               "high-is-black: raw == hi gives exact 1000 (span 3000)");
+    HOST_CHECK("S3-U06",
+               1000u == line_track_normalise(3499u, cal.white_l, cal.black_l,
+                                             cal.recip_l_q16) ||
+               999u == line_track_normalise(3499u, cal.white_l, cal.black_l,
+                                            cal.recip_l_q16),
+               "high-is-black: raw == hi-1 does not overshoot 1000");
+
+    /* Reversed polarity passed to normalise (white=3500, black=500) */
+    HOST_CHECK("S3-U06",
+               0u == line_track_normalise(3500u, 3500u, 500u, cal.recip_l_q16),
+               "low-is-black: raw == hi (white) gives exact 0");
+    HOST_CHECK("S3-U06",
+               1000u == line_track_normalise(500u, 3500u, 500u,
+                                             cal.recip_l_q16),
+               "low-is-black: raw == lo (black) gives exact 1000");
+    HOST_CHECK("S3-U01",
+               500u == line_track_normalise(2000u, 3500u, 500u,
+                                            cal.recip_l_q16),
+               "low-is-black: midpoint gives 500");
+
+    /* Reversed min/max order passed to cal_finish (R13) */
+    b_ok = line_track_cal_finish(&cal2, 3500u, 500u, 2400u, 400u);
+    HOST_CHECK("S3-U06", b_ok && (500u == cal2.white_l) &&
+                         (3500u == cal2.black_l),
+               "cal_finish orders reversed endpoints without underflow");
+    HOST_CHECK("S3-U06",
+               !line_track_cal_finish(&cal2, 1000u, 1399u, 400u, 2400u),
+               "cal_finish rejects span < LINE_CAL_MIN_SPAN (399 < 400)");
+
+    /* Out-of-range clamping and midpoint (S3-U01) */
+    HOST_CHECK("S3-U01",
+               0u == line_track_normalise(100u, cal.white_l, cal.black_l,
+                                          cal.recip_l_q16),
+               "raw below white clamps to 0");
+    HOST_CHECK("S3-U01",
+               1000u == line_track_normalise(4095u, cal.white_l, cal.black_l,
+                                             cal.recip_l_q16),
+               "raw above black clamps to 1000");
+    HOST_CHECK("S3-U01",
+               500u == line_track_normalise(2000u, cal.white_l, cal.black_l,
+                                            cal.recip_l_q16),
+               "midpoint normalises to 500");
+
+    /* Steering conventions: +1000 = line under left sensor */
+    HOST_CHECK("S3-U01", 0 == line_track_steering(500u, 500u),
+               "equal sensors give 0 steering");
+    HOST_CHECK("S3-U01", 1000 == line_track_steering(1000u, 0u),
+               "left full black, right white gives +1000");
+    HOST_CHECK("S3-U01", -1000 == line_track_steering(0u, 1000u),
+               "right full black, left white gives -1000");
+
     cls = replay_trace(trace_t, 6u, &fires);
     HOST_CHECK("S3-U02", (APP_JCT_T == cls) && (1u == fires),
                "T-junction trace classified as APP_JCT_T once");
@@ -248,12 +246,6 @@ static void test_s3_u02_u14(void)
     cls = replay_trace(trace_branch_late, 5u, &fires);
     HOST_CHECK("S3-U14", (APP_JCT_T == cls) && (1u == fires),
                "Late barcode branch (in CONFIRM) sets barcode-side flag");
-}
 
-int main(void)
-{
-    HOST_INIT();
-    test_s3_u01_u06();
-    test_s3_u02_u14();
     return (0 == HOST_SUMMARY("line_track")) ? 0 : 1;
 }

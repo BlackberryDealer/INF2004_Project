@@ -15,7 +15,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <stddef.h>
 
 /* Include the real task implementations to drive single cycles directly. */
 #include "line.c"
@@ -39,7 +38,7 @@ static int32_t             g_sim_speed_l   = 36; /* ~250 mm/s */
 static int32_t             g_sim_speed_r   = 36;
 static bool                gb_sim_bar_pin  = false;
 static status_board_line_t g_sim_line_out  = {0, 0u, 0u, false};
-static drv_gpio_irq_cb_t   gp_sim_bar_cb   = NULL;
+static drv_gpio_irq_cb_t   gp_sim_bar_cb   = (drv_gpio_irq_cb_t) 0;
 
 /* ---- Kernel & platform mocks ----------------------------------------- */
 
@@ -75,6 +74,12 @@ ID tk_get_tid(void)
     return 1;
 }
 
+UW in_w(UW port)
+{
+    (void) port;
+    return gb_sim_bar_pin ? (1u << PIN_BAR_DO) : 0u;
+}
+
 ID app_start_task(FP p_entry, PRI priority, uint64_t * p_stack,
                   uint32_t stack_bytes, char const * p_name)
 {
@@ -93,12 +98,6 @@ ER drv_gpio_irq_attach(uint32_t pin, uint32_t edges,
     (void) edges;
     gp_sim_bar_cb = p_callback;
     return E_OK;
-}
-
-UW in_w(UW port)
-{
-    (void) port;
-    return gb_sim_bar_pin ? (1u << PIN_BAR_DO) : 0u;
 }
 
 void drv_ir_adc_init(void)
@@ -266,20 +265,21 @@ static uint32_t sim_feed_barcode_edges(uint32_t char_idx, uint32_t start_us)
     return now_us;
 }
 
-/* ---- S3-U07 & S3-U08 ------------------------------------------------- */
-
-static void test_s3_u07_u08(void)
+int main(void)
 {
-    uint32_t end_us   = 0u;
-    uint32_t exp_val  = 0u;
+    uint32_t exp_val     = 0u;
+    uint32_t mark_counts = 0u;
+    uint32_t line_counts = 0u;
 
+    HOST_INIT();
+
+    /* ---- S3-U07 & S3-U08 --------------------------------------------- */
     sim_reset();
     g_sim_path = 100u;
 
     /* S3-U07: Feed 29 elements of '*A*' and run ONE barcode_cycle() without
        advancing path by the 30 mm quiet zone. Must decode immediately! */
-    end_us = sim_feed_barcode_edges(10u, 50000u);
-    (void) end_us;
+    (void) sim_feed_barcode_edges(10u, 50000u);
     barcode_cycle();
 
     exp_val = mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u);
@@ -322,15 +322,8 @@ static void test_s3_u07_u08(void)
                (APP_EVT_BARCODE == g_sim_evts[0].type) &&
                (exp_val == g_sim_evts[0].value),
                "newly mapped character 'E' -> RIGHT decoded and posted");
-}
 
-/* ---- S3-U09 (Rejoin mode, review F-02) ------------------------------- */
-
-static void test_s3_u09_rejoin(void)
-{
-    uint32_t mark_counts = 0u;
-    uint32_t line_counts = 0u;
-
+    /* ---- S3-U09 (Rejoin mode, review F-02) --------------------------- */
     sim_reset();
     sim_calibrate_line();
 
@@ -386,12 +379,8 @@ static void test_s3_u09_rejoin(void)
                (g_sim_evts[0].value >= 9u) && (g_sim_evts[0].value <= 11u) &&
                (g_sim_evts[1].value >= 44u) && (g_sim_evts[1].value <= 46u),
                "first LINE_FOUND ~10 mm, second LINE_FOUND ~45 mm");
-}
 
-/* ---- S3-U14 (Full task barcode-branch + line junction integration) --- */
-
-static void test_s3_u14_task_branch_orders(void)
-{
+    /* ---- S3-U14 (Full task barcode-branch + line junction integration) */
     sim_reset();
     sim_calibrate_line();
 
@@ -462,13 +451,6 @@ static void test_s3_u14_task_branch_orders(void)
                (APP_EVT_JUNCTION == g_sim_evts[0].type) &&
                (APP_JCT_CROSS == g_sim_evts[0].value),
                "full task replay: late barcode branch + left sat -> APP_JCT_CROSS");
-}
 
-int main(void)
-{
-    HOST_INIT();
-    test_s3_u07_u08();
-    test_s3_u09_rejoin();
-    test_s3_u14_task_branch_orders();
     return (0 == HOST_SUMMARY("line_barcode_sim")) ? 0 : 1;
 }
