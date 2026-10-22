@@ -45,8 +45,14 @@
 #define IMU_AVG_Q15_ONE        (32768)
 #define IMU_MG_RAW_SHIFT       (16) /* raw / 16: high-resolution mode */
 #define IMU_MAG_DIV_PERIOD     (IMU_MAG_EVERY_N - 1u)
+#define IMU_MAG_BACKLOG_LIMIT  (2u) /* more samples: postpone the mag  */
 #define IMU_GOOD_READS_RECOVER (3u)
 #define IMU_CLASS_GAP_MAX      (31u)
+#define IMU_TURN_WINDOW_CYCLES (5)     /* magnetometer cycle = 50 ms      */
+#define IMU_DPS_PER_WINDOW     (2)     /* 0.1 deg / 50 ms -> deg/s        */
+#define IMU_REST_AZ_MG         (1000)  /* at rest az reads +1000 mg     */
+#define IMU_IMPACT_SEQ_MASK    (0x0Fu) /* packed IMPACT_SEQ field width */
+#define IMU_OFFSET_LSB_MG      (2)     /* PRV_OFS_* rows: 2 mg per step   */
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -106,15 +112,22 @@ static int32_t  g_enc_hdg_prev_cdeg = 0;
 
 /* ---- private function prototypes ------------------------------------- */
 
-static void     imu_task(INT stacd, void * p_exinf);
-static void     imu_int1_isr(uint32_t events, uint32_t now_us);
-static void     imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
-                                 bool * pb_mag_read);
+static void imu_task(INT stacd, void * p_exinf);
+static void imu_int1_isr(uint32_t events, uint32_t now_us);
+static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
+                             bool * pb_mag_read);
+static bool imu_read_acc(uint32_t * p_n_samples);
+static void imu_read_mag_if_due(uint32_t n_samples, bool * pb_mag_cycle,
+                                bool * pb_mag_read);
+static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw);
+static int32_t  imu_encoder_rate(int32_t pos_l, int32_t pos_r);
 static void     imu_i2c_result(bool b_ok, bool b_is_acc);
 static void     imu_calibrate(bool b_mode_set, bool b_read_ok);
 static void     imu_run_start(int32_t pos_l, int32_t pos_r);
 static void     imu_turn_rate(bool b_mag_cycle, bool b_mag_read, int32_t pos_l,
                               int32_t pos_r);
+static int32_t  imu_mag_rate(bool b_mag_read, bool * pb_use_enc);
+static bool     imu_turn_disagrees(int32_t imu_dps, int32_t enc_dps);
 static void     imu_classify(int32_t speed_cpw);
 static void     imu_write_board(uint32_t motion_class);
 static uint32_t imu_terrain_state_get(void);
@@ -235,87 +248,7 @@ static void imu_task(INT stacd, void * p_exinf)
         }
         else
         {
-            /* 5. Forward acceleration: the difference across the full
-               50 ms window, never 10 ms. */
-            g_a_fwd_mg = terrain_speed_hist_push(&g_speed_hist, speed_cpw);
-
-            /* 6. Terrain step. ds comes from the slower wheel; a rebase
-               or a glitch gives 0 so the run-start rebase can never
-               become a false climb (review R03, B4.2.2 step 6). */
-            {
-                terrain_input_t  in;
-                terrain_output_t out;
-                int32_t          prev_l = app_bits_decode(
-                    app_bits_get(g_imu_prv_e, PRV_IMU_E_PREV_POS_L_POS,
-                                 PRV_IMU_E_PREV_POS_L_BITS),
-                    PRV_IMU_E_PREV_POS_L_OFFSET);
-                int32_t prev_r = app_bits_decode(
-                    app_bits_get(g_imu_prv_f, PRV_IMU_F_PREV_POS_R_POS,
-                                 PRV_IMU_F_PREV_POS_R_BITS),
-                    PRV_IMU_F_PREV_POS_R_OFFSET);
-                int32_t dpos_l    = pos_l - prev_l;
-                int32_t dpos_r    = pos_r - prev_r;
-                bool    b_clamped = false;
-
-                g_imu_prv_e = app_bits_put(
-                    g_imu_prv_e, PRV_IMU_E_PREV_POS_L_POS,
-                    PRV_IMU_E_PREV_POS_L_BITS,
-                    app_bits_encode(pos_l, PRV_IMU_E_PREV_POS_L_MIN,
-                                    PRV_IMU_E_PREV_POS_L_MAX,
-                                    PRV_IMU_E_PREV_POS_L_OFFSET, &b_clamped));
-                imu_clamp_fault(b_clamped);
-                g_imu_prv_f = app_bits_put(
-                    g_imu_prv_f, PRV_IMU_F_PREV_POS_R_POS,
-                    PRV_IMU_F_PREV_POS_R_BITS,
-                    app_bits_encode(pos_r, PRV_IMU_F_PREV_POS_R_MIN,
-                                    PRV_IMU_F_PREV_POS_R_MAX,
-                                    PRV_IMU_F_PREV_POS_R_OFFSET, &b_clamped));
-                imu_clamp_fault(b_clamped);
-
-                in.ax_mg     = g_avg_ax_mg;
-                in.az_mg     = g_avg_az_mg;
-                in.a_fwd_mg  = g_a_fwd_mg;
-                in.ds_counts = terrain_ds_counts(dpos_l, dpos_r);
-
-                terrain_step(&g_terrain, &in, &out);
-
-                g_pitch_ddeg  = out.pitch_ddeg;
-                g_hump_now_mm = out.hump_now_mm;
-
-                if (out.hump_done_mm > 0u)
-                {
-                    uint32_t run_peak =
-                        app_bits_get(g_imu_prv_c, PRV_IMU_C_RUN_PEAK_POS,
-                                     PRV_IMU_C_RUN_PEAK_BITS);
-
-                    if (out.hump_done_mm > run_peak)
-                    {
-                        g_imu_prv_c = app_bits_put(
-                            g_imu_prv_c, PRV_IMU_C_RUN_PEAK_POS,
-                            PRV_IMU_C_RUN_PEAK_BITS,
-                            app_bits_encode(
-                                (int32_t)out.hump_done_mm,
-                                PRV_IMU_C_RUN_PEAK_MIN, PRV_IMU_C_RUN_PEAK_MAX,
-                                PRV_IMU_C_RUN_PEAK_OFFSET, &b_clamped));
-                        /* cast: hump_done < 2^31 */
-                        imu_clamp_fault(b_clamped);
-                    }
-                    if (out.hump_done_mm >= PRV_IMU_C_RUN_PEAK_MAX)
-                    {
-                        /* A25: 127 means ">= 127 mm" (correction T6);
-                           reaching the top code sets the clamp fault
-                           (S4-U11). */
-                        fault_set(APP_FAULT_RANGE_CLAMP);
-                    }
-                    (void)mission_post_event(APP_EVT_HUMP, out.hump_done_mm);
-                    /* ignored: K4 drops are counted by
-                       mission_post_event itself */
-#if (IMU_LOG_HUMPS != 0)
-                    app_log("hump int %d geo %d\n", (int32_t)out.hump_done_mm,
-                            (int32_t)out.hump_geo_mm, 0);
-#endif
-                }
-            }
+            imu_terrain_update(pos_l, pos_r, speed_cpw);
 
             /* 7. Turn rate, every 5th cycle (the magnetometer cycle). */
             imu_turn_rate(b_mag_cycle, b_mag_read, pos_l, pos_r);
@@ -327,6 +260,89 @@ static void imu_task(INT stacd, void * p_exinf)
             imu_write_board(app_bits_get(g_imu_prv_a, PRV_IMU_A_LAST_CLASS_POS,
                                          PRV_IMU_A_LAST_CLASS_BITS));
         }
+    }
+}
+
+/**
+ * imu_terrain_update
+ * @brief   B4.2.2 steps 5 and 6: forward acceleration over the full
+ *          50 ms window, then one Terrain Monitor cycle. ds comes from
+ *          the slower wheel; a rebase or a glitch gives 0 so the
+ *          run-start rebase can never become a false climb (review R03).
+ *          A finished hump updates the run peak and posts APP_EVT_HUMP.
+ * @param   pos_l      current left position, counts
+ * @param   pos_r      current right position, counts
+ * @param   speed_cpw  this cycle's speed, counts per 50 ms window
+ * @return  none
+ * @context imu_task
+ */
+static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
+{
+    terrain_input_t  in;
+    terrain_output_t out;
+    int32_t          prev_l =
+        app_bits_decode(app_bits_get(g_imu_prv_e, PRV_IMU_E_PREV_POS_L_POS,
+                                     PRV_IMU_E_PREV_POS_L_BITS),
+                        PRV_IMU_E_PREV_POS_L_OFFSET);
+    int32_t prev_r =
+        app_bits_decode(app_bits_get(g_imu_prv_f, PRV_IMU_F_PREV_POS_R_POS,
+                                     PRV_IMU_F_PREV_POS_R_BITS),
+                        PRV_IMU_F_PREV_POS_R_OFFSET);
+    int32_t dpos_l    = pos_l - prev_l;
+    int32_t dpos_r    = pos_r - prev_r;
+    bool    b_clamped = false;
+
+    /* 5. Forward acceleration: the difference across the full 50 ms
+       window, never 10 ms. */
+    g_a_fwd_mg = terrain_speed_hist_push(&g_speed_hist, speed_cpw);
+
+    g_imu_prv_e = app_bits_put(
+        g_imu_prv_e, PRV_IMU_E_PREV_POS_L_POS, PRV_IMU_E_PREV_POS_L_BITS,
+        app_bits_encode(pos_l, PRV_IMU_E_PREV_POS_L_MIN,
+                        PRV_IMU_E_PREV_POS_L_MAX, PRV_IMU_E_PREV_POS_L_OFFSET,
+                        &b_clamped));
+    imu_clamp_fault(b_clamped);
+    g_imu_prv_f = app_bits_put(
+        g_imu_prv_f, PRV_IMU_F_PREV_POS_R_POS, PRV_IMU_F_PREV_POS_R_BITS,
+        app_bits_encode(pos_r, PRV_IMU_F_PREV_POS_R_MIN,
+                        PRV_IMU_F_PREV_POS_R_MAX, PRV_IMU_F_PREV_POS_R_OFFSET,
+                        &b_clamped));
+    imu_clamp_fault(b_clamped);
+
+    in.ax_mg     = g_avg_ax_mg;
+    in.az_mg     = g_avg_az_mg;
+    in.a_fwd_mg  = g_a_fwd_mg;
+    in.ds_counts = terrain_ds_counts(dpos_l, dpos_r);
+
+    terrain_step(&g_terrain, &in, &out);
+
+    g_pitch_ddeg  = out.pitch_ddeg;
+    g_hump_now_mm = out.hump_now_mm;
+
+    if (out.hump_done_mm > 0u)
+    {
+        uint32_t run_peak = app_bits_get(g_imu_prv_c, PRV_IMU_C_RUN_PEAK_POS,
+                                         PRV_IMU_C_RUN_PEAK_BITS);
+
+        if (out.hump_done_mm > run_peak)
+        {
+            g_imu_prv_c = app_bits_put(
+                g_imu_prv_c, PRV_IMU_C_RUN_PEAK_POS, PRV_IMU_C_RUN_PEAK_BITS,
+                app_bits_encode((int32_t)out.hump_done_mm,
+                                PRV_IMU_C_RUN_PEAK_MIN, PRV_IMU_C_RUN_PEAK_MAX,
+                                PRV_IMU_C_RUN_PEAK_OFFSET, &b_clamped));
+            /* cast: hump_done_mm < 2^31 */
+            imu_clamp_fault(b_clamped);
+        }
+        (void)mission_post_event(APP_EVT_HUMP, out.hump_done_mm);
+        /* ignored: K4 drops are counted by
+           mission_post_event itself, and its VALUE clamp raises
+           APP_FAULT_RANGE_CLAMP for a peak beyond the 7-bit event
+           field (A25 / correction T6) */
+#if (IMU_LOG_HUMPS != 0)
+        app_log("hump int %d geo %d\n", (int32_t)out.hump_done_mm,
+                (int32_t)out.hump_geo_mm, 0);
+#endif
     }
 }
 
@@ -365,48 +381,69 @@ static void imu_int1_isr(uint32_t events, uint32_t now_us)
 static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
                              bool * pb_mag_read)
 {
-    drv_lsm303_acc_t samples[IMU_ACC_SAMPLES_MAX];
-    int32_t          ercd    = 0;
-    uint32_t         n       = 0u;
-    uint32_t         mag_div = app_bits_get(g_imu_prv_a, PRV_IMU_A_MAG_DIV_POS,
-                                            PRV_IMU_A_MAG_DIV_BITS);
-    bool             b_mag_due = (0u == mag_div);
+    uint32_t n_samples = 0u;
 
-    *pb_read_ok   = false;
-    *pb_mag_cycle = b_mag_due;
-    *pb_mag_read  = false;
+    *pb_read_ok = imu_read_acc(&n_samples);
+    imu_read_mag_if_due(n_samples, pb_mag_cycle, pb_mag_read);
+}
+
+/**
+ * imu_read_acc
+ * @brief   One accelerometer FIFO read (0..4 samples) averaged with the
+ *          reciprocal table and converted to mg with the calibration
+ *          offsets applied. An empty FIFO or an overrun keeps the last
+ *          cycle's averages.
+ * @param   p_n_samples  out: samples taken this cycle (0 on overrun)
+ * @return  true when the transfer succeeded
+ * @context imu_task
+ */
+static bool imu_read_acc(uint32_t * p_n_samples)
+{
+    drv_lsm303_acc_t samples[IMU_ACC_SAMPLES_MAX];
+    int32_t          ercd      = 0;
+    uint32_t         n_samples = 0u;
+
+    *p_n_samples = 0u;
 
     ercd = drv_lsm303_read_acc(samples, IMU_ACC_SAMPLES_MAX);
     if (ercd < 0)
     {
         imu_i2c_result(false, true);
+        return false;
     }
-    else
+
     {
         uint32_t idx      = 0u;
         int32_t  sum_x    = 0;
         int32_t  sum_y    = 0;
         int32_t  sum_z    = 0;
         uint32_t fifo_ovr = drv_lsm303_fifo_overruns();
-        int32_t  ofs_ax   = app_bits_decode(
-            app_bits_get(g_ofs_word_a, PRV_OFS_A_AX_POS, PRV_OFS_A_AX_BITS),
-            PRV_OFS_A_AX_OFFSET);
-        int32_t ofs_ay = app_bits_decode(
-            app_bits_get(g_ofs_word_a, PRV_OFS_A_AY_POS, PRV_OFS_A_AY_BITS),
-            PRV_OFS_A_AY_OFFSET);
-        int32_t ofs_az = app_bits_decode(
-            app_bits_get(g_ofs_word_b, PRV_OFS_B_AZ_POS, PRV_OFS_B_AZ_BITS),
-            PRV_OFS_B_AZ_OFFSET);
+        int32_t  ofs_ax =
+            app_bits_decode(
+                app_bits_get(g_ofs_word_a, PRV_OFS_A_AX_POS, PRV_OFS_A_AX_BITS),
+                PRV_OFS_A_AX_OFFSET) *
+            IMU_OFFSET_LSB_MG;
+        int32_t ofs_ay =
+            app_bits_decode(
+                app_bits_get(g_ofs_word_a, PRV_OFS_A_AY_POS, PRV_OFS_A_AY_BITS),
+                PRV_OFS_A_AY_OFFSET) *
+            IMU_OFFSET_LSB_MG;
+        int32_t ofs_az =
+            app_bits_decode(
+                app_bits_get(g_ofs_word_b, PRV_OFS_B_AZ_POS, PRV_OFS_B_AZ_BITS),
+                PRV_OFS_B_AZ_OFFSET) *
+            IMU_OFFSET_LSB_MG;
+        /* LSB weight from the layout (B4.4): one stored step is 2 mg. */
 
         /* PRV_OFS_B FIFO_OVR: the driver's counter, packed here. */
         g_ofs_word_b = app_bits_put(g_ofs_word_b, PRV_OFS_B_FIFO_OVR_POS,
                                     PRV_OFS_B_FIFO_OVR_BITS, fifo_ovr);
 
         imu_i2c_result(true, true);
-        n = (uint32_t)ercd; /* cast: count >= 0 here */
-        if (n > 0u)
+        n_samples = (uint32_t)ercd; /* cast: count >= 0 here */
+        if (n_samples > 0u)
         {
-            for (idx = 0u; idx < n; idx++)
+            for (idx = 0u; idx < n_samples; idx++)
             {
                 sum_x += (int32_t)samples[idx].acc_x;
                 sum_y += (int32_t)samples[idx].acc_y;
@@ -416,9 +453,12 @@ static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
                signed value (review F-07). |sum| <= 4 x 32768, so the
                product fits int32. High-resolution mode keeps the 12
                bits << 4, so the average fits an int16 (E4 image). */
-            g_avg_raw_x = (int16_t)((sum_x * g_recip_q15[n]) / IMU_AVG_Q15_ONE);
-            g_avg_raw_y = (int16_t)((sum_y * g_recip_q15[n]) / IMU_AVG_Q15_ONE);
-            g_avg_raw_z = (int16_t)((sum_z * g_recip_q15[n]) / IMU_AVG_Q15_ONE);
+            g_avg_raw_x =
+                (int16_t)((sum_x * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
+            g_avg_raw_y =
+                (int16_t)((sum_y * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
+            g_avg_raw_z =
+                (int16_t)((sum_z * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
             g_avg_ax_mg =
                 (((int32_t)g_avg_raw_x / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB) -
                 ofs_ax;
@@ -430,8 +470,33 @@ static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
                 (((int32_t)g_avg_raw_z / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB) -
                 ofs_az;
         }
-        *pb_read_ok = true;
     }
+
+    *p_n_samples = n_samples;
+    return true;
+}
+
+/**
+ * imu_read_mag_if_due
+ * @brief   Magnetometer read on every IMU_MAG_EVERY_N-th cycle. It is
+ *          postponed one cycle when this cycle already took more than
+ *          IMU_MAG_BACKLOG_LIMIT samples (B4.1.1 bus budget).
+ * @param   n_samples    accelerometer samples taken this cycle
+ * @param   pb_mag_cycle out: true when this cycle was due a mag read
+ * @param   pb_mag_read  out: true when the mag was actually read
+ * @return  none
+ * @context imu_task
+ */
+static void imu_read_mag_if_due(uint32_t n_samples, bool * pb_mag_cycle,
+                                bool * pb_mag_read)
+{
+    uint32_t mag_div   = app_bits_get(g_imu_prv_a, PRV_IMU_A_MAG_DIV_POS,
+                                      PRV_IMU_A_MAG_DIV_BITS);
+    bool     b_mag_due = (0u == mag_div);
+    int32_t  ercd      = 0;
+
+    *pb_mag_cycle = b_mag_due;
+    *pb_mag_read  = false;
 
     if (!b_mag_due)
     {
@@ -440,9 +505,9 @@ static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
                                    PRV_IMU_A_MAG_DIV_BITS, mag_div);
         return;
     }
-    if (n > 2u)
+    if (n_samples > IMU_MAG_BACKLOG_LIMIT)
     {
-        return; /* backlog cycle: postpone one cycle */
+        return; /* backlog cycle: postponed, MAG_DIV stays 0 */
     }
 
     ercd = drv_lsm303_read_mag(&g_mag_mx, &g_mag_my, &g_mag_mz);
@@ -570,31 +635,42 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
     if (!gb_cal_done_once)
     {
         bool    b_clamped = false;
+        int32_t avg_raw_x = 0;
+        int32_t avg_raw_y = 0;
+        int32_t avg_raw_z = 0;
         int32_t ofs_ax    = 0;
         int32_t ofs_ay    = 0;
         int32_t ofs_az    = 0;
 
-        /* Event-time division by the sample count (once per mode).
-           The offsets are stored in 2 mg steps (PRV_OFS_*): / 2 is a
-           power-of-two division, never >> on a signed value. */
-        ofs_ax = g_cal_sum_x / (int32_t)IMU_CAL_SAMPLES;
-        ofs_ay = g_cal_sum_y / (int32_t)IMU_CAL_SAMPLES;
-        ofs_az = (g_cal_sum_z / (int32_t)IMU_CAL_SAMPLES) - 1000;
+        /* Event-time division by the sample count (once per mode). The
+           sums are in raw register units, so each average is converted
+           to mg exactly like imu_read_sensors does before it can be
+           subtracted there: mg = (raw / 16) x IMU_MG_PER_LSB. */
+        avg_raw_x = g_cal_sum_x / (int32_t)IMU_CAL_SAMPLES;
+        avg_raw_y = g_cal_sum_y / (int32_t)IMU_CAL_SAMPLES;
+        avg_raw_z = g_cal_sum_z / (int32_t)IMU_CAL_SAMPLES;
+        ofs_ax    = (avg_raw_x / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB;
+        ofs_ay    = (avg_raw_y / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB;
+        ofs_az =
+            ((avg_raw_z / IMU_MG_RAW_SHIFT) * IMU_MG_PER_LSB) - IMU_REST_AZ_MG;
 
+        /* Offsets are stored in 2 mg steps, so the conversion divides by
+           IMU_OFFSET_LSB_MG (a power of two; never >> on a signed
+           value). */
         g_ofs_word_a = app_bits_put(
             g_ofs_word_a, PRV_OFS_A_AX_POS, PRV_OFS_A_AX_BITS,
-            app_bits_encode(ofs_ax / 2, PRV_OFS_A_AX_MIN, PRV_OFS_A_AX_MAX,
-                            PRV_OFS_A_AX_OFFSET, &b_clamped));
+            app_bits_encode(ofs_ax / IMU_OFFSET_LSB_MG, PRV_OFS_A_AX_MIN,
+                            PRV_OFS_A_AX_MAX, PRV_OFS_A_AX_OFFSET, &b_clamped));
         imu_clamp_fault(b_clamped);
         g_ofs_word_a = app_bits_put(
             g_ofs_word_a, PRV_OFS_A_AY_POS, PRV_OFS_A_AY_BITS,
-            app_bits_encode(ofs_ay / 2, PRV_OFS_A_AY_MIN, PRV_OFS_A_AY_MAX,
-                            PRV_OFS_A_AY_OFFSET, &b_clamped));
+            app_bits_encode(ofs_ay / IMU_OFFSET_LSB_MG, PRV_OFS_A_AY_MIN,
+                            PRV_OFS_A_AY_MAX, PRV_OFS_A_AY_OFFSET, &b_clamped));
         imu_clamp_fault(b_clamped);
         g_ofs_word_b = app_bits_put(
             g_ofs_word_b, PRV_OFS_B_AZ_POS, PRV_OFS_B_AZ_BITS,
-            app_bits_encode(ofs_az / 2, PRV_OFS_B_AZ_MIN, PRV_OFS_B_AZ_MAX,
-                            PRV_OFS_B_AZ_OFFSET, &b_clamped));
+            app_bits_encode(ofs_az / IMU_OFFSET_LSB_MG, PRV_OFS_B_AZ_MIN,
+                            PRV_OFS_B_AZ_MAX, PRV_OFS_B_AZ_OFFSET, &b_clamped));
         imu_clamp_fault(b_clamped);
 
         gb_cal_done_once = true;
@@ -683,109 +759,154 @@ static void imu_run_start(int32_t pos_l, int32_t pos_r)
 static void imu_turn_rate(bool b_mag_cycle, bool b_mag_read, int32_t pos_l,
                           int32_t pos_r)
 {
-    int32_t enc_hdg   = 0;
     int32_t enc_dps   = 0;
     int32_t imu_dps   = 0;
     bool    b_use_enc = false;
-    int32_t diff      = 0;
 
     if (!b_mag_cycle)
     {
         return; /* keep the last reported rate */
     }
 
-    /* Encoder rate over the same 50 ms window (event-time division
-       by 5: only every 5th cycle). */
-    enc_hdg             = odometry_heading_cdeg(pos_l, pos_r);
-    enc_dps             = (enc_hdg - g_enc_hdg_prev_cdeg) / 5;
+    enc_dps = imu_encoder_rate(pos_l, pos_r);
+    imu_dps = imu_mag_rate(b_mag_read, &b_use_enc);
+
+    if ((!b_use_enc) && imu_turn_disagrees(imu_dps, enc_dps))
+    {
+        b_use_enc = true; /* A7: the encoder rate wins */
+    }
+
+    g_turn_dps          = (b_use_enc) ? enc_dps : imu_dps;
+    gb_is_turn_from_enc = b_use_enc;
+}
+
+/**
+ * imu_encoder_rate
+ * @brief   Encoder turn rate over the same 50 ms window, in deg/s.
+ *          Event-time division by IMU_TURN_WINDOW_CYCLES (only every
+ *          5th cycle). Also refreshes PRV_IMU_D PREV_DIFF.
+ * @param   pos_l  current left position, counts
+ * @param   pos_r  current right position, counts
+ * @return  deg/s
+ * @context imu_task
+ */
+static int32_t imu_encoder_rate(int32_t pos_l, int32_t pos_r)
+{
+    int32_t enc_hdg = odometry_heading_cdeg(pos_l, pos_r);
+    int32_t enc_dps = (enc_hdg - g_enc_hdg_prev_cdeg) / IMU_TURN_WINDOW_CYCLES;
+    bool    b_clamped = false;
+
     g_enc_hdg_prev_cdeg = enc_hdg;
-    {
-        bool b_clamped = false;
 
-        /* PREV_DIFF: the position difference that will be 50 ms old
-           on the next magnetometer cycle. */
-        g_imu_prv_d = app_bits_put(
-            g_imu_prv_d, PRV_IMU_D_PREV_DIFF_POS, PRV_IMU_D_PREV_DIFF_BITS,
-            app_bits_encode(pos_l - pos_r, PRV_IMU_D_PREV_DIFF_MIN,
-                            PRV_IMU_D_PREV_DIFF_MAX, PRV_IMU_D_PREV_DIFF_OFFSET,
-                            &b_clamped));
-        imu_clamp_fault(b_clamped);
-    }
+    /* PREV_DIFF: the position difference that will be 50 ms old on the
+       next magnetometer cycle. */
+    g_imu_prv_d = app_bits_put(
+        g_imu_prv_d, PRV_IMU_D_PREV_DIFF_POS, PRV_IMU_D_PREV_DIFF_BITS,
+        app_bits_encode(pos_l - pos_r, PRV_IMU_D_PREV_DIFF_MIN,
+                        PRV_IMU_D_PREV_DIFF_MAX, PRV_IMU_D_PREV_DIFF_OFFSET,
+                        &b_clamped));
+    imu_clamp_fault(b_clamped);
 
-    if (b_mag_read)
-    {
-        if (terrain_abs(g_pitch_ddeg) > (uint32_t)IMU_MAG_MAX_PITCH_DDEG)
-        /* cast: positive constant, comparison only */
-        {
-            /* On a hump there is no tilt compensation: use the encoder
-               rate and drop the magnetometer reference. */
-            g_imu_prv_c =
-                app_bits_put(g_imu_prv_c, PRV_IMU_C_PREV_HDG_VALID_POS,
-                             PRV_IMU_C_PREV_HDG_VALID_BITS, 0u);
-            b_use_enc = true;
-        }
-        else
-        {
-            int32_t  heading = terrain_atan2_ddeg(g_mag_my - IMU_MAG_OFS_Y,
-                                                  g_mag_mx - IMU_MAG_OFS_X) *
-                               IMU_MAG_HEADING_SIGN;
-            uint32_t heading_wrap =
-                (uint32_t)terrain_heading_wrap_ddeg(heading);
-            /* cast: wrap >= 0 */
-            bool b_hdg_valid =
-                (0u != app_bits_get(g_imu_prv_c, PRV_IMU_C_PREV_HDG_VALID_POS,
-                                    PRV_IMU_C_PREV_HDG_VALID_BITS));
+    return enc_dps;
+}
 
-            if (b_hdg_valid)
-            {
-                uint32_t prev_hdg =
-                    app_bits_get(g_imu_prv_c, PRV_IMU_C_PREV_HDG_POS,
-                                 PRV_IMU_C_PREV_HDG_BITS);
+/**
+ * imu_mag_rate
+ * @brief   Magnetometer turn rate: the heading difference over 50 ms,
+ *          doubled to deg/s. On a hump, after a postponed cycle or
+ *          after an I2C error the reference is dropped, the encoder rate
+ *          is requested and a 100 ms gap is never treated as 50 ms
+ *          (B4.2.2 step 7).
+ * @param   b_mag_read  true when the magnetometer was actually read
+ * @param   pb_use_enc  out: true when the encoder rate must be used
+ * @return  deg/s from the magnetometer (0 when re-seeding)
+ * @context imu_task
+ */
+static int32_t imu_mag_rate(bool b_mag_read, bool * pb_use_enc)
+{
+    int32_t imu_dps = 0;
 
-                imu_dps =
-                    terrain_heading_delta_ddeg(prev_hdg, heading_wrap) * 2;
-            }
-            else
-            {
-                /* Re-seed after a gap: report the encoder rate for
-                   this cycle. */
-                b_use_enc = true;
-            }
-            g_imu_prv_c = app_bits_put(g_imu_prv_c, PRV_IMU_C_PREV_HDG_POS,
-                                       PRV_IMU_C_PREV_HDG_BITS, heading_wrap);
-            g_imu_prv_c =
-                app_bits_put(g_imu_prv_c, PRV_IMU_C_PREV_HDG_VALID_POS,
-                             PRV_IMU_C_PREV_HDG_VALID_BITS, 1u);
-        }
-    }
-    else
+    *pb_use_enc = false;
+
+    if (!b_mag_read)
     {
         /* This cycle should have read the magnetometer but did not
            (postponed backlog or I2C error): drop the reference. */
         g_imu_prv_c = app_bits_put(g_imu_prv_c, PRV_IMU_C_PREV_HDG_VALID_POS,
                                    PRV_IMU_C_PREV_HDG_VALID_BITS, 0u);
-        b_use_enc   = true;
+        *pb_use_enc = true;
+        return 0;
     }
 
-    if (!b_use_enc)
+    if (terrain_abs(g_pitch_ddeg) > (uint32_t)IMU_MAG_MAX_PITCH_DDEG)
+    /* cast: positive constant, comparison only */
     {
-        diff = imu_dps - enc_dps;
-        if (diff < 0)
-        {
-            diff = 0 - diff;
-        }
-        if ((terrain_abs(enc_dps) >= (uint32_t)IMU_TURN_CHECK_MIN_DPS)
-            /* cast: positive constant, comparison only */
-            && ((diff * 100) > ((int32_t)IMU_TURN_DISAGREE_PCT *
-                                (int32_t)terrain_abs(enc_dps))))
-        /* casts: both products are far below 2^31 */
-        {
-            b_use_enc = true; /* A7: the encoder rate wins */
-        }
+        /* On a hump there is no tilt compensation: use the encoder rate
+           and drop the magnetometer reference. */
+        g_imu_prv_c = app_bits_put(g_imu_prv_c, PRV_IMU_C_PREV_HDG_VALID_POS,
+                                   PRV_IMU_C_PREV_HDG_VALID_BITS, 0u);
+        *pb_use_enc = true;
+        return 0;
     }
 
-    g_turn_dps          = (b_use_enc) ? enc_dps : imu_dps;
-    gb_is_turn_from_enc = b_use_enc;
+    {
+        int32_t  heading      = terrain_atan2_ddeg(g_mag_my - IMU_MAG_OFS_Y,
+                                                   g_mag_mx - IMU_MAG_OFS_X) *
+                                IMU_MAG_HEADING_SIGN;
+        uint32_t heading_wrap = (uint32_t)terrain_heading_wrap_ddeg(heading);
+        /* cast: wrap >= 0 */
+        bool b_hdg_valid =
+            (0u != app_bits_get(g_imu_prv_c, PRV_IMU_C_PREV_HDG_VALID_POS,
+                                PRV_IMU_C_PREV_HDG_VALID_BITS));
+
+        if (b_hdg_valid)
+        {
+            uint32_t prev_hdg = app_bits_get(
+                g_imu_prv_c, PRV_IMU_C_PREV_HDG_POS, PRV_IMU_C_PREV_HDG_BITS);
+
+            imu_dps = terrain_heading_delta_ddeg(prev_hdg, heading_wrap) *
+                      IMU_DPS_PER_WINDOW;
+        }
+        else
+        {
+            /* Re-seed after a gap: report the encoder rate for this
+               cycle. */
+            *pb_use_enc = true;
+        }
+        g_imu_prv_c = app_bits_put(g_imu_prv_c, PRV_IMU_C_PREV_HDG_POS,
+                                   PRV_IMU_C_PREV_HDG_BITS, heading_wrap);
+        g_imu_prv_c = app_bits_put(g_imu_prv_c, PRV_IMU_C_PREV_HDG_VALID_POS,
+                                   PRV_IMU_C_PREV_HDG_VALID_BITS, 1u);
+    }
+
+    return imu_dps;
+}
+
+/**
+ * imu_turn_disagrees
+ * @brief   Assumption A7 test: a meaningful encoder rate that the
+ *          magnetometer contradicts by more than IMU_TURN_DISAGREE_PCT.
+ * @param   imu_dps  magnetometer rate, deg/s
+ * @param   enc_dps  encoder rate, deg/s
+ * @return  true when the encoder rate should be reported
+ * @context imu_task
+ */
+static bool imu_turn_disagrees(int32_t imu_dps, int32_t enc_dps)
+{
+    int32_t diff = imu_dps - enc_dps;
+
+    if (diff < 0)
+    {
+        diff = 0 - diff;
+    }
+    if (terrain_abs(enc_dps) < (uint32_t)IMU_TURN_CHECK_MIN_DPS)
+    /* cast: positive constant, comparison only */
+    {
+        return false; /* too slow to judge */
+    }
+    return ((diff * 100) >
+            ((int32_t)IMU_TURN_DISAGREE_PCT * (int32_t)terrain_abs(enc_dps)));
+    /* casts: both products are far below 2^31 */
 }
 
 /**
@@ -812,11 +933,23 @@ static void imu_classify(int32_t speed_cpw)
     uint32_t class_gap   = app_bits_get(g_imu_prv_a, PRV_IMU_A_CLASS_GAP_POS,
                                         PRV_IMU_A_CLASS_GAP_BITS);
 
-    if ((seq_now & 0xFu) != impact_seq_seen)
+    if ((seq_now & IMU_IMPACT_SEQ_MASK) != impact_seq_seen)
     {
+        /* Read INT1_SRC_A: it clears the latched interrupt so a repeated
+           tap can raise a new rising edge (B4.1.1, S4-I03). A read error
+           is not counted here; the next accelerometer transfer reports
+           the bus fault itself. */
+        int32_t src_byte = drv_lsm303_read_int1_src();
+
         g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_IMPACT_SEQ_POS,
-                                   PRV_IMU_A_IMPACT_SEQ_BITS, seq_now & 0xFu);
+                                   PRV_IMU_A_IMPACT_SEQ_BITS,
+                                   seq_now & IMU_IMPACT_SEQ_MASK);
         impact_hold = IMU_IMPACT_HOLD_TICKS;
+#if (IMU_LOG_HUMPS != 0)
+        app_log("impact src %d\n", src_byte, 0, 0);
+#else
+        (void)src_byte; /* unused when impact logging is off */
+#endif
     }
     else if (impact_hold > 0u)
     {

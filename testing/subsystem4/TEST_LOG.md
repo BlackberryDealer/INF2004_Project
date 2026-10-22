@@ -49,6 +49,10 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S4-U01, U02, U03, U06, U07, U12, U13, U10 | Phase 4 commit | Faris | PASS (host, packed) | `logs/2026-10-22_host_phase4_packed.txt` | terrain 19/19 (incl. S4-U10 pitch pack), fifo 6/6; packed terrain.c/imu.c build into normal and TEST=1 images with zero warnings |
 | 2026-10-22 | S4-U11 | — | Faris | pending | — | hump 127/128 → RANGE_CLAMP lives in Buddy 5's packed status-board writer (and imu.c raises it when the run peak reaches 127); runs once B5 merges |
 | 2026-10-22 | RAM report (Phase 5) | Phase 5 commit | Faris | PASS (script) | `docs/ram_comparison.md` | real baseline-vs-packed ELFs from this branch: B4 statics net −63 B; section 3 stays pending until on-car `app_stack_report()` logs exist |
+| 2026-10-22 | S4-U01, U02, U03, U06, U07, U12, U13, U10, U14 | audit commit | Faris | PASS (host) | `logs/2026-10-22_host_audit.txt` | terrain 19/19, fifo planner 6/6 after the function-length and naming refactor (behaviour unchanged) |
+| 2026-10-22 | S4-U11 | audit commit | Faris | PASS (target build) | `test_imu.c` `test_imu_hump_clamp`, `test_imu_offset_lsb` | 127 mm is representable and does not clamp; 128 mm clamps to 127 and sets the flag `imu_clamp_fault` turns into `APP_FAULT_RANGE_CLAMP`; that bit stays out of `APP_FAULT_STOP_MASK` (A25). One `PRV_OFS_A` AX step decodes to 2 mg, the 12-bit field covers ±4094 mg and 2048 steps clamp. Pure flag checks, so live state is untouched |
+| 2026-10-22 | normal + `TEST=1` builds, `barr_check.sh` | audit commit | Faris | PASS | build logs | both images build with zero warnings after the audit; `tools/barr_check.sh`: 67 files, no findings |
+| 2026-10-22 | RAM report (Phase 5, regenerated) | audit commit | Faris | PASS (script) | `docs/ram_comparison.md` | re-measured against a fresh pre-packing baseline (`05a20af`): `.bss` −64 B, `.data` +8 B, B4 statics net **−59 B**; section 3 still pending until on-car `app_stack_report()` logs exist |
 | 2026-10-22 | S4-I01, I02, I03, I04, I09 (Phase 3) | — | Faris | pending | — | integration on the car: INT1→motors low ≤15 ms with Buddy 2 (GP14), course humps vs ruler, imu_task WCET. Blocked on hardware; plan below |
 | 2026-10-22 | S4-I01–I11 | — | Faris | pending | — | bench/track: needs the physical car (placeholders kept, spec rule A.3) |
 
@@ -61,6 +65,24 @@ so the 16-bit `RAW_SAMPLE` row now sits in its own documentation group
 `E_IMU_SAMPLE`. No macros are generated for either group, so nothing
 functional changes. Please decide: relax the generator's group check for
 class E rows (Buddy 1), or keep the split group as committed.
+
+## Audit pass (review of Phases 1–5)
+
+Re-read every subsystem 4 file against Part A, Part C and Part D before
+handing over. Two **behaviour** defects and several style items were found;
+everything below is fixed and re-tested except where marked pending.
+
+| Item | Kind | What was wrong | Fix |
+|---|---|---|---|
+| `imu_calibrate` | behaviour | The CAL_IMU offsets were summed in raw register units (`g_cal_sum_x += g_avg_raw_x`) but subtracted as mg in the read path, so `ax - ofs_ax` produced values like `1000 − 16000` mg and the store path clamped | Divide the sample sum first, then convert with `IMU_MG_RAW_SHIFT` / `IMU_MG_PER_LSB`; `az` also subtracts the `IMU_REST_AZ_MG` rest reference |
+| `imu_calibrate` / `imu_read_acc` | behaviour | The PRV_OFS_A/B words carry **2 mg per step** (`tools/layout.csv`, spec B4.4), but `imu_read_acc` subtracted the decoded step as if it were 1 mg, so every stored offset was applied at half strength | The read path now multiplies by `IMU_OFFSET_LSB_MG`; `test_imu_offset_lsb` locks the 2 mg step and the ±4094 mg range |
+| `imu_int1_isr` / impact path | behaviour | `INT1_SRC_A` was never read, so the LSM303DLHC's latched interrupt never re-armed: only the first tap of a run could be seen (breaks S4-I03) | New `drv_lsm303_read_int1_src()` read on the magnetometer cycle; the logged sequence is masked with `IMU_IMPACT_SEQ_MASK` |
+| `drv_lsm303` error paths | robustness | An aborted or timed-out transfer left the controller enabled with stale RX data, so the next read could return old samples | New `lsm303_flush()` on every error path (clear abort, toggle `IC_ENABLE`, drain RX) |
+| `imu_terrain_update` | correctness | Raised `APP_FAULT_RANGE_CLAMP` at `hump_done >= 127`, which also fired for a legitimate exactly-127 mm hump | Removed; `app_bits_encode`'s clamp flag is the only source (S4-U11 test proves 127 passes, 128 clamps) |
+| `imu_task`, `imu_turn_rate`, `terrain_step` | BARR 6.2.a | 152, 107 and 151 lines | Split into `imu_terrain_update`, `imu_encoder_rate`, `imu_mag_rate`, `imu_turn_disagrees`, `terrain_flat_step` / `terrain_climb_step` / `terrain_descend_step`; longest function is now 89 lines |
+| `n`, `y`, `x`, `r`, `k`, `f`, `a`, `da`, `id` | BARR 7.1.e | Names shorter than three characters | Renamed (`n_samples`, `y_value`, `id_bytes`, …). **Exception:** `terrain_atan2_ddeg(int32_t y, int32_t x)` keeps the spec's parameter names, because spec line 3291 writes that declaration verbatim and Part A rule 1 fixes the interface |
+| `tools/ram_report.sh` | cosmetic | Symbol rows printed as `|sym| … |B4|` (no padding in the markdown table) | `| %s |`; report regenerated |
+| `docs/ram_comparison.md` | packaging | The Phase 5 run left the file as UTF-16LE with a BOM, so git stored it as a **binary blob** and the markdown table rendered as garbage on GitHub | Regenerated as plain UTF-8; the same UTF-16 problem was found in `logs/2026-10-22_host_phase2.txt` and `..._phase4_packed.txt` and both were converted too |
 
 ## Phase 3 integration plan (pending hardware)
 

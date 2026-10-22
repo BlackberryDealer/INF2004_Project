@@ -29,6 +29,8 @@
 #if APP_TEST
 static bool test_imu_terrain_reset(void);
 static bool test_imu_pitch_pack(void);
+static bool test_imu_hump_clamp(void);
+static bool test_imu_offset_lsb(void);
 #endif
 
 /* ---- public functions ------------------------------------------------- */
@@ -58,9 +60,15 @@ void test_imu_run(void)
     TEST_CHECK("S4-U10", test_imu_pitch_pack(),
                "pitch pack/unpack at -45/0/+45 deg and clamp beyond");
 
-    /* S4-U11 (hump 127/128 sets RANGE_CLAMP) lands with Buddy 5's
-       packed status board: the clamp lives in the board writer, not in
-       imu.c. See testing/subsystem4/TEST_LOG.md. */
+    /* S4-U11: reaching or passing the 7-bit run-peak ceiling sets the
+       clamp flag, so imu_clamp_fault() raises APP_FAULT_RANGE_CLAMP. */
+    TEST_CHECK("S4-U11", test_imu_hump_clamp(),
+               "hump 127 passes, 128 clamps and raises RANGE_CLAMP");
+
+    /* S4-U11: the PRV_OFS_* words store 2 mg per step, so the read path
+       must scale the decoded value back to mg. */
+    TEST_CHECK("S4-U11", test_imu_offset_lsb(),
+               "one PRV_OFS_A AX step decodes to 2 mg, range covers +-4094 mg");
 
     TEST_SUMMARY("imu");
 #endif
@@ -194,6 +202,99 @@ static bool test_imu_pitch_pack(void)
     raw       = app_bits_encode(-451, SB_IMU0_PITCH_MIN, SB_IMU0_PITCH_MAX,
                                 SB_IMU0_PITCH_OFFSET, &b_clamped);
     if ((!b_clamped) || (app_bits_decode(raw, SB_IMU0_PITCH_OFFSET) != -450))
+    {
+        b_ok = false;
+    }
+
+    return b_ok;
+}
+
+/**
+ * test_imu_hump_clamp
+ * @brief   S4-U11: a hump of 127 mm is representable and must not set
+ *          the clamp flag, a hump of 128 mm must clamp to 127 and set
+ *          it (which imu_clamp_fault turns into APP_FAULT_RANGE_CLAMP).
+ *          A25 keeps RANGE_CLAMP out of APP_FAULT_STOP_MASK, so this
+ *          fault never by itself stops the robot.
+ * @return  true when the run-peak clamp behaves as the layout says
+ * @context usermain (test only)
+ */
+static bool test_imu_hump_clamp(void)
+{
+    bool     b_ok      = true;
+    bool     b_clamped = false;
+    uint32_t raw       = 0u;
+
+    raw = app_bits_encode(127, PRV_IMU_C_RUN_PEAK_MIN, PRV_IMU_C_RUN_PEAK_MAX,
+                          PRV_IMU_C_RUN_PEAK_OFFSET, &b_clamped);
+    if ((b_clamped) || (127 != app_bits_decode(raw, PRV_IMU_C_RUN_PEAK_OFFSET)))
+    {
+        b_ok = false;
+    }
+
+    b_clamped = false;
+    raw = app_bits_encode(128, PRV_IMU_C_RUN_PEAK_MIN, PRV_IMU_C_RUN_PEAK_MAX,
+                          PRV_IMU_C_RUN_PEAK_OFFSET, &b_clamped);
+    if ((!b_clamped) ||
+        (127 != app_bits_decode(raw, PRV_IMU_C_RUN_PEAK_OFFSET)))
+    {
+        b_ok = false;
+    }
+
+    if (0u != (APP_FAULT_STOP_MASK & APP_FAULT_RANGE_CLAMP))
+    {
+        b_ok = false; /* A25: informational only */
+    }
+
+    return b_ok;
+}
+
+/**
+ * test_imu_offset_lsb
+ * @brief   S4-U11 (offset half): the PRV_OFS_* words carry 2 mg per step
+ *          (tools/layout.csv, spec B4.4), so one step is 2 mg and the
+ *          12-bit field covers the full +-4 g range. imu_read_acc must
+ *          scale a decoded step back to 2 mg before subtracting it.
+ * @return  true when the layout matches the documented LSB weight
+ * @context usermain (test only)
+ */
+static bool test_imu_offset_lsb(void)
+{
+    bool     b_ok      = true;
+    bool     b_clamped = false;
+    uint32_t raw       = 0u;
+    int32_t  step_mg   = 2; /* layout.csv: PRV_OFS_A AX/AY/AZ LSB = 2 mg */
+
+    if ((PRV_OFS_A_AX_BITS != PRV_OFS_A_AY_BITS) ||
+        (PRV_OFS_A_AX_BITS != PRV_OFS_B_AZ_BITS))
+    {
+        b_ok = false; /* the three offsets must stay interchangeable */
+    }
+
+    /* +1 g in 2 mg steps. */
+    raw = app_bits_encode(500, PRV_OFS_A_AX_MIN, PRV_OFS_A_AX_MAX,
+                          PRV_OFS_A_AX_OFFSET, &b_clamped);
+    if ((b_clamped) ||
+        ((app_bits_decode(raw, PRV_OFS_A_AX_OFFSET) * step_mg) != 1000))
+    {
+        b_ok = false;
+    }
+
+    /* Negative offset: -1 g. */
+    b_clamped = false;
+    raw       = app_bits_encode(-500, PRV_OFS_A_AX_MIN, PRV_OFS_A_AX_MAX,
+                                PRV_OFS_A_AX_OFFSET, &b_clamped);
+    if ((b_clamped) ||
+        ((app_bits_decode(raw, PRV_OFS_A_AX_OFFSET) * step_mg) != -1000))
+    {
+        b_ok = false;
+    }
+
+    /* The top code is 2047 steps = 4094 mg; one step more clamps. */
+    raw = app_bits_encode(2048, PRV_OFS_A_AX_MIN, PRV_OFS_A_AX_MAX,
+                          PRV_OFS_A_AX_OFFSET, &b_clamped);
+    if ((!b_clamped) ||
+        ((app_bits_decode(raw, PRV_OFS_A_AX_OFFSET) * step_mg) != 4094))
     {
         b_ok = false;
     }

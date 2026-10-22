@@ -35,12 +35,19 @@
    is at most APP_TICK_COUNTS_MAX counts. */
 #define TERRAIN_DS_DELTA_MAX (4u * APP_TICK_COUNTS_MAX)
 
-#define TERRAIN_DDEG_CIRCLE  (3600)
-#define TERRAIN_DDEG_HALF    (1800)
-#define TERRAIN_Q14_ONE      (16384)
-#define TERRAIN_ATAN_K_MAX   (32)
-#define TERRAIN_ATAN_SCALE   (1024)
-#define TERRAIN_HIST_ENTRIES (5u)
+#define TERRAIN_DDEG_CIRCLE    (3600)
+#define TERRAIN_DDEG_HALF      (1800)
+#define TERRAIN_DDEG_QUADRANT  (900)
+#define TERRAIN_DDEG_PER_DEG   (10)
+#define TERRAIN_DEG_QUADRANT   (90)
+#define TERRAIN_DEG_HALF       (180)
+#define TERRAIN_DEG_THREE_Q    (270)
+#define TERRAIN_DEG_CIRCLE     (360)
+#define TERRAIN_Q14_ONE        (16384)
+#define TERRAIN_ATAN_K_MAX     (32)
+#define TERRAIN_ATAN_SCALE     (1024)
+#define TERRAIN_ATAN_FRAC_MASK (31u)
+#define TERRAIN_HIST_ENTRIES   (5u)
 
 /* Height conversion: acc is ds_um x (ax - a_fwd) summed over the hump.
    h_mm = acc / 1 000 000 approx: (acc >> 10) x 1074 >> 20 = acc x
@@ -92,8 +99,17 @@ static void     terrain_hist_put(terrain_speed_hist_t * p_hist, uint32_t slot,
                                  int32_t speed_cpw);
 static uint32_t terrain_acc_to_mm(int32_t acc_um_mg);
 static uint32_t terrain_climb_limit_counts(void);
-static uint32_t terrain_sin_q14_deg(uint32_t deg, uint32_t rem_ddeg);
+static uint32_t terrain_sin_q14_deg(uint32_t deg, uint32_t frac_ddeg);
 static uint32_t terrain_hump_report(uint32_t integ_mm, uint32_t geo_mm);
+static void     terrain_flat_step(terrain_t * p_ter, int32_t pitch_ddeg);
+static void terrain_climb_step(terrain_t * p_ter, terrain_input_t const * p_in,
+                               int32_t pitch_ddeg, int32_t delta_a,
+                               uint32_t ds_um, terrain_output_t * p_out);
+static void terrain_descend_step(terrain_t * p_ter, int32_t pitch_ddeg,
+                                 int32_t delta_a, uint32_t ds_um,
+                                 terrain_output_t * p_out);
+static void terrain_hyst_bump(terrain_t * p_ter);
+static bool terrain_hyst_done(terrain_t const * p_ter);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -115,25 +131,25 @@ uint32_t terrain_abs(int32_t value)
 
 /**
  * terrain_atan2_ddeg
- * @brief   Integer atan2(y, x) in 0.1 deg, -1800..1799, error <= 0.2 deg.
+ * @brief   Integer atan2 in 0.1 deg, -1800..1799, error <= 0.2 deg.
  *          Works on magnitudes, then maps back by quadrant. One division,
  *          allowed: called at most twice per 10 ms cycle.
- * @param   y  signed value
- * @param   x  signed value
+ * @param   y_value  signed value (the spec snippet names it y)
+ * @param   x_value  signed value (the spec snippet names it x)
  * @return  angle in 0.1 deg
  * @context any (imu_task, host test)
  */
-int32_t terrain_atan2_ddeg(int32_t y, int32_t x)
+int32_t terrain_atan2_ddeg(int32_t y_value, int32_t x_value)
 {
-    uint32_t mag_y  = terrain_abs(y);
-    uint32_t mag_x  = terrain_abs(x);
-    bool     b_swap = (mag_y > mag_x);
-    uint32_t small  = 0u;
-    uint32_t big    = 0u;
-    uint32_t r      = 0u;
-    uint32_t k      = 0u;
-    uint32_t f      = 0u;
-    int32_t  a      = 0;
+    uint32_t mag_y   = terrain_abs(y_value);
+    uint32_t mag_x   = terrain_abs(x_value);
+    bool     b_swap  = (mag_y > mag_x);
+    uint32_t small   = 0u;
+    uint32_t big     = 0u;
+    uint32_t ratio   = 0u;
+    uint32_t tab_idx = 0u;
+    uint32_t frac    = 0u;
+    int32_t  angle   = 0;
 
     if ((0u == mag_y) && (0u == mag_x))
     {
@@ -151,39 +167,42 @@ int32_t terrain_atan2_ddeg(int32_t y, int32_t x)
         big   = mag_x;
     }
 
-    r = (small * (uint32_t)TERRAIN_ATAN_SCALE) / big;
+    ratio = (small * (uint32_t)TERRAIN_ATAN_SCALE) / big;
     /* 0..1024; the one division */
-    k = r >> 5;  /* 0..32 */
-    f = r & 31u; /* fraction within a step */
-    if (TERRAIN_ATAN_K_MAX == k)
+    tab_idx = ratio >> 5; /* 0..32 */
+    frac    = ratio & TERRAIN_ATAN_FRAC_MASK;
+    if (TERRAIN_ATAN_K_MAX == tab_idx)
     {
-        a = g_atan_tab[TERRAIN_ATAN_K_MAX];
+        angle = g_atan_tab[TERRAIN_ATAN_K_MAX];
     }
     else
     {
-        a = g_atan_tab[k] +
-            (((g_atan_tab[k + 1u] - g_atan_tab[k]) * (int32_t)f) / 32);
+        angle = g_atan_tab[tab_idx] +
+                (((g_atan_tab[tab_idx + 1u] - g_atan_tab[tab_idx]) *
+                  (int32_t)frac) /
+                 TERRAIN_ATAN_K_MAX);
         /* signed division by 32, not >>:
            C99 truncates toward zero */
     }
     if (b_swap)
     {
-        a = 900 - a; /* complement: angle above 45 deg */
+        angle = TERRAIN_DDEG_QUADRANT - angle;
+        /* complement: angle above 45 deg */
     }
 
-    if ((x < 0) && (y >= 0))
+    if ((x_value < 0) && (y_value >= 0))
     {
-        return TERRAIN_DDEG_HALF - a; /* second quadrant: 180 - a */
+        return TERRAIN_DDEG_HALF - angle; /* second quadrant: 180 - a */
     }
-    if ((x < 0) && (y < 0))
+    if ((x_value < 0) && (y_value < 0))
     {
-        return a - TERRAIN_DDEG_HALF; /* third quadrant: a - 180 */
+        return angle - TERRAIN_DDEG_HALF; /* third quadrant: a - 180 */
     }
-    if ((x >= 0) && (y < 0))
+    if ((x_value >= 0) && (y_value < 0))
     {
-        return -a;
+        return -angle;
     }
-    return a; /* x >= 0, y >= 0 */
+    return angle; /* x >= 0, y >= 0 */
 }
 
 /**
@@ -196,10 +215,10 @@ int32_t terrain_atan2_ddeg(int32_t y, int32_t x)
  */
 int32_t terrain_sin_q14(int32_t ddeg)
 {
-    uint32_t deg      = 0u;
-    uint32_t rem      = 0u;
-    uint32_t val      = 0u;
-    bool     b_is_neg = false;
+    uint32_t deg       = 0u;
+    uint32_t frac      = 0u;
+    uint32_t q14_value = 0u;
+    bool     b_is_neg  = false;
 
     ddeg = ddeg % TERRAIN_DDEG_CIRCLE;
     if (ddeg < 0)
@@ -207,45 +226,45 @@ int32_t terrain_sin_q14(int32_t ddeg)
         ddeg += TERRAIN_DDEG_CIRCLE; /* remainder is > -3600: one add */
     }
 
-    deg = (uint32_t)ddeg / 10u; /* cast: ddeg >= 0 here */
-    rem = (uint32_t)ddeg % 10u;
+    deg  = (uint32_t)ddeg / TERRAIN_DDEG_PER_DEG; /* cast: ddeg >= 0 */
+    frac = (uint32_t)ddeg % TERRAIN_DDEG_PER_DEG;
 
-    if (deg < 90u)
+    if (deg < TERRAIN_DEG_QUADRANT)
     {
-        val = terrain_sin_q14_deg(deg, rem);
+        q14_value = terrain_sin_q14_deg(deg, frac);
     }
-    else if (deg < 180u)
+    else if (deg < TERRAIN_DEG_HALF)
     {
-        val = terrain_sin_q14_deg(180u - deg, rem);
+        q14_value = terrain_sin_q14_deg(TERRAIN_DEG_HALF - deg, frac);
     }
-    else if (deg < 270u)
+    else if (deg < TERRAIN_DEG_THREE_Q)
     {
-        b_is_neg = true;
-        val      = terrain_sin_q14_deg(deg - 180u, rem);
+        b_is_neg  = true;
+        q14_value = terrain_sin_q14_deg(deg - TERRAIN_DEG_HALF, frac);
     }
     else
     {
-        b_is_neg = true;
-        val      = terrain_sin_q14_deg(360u - deg, rem);
+        b_is_neg  = true;
+        q14_value = terrain_sin_q14_deg(TERRAIN_DEG_CIRCLE - deg, frac);
     }
 
     if (b_is_neg)
     {
-        return (int32_t)(0u - val); /* cast: val <= 16384 */
+        return (int32_t)(0u - q14_value); /* cast: value <= 16384 */
     }
-    return (int32_t)val; /* cast: val <= 16384 */
+    return (int32_t)q14_value; /* cast: value <= 16384 */
 }
 
 /**
  * terrain_cos_q14
- * @brief   Cosine via sin(ddeg + 900).
+ * @brief   Cosine via sin(ddeg + 90 deg).
  * @param   ddeg  angle in 0.1 deg
  * @return  Q14 cosine, -16384..16384
  * @context any
  */
 int32_t terrain_cos_q14(int32_t ddeg)
 {
-    return terrain_sin_q14(ddeg + 900);
+    return terrain_sin_q14(ddeg + TERRAIN_DDEG_QUADRANT);
 }
 
 /**
@@ -384,7 +403,8 @@ void terrain_reset(terrain_t * p_ter)
  * @brief   One 10 ms cycle of the Terrain Monitor (Figure 6.3 with the
  *          review changes). pitch = atan2(ax - a_fwd, az), + = nose up.
  *          Distance, not time, decides "ramp": the climb limit is
- *          TERRAIN_MAX_CLIMB_MM converted to counts.
+ *          TERRAIN_MAX_CLIMB_MM converted to counts. One handler per
+ *          state, as B4.2.1 requires.
  * @param   p_ter  monitor state
  * @param   p_in   this cycle's inputs
  * @param   p_out  outputs: pitch, hump now, hump done (one cycle), geo
@@ -394,14 +414,12 @@ void terrain_reset(terrain_t * p_ter)
 void terrain_step(terrain_t * p_ter, terrain_input_t const * p_in,
                   terrain_output_t * p_out)
 {
-    int32_t pitch =
+    int32_t pitch_ddeg =
         terrain_atan2_ddeg(p_in->ax_mg - p_in->a_fwd_mg, p_in->az_mg);
-    uint32_t ds_um = p_in->ds_counts * APP_UM_PER_COUNT;
-    int32_t  da    = p_in->ax_mg - p_in->a_fwd_mg;
-    int32_t  accum = 0;
-    uint32_t climb = 0u;
+    int32_t  delta_a = p_in->ax_mg - p_in->a_fwd_mg;
+    uint32_t ds_um   = p_in->ds_counts * APP_UM_PER_COUNT;
 
-    p_out->pitch_ddeg   = pitch;
+    p_out->pitch_ddeg   = pitch_ddeg;
     p_out->hump_now_mm  = terrain_acc_to_mm(p_ter->acc_um_mg);
     p_out->hump_done_mm = 0u;
     p_out->hump_geo_mm  = 0u;
@@ -409,130 +427,15 @@ void terrain_step(terrain_t * p_ter, terrain_input_t const * p_in,
     switch (terrain_state_get(p_ter))
     {
     case TERRAIN_FLAT:
-        if (terrain_climb_get(p_ter) > 0u)
-        {
-            /* Ramp latch (S4-U02): after a climb longer than
-               TERRAIN_MAX_CLIMB_MM was rejected as a ramp, do not
-               re-arm CLIMBING while the surface is still pitched. The
-               latch clears once the pitch stays <= TERRAIN_LEVEL_DDEG
-               for TERRAIN_HYST_SAMPLES cycles. */
-            if (terrain_abs(pitch) <= (uint32_t)TERRAIN_LEVEL_DDEG)
-            {
-                terrain_hyst_set(p_ter, terrain_hyst_get(p_ter) + 1u);
-                if (terrain_hyst_get(p_ter) >= TERRAIN_HYST_SAMPLES)
-                {
-                    terrain_climb_set(p_ter, 0u);
-                    terrain_hyst_set(p_ter, 0u);
-                }
-            }
-            else
-            {
-                terrain_hyst_set(p_ter, 0u);
-            }
-            break;
-        }
-        if (pitch >= TERRAIN_CLIMB_START_DDEG)
-        {
-            terrain_hyst_set(p_ter, terrain_hyst_get(p_ter) + 1u);
-            if (terrain_hyst_get(p_ter) >= TERRAIN_HYST_SAMPLES)
-            {
-                terrain_state_set(p_ter, TERRAIN_CLIMBING);
-                terrain_hyst_set(p_ter, 0u);
-                p_ter->acc_um_mg = 0;
-                terrain_climb_set(p_ter, 0u);
-                terrain_peak_set(p_ter, 0u);
-                terrain_pitch_max_set(p_ter, 0);
-            }
-        }
-        else
-        {
-            terrain_hyst_set(p_ter, 0u);
-        }
+        terrain_flat_step(p_ter, pitch_ddeg);
         break;
 
     case TERRAIN_CLIMBING:
-        /* Bound comment (spec): |ds_um| <= 5235 and |da| <= 4000 per
-           cycle, so the product fits int32. */
-        accum            = p_ter->acc_um_mg +
-                           ((int32_t)ds_um * da); /* cast: <= 5235, positive */
-        p_ter->acc_um_mg = accum;
-        p_out->hump_now_mm = terrain_acc_to_mm(accum);
-        climb              = terrain_climb_get(p_ter) + p_in->ds_counts;
-        terrain_climb_set(p_ter, climb);
-        if (p_out->hump_now_mm > terrain_peak_get(p_ter))
-        {
-            terrain_peak_set(p_ter, p_out->hump_now_mm);
-        }
-        if (pitch > terrain_pitch_max_get(p_ter))
-        {
-            terrain_pitch_max_set(p_ter, pitch);
-        }
-
-        if (terrain_climb_get(p_ter) > terrain_climb_limit_counts())
-        {
-            /* A ramp, not a hump: no report. Set the latch so the
-               still-pitched surface cannot immediately re-arm a new
-               climb (S4-U02). */
-            terrain_reset(p_ter);
-            terrain_climb_set(p_ter, 1u);
-            break;
-        }
-        if (pitch <= TERRAIN_LEVEL_DDEG)
-        {
-            terrain_hyst_set(p_ter, terrain_hyst_get(p_ter) + 1u);
-            if (terrain_hyst_get(p_ter) >= TERRAIN_HYST_SAMPLES)
-            {
-                terrain_state_set(p_ter, TERRAIN_DESCENDING);
-                terrain_hyst_set(p_ter, 0u);
-            }
-        }
-        else
-        {
-            terrain_hyst_set(p_ter, 0u);
-        }
+        terrain_climb_step(p_ter, p_in, pitch_ddeg, delta_a, ds_um, p_out);
         break;
 
     case TERRAIN_DESCENDING:
-        /* Same accumulation: on a descent da is negative and the
-           integrated height falls back toward zero. */
-        accum            = p_ter->acc_um_mg +
-                           ((int32_t)ds_um * da); /* cast: <= 5235, positive */
-        p_ter->acc_um_mg = accum;
-        p_out->hump_now_mm = terrain_acc_to_mm(accum);
-
-        if (terrain_abs(pitch) <= (uint32_t)TERRAIN_LEVEL_DDEG)
-        {
-            terrain_hyst_set(p_ter, terrain_hyst_get(p_ter) + 1u);
-            if (terrain_hyst_get(p_ter) >= TERRAIN_HYST_SAMPLES)
-            {
-                uint32_t h_geo =
-                    ((uint32_t)TERRAIN_WHEELBASE_MM *
-                     (uint32_t)terrain_sin_q14(terrain_pitch_max_get(p_ter))) /
-                    (uint32_t)TERRAIN_Q14_ONE;
-                /* casts: wheelbase >= 0 and, as
-                   pitch_max >= CLIMB_START > 0, the
-                   sine is >= 0; the division is by a
-                   power of two (never >> on a signed
-                   value) */
-
-                terrain_state_set(p_ter, TERRAIN_FLAT);
-                terrain_hyst_set(p_ter, 0u);
-                p_ter->acc_um_mg = 0; /* keep hump_now = 0 in FLAT */
-                if (terrain_peak_get(p_ter) >= TERRAIN_HUMP_MIN_MM)
-                {
-                    p_out->hump_done_mm =
-                        terrain_hump_report(terrain_peak_get(p_ter), h_geo);
-                    p_out->hump_geo_mm = h_geo;
-                }
-                terrain_climb_set(p_ter, 0u);
-                terrain_peak_set(p_ter, 0u);
-                terrain_pitch_max_set(p_ter, 0);
-            }
-        }
-        else
-        {
-            terrain_hyst_set(p_ter, 0u);
-        }
+        terrain_descend_step(p_ter, pitch_ddeg, delta_a, ds_um, p_out);
         break;
 
     case TERRAIN_CAL:
@@ -821,23 +724,23 @@ static uint32_t terrain_climb_limit_counts(void)
 /**
  * terrain_sin_q14_deg
  * @brief   Table lookup with linear interpolation inside a degree.
- * @param   deg       0..90
- * @param   rem_ddeg  fraction of a degree, 0..9
+ * @param   deg        0..90
+ * @param   frac_ddeg  fraction of a degree, 0..9
  * @return  Q14 sine, unsigned
  * @context any
  */
-static uint32_t terrain_sin_q14_deg(uint32_t deg, uint32_t rem_ddeg)
+static uint32_t terrain_sin_q14_deg(uint32_t deg, uint32_t frac_ddeg)
 {
     uint32_t base = 0u;
 
-    if (0u == rem_ddeg)
+    if (0u == frac_ddeg)
     {
         return (uint32_t)g_sin_tab[deg]; /* cast: entry >= 0 */
     }
     base = (uint32_t)g_sin_tab[deg]; /* cast: entry >= 0 */
     return base +
-           (((uint32_t)(g_sin_tab[deg + 1u] - g_sin_tab[deg]) * rem_ddeg) /
-            10u);
+           (((uint32_t)(g_sin_tab[deg + 1u] - g_sin_tab[deg]) * frac_ddeg) /
+            TERRAIN_DDEG_PER_DEG);
     /* signed division by 10, event-time */
 }
 
@@ -861,6 +764,200 @@ static uint32_t terrain_hump_report(uint32_t integ_mm, uint32_t geo_mm)
     case 0u:
     default:
         return integ_mm;
+    }
+}
+
+/**
+ * terrain_hyst_bump
+ * @brief   Counts one more consecutive sample that meets a condition.
+ * @param   p_ter  monitor state
+ * @return  none
+ * @context any (handler helper)
+ */
+static void terrain_hyst_bump(terrain_t * p_ter)
+{
+    terrain_hyst_set(p_ter, terrain_hyst_get(p_ter) + 1u);
+}
+
+/**
+ * terrain_hyst_done
+ * @brief   True when the hysteresis count reached TERRAIN_HYST_SAMPLES.
+ * @param   p_ter  monitor state
+ * @return  true when the condition has held long enough
+ * @context any (handler helper)
+ */
+static bool terrain_hyst_done(terrain_t const * p_ter)
+{
+    return (terrain_hyst_get(p_ter) >= TERRAIN_HYST_SAMPLES);
+}
+
+/**
+ * terrain_flat_step
+ * @brief   FLAT handler: watch for a climb, and hold the ramp latch after
+ *          a rejected ramp.
+ * @param   p_ter       monitor state
+ * @param   pitch_ddeg  this cycle's pitch, 0.1 deg
+ * @return  none
+ * @context terrain_step
+ */
+static void terrain_flat_step(terrain_t * p_ter, int32_t pitch_ddeg)
+{
+    if (terrain_climb_get(p_ter) > 0u)
+    {
+        /* Ramp latch (S4-U02): after a climb longer than
+           TERRAIN_MAX_CLIMB_MM was rejected as a ramp, do not re-arm
+           CLIMBING while the surface is still pitched. The latch clears
+           once the pitch stays <= TERRAIN_LEVEL_DDEG for
+           TERRAIN_HYST_SAMPLES cycles. */
+        if (terrain_abs(pitch_ddeg) <= (uint32_t)TERRAIN_LEVEL_DDEG)
+        {
+            terrain_hyst_bump(p_ter);
+            if (terrain_hyst_done(p_ter))
+            {
+                terrain_climb_set(p_ter, 0u);
+                terrain_hyst_set(p_ter, 0u);
+            }
+        }
+        else
+        {
+            terrain_hyst_set(p_ter, 0u);
+        }
+        return;
+    }
+
+    if (pitch_ddeg >= TERRAIN_CLIMB_START_DDEG)
+    {
+        terrain_hyst_bump(p_ter);
+        if (terrain_hyst_done(p_ter))
+        {
+            terrain_state_set(p_ter, TERRAIN_CLIMBING);
+            terrain_hyst_set(p_ter, 0u);
+            p_ter->acc_um_mg = 0;
+            terrain_climb_set(p_ter, 0u);
+            terrain_peak_set(p_ter, 0u);
+            terrain_pitch_max_set(p_ter, 0);
+        }
+    }
+    else
+    {
+        terrain_hyst_set(p_ter, 0u);
+    }
+}
+
+/**
+ * terrain_climb_step
+ * @brief   CLIMBING handler: integrate the height, track the peak and
+ *          the maximum pitch, reject a ramp by distance.
+ * @param   p_ter       monitor state
+ * @param   p_in        this cycle's inputs
+ * @param   pitch_ddeg  this cycle's pitch, 0.1 deg
+ * @param   delta_a     ax - a_fwd, mg
+ * @param   ds_um       this cycle's travel, um
+ * @param   p_out       outputs
+ * @return  none
+ * @context terrain_step
+ */
+static void terrain_climb_step(terrain_t * p_ter, terrain_input_t const * p_in,
+                               int32_t pitch_ddeg, int32_t delta_a,
+                               uint32_t ds_um, terrain_output_t * p_out)
+{
+    int32_t accum = p_ter->acc_um_mg + ((int32_t)ds_um * delta_a);
+    /* cast: ds_um <= 5235 per cycle, so the product fits int32 */
+
+    p_ter->acc_um_mg   = accum;
+    p_out->hump_now_mm = terrain_acc_to_mm(accum);
+    terrain_climb_set(p_ter, terrain_climb_get(p_ter) + p_in->ds_counts);
+
+    if (p_out->hump_now_mm > terrain_peak_get(p_ter))
+    {
+        terrain_peak_set(p_ter, p_out->hump_now_mm);
+    }
+    if (pitch_ddeg > terrain_pitch_max_get(p_ter))
+    {
+        terrain_pitch_max_set(p_ter, pitch_ddeg);
+    }
+
+    if (terrain_climb_get(p_ter) > terrain_climb_limit_counts())
+    {
+        /* A ramp, not a hump: no report. Set the latch so the
+           still-pitched surface cannot immediately re-arm a new climb
+           (S4-U02). */
+        terrain_reset(p_ter);
+        terrain_climb_set(p_ter, 1u);
+        return;
+    }
+
+    if (pitch_ddeg <= TERRAIN_LEVEL_DDEG)
+    {
+        terrain_hyst_bump(p_ter);
+        if (terrain_hyst_done(p_ter))
+        {
+            terrain_state_set(p_ter, TERRAIN_DESCENDING);
+            terrain_hyst_set(p_ter, 0u);
+        }
+    }
+    else
+    {
+        terrain_hyst_set(p_ter, 0u);
+    }
+}
+
+/**
+ * terrain_descend_step
+ * @brief   DESCENDING handler: keep integrating (the height falls back)
+ *          and report the hump when the surface has levelled off.
+ * @param   p_ter       monitor state
+ * @param   pitch_ddeg  this cycle's pitch, 0.1 deg
+ * @param   delta_a     ax - a_fwd, mg
+ * @param   ds_um       this cycle's travel, um
+ * @param   p_out       outputs
+ * @return  none
+ * @context terrain_step
+ */
+static void terrain_descend_step(terrain_t * p_ter, int32_t pitch_ddeg,
+                                 int32_t delta_a, uint32_t ds_um,
+                                 terrain_output_t * p_out)
+{
+    int32_t accum = p_ter->acc_um_mg + ((int32_t)ds_um * delta_a);
+    /* cast: ds_um <= 5235 per cycle, so the product fits int32 */
+
+    p_ter->acc_um_mg   = accum;
+    p_out->hump_now_mm = terrain_acc_to_mm(accum);
+
+    if (terrain_abs(pitch_ddeg) > (uint32_t)TERRAIN_LEVEL_DDEG)
+    {
+        terrain_hyst_set(p_ter, 0u);
+        return;
+    }
+
+    terrain_hyst_bump(p_ter);
+    if (!terrain_hyst_done(p_ter))
+    {
+        return;
+    }
+
+    {
+        uint32_t geo_mm =
+            ((uint32_t)TERRAIN_WHEELBASE_MM *
+             (uint32_t)terrain_sin_q14(terrain_pitch_max_get(p_ter))) /
+            (uint32_t)TERRAIN_Q14_ONE;
+        /* casts: the wheelbase is positive and, because the maximum
+           pitch is >= TERRAIN_CLIMB_START_DDEG > 0, the sine is >= 0;
+           the division is by a power of two (never >> on a signed
+           value) */
+
+        terrain_state_set(p_ter, TERRAIN_FLAT);
+        terrain_hyst_set(p_ter, 0u);
+        p_ter->acc_um_mg = 0; /* keep hump_now = 0 in FLAT */
+        if (terrain_peak_get(p_ter) >= TERRAIN_HUMP_MIN_MM)
+        {
+            p_out->hump_done_mm =
+                terrain_hump_report(terrain_peak_get(p_ter), geo_mm);
+            p_out->hump_geo_mm = geo_mm;
+        }
+        terrain_climb_set(p_ter, 0u);
+        terrain_peak_set(p_ter, 0u);
+        terrain_pitch_max_set(p_ter, 0);
     }
 }
 

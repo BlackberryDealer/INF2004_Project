@@ -53,14 +53,17 @@ static inline uint32_t drv_lsm303_fifo_plan(uint32_t   fifo_src,
     return ovr;
 }
 
-extern int32_t  drv_lsm303_init(void); /* 0 OK, <0 I2C error */
-extern int32_t  drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples,
-                                    uint32_t max_samples); /* count or <0 */
-extern int32_t  drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my,
-                                    int16_t * p_mz); /* 0 or <0 */
-extern int32_t  drv_lsm303_identity_ok(void);        /* 1 = 'H','4','3' found */
-extern uint32_t drv_lsm303_fifo_overruns(void);      /* saturating, for the
-                                                        packed PRV_OFS_B row */
+extern int32_t drv_lsm303_init(void); /* 0 OK, <0 I2C error */
+extern int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples,
+                                   uint32_t max_samples); /* count or <0 */
+extern int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my,
+                                   int16_t * p_mz); /* 0 or <0 */
+/* Reads INT1_SRC_A, which also clears the latched interrupt so a later
+   impact can raise a new edge (B4.1.1). Returns the byte or <0. */
+extern int32_t  drv_lsm303_read_int1_src(void);
+extern int32_t  drv_lsm303_identity_ok(void);   /* 1 = 'H','4','3' found */
+extern uint32_t drv_lsm303_fifo_overruns(void); /* saturating, for the
+                                                   packed PRV_OFS_B row */
 extern void drv_lsm303_bus_reset(void);
 
 #endif /* DRV_LSM303_H */

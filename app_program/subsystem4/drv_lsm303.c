@@ -101,6 +101,7 @@ static int32_t lsm303_rx(uint32_t slave, uint8_t reg, uint8_t * p_out,
                          uint32_t count);
 static int32_t lsm303_wait_bits(uint32_t start_us, uint32_t bits);
 static int32_t lsm303_check_abort(void);
+static void    lsm303_flush(void);
 static void    lsm303_rx_drain(void);
 static void    lsm303_delay_us(uint32_t delay_us);
 static void    lsm303_hw_setup(void);
@@ -232,6 +233,27 @@ int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my, int16_t * p_mz)
 }
 
 /**
+ * drv_lsm303_read_int1_src
+ * @brief   Reads INT1_SRC_A. The LSM303DLHC latches the interrupt until
+ *          this register is read, so calling it after every impact is
+ *          what lets a repeated tap generate a new rising edge on INT1
+ *          (B4.1.1 register table, S4-I03).
+ * @return  the INT1_SRC_A byte, or <0 on an I2C error
+ * @context imu_task
+ */
+int32_t drv_lsm303_read_int1_src(void)
+{
+    uint8_t src  = 0u;
+    int32_t ercd = lsm303_rx(LSM303_ADDR_ACC, LSM303_REG_INT1_SRC_A, &src, 1u);
+
+    if (0 != ercd)
+    {
+        return ercd;
+    }
+    return (int32_t)src; /* cast: byte, zero-extended */
+}
+
+/**
  * drv_lsm303_identity_ok
  * @brief   Reads the magnetometer identity registers IRA/IRB/IRC.
  * @return  1 when 'H','4','3' are found, 0 on a mismatch, <0 on an
@@ -240,15 +262,15 @@ int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my, int16_t * p_mz)
  */
 int32_t drv_lsm303_identity_ok(void)
 {
-    uint8_t id[3u] = {0, 0, 0};
-    int32_t ercd   = lsm303_rx(LSM303_ADDR_MAG, LSM303_REG_IRA_M, id, 3u);
+    uint8_t id_bytes[3u] = {0, 0, 0};
+    int32_t ercd = lsm303_rx(LSM303_ADDR_MAG, LSM303_REG_IRA_M, id_bytes, 3u);
 
     if (0 != ercd)
     {
         return ercd;
     }
-    if ((LSM303_ID_H == id[0]) && (LSM303_ID_4 == id[1]) &&
-        (LSM303_ID_3 == id[2]))
+    if ((LSM303_ID_H == id_bytes[0]) && (LSM303_ID_4 == id_bytes[1]) &&
+        (LSM303_ID_3 == id_bytes[2]))
     {
         return 1;
     }
@@ -420,6 +442,10 @@ static int32_t lsm303_tx2(uint32_t slave, uint8_t reg, uint8_t val)
     {
         ercd = lsm303_check_abort();
     }
+    if (0 != ercd)
+    {
+        lsm303_flush();
+    }
 
     return ercd;
 }
@@ -465,6 +491,7 @@ static int32_t lsm303_rx(uint32_t slave, uint8_t reg, uint8_t * p_out,
     }
     if (0 != ercd)
     {
+        lsm303_flush();
         return ercd;
     }
 
@@ -479,6 +506,7 @@ static int32_t lsm303_rx(uint32_t slave, uint8_t reg, uint8_t * p_out,
         }
         if (0 != ercd)
         {
+            lsm303_flush();
             return ercd;
         }
         p_out[idx] = (uint8_t)(i2c1_hw->data_cmd & 0xFFu);
@@ -489,6 +517,10 @@ static int32_t lsm303_rx(uint32_t slave, uint8_t reg, uint8_t * p_out,
     if (0 == ercd)
     {
         ercd = lsm303_check_abort();
+    }
+    if (0 != ercd)
+    {
+        lsm303_flush();
     }
 
     return ercd;
@@ -537,6 +569,24 @@ static int32_t lsm303_check_abort(void)
     }
 
     return 0;
+}
+
+/**
+ * lsm303_flush
+ * @brief   Recovers the controller after a failed transfer: clears the
+ *          TX abort latch, drops any queued command and drains the RX
+ *          FIFO, so the next transaction starts clean. Toggling
+ *          IC_ENABLE discards the FIFOs but preserves IC_CON, the
+ *          baud-rate counters, IC_TAR and the other configuration.
+ * @return  none
+ * @context imu_task
+ */
+static void lsm303_flush(void)
+{
+    (void)i2c1_hw->clr_tx_abrt; /* read clears; always reads 0 */
+    i2c1_hw->enable = 0u;
+    i2c1_hw->enable = 1u;
+    lsm303_rx_drain();
 }
 
 /**
