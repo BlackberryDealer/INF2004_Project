@@ -72,6 +72,23 @@ static volatile uint32_t g_queue_high_water = 0u;
 /* The mission context: written only by mission_task. */
 static mission_ctx_t g_ctx;
 
+/* Console names of the APP_FAULT_IDX_* bits (bring-up diagnosis: the
+   fault mask otherwise only leaves the car over MQTT). No % in them,
+   because each is passed to app_log() as the format.                 */
+static char const * const g_fault_names[APP_FAULT_COUNT] =
+{
+    "FAULT bit 0 MOTOR_STALL (wheel not turning)\n",
+    "FAULT bit 1 ENCODER (impossible encoder read)\n",
+    "FAULT bit 2 IMU (3 I2C errors in a row)\n",
+    "FAULT bit 3 NO_ECHO (ultrasonic silent 3 pings)\n",
+    "FAULT bit 4 WIFI_LOSS (info only)\n",
+    "FAULT bit 5 QUEUE_OVERFLOW (mission queue full)\n",
+    "FAULT bit 6 RANGE_CLAMP (info only)\n",
+    "FAULT bit 7 CAL_TIMEOUT (IMU or IR calibration > 10 s)\n",
+    "FAULT bit 8 REACQUIRE_FAIL (line not found again)\n",
+    "FAULT bit 9 PIO_LOAD (no PIO space for RGB)\n",
+};
+
 /* ---- private function prototypes ------------------------------------- */
 
 static void mission_task(INT stacd, void * p_exinf);
@@ -839,6 +856,7 @@ static void mission_faults(mission_ctx_t * p_ctx,
         if (0u != (fresh & (1u << idx)))
         {
             (void) telem_post_event(APP_EVT_SENSOR_FAULT, idx); /* counted */
+            app_log(g_fault_names[idx], 0, 0, 0);
         }
     }
     p_ctx->last_faults = faults;
@@ -850,6 +868,7 @@ static void mission_faults(mission_ctx_t * p_ctx,
     }
     else if (b_move && (0u != (safety_get() & SAFETY_IMPACT)))
     {
+        app_log("FAULT IMPACT (IMU INT1 while moving)\n", 0, 0, 0);
         mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
     }
     else
