@@ -56,15 +56,23 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S4-I01, I02, I03, I04, I09 (Phase 3) | — | Faris | pending | — | integration on the car: INT1→motors low ≤15 ms with Buddy 2 (GP14), course humps vs ruler, imu_task WCET. Blocked on hardware; plan below |
 | 2026-10-22 | S4-I01–I11 | — | Faris | pending | — | bench/track: needs the physical car (placeholders kept, spec rule A.3) |
 
-## SPEC-QUESTION (to the team chat before merging Phase 4)
+## SPEC-QUESTION
 
-**SQ-B4-1: E_IMU_SAMPLE group.** B4.4 lists the three E_IMU rows in one
-group with mixed `group_bits` (32, 32, 16). Buddy 1's `gen_layout.py`
-rejects mixed `group_bits` inside a group *before* its class-E exemption,
-so the 16-bit `RAW_SAMPLE` row now sits in its own documentation group
-`E_IMU_SAMPLE`. No macros are generated for either group, so nothing
-functional changes. Please decide: relax the generator's group check for
-class E rows (Buddy 1), or keep the split group as committed.
+**SQ-B4-1: E_IMU_SAMPLE group — RESOLVED, Buddy 1 accepts the split.**
+B4.4 lists the three E_IMU rows in one group with mixed `group_bits`
+(32, 32, 16). Buddy 1's `gen_layout.py` rejects mixed `group_bits` inside
+a group *before* its class-E exemption, so the 16-bit `RAW_SAMPLE` row
+sits in its own documentation group `E_IMU_SAMPLE`. No macros are
+generated for either group, so nothing functional changes.
+
+Buddy 1 keeps the generator check and accepts `E_IMU_SAMPLE`. Per the
+C.6 rule that `tools/layout.csv` changes only through a `SHARED:` pull
+request, the layout rows plus the three generated files are reviewed in
+branch `shared-b4-layout-rows` (commit `36da4ae`), where the deviation
+from B4.4 is written up. Merge that PR before or together with `b4-imu`;
+the rows are identical on both branches, so the merge is a duplicate
+addition and needs no manual fix-up. After it merges, rebase `b4-imu`
+onto `main` so its own PR diff no longer carries the layout rows.
 
 ## Audit pass (review of Phases 1–5)
 
@@ -83,6 +91,7 @@ everything below is fixed and re-tested except where marked pending.
 | `n`, `y`, `x`, `r`, `k`, `f`, `a`, `da`, `id` | BARR 7.1.e | Names shorter than three characters | Renamed (`n_samples`, `y_value`, `id_bytes`, …). **Exception:** `terrain_atan2_ddeg(int32_t y, int32_t x)` keeps the spec's parameter names, because spec line 3291 writes that declaration verbatim and Part A rule 1 fixes the interface |
 | `tools/ram_report.sh` | cosmetic | Symbol rows printed as `|sym| … |B4|` (no padding in the markdown table) | `| %s |`; report regenerated |
 | `docs/ram_comparison.md` | packaging | The Phase 5 run left the file as UTF-16LE with a BOM, so git stored it as a **binary blob** and the markdown table rendered as garbage on GitHub | Regenerated as plain UTF-8; the same UTF-16 problem was found in `logs/2026-10-22_host_phase2.txt` and `..._phase4_packed.txt` and both were converted too |
+| `layout.csv` / generated files | process | The B4 layout rows were committed as `S4:` on `b4-imu`, but C.6 lists `tools/layout.csv` as a shared file that changes only through a `SHARED:` PR | Rows re-submitted for review on branch `shared-b4-layout-rows` (commit `36da4ae`), additive only (+375/−0), with the B4.4 `E_IMU_SAMPLE` deviation written up in the commit/PR body |
 
 ## Phase 3 integration plan (pending hardware)
 
