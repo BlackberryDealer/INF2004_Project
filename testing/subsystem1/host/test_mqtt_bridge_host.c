@@ -19,7 +19,7 @@
 
 #define MOCK_K11_ID     (7)
 #define MOCK_Q_MAX      (8u)
-#define MOCK_MSG_MAX    (MQTT_BRIDGE_TX_MAX + 1u)
+#define MOCK_MSG_MAX    (APP_MQ_PAYLOAD_MAX)   /* = K11 maxmsz */
 
 static uint8_t  g_q_msg[MOCK_Q_MAX][MOCK_MSG_MAX];
 static uint32_t g_q_len[MOCK_Q_MAX];
@@ -106,8 +106,13 @@ uint32_t mission_evt_barcode_value(uint32_t cmd, uint32_t char_index)
 
 /* ---- helpers ---------------------------------------------------------- */
 
+/* Like tk_snd_mbf, refuses a message longer than K11's maxmsz. */
 static void q_push(uint8_t const * p_msg, uint32_t len)
 {
+    if ((len > MOCK_MSG_MAX) || (g_q_count >= MOCK_Q_MAX))
+    {
+        return;
+    }
     (void) memcpy(g_q_msg[g_q_count], p_msg, len);
     g_q_len[g_q_count] = len;
     g_q_count++;

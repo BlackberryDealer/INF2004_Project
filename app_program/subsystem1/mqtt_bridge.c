@@ -79,7 +79,7 @@ static void     bridge_count(uint32_t pos, uint32_t bits, int32_t max);
 uint32_t mqtt_bridge_take(uint8_t * p_buf, uint32_t buf_size,
                           uint8_t * p_mq_type)
 {
-    uint8_t  local[MQTT_BRIDGE_TX_MAX + 1u] = {0u};
+    uint8_t  local[APP_MQ_PAYLOAD_MAX] = {0u};   /* = K11 maxmsz */
     uint32_t copied = 0u;
     uint32_t idx    = 0u;
     INT      rcv    = 0;
