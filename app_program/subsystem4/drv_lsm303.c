@@ -22,9 +22,13 @@
  * The template cannot link the SDK's i2c.c (see build_make/pico_rp2040.mk,
  * CSC28 note C2), so every bus transaction is done here against the
  * hardware/structs/i2c.h register map: IC_CON, IC_TAR, IC_DATA_CMD,
- * IC_RAW_INTR_STAT and friends. Transfers poll with a 1 ms deadline from
- * sys_tick_now_us(); this busy-wait is the one listed exception to Part A
- * rule 7 and is measured on the bench (S4-I09).
+ * IC_RAW_INTR_STAT and friends. The TX and RX FIFOs are only 16 entries
+ * deep, so a read queues one command at a time and collects each byte
+ * before the next (as the SDK's i2c_read_blocking does); queueing a whole
+ * 4-sample burst at once (25 commands) dropped the STOP and timed out.
+ * IC_TAR is written once while the block is disabled. Transfers poll with
+ * a 1 ms deadline from sys_tick_now_us(); this busy-wait is the one listed
+ * exception to Part A rule 7 and is measured on the bench (S4-I09).
  *
  * Timing at 400 kHz (22.5 us per byte): FIFO status read = 4 bytes
  * (90 us), 2 samples = 15 bytes (338 us), 4 samples = 27 bytes (608 us),
@@ -71,13 +75,19 @@ extern uint32_t sys_tick_now_us(void);
 #define LSM303_REG_OUT_X_L_M (0x08u)
 #define LSM303_REG_WHO_AM_I  (0x0Fu)
 
+/* Sub-address bit 7: the LSM303D auto-increments the register address in
+   a multi-byte read only when it is set, for the magnetometer as well as
+   the accelerometer (the DLHC magnetometer incremented on its own). */
+#define LSM303_AUTO_INC (0x80u)
+
 /* Register values (LSM303D; each bit position taken from the datasheet
    register tables on pages 34-43 of DocID023312) */
 #define LSM303_VAL_CTRL0     (0x40u) /* FIFO_EN, bit 6                  */
 #define LSM303_VAL_CTRL1     (0x7Fu) /* AODR 200 Hz, BDU, X/Y/Z on      */
 #define LSM303_VAL_CTRL2     (0x08u) /* AFS = +-4 g, ABW 773 Hz         */
 #define LSM303_VAL_CTRL3     (0x20u) /* INT1_IG1, bit 5                 */
-#define LSM303_VAL_CTRL5     (0x65u) /* M high-res, M_ODR 50 Hz, LIR1   */
+#define LSM303_VAL_CTRL5     (0x71u) /* M_RES high, M_ODR 100 = 50 Hz,
+                                         LIR1 (bits 6-5, 4-2, 0)         */
 #define LSM303_VAL_CTRL6     (0x00u) /* MFS = +-2 gauss                 */
 #define LSM303_VAL_CTRL7     (0x00u) /* MD = continuous conversion      */
 #define LSM303_VAL_FIFO_CTRL (0x40u) /* FM = stream mode                */
@@ -93,6 +103,7 @@ extern uint32_t sys_tick_now_us(void);
 
 /* Bus timings */
 #define LSM303_BUS_TIMEOUT_US (1000u)      /* per-transfer deadline      */
+#define LSM303_ENABLE_WAIT_US (100u) /* IC_ENABLE / ABORT settle bound */
 #define LSM303_SYS_HZ         (125000000u) /* template fixed clock  */
 #define LSM303_BUS_HZ         (400000u)
 #define LSM303_RESET_HALF_US  (5u) /* SCL half period, 100 kHz   */
@@ -110,12 +121,13 @@ static uint32_t g_lsm303_fifo_ovr = 0u; /* saturating, imu_task context */
 /* ---- private function prototypes ------------------------------------- */
 
 static int32_t lsm303_hw_write_config(void);
-static int32_t lsm303_tx2(uint32_t slave, uint8_t reg, uint8_t val);
-static int32_t lsm303_rx(uint32_t slave, uint8_t reg, uint8_t * p_out,
-                         uint32_t count);
-static int32_t lsm303_wait_bits(uint32_t start_us, uint32_t bits);
-static int32_t lsm303_check_abort(void);
-static void    lsm303_flush(void);
+static int32_t lsm303_tx2(uint8_t reg, uint8_t val);
+static int32_t lsm303_rx(uint8_t reg, uint8_t * p_out, uint32_t count);
+static void    lsm303_begin(void);
+static int32_t lsm303_wait_rx(uint32_t start_us);
+static int32_t lsm303_wait_stop(uint32_t start_us);
+static void    lsm303_recover(void);
+static void    lsm303_set_enable(bool b_on);
 static void    lsm303_rx_drain(void);
 static void    lsm303_delay_us(uint32_t delay_us);
 static void    lsm303_hw_setup(void);
@@ -133,8 +145,12 @@ int32_t drv_lsm303_init(void)
 {
     gpio_set_function(PIN_IMU_SDA, GPIO_FUNC_I2C);
     gpio_set_function(PIN_IMU_SCL, GPIO_FUNC_I2C);
-    /* No pull-ups configured here: the GY-511 module carries them (A18,
-       measured on the bench as S4-I07). */
+    /* The GY-511 module carries its own pull-ups (A18, S4-I07). The
+       internal ~50 kOhm pull-ups are added as well so the lines still idle
+       high if the module's are missing or weak; in parallel they change
+       the module's value by only a few percent. */
+    gpio_pull_up(PIN_IMU_SDA);
+    gpio_pull_up(PIN_IMU_SCL);
     lsm303_hw_setup();
     return lsm303_hw_write_config();
 }
@@ -162,7 +178,7 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
         max_samples = DRV_LSM303_FIFO_MAX; /* API cap */
     }
 
-    ercd = lsm303_rx(LSM303_ADDR, LSM303_REG_FIFO_SRC, &fifo_src, 1u);
+    ercd = lsm303_rx(LSM303_REG_FIFO_SRC, &fifo_src, 1u);
     if (0 != ercd)
     {
         return ercd;
@@ -176,7 +192,7 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
     {
         /* Discard up to 4 samples so the stream can continue; no sample
            from this cycle is used (review R14). */
-        ercd = lsm303_rx(LSM303_ADDR, (uint8_t)(LSM303_REG_OUT_X_L_A | 0x80u),
+        ercd = lsm303_rx((uint8_t)(LSM303_REG_OUT_X_L_A | LSM303_AUTO_INC),
                          burst, LSM303_SAMPLES_BYTES);
         if (0 != ercd)
         {
@@ -190,7 +206,7 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
         return 0; /* no new data this cycle */
     }
 
-    ercd = lsm303_rx(LSM303_ADDR, (uint8_t)(LSM303_REG_OUT_X_L_A | 0x80u),
+    ercd = lsm303_rx((uint8_t)(LSM303_REG_OUT_X_L_A | LSM303_AUTO_INC),
                      burst, take * 6u);
     if (0 != ercd)
     {
@@ -221,6 +237,8 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
  * @brief   One magnetometer read: 6 bytes from OUT_X_L_M, in the LSM303D
  *          order X_L, X_H, Y_L, Y_H, Z_L, Z_H (little-endian, plain XYZ;
  *          the DLHC's X/Z/Y order does not apply here).
+ *          The sub-address carries LSM303_AUTO_INC: without it the
+ *          LSM303D returns OUT_X_L_M six times.
  * @param   p_mx  out: X field
  * @param   p_my  out: Y field
  * @param   p_mz  out: Z field
@@ -232,7 +250,8 @@ int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my, int16_t * p_mz)
     uint8_t buf[6u] = {0};
     int32_t ercd    = 0;
 
-    ercd = lsm303_rx(LSM303_ADDR, LSM303_REG_OUT_X_L_M, buf, 6u);
+    ercd = lsm303_rx((uint8_t)(LSM303_REG_OUT_X_L_M | LSM303_AUTO_INC), buf,
+                     6u);
     if (0 != ercd)
     {
         return ercd;
@@ -258,7 +277,7 @@ int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my, int16_t * p_mz)
 int32_t drv_lsm303_read_int1_src(void)
 {
     uint8_t src  = 0u;
-    int32_t ercd = lsm303_rx(LSM303_ADDR, LSM303_REG_IG_SRC1, &src, 1u);
+    int32_t ercd = lsm303_rx(LSM303_REG_IG_SRC1, &src, 1u);
 
     if (0 != ercd)
     {
@@ -276,7 +295,7 @@ int32_t drv_lsm303_read_int1_src(void)
 int32_t drv_lsm303_identity_ok(void)
 {
     uint8_t id_byte = 0u;
-    int32_t ercd    = lsm303_rx(LSM303_ADDR, LSM303_REG_WHO_AM_I, &id_byte, 1u);
+    int32_t ercd    = lsm303_rx(LSM303_REG_WHO_AM_I, &id_byte, 1u);
 
     if (0 != ercd)
     {
@@ -313,8 +332,8 @@ void drv_lsm303_bus_reset(void)
 {
     uint32_t idx = 0u;
 
-    i2c1_hw->enable = 0u; /* register-level de-init (the SDK
-                             i2c_deinit lives in unlinked i2c.c) */
+    lsm303_set_enable(false); /* register-level de-init (the SDK
+                                 i2c_deinit lives in unlinked i2c.c) */
     gpio_set_function(PIN_IMU_SCL, GPIO_FUNC_SIO);
     gpio_set_dir(PIN_IMU_SCL, GPIO_OUT);
     gpio_put(PIN_IMU_SCL, false);
@@ -353,15 +372,21 @@ static void lsm303_hw_setup(void)
     uint32_t spklen   = lcnt / 16u;                              /* 11 */
     uint32_t sda_hold = ((LSM303_SYS_HZ * 3u) / 10000000u) + 1u; /* 38 */
 
-    i2c1_hw->enable = 0u;
+    /* IC_CON, IC_TAR and the SCL counts are only writable while the block
+       is disabled (RP2040 datasheet, I2C chapter), so they are all set
+       here, once, between disable and enable. One slave address serves
+       both sensors, so IC_TAR never changes afterwards. */
+    lsm303_set_enable(false);
     i2c1_hw->con = I2C_IC_CON_MASTER_MODE_BITS | I2C_IC_CON_SPEED_VALUE_FAST |
                    I2C_IC_CON_IC_RESTART_EN_BITS |
                    I2C_IC_CON_IC_SLAVE_DISABLE_BITS;
+    i2c1_hw->tar         = LSM303_ADDR;
     i2c1_hw->fs_scl_hcnt = hcnt;
     i2c1_hw->fs_scl_lcnt = lcnt;
     i2c1_hw->fs_spklen   = spklen;
     i2c1_hw->sda_hold    = sda_hold;
-    i2c1_hw->enable      = 1u;
+    lsm303_set_enable(true);
+    lsm303_begin();
 }
 
 /**
@@ -378,49 +403,49 @@ static int32_t lsm303_hw_write_config(void)
 {
     int32_t ercd = 0;
 
-    ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL0, LSM303_VAL_CTRL0);
+    ercd = lsm303_tx2(LSM303_REG_CTRL0, LSM303_VAL_CTRL0);
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL1, LSM303_VAL_CTRL1);
+        ercd = lsm303_tx2(LSM303_REG_CTRL1, LSM303_VAL_CTRL1);
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL2, LSM303_VAL_CTRL2);
+        ercd = lsm303_tx2(LSM303_REG_CTRL2, LSM303_VAL_CTRL2);
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL5, LSM303_VAL_CTRL5);
+        ercd = lsm303_tx2(LSM303_REG_CTRL5, LSM303_VAL_CTRL5);
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL6, LSM303_VAL_CTRL6);
+        ercd = lsm303_tx2(LSM303_REG_CTRL6, LSM303_VAL_CTRL6);
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL7, LSM303_VAL_CTRL7);
+        ercd = lsm303_tx2(LSM303_REG_CTRL7, LSM303_VAL_CTRL7);
     }
     if (0 == ercd)
     {
         ercd =
-            lsm303_tx2(LSM303_ADDR, LSM303_REG_FIFO_CTRL, LSM303_VAL_FIFO_CTRL);
+            lsm303_tx2(LSM303_REG_FIFO_CTRL, LSM303_VAL_FIFO_CTRL);
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_CTRL3, LSM303_VAL_CTRL3);
+        ercd = lsm303_tx2(LSM303_REG_CTRL3, LSM303_VAL_CTRL3);
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_IG_CFG1, LSM303_VAL_IG_CFG1);
+        ercd = lsm303_tx2(LSM303_REG_IG_CFG1, LSM303_VAL_IG_CFG1);
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_IG_THS1,
+        ercd = lsm303_tx2(LSM303_REG_IG_THS1,
                           (uint8_t)IMU_IMPACT_THS);
         /* cast: threshold is 0..127 */
     }
     if (0 == ercd)
     {
-        ercd = lsm303_tx2(LSM303_ADDR, LSM303_REG_IG_DUR1, LSM303_VAL_IG_DUR1);
+        ercd = lsm303_tx2(LSM303_REG_IG_DUR1, LSM303_VAL_IG_DUR1);
     }
 
     return ercd;
@@ -429,32 +454,28 @@ static int32_t lsm303_hw_write_config(void)
 /**
  * lsm303_tx2
  * @brief   Writes one register: byte 0 = address, byte 1 = value with
- *          STOP.
- * @param   slave  7-bit slave address
- * @param   reg    register address
- * @param   val    value to write
+ *          STOP, then waits for the STOP condition on the bus (STOP_DET),
+ *          not just for an empty TX FIFO, so the write has really ended
+ *          before the next transfer starts.
+ * @param   reg  register address
+ * @param   val  value to write
  * @return  0 or an LSM303_ERR_* code
  * @context imu_task
  */
-static int32_t lsm303_tx2(uint32_t slave, uint8_t reg, uint8_t val)
+static int32_t lsm303_tx2(uint8_t reg, uint8_t val)
 {
     uint32_t start_us = sys_tick_now_us();
     int32_t  ercd     = 0;
 
-    i2c1_hw->tar = slave;
-    lsm303_rx_drain();
-    i2c1_hw->data_cmd = I2C_IC_DATA_CMD_RESTART_BITS | reg;
+    lsm303_begin();
+    i2c1_hw->data_cmd = reg;
     i2c1_hw->data_cmd = I2C_IC_DATA_CMD_STOP_BITS | val;
+    /* 2 commands: far below the 16-entry TX FIFO */
 
-    ercd = lsm303_wait_bits(start_us, I2C_IC_RAW_INTR_STAT_TX_EMPTY_BITS |
-                                          I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS);
-    if (0 == ercd)
-    {
-        ercd = lsm303_check_abort();
-    }
+    ercd = lsm303_wait_stop(start_us);
     if (0 != ercd)
     {
-        lsm303_flush();
+        lsm303_recover();
     }
 
     return ercd;
@@ -462,94 +483,92 @@ static int32_t lsm303_tx2(uint32_t slave, uint8_t reg, uint8_t val)
 
 /**
  * lsm303_rx
- * @brief   Reads count bytes starting at reg: one address byte, then
- *          count read commands, the last one with STOP.
- * @param   slave   7-bit slave address
- * @param   reg     register address
+ * @brief   Reads count bytes starting at reg: the address byte, then one
+ *          read command at a time. Each byte is collected from the RX FIFO
+ *          before the next command is queued (as the SDK's
+ *          i2c_read_blocking does), so at most 2 entries are ever in the
+ *          16-entry TX FIFO and the RX FIFO cannot overflow, whatever
+ *          count is. The last command carries STOP.
+ * @param   reg     register address (bit 7 set for auto-increment)
  * @param   p_out   output buffer, count bytes
- * @param   count   bytes to read
+ * @param   count   bytes to read, >= 1
  * @return  0 or an LSM303_ERR_* code
  * @context imu_task
  */
-static int32_t lsm303_rx(uint32_t slave, uint8_t reg, uint8_t * p_out,
-                         uint32_t count)
+static int32_t lsm303_rx(uint8_t reg, uint8_t * p_out, uint32_t count)
 {
     uint32_t start_us = sys_tick_now_us();
     uint32_t idx      = 0u;
     int32_t  ercd     = 0;
 
-    i2c1_hw->tar = slave;
-    lsm303_rx_drain();
-    i2c1_hw->data_cmd = I2C_IC_DATA_CMD_RESTART_BITS | reg;
+    lsm303_begin();
+    i2c1_hw->data_cmd = reg;
 
-    for (idx = 0u; idx < count; idx++)
+    for (idx = 0u; (idx < count) && (0 == ercd); idx++)
     {
         uint32_t cmd = I2C_IC_DATA_CMD_CMD_BITS; /* read */
 
+        if (0u == idx)
+        {
+            cmd |= I2C_IC_DATA_CMD_RESTART_BITS; /* write -> read turn */
+        }
         if ((count - 1u) == idx)
         {
             cmd |= I2C_IC_DATA_CMD_STOP_BITS;
         }
         i2c1_hw->data_cmd = cmd;
-    }
 
-    ercd = lsm303_wait_bits(start_us, I2C_IC_RAW_INTR_STAT_TX_EMPTY_BITS |
-                                          I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS);
-    if (0 == ercd)
-    {
-        ercd = lsm303_check_abort();
-    }
-    if (0 != ercd)
-    {
-        lsm303_flush();
-        return ercd;
-    }
-
-    for (idx = 0u; idx < count; idx++)
-    {
-        ercd =
-            lsm303_wait_bits(start_us, I2C_IC_RAW_INTR_STAT_RX_FULL_BITS |
-                                           I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS);
+        ercd = lsm303_wait_rx(start_us);
         if (0 == ercd)
         {
-            ercd = lsm303_check_abort();
+            p_out[idx] = (uint8_t)(i2c1_hw->data_cmd & 0xFFu);
+            /* cast: DAT field is bits 0-7 */
         }
-        if (0 != ercd)
-        {
-            lsm303_flush();
-            return ercd;
-        }
-        p_out[idx] = (uint8_t)(i2c1_hw->data_cmd & 0xFFu);
-        /* cast: DAT field is bits 0-7 */
     }
 
-    ercd = lsm303_wait_bits(start_us, I2C_IC_RAW_INTR_STAT_STOP_DET_BITS);
     if (0 == ercd)
     {
-        ercd = lsm303_check_abort();
+        ercd = lsm303_wait_stop(start_us);
     }
     if (0 != ercd)
     {
-        lsm303_flush();
+        lsm303_recover();
     }
 
     return ercd;
 }
 
 /**
- * lsm303_wait_bits
- * @brief   Polls raw_intr_stat until any bit of bits is set, or the
- *          1 ms per-transfer deadline passes.
- * @param   start_us  deadline base from sys_tick_now_us()
- * @param   bits      mask to wait for
- * @return  0 or LSM303_ERR_TIMEOUT
+ * lsm303_begin
+ * @brief   Clears what a previous transfer may have left behind before a
+ *          new one starts: stale RX bytes and the STOP_DET latch.
+ * @return  none
  * @context imu_task
  */
-static int32_t lsm303_wait_bits(uint32_t start_us, uint32_t bits)
+static void lsm303_begin(void)
+{
+    lsm303_rx_drain();
+    (void)i2c1_hw->clr_stop_det; /* read clears; always reads 0 */
+}
+
+/**
+ * lsm303_wait_rx
+ * @brief   Polls until one received byte is in the RX FIFO, a TX abort
+ *          (NACK, lost arbitration) is flagged, or the per-transfer
+ *          deadline passes.
+ * @param   start_us  deadline base from sys_tick_now_us()
+ * @return  0, LSM303_ERR_ABORT or LSM303_ERR_TIMEOUT
+ * @context imu_task
+ */
+static int32_t lsm303_wait_rx(uint32_t start_us)
 {
     for (;;)
     {
-        if (0u != (i2c1_hw->raw_intr_stat & bits))
+        if (0u != (i2c1_hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS))
+        {
+            return LSM303_ERR_ABORT;
+        }
+        if (0u != i2c1_hw->rxflr)
         {
             return 0;
         }
@@ -561,42 +580,85 @@ static int32_t lsm303_wait_bits(uint32_t start_us, uint32_t bits)
 }
 
 /**
- * lsm303_check_abort
- * @brief   Handles a TX abort: clears the flag, flushes the command
- *          FIFO by toggling IC_ENABLE (configuration is preserved),
- *          returns an error.
- * @return  0 when no abort is pending, else LSM303_ERR_ABORT
+ * lsm303_wait_stop
+ * @brief   Polls until the STOP condition has been sent (STOP_DET), then
+ *          clears it. A TX abort also ends in STOP, so the abort flag is
+ *          checked first and wins.
+ * @param   start_us  deadline base from sys_tick_now_us()
+ * @return  0, LSM303_ERR_ABORT or LSM303_ERR_TIMEOUT
  * @context imu_task
  */
-static int32_t lsm303_check_abort(void)
+static int32_t lsm303_wait_stop(uint32_t start_us)
 {
-    if (0u != (i2c1_hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS))
+    for (;;)
     {
-        (void)i2c1_hw->clr_tx_abrt; /* read clears; always reads 0 */
-        i2c1_hw->enable = 0u;       /* flush the queued commands    */
-        i2c1_hw->enable = 1u;
-        return LSM303_ERR_ABORT;
-    }
+        uint32_t const stat = i2c1_hw->raw_intr_stat;
 
-    return 0;
+        if (0u != (stat & I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS))
+        {
+            return LSM303_ERR_ABORT;
+        }
+        if (0u != (stat & I2C_IC_RAW_INTR_STAT_STOP_DET_BITS))
+        {
+            (void)i2c1_hw->clr_stop_det; /* read clears; always reads 0 */
+            return 0;
+        }
+        if ((sys_tick_now_us() - start_us) > LSM303_BUS_TIMEOUT_US)
+        {
+            return LSM303_ERR_TIMEOUT;
+        }
+    }
 }
 
 /**
- * lsm303_flush
- * @brief   Recovers the controller after a failed transfer: clears the
- *          TX abort latch, drops any queued command and drains the RX
- *          FIFO, so the next transaction starts clean. Toggling
- *          IC_ENABLE discards the FIFOs but preserves IC_CON, the
- *          baud-rate counters, IC_TAR and the other configuration.
+ * lsm303_recover
+ * @brief   Recovers the controller after a failed transfer. ABORT makes
+ *          the master send STOP and flush the TX FIFO even when it is
+ *          holding the bus mid-transfer; then the TX abort latch is
+ *          cleared and the block is disabled and re-enabled (waiting for
+ *          IC_ENABLE_STATUS each time, both bounded), which keeps IC_CON,
+ *          IC_TAR and the baud-rate counters. Finally the RX FIFO and the
+ *          STOP_DET latch are cleared so the next transfer starts clean.
  * @return  none
  * @context imu_task
  */
-static void lsm303_flush(void)
+static void lsm303_recover(void)
 {
+    uint32_t start_us = sys_tick_now_us();
+
+    i2c1_hw->enable = I2C_IC_ENABLE_ENABLE_BITS | I2C_IC_ENABLE_ABORT_BITS;
+    while ((0u != (i2c1_hw->enable & I2C_IC_ENABLE_ABORT_BITS)) &&
+           ((sys_tick_now_us() - start_us) < LSM303_ENABLE_WAIT_US))
+    {
+        /* bounded: the abort completes within one byte time (~23 us) */
+    }
     (void)i2c1_hw->clr_tx_abrt; /* read clears; always reads 0 */
-    i2c1_hw->enable = 0u;
-    i2c1_hw->enable = 1u;
-    lsm303_rx_drain();
+
+    lsm303_set_enable(false);
+    lsm303_set_enable(true);
+    lsm303_begin();
+}
+
+/**
+ * lsm303_set_enable
+ * @brief   Writes IC_ENABLE and waits (bounded) until IC_ENABLE_STATUS
+ *          follows, so registers that are only writable while the block
+ *          is disabled (IC_TAR, IC_CON, the SCL counts) really are.
+ * @param   b_on  true to enable, false to disable
+ * @return  none
+ * @context imu_task or usermain
+ */
+static void lsm303_set_enable(bool b_on)
+{
+    uint32_t const want     = b_on ? 1u : 0u;
+    uint32_t       start_us = sys_tick_now_us();
+
+    i2c1_hw->enable = want;
+    while (((i2c1_hw->enable_status & 1u) != want) &&
+           ((sys_tick_now_us() - start_us) < LSM303_ENABLE_WAIT_US))
+    {
+        /* bounded: a few ic_clk cycles when the bus is idle */
+    }
 }
 
 /**
@@ -607,7 +669,7 @@ static void lsm303_flush(void)
  */
 static void lsm303_rx_drain(void)
 {
-    while (0u != (i2c1_hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_RX_FULL_BITS))
+    while (0u != i2c1_hw->rxflr)
     {
         (void)i2c1_hw->data_cmd; /* ignored: discarding stale data */
     }

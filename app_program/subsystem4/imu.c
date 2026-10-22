@@ -372,7 +372,8 @@ static void imu_int1_isr(uint32_t events, uint32_t now_us)
  *          magnetometer read. The magnetometer is postponed when the
  *          cycle already read more than 2 samples (B4.1.1 timing).
  * @param   pb_read_ok    out: true when the accelerometer read succeeded
- *                        (an empty FIFO is still success)
+ *                        and returned at least one new sample (an empty
+ *                        FIFO is not an I2C error, but gives no new data)
  * @param   pb_mag_cycle  out: true when this is a magnetometer cycle,
  *                        even when the read was postponed or failed
  * @param   pb_mag_read   out: true when the magnetometer was read
@@ -384,7 +385,12 @@ static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
 {
     uint32_t n_samples = 0u;
 
-    *pb_read_ok = imu_read_acc(&n_samples);
+    bool b_acc_ok = imu_read_acc(&n_samples);
+
+    /* Calibration may only sum a cycle that brought new samples: on an
+       empty FIFO g_avg_raw_* still holds last cycle's average, which
+       would be counted twice. */
+    *pb_read_ok = b_acc_ok && (n_samples > 0u);
     imu_read_mag_if_due(n_samples, pb_mag_cycle, pb_mag_read);
 }
 
@@ -586,7 +592,8 @@ static void imu_i2c_result(bool b_ok, bool b_is_acc)
  *          activation (B4.2.2 step 4). The magnetometer is NOT
  *          calibrated at run time (review R15).
  * @param   b_mode_set  current state of the mode bit
- * @param   b_read_ok   true when this cycle's read succeeded (no
+ * @param   b_read_ok   true when this cycle's read succeeded with new
+ *                      samples (no
  *                      summation on I2C failures, so a dead bus ends
  *                      in mission's calibration timeout, not in
  *                      garbage offsets)
@@ -602,6 +609,9 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
     {
         gb_cal_active    = true;
         gb_cal_done_once = false;
+        cal_cnt          = 0u; /* the local copy too: on a second
+                                  calibration it still held 200 and the
+                                  offsets were computed from empty sums */
         g_imu_prv_b      = app_bits_put(g_imu_prv_b, PRV_IMU_B_CAL_CNT_POS,
                                         PRV_IMU_B_CAL_CNT_BITS, 0u);
         g_cal_sum_x      = 0;
