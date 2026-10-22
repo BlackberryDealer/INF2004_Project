@@ -1,7 +1,8 @@
 /**
  * @file    test_mqtt_bridge_host.c
- * @brief   Laptop tests of mqtt_bridge.c against a mock kernel: command
- *          validation and rate limit (S1-U12), K11 take, routing,
+ * @brief   Laptop tests of mqtt_bridge.c against a mock kernel: binary
+ *          command validation (S1-U11), rate limit (S1-U12), MAP
+ *          (S1-U35), K11 take, routing,
  *          availability, link changes and drop counters. The real source
  *          is included so its private counters can be checked.
  * @owner   Buddy 1 (communications)
@@ -27,6 +28,7 @@ static uint32_t g_now_us;
 static uint32_t g_faults;
 static uint32_t g_posts;
 static uint32_t g_post_type[16];
+static uint32_t g_post_value[16];
 
 INT tk_rcv_mbf(ID id, void * p_msg, TMO tmout)
 {
@@ -88,10 +90,10 @@ void fault_clear(uint32_t bits)
 
 bool mission_post_event(uint32_t type, uint32_t value)
 {
-    (void) value;
     if (g_posts < 16u)
     {
-        g_post_type[g_posts] = type;
+        g_post_type[g_posts]  = type;
+        g_post_value[g_posts] = value;
     }
     g_posts++;
     return true;
@@ -111,10 +113,25 @@ static void q_push(uint8_t const * p_msg, uint32_t len)
     g_q_count++;
 }
 
-static void post_text(char const * p_text)
+static uint32_t g_drops_seen;
+
+/* Command drops counted since the last call. */
+static uint32_t new_cmd_drops(void)
 {
-    mqtt_bridge_post_command((uint8_t const *) p_text,
-                             (uint32_t) strlen(p_text));
+    uint32_t const now = app_bits_get(g_bridge_word,
+                                      PRV_BRIDGE_CMD_DROPS_POS,
+                                      PRV_BRIDGE_CMD_DROPS_BITS);
+    uint32_t const delta = now - g_drops_seen;
+
+    g_drops_seen = now;
+    return delta;
+}
+
+static void post_cmd(uint32_t mq_type)
+{
+    uint8_t const byte0 = (uint8_t) telem_bin_header(mq_type);
+
+    mqtt_bridge_post_command(&byte0, 1u);
 }
 
 /* ---- tests ------------------------------------------------------------ */
@@ -123,29 +140,30 @@ int main(void)
 {
     uint8_t      buf[MQTT_BRIDGE_TX_MAX];
     uint8_t      msg[MOCK_MSG_MAX];
-    uint8_t      type  = 0xFFu;
-    uint32_t     len   = 0u;
-    uint32_t     idx   = 0u;
-    char const * p_top = NULL;
-    uint8_t      qos   = 9u;
-    bool         b_ret = true;
+    uint8_t      cmd[3]  = {0u, 0u, 0u};
+    uint8_t      type    = 0xFFu;
+    uint32_t     len     = 0u;
+    uint32_t     idx     = 0u;
+    char const * p_top   = NULL;
+    uint8_t      qos     = 9u;
+    bool         b_ret   = true;
 
     HOST_INIT();
 
-    /* S1-U12: two STOP commands 50 ms apart -> one event, one drop */
+    /* S1-U12 (packed): repeated command within 100 ms dropped, counted */
     g_now_us = 5000000u;
-    post_text("{\"cmd\":\"STOP\"}");
+    post_cmd(APP_MQ_TYPE_CMD_STOP);
     g_now_us += 50000u;
-    post_text("{\"cmd\":\"STOP\"}");
+    post_cmd(APP_MQ_TYPE_CMD_STOP);
     HOST_CHECK("S1-U12", (1u == g_posts) && (APP_EVT_STOP == g_post_type[0]),
                "two STOPs 50 ms apart: one STOP event posted");
-    HOST_CHECK("S1-U12", 1u == g_cmd_drops,
+    HOST_CHECK("S1-U12", 1u == new_cmd_drops(),
                "two STOPs 50 ms apart: one command drop");
     g_now_us += 50000u;   /* 100 ms after the accepted one */
-    post_text("{\"cmd\":\"STOP\"}");
+    post_cmd(APP_MQ_TYPE_CMD_STOP);
     HOST_CHECK("S1-U12", 2u == g_posts, "STOP 100 ms later is accepted");
-    post_text("{\"cmd\":\"START\"}");
-    post_text("{\"cmd\":\"RESET\"}");
+    post_cmd(APP_MQ_TYPE_CMD_START);
+    post_cmd(APP_MQ_TYPE_CMD_RESET);
     HOST_CHECK("S1-U12", (4u == g_posts)
                          && (APP_EVT_START == g_post_type[2])
                          && (APP_EVT_RESET == g_post_type[3]),
@@ -153,41 +171,64 @@ int main(void)
 
     /* the 16-bit 10 ms clock wraps every 655.36 s: still per-gap */
     g_now_us = 5100000u + 655360000u;  /* START was accepted at 5.1 s */
-    post_text("{\"cmd\":\"START\"}");
-    HOST_CHECK("S1-U12", 4u == g_posts,
+    post_cmd(APP_MQ_TYPE_CMD_START);
+    HOST_CHECK("S1-U12", (4u == g_posts) && (1u == new_cmd_drops()),
                "same 16-bit stamp after a wrap is rate-limited");
     g_now_us += 100000u;
-    post_text("{\"cmd\":\"START\"}");
+    post_cmd(APP_MQ_TYPE_CMD_START);
     HOST_CHECK("S1-U12", 5u == g_posts, "accepted 100 ms later");
 
-    /* invalid commands are counted, never posted */
+    /* MAP: 2 bytes, byte 1 = MQ_MAP (char 0..42, cmd 0..3) */
     g_now_us += 1000000u;
-    idx = g_cmd_drops;
-    post_text("{\"cmd\":\"stop\"}");
-    post_text("{\"cmd\":\"STOP\"} ");
-    post_text("{\"cmd\":\"GO\"}");
-    mqtt_bridge_post_command(NULL, 4u);
-    mqtt_bridge_post_command((uint8_t const *) "", 0u);
-    HOST_CHECK("S1-U35", (5u == g_posts) && ((idx + 5u) == g_cmd_drops),
-               "malformed baseline commands rejected and counted");
+    cmd[0] = (uint8_t) telem_bin_header(APP_MQ_TYPE_CMD_MAP);
+    cmd[1] = (uint8_t) app_bits_put(app_bits_put(0u, MQ_MAP_CHAR_POS,
+                                                 MQ_MAP_CHAR_BITS, 10u),
+                                    MQ_MAP_CMD_POS, MQ_MAP_CMD_BITS, 3u);
+    mqtt_bridge_post_command(cmd, 2u);
+    HOST_CHECK("S1-U35", (6u == g_posts) && (APP_EVT_MAP == g_post_type[5])
+                         && (mission_evt_barcode_value(3u, 10u)
+                             == g_post_value[5]),
+               "MAP command posts APP_EVT_MAP with char and command");
+
+    /* S1-U11: wrong version or length rejected and counted */
+    g_now_us += 1000000u;
+    cmd[0] = (uint8_t) (telem_bin_header(APP_MQ_TYPE_CMD_STOP) + 1u);
+    mqtt_bridge_post_command(cmd, 1u);              /* version 2 */
+    cmd[0] = (uint8_t) telem_bin_header(APP_MQ_TYPE_CMD_STOP);
+    mqtt_bridge_post_command(cmd, 2u);              /* STOP, 2 bytes */
+    cmd[0] = (uint8_t) telem_bin_header(APP_MQ_TYPE_CMD_MAP);
+    mqtt_bridge_post_command(cmd, 1u);              /* MAP, 1 byte */
+    mqtt_bridge_post_command(cmd, 3u);              /* MAP, 3 bytes */
+    cmd[1] = 43u;                                   /* char 43: invalid */
+    mqtt_bridge_post_command(cmd, 2u);
+    cmd[0] = (uint8_t) telem_bin_header(APP_MQ_TYPE_STATE);
+    mqtt_bridge_post_command(cmd, 1u);              /* not a command */
+    mqtt_bridge_post_command(NULL, 1u);
+    mqtt_bridge_post_command(cmd, 0u);
+    HOST_CHECK("S1-U11", (6u == g_posts) && (8u == new_cmd_drops()),
+               "wrong version, length, type or char: rejected, counted");
 
     for (idx = 0u; idx < 300u; idx++)
     {
         bridge_count_cmd_drop();
     }
-    HOST_CHECK("S1-U35", 255u == g_cmd_drops, "command drops saturate");
+    HOST_CHECK("S1-U11", 255u == app_bits_get(g_bridge_word,
+                                              PRV_BRIDGE_CMD_DROPS_POS,
+                                              PRV_BRIDGE_CMD_DROPS_BITS),
+               "command drops saturate at 255");
+    HOST_CHECK("S1-U11", 0u == mqtt_bridge_publish_drops(),
+               "command drops never touch the publish-drop field");
 
-    /* take: route byte + JSON, never blocks */
+    /* take: the binary payload itself; type from MQ_HDR */
     HOST_CHECK("S1-U30", 0u == mqtt_bridge_take(buf, sizeof(buf), &type),
                "empty K11 returns 0");
-    msg[0] = APP_MQ_TYPE_HEARTBEAT;
-    (void) memcpy(&msg[1], "{\"up\":1}", 8u);
-    q_push(msg, 9u);
-    len = mqtt_bridge_take(buf, sizeof(buf), &type);
-    HOST_CHECK("S1-U30", (8u == len) && (APP_MQ_TYPE_HEARTBEAT == type)
-                         && (0 == memcmp(buf, "{\"up\":1}", 8u)),
-               "take returns the route and the JSON bytes");
-    q_push(msg, 9u);
+    len = telem_bin_heartbeat(7u, 1u, 99u, msg, sizeof(msg));
+    q_push(msg, len);
+    idx = mqtt_bridge_take(buf, sizeof(buf), &type);
+    HOST_CHECK("S1-U30", (6u == idx) && (APP_MQ_TYPE_HEARTBEAT == type)
+                         && (0 == memcmp(buf, msg, 6u)),
+               "take returns the type and all payload bytes");
+    q_push(msg, len);
     HOST_CHECK("S1-U30", (0u == mqtt_bridge_take(buf, 4u, &type))
                          && (1u == mqtt_bridge_publish_drops()),
                "payload larger than the caller's buffer is dropped");
@@ -209,14 +250,14 @@ int main(void)
     HOST_CHECK("S1-U31", (0 == strcmp(p_top, TELEM_TOPIC_EVENT))
                          && (0u == qos) && (!b_ret), "unknown route");
 
-    /* availability */
+    /* availability: one header byte */
     len = mqtt_bridge_availability(true, buf, sizeof(buf));
-    HOST_CHECK("S1-U32", (6u == len) && (0 == memcmp(buf, "online", 6u)),
-               "online payload");
+    HOST_CHECK("S1-U32", (1u == len) && (0x29u == buf[0]),
+               "online payload is the byte 0x29");
     len = mqtt_bridge_availability(false, buf, sizeof(buf));
-    HOST_CHECK("S1-U32", (7u == len) && (0 == memcmp(buf, "offline", 7u)),
-               "offline payload");
-    HOST_CHECK("S1-U32", 0u == mqtt_bridge_availability(false, buf, 6u),
+    HOST_CHECK("S1-U32", (1u == len) && (0x31u == buf[0]),
+               "offline payload is the byte 0x31");
+    HOST_CHECK("S1-U32", 0u == mqtt_bridge_availability(false, buf, 0u),
                "availability that does not fit returns 0");
 
     /* link changes: fault bit only, never a mission event */

@@ -8,7 +8,8 @@
 #   S1-U01, U02  test_telem_json_host.c  (baseline JSON builders)
 #   S1-U01, U02 (packed), S1-U10  test_telem_bin_host.c (binary builders;
 #                writes the golden vectors in golden/)
-#   S1-U12, U30..U35  test_mqtt_bridge_host.c (mqtt_bridge.c + mock kernel)
+#   S1-U11, U12, U30..U35  test_mqtt_bridge_host.c (mqtt_bridge.c + mock
+#                kernel; links telem_bin.c, app_bits.c, odometry.c)
 #   S1-U13, U15, U36, U37  test_mqtt_utk_host.c (radio-task mqtt_utk.c +
 #                mock lwIP in mock_lwip/ + mock bridge)
 #
@@ -84,15 +85,17 @@ tree:
 	mkdir -p $(B)/subsystem1 $(B)/subsystem2 $(B)/subsystem5
 	cp mock/app.h $(B)/app.h
 	cp $(APP_DIR)/app_types.h $(APP_DIR)/app_layout.h $(APP_DIR)/app_bits.h \
-	   $(B)/
+	   $(APP_DIR)/app_bits.c $(B)/
 	cp $(S1)/*.c $(S1)/*.h $(B)/subsystem1/
-	cp $(APP_DIR)/subsystem2/fault.h $(B)/subsystem2/
+	cp $(APP_DIR)/subsystem2/fault.h $(APP_DIR)/subsystem2/odometry.h \
+	   $(APP_DIR)/subsystem2/odometry.c $(B)/subsystem2/
 	cp $(APP_DIR)/subsystem5/mission.h $(APP_DIR)/subsystem5/sys_tick.h \
 	   $(B)/subsystem5/
 
 test_mqtt_bridge_host.out: test_mqtt_bridge_host.c tree
 	$(CC) -std=c99 -Wall -Wextra -Werror -pedantic -I../../host \
-	    -I$(B)/subsystem1 -o $@ test_mqtt_bridge_host.c
+	    -I$(B)/subsystem1 -I$(B) -o $@ test_mqtt_bridge_host.c \
+	    $(B)/subsystem1/telem_bin.c $(B)/app_bits.c $(B)/subsystem2/odometry.c
 
 mqtt_bridge: test_mqtt_bridge_host.out
 	./test_mqtt_bridge_host.out

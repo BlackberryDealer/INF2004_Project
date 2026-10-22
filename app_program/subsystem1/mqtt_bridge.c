@@ -3,7 +3,8 @@
  * @brief   Kernel-side functions the radio task (mqtt_utk.c) calls: take the
  *          next payload from K11, route it, build the availability payload,
  *          validate and rate-limit remote commands, report link changes.
- *          Baseline representation: JSON / text payloads.
+ *          Packed representation (B1.4): binary payloads and commands,
+ *          counters in the PRV_BRIDGE word.
  * @owner   Buddy 1 (communications)
  * @kind    task
  * @reqs    FR10, FR11, FR12, FR20, NFR9
@@ -12,8 +13,11 @@
 #include "mqtt_bridge.h"       /* own header first (BARR-C 4.3.c) */
 #include "../app.h"
 #include "../app_types.h"
+#include "../app_layout.h"
+#include "../app_bits.h"
 #include "cfg_telem.h"
 #include "telem.h"
+#include "telem_bin.h"
 #include "../subsystem2/fault.h"
 #include "../subsystem5/mission.h"
 #include "../subsystem5/sys_tick.h"
@@ -30,46 +34,41 @@
 
 #define BRIDGE_US_PER_10MS    (10000u)
 #define BRIDGE_CMD_GAP_10MS   (TELEM_CMD_MIN_GAP_MS / 10u)
-#define BRIDGE_DROPS_MAX      (255u)
+#define BRIDGE_CMD_LEN        (1u)     /* START, STOP, RESET: header only */
+#define BRIDGE_MAP_LEN        (2u)     /* MAP: header + MQ_MAP byte       */
 
-#if (BRIDGE_CMD_GAP_10MS < 1u) || (BRIDGE_CMD_GAP_10MS > 65535u)
+#if (BRIDGE_CMD_GAP_10MS < 1u) || (BRIDGE_CMD_GAP_10MS > PRV_CMD_T_LAST_MAX)
 #error "TELEM_CMD_MIN_GAP_MS no longer fits the 16-bit 10 ms time stamps"
+#endif
+#if (BRIDGE_CMD_COUNT > PRV_BRIDGE_CMD_SEEN_BITS)
+#error "PRV_BRIDGE.CMD_SEEN needs one bit per command type: widen it"
 #endif
 
 /* ---- private data ---------------------------------------------------- */
 
-/* Accepted baseline commands (exact bytes, no NUL). */
-static char const g_cmd_start[] = "{\"cmd\":\"START\"}";
-static char const g_cmd_stop[]  = "{\"cmd\":\"STOP\"}";
-static char const g_cmd_reset[] = "{\"cmd\":\"RESET\"}";
-
-static char const g_avail_online[]  = "online";
-static char const g_avail_offline[] = "offline";
-
-/* All written only by the radio task (rule 1). The publish-drop count is
-   read by telem_task as one byte (atomic).                              */
-static uint16_t         g_cmd_last_10ms[BRIDGE_CMD_COUNT] = {0u, 0u, 0u, 0u};
-static uint8_t          g_cmd_seen_mask   = 0u;   /* bit n: command n seen */
-static uint8_t          g_cmd_drops       = 0u;
-static volatile uint8_t g_bridge_pub_drops = 0u;
+/* Both written only by the radio task (rule 1). PRV_CMD_T: one 16-bit
+   time stamp per command type. PRV_BRIDGE (command drops, publish drops,
+   seen mask) is read by telem_task as one aligned word (atomic).       */
+static uint16_t          g_cmd_last_10ms[BRIDGE_CMD_COUNT] =
+{
+    0u, 0u, 0u, 0u
+};
+static volatile uint32_t g_bridge_word = 0u;
 
 /* ---- private function prototypes ------------------------------------- */
 
 static uint32_t bridge_parse_command(uint8_t const * p_payload,
-                                     uint32_t length);
-static bool     bridge_bytes_equal(uint8_t const * p_payload, uint32_t length,
-                                   char const * p_text, uint32_t text_len);
+                                     uint32_t length, uint32_t * p_map);
 static bool     bridge_rate_ok(uint32_t cmd_idx);
 static void     bridge_count_cmd_drop(void);
-static uint32_t bridge_copy_text(char const * p_text, uint32_t text_len,
-                                 uint8_t * p_buf, uint32_t size);
+static void     bridge_count(uint32_t pos, uint32_t bits, int32_t max);
 
 /* ---- public functions ------------------------------------------------- */
 
 /**
  * mqtt_bridge_take
- * @brief   Takes the next queued payload from K11 without waiting.
- *          Baseline K11 message: byte 0 = APP_MQ_TYPE_*, then the payload.
+ * @brief   Takes the next queued payload from K11 without waiting. The
+ *          K11 message is the binary payload; its type is MQ_HDR.TYPE.
  * @param   p_buf      output buffer
  * @param   buf_size   size of p_buf
  * @param   p_mq_type  receives APP_MQ_TYPE_*
@@ -89,15 +88,17 @@ uint32_t mqtt_bridge_take(uint8_t * p_buf, uint32_t buf_size,
     {
         rcv = tk_rcv_mbf(telem_k11_id(), local, TMO_POL);
     }
-    if (rcv > 1)
+    if (rcv > 0)
     {
-        copied = (uint32_t) rcv - 1u;   /* cast: rcv > 1 */
+        copied = (uint32_t) rcv;   /* cast: rcv > 0 */
         if (copied <= buf_size)
         {
-            *p_mq_type = local[0];
+            /* cast: a 5-bit field, < 32 */
+            *p_mq_type = (uint8_t) app_bits_get(local[0], MQ_HDR_TYPE_POS,
+                                                MQ_HDR_TYPE_BITS);
             for (idx = 0u; idx < copied; idx++)
             {
-                p_buf[idx] = local[idx + 1u];
+                p_buf[idx] = local[idx];
             }
         }
         else
@@ -174,27 +175,28 @@ void mqtt_bridge_route(uint8_t mq_type, char const ** pp_topic, uint8_t * p_qos,
 
 /**
  * mqtt_bridge_availability
- * @brief   Availability payload: "online" / "offline" (plain text, no NUL).
+ * @brief   Availability payload: one header byte of type ONLINE (0x29) or
+ *          OFFLINE (0x31).
  * @param   b_is_online  true = online
  * @param   p_buf        output buffer
  * @param   size         size of p_buf
- * @return  payload length, 0 if it does not fit
+ * @return  1, or 0 if it does not fit
  * @context radio task
  */
 uint32_t mqtt_bridge_availability(bool b_is_online, uint8_t * p_buf,
                                   uint32_t size)
 {
-    uint32_t len = 0u;
+    uint32_t len  = 0u;
+    uint32_t type = APP_MQ_TYPE_OFFLINE;
 
     if (b_is_online)
     {
-        len = bridge_copy_text(g_avail_online, sizeof(g_avail_online) - 1u,
-                               p_buf, size);
+        type = APP_MQ_TYPE_ONLINE;
     }
-    else
+    if ((NULL != p_buf) && (size >= 1u))
     {
-        len = bridge_copy_text(g_avail_offline, sizeof(g_avail_offline) - 1u,
-                               p_buf, size);
+        p_buf[0] = (uint8_t) telem_bin_header(type); /* cast: one byte */
+        len      = 1u;
     }
 
     return len;
@@ -202,8 +204,9 @@ uint32_t mqtt_bridge_availability(bool b_is_online, uint8_t * p_buf,
 
 /**
  * mqtt_bridge_post_command
- * @brief   Validates a remote command (exact bytes), applies the 100 ms
- *          per-type rate limit and posts START / STOP / RESET to the
+ * @brief   Validates a binary command (version 1; START / STOP / RESET
+ *          are 1 byte, MAP is 2 bytes with the MQ_MAP fields in byte 1),
+ *          applies the 100 ms per-type rate limit and posts it to the
  *          mission queue. Anything else counts as a command drop.
  * @param   p_payload  received bytes
  * @param   length     payload length
@@ -212,8 +215,11 @@ uint32_t mqtt_bridge_availability(bool b_is_online, uint8_t * p_buf,
  */
 void mqtt_bridge_post_command(uint8_t const * p_payload, uint32_t length)
 {
-    uint32_t const cmd_idx = bridge_parse_command(p_payload, length);
+    uint32_t       map_val = 0u;
+    uint32_t const cmd_idx = bridge_parse_command(p_payload, length,
+                                                  &map_val);
     uint32_t       evt     = APP_EVT_START;
+    uint32_t       value   = 0u;
 
     if (BRIDGE_CMD_NONE == cmd_idx)
     {
@@ -225,20 +231,27 @@ void mqtt_bridge_post_command(uint8_t const * p_payload, uint32_t length)
     }
     else
     {
-        if (BRIDGE_CMD_STOP == cmd_idx)
+        switch (cmd_idx)
         {
-            evt = APP_EVT_STOP;
-        }
-        else if (BRIDGE_CMD_RESET == cmd_idx)
-        {
-            evt = APP_EVT_RESET;
-        }
-        else
-        {
-            evt = APP_EVT_START;
+            case BRIDGE_CMD_STOP:
+                evt = APP_EVT_STOP;
+                break;
+
+            case BRIDGE_CMD_RESET:
+                evt = APP_EVT_RESET;
+                break;
+
+            case BRIDGE_CMD_MAP:
+                evt   = APP_EVT_MAP;
+                value = map_val;
+                break;
+
+            default:   /* BRIDGE_CMD_START */
+                evt = APP_EVT_START;
+                break;
         }
         /* a full K4 sets APP_FAULT_QUEUE_OVERFLOW inside mission */
-        (void) mission_post_event(evt, 0u);
+        (void) mission_post_event(evt, value);
     }
 }
 
@@ -270,21 +283,20 @@ void mqtt_bridge_link_changed(bool b_is_up)
  */
 void mqtt_bridge_count_publish_drop(void)
 {
-    if (g_bridge_pub_drops < BRIDGE_DROPS_MAX)
-    {
-        g_bridge_pub_drops++;
-    }
+    bridge_count(PRV_BRIDGE_PUB_DROPS_POS, PRV_BRIDGE_PUB_DROPS_BITS,
+                 PRV_BRIDGE_PUB_DROPS_MAX);
 }
 
 /**
  * mqtt_bridge_publish_drops
- * @brief   Publish drops so far (one-byte read, atomic).
+ * @brief   Publish drops so far (one aligned word read, atomic).
  * @return  0..255
  * @context any task
  */
 uint32_t mqtt_bridge_publish_drops(void)
 {
-    return (uint32_t) g_bridge_pub_drops;   /* cast: widening */
+    return app_bits_get(g_bridge_word, PRV_BRIDGE_PUB_DROPS_POS,
+                        PRV_BRIDGE_PUB_DROPS_BITS);
 }
 
 /**
@@ -302,67 +314,69 @@ char const * mqtt_bridge_cmd_topic(void)
 
 /**
  * bridge_parse_command
- * @brief   Matches a payload against the accepted command texts.
+ * @brief   Checks version and length and returns the command. For MAP,
+ *          builds the mission event value from the MQ_MAP byte.
  * @param   p_payload  received bytes (may be NULL)
  * @param   length     payload length
+ * @param   p_map      receives the MAP event value (MAP only)
  * @return  BRIDGE_CMD_* index, or BRIDGE_CMD_NONE
  * @context radio task
  */
 static uint32_t bridge_parse_command(uint8_t const * p_payload,
-                                     uint32_t length)
+                                     uint32_t length, uint32_t * p_map)
 {
     uint32_t cmd_idx = BRIDGE_CMD_NONE;
+    uint32_t version = 0u;
+    uint32_t type    = 0u;
+    uint32_t ch_idx  = 0u;
 
-    if (bridge_bytes_equal(p_payload, length, g_cmd_start,
-                           sizeof(g_cmd_start) - 1u))
+    if ((NULL != p_payload) && (length >= BRIDGE_CMD_LEN))
     {
-        cmd_idx = BRIDGE_CMD_START;
+        version = app_bits_get(p_payload[0], MQ_HDR_VER_POS, MQ_HDR_VER_BITS);
+        type    = app_bits_get(p_payload[0], MQ_HDR_TYPE_POS,
+                               MQ_HDR_TYPE_BITS);
     }
-    else if (bridge_bytes_equal(p_payload, length, g_cmd_stop,
-                                sizeof(g_cmd_stop) - 1u))
+    if (APP_MQ_VERSION != version)
     {
-        cmd_idx = BRIDGE_CMD_STOP;
+        cmd_idx = BRIDGE_CMD_NONE;   /* also: no payload at all */
     }
-    else if (bridge_bytes_equal(p_payload, length, g_cmd_reset,
-                                sizeof(g_cmd_reset) - 1u))
+    else if (BRIDGE_CMD_LEN == length)
     {
-        cmd_idx = BRIDGE_CMD_RESET;
+        if (APP_MQ_TYPE_CMD_START == type)
+        {
+            cmd_idx = BRIDGE_CMD_START;
+        }
+        else if (APP_MQ_TYPE_CMD_STOP == type)
+        {
+            cmd_idx = BRIDGE_CMD_STOP;
+        }
+        else if (APP_MQ_TYPE_CMD_RESET == type)
+        {
+            cmd_idx = BRIDGE_CMD_RESET;
+        }
+        else
+        {
+            cmd_idx = BRIDGE_CMD_NONE;
+        }
+    }
+    else if ((BRIDGE_MAP_LEN == length) && (APP_MQ_TYPE_CMD_MAP == type))
+    {
+        ch_idx = app_bits_get(p_payload[1], MQ_MAP_CHAR_POS,
+                              MQ_MAP_CHAR_BITS);
+        if (ch_idx <= (uint32_t) MQ_MAP_CHAR_MAX)  /* cast: 42; ENUM */
+        {
+            cmd_idx = BRIDGE_CMD_MAP;
+            *p_map  = mission_evt_barcode_value(
+                          app_bits_get(p_payload[1], MQ_MAP_CMD_POS,
+                                       MQ_MAP_CMD_BITS), ch_idx);
+        }
     }
     else
     {
-        cmd_idx = BRIDGE_CMD_NONE;
+        cmd_idx = BRIDGE_CMD_NONE;   /* wrong length for the type */
     }
 
     return cmd_idx;
-}
-
-/**
- * bridge_bytes_equal
- * @brief   Exact byte compare of a payload with a constant text.
- * @param   p_payload  received bytes (may be NULL)
- * @param   length     payload length
- * @param   p_text     expected text
- * @param   text_len   expected length (without NUL)
- * @return  true if equal
- * @context radio task
- */
-static bool bridge_bytes_equal(uint8_t const * p_payload, uint32_t length,
-                               char const * p_text, uint32_t text_len)
-{
-    bool     b_is_equal = false;
-    uint32_t idx        = 0u;
-
-    if ((NULL != p_payload) && (length == text_len))
-    {
-        b_is_equal = true;
-        for (idx = 0u; (idx < length) && b_is_equal; idx++)
-        {
-            /* cast: compare the text's character code as a byte */
-            b_is_equal = (p_payload[idx] == (uint8_t) p_text[idx]);
-        }
-    }
-
-    return b_is_equal;
 }
 
 /**
@@ -380,11 +394,14 @@ static bool bridge_rate_ok(uint32_t cmd_idx)
     /* cast: keep the low 16 bits of the 10 ms count; wraps by design */
     uint16_t const now_10ms = (uint16_t) (sys_tick_now_us()
                                           / BRIDGE_US_PER_10MS);
-    uint8_t const  bit      = (uint8_t) (1u << cmd_idx); /* cast: < 16 */
+    uint32_t const bit      = 1u << cmd_idx;
+    uint32_t const seen     = app_bits_get(g_bridge_word,
+                                           PRV_BRIDGE_CMD_SEEN_POS,
+                                           PRV_BRIDGE_CMD_SEEN_BITS);
     bool           b_is_ok  = false;
     uint16_t       gap      = 0u;
 
-    if (0u == (g_cmd_seen_mask & bit))
+    if (0u == (seen & bit))
     {
         b_is_ok = true;
     }
@@ -398,8 +415,8 @@ static bool bridge_rate_ok(uint32_t cmd_idx)
     if (b_is_ok)
     {
         g_cmd_last_10ms[cmd_idx] = now_10ms;
-        /* cast: four command bits, <= 0x0F */
-        g_cmd_seen_mask          = (uint8_t) (g_cmd_seen_mask | bit);
+        g_bridge_word = app_bits_put(g_bridge_word, PRV_BRIDGE_CMD_SEEN_POS,
+                                     PRV_BRIDGE_CMD_SEEN_BITS, seen | bit);
     }
 
     return b_is_ok;
@@ -412,38 +429,27 @@ static bool bridge_rate_ok(uint32_t cmd_idx)
  */
 static void bridge_count_cmd_drop(void)
 {
-    if (g_cmd_drops < BRIDGE_DROPS_MAX)
-    {
-        g_cmd_drops++;
-    }
+    bridge_count(PRV_BRIDGE_CMD_DROPS_POS, PRV_BRIDGE_CMD_DROPS_BITS,
+                 PRV_BRIDGE_CMD_DROPS_MAX);
 }
 
 /**
- * bridge_copy_text
- * @brief   Copies a constant text (no NUL) into a byte buffer.
- * @param   p_text    text
- * @param   text_len  text length
- * @param   p_buf     output buffer (may be NULL)
- * @param   size      size of p_buf
- * @return  text_len, or 0 if it does not fit
+ * bridge_count
+ * @brief   Saturating increment of one PRV_BRIDGE counter (the radio task
+ *          is the word's only writer, so no lock is needed).
+ * @param   pos   layout _POS
+ * @param   bits  layout _BITS
+ * @param   max   layout _MAX (saturation value)
  * @context radio task
  */
-static uint32_t bridge_copy_text(char const * p_text, uint32_t text_len,
-                                 uint8_t * p_buf, uint32_t size)
+static void bridge_count(uint32_t pos, uint32_t bits, int32_t max)
 {
-    uint32_t len = 0u;
-    uint32_t idx = 0u;
+    uint32_t const count = app_bits_get(g_bridge_word, pos, bits);
 
-    if ((NULL != p_buf) && (text_len <= size))
+    if (count < (uint32_t) max)   /* cast: positive layout constant */
     {
-        for (idx = 0u; idx < text_len; idx++)
-        {
-            p_buf[idx] = (uint8_t) p_text[idx]; /* cast: ASCII byte */
-        }
-        len = text_len;
+        g_bridge_word = app_bits_put(g_bridge_word, pos, bits, count + 1u);
     }
-
-    return len;
 }
 
 /*** end of file ***/

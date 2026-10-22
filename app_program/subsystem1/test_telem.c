@@ -17,6 +17,7 @@
 #include "../test_report.h"
 #include "../app_types.h"
 #include "telem.h"
+#include "telem_bin.h"
 #include "mqtt_bridge.h"
 #include "../subsystem5/sys_tick.h"
 
@@ -27,17 +28,7 @@
 #define TEST_TEL_NO_BLOCK_US   (1000u)  /* a TMO_POL call is far faster  */
 #define TEST_TEL_CMD_GAP_MS    (50u)
 
-/* A valid heartbeat payload (baseline: route byte + JSON text). */
-static uint8_t const g_test_payload[] =
-{
-    (uint8_t) APP_MQ_TYPE_HEARTBEAT,
-    '{', '"', 'u', 'p', '"', ':', '0', '}'
-};
-
-static uint8_t const g_test_stop[] =
-{
-    '{', '"', 'c', 'm', 'd', '"', ':', '"', 'S', 'T', 'O', 'P', '"', '}'
-};
+#define TEST_TEL_PAYLOAD_MAX   (APP_MQ_PAYLOAD_MAX)
 #endif
 
 /* ---- public functions ------------------------------------------------- */
@@ -55,6 +46,9 @@ void test_telem_run(void)
 {
 #if APP_TEST
     uint8_t  buf[MQTT_BRIDGE_TX_MAX] = {0u};
+    uint8_t  payload[TEST_TEL_PAYLOAD_MAX] = {0u};
+    uint8_t  stop_cmd    = 0u;
+    uint32_t pay_len     = 0u;
     uint8_t  mq_type     = 0u;
     uint32_t queued      = 0u;
     uint32_t drained     = 0u;
@@ -66,12 +60,17 @@ void test_telem_run(void)
 
     TEST_INIT();
 
+    /* a valid (all-zero) heartbeat, and the 1-byte binary STOP command */
+    pay_len  = telem_bin_heartbeat(0u, 0u, 0u, payload, sizeof(payload));
+    /* cast: the header is one byte */
+    stop_cmd = (uint8_t) telem_bin_header(APP_MQ_TYPE_CMD_STOP);
+
     /* S1-U03: fill K11 the way telem_task does (TMO_POL) until it is full */
     while ((!b_is_full) && (queued < TEST_TEL_FILL_MAX))
     {
         start_us = sys_tick_now_us();
-        ercd     = tk_snd_mbf(telem_k11_id(), g_test_payload,
-                              (INT) sizeof(g_test_payload), /* cast: 9 */
+        ercd     = tk_snd_mbf(telem_k11_id(), payload,
+                              (INT) pay_len, /* cast: 6 bytes */
                               TMO_POL);
         took_us  = sys_tick_now_us() - start_us;
         if (E_OK == ercd)
@@ -103,11 +102,11 @@ void test_telem_run(void)
 
     /* S1-U12 smoke check: two STOPs 50 ms apart never block the caller */
     start_us = sys_tick_now_us();
-    mqtt_bridge_post_command(g_test_stop, sizeof(g_test_stop));
+    mqtt_bridge_post_command(&stop_cmd, 1u);
     took_us = sys_tick_now_us() - start_us;
     (void) tk_dly_tsk(TEST_TEL_CMD_GAP_MS);
     start_us = sys_tick_now_us();
-    mqtt_bridge_post_command(g_test_stop, sizeof(g_test_stop));
+    mqtt_bridge_post_command(&stop_cmd, 1u);
     took_us = took_us + (sys_tick_now_us() - start_us);
     TEST_CHECK("S1-U12", took_us < TEST_TEL_NO_BLOCK_US,
                "two remote STOPs return at once (counts: host test)");

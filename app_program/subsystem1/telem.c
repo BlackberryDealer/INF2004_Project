@@ -2,8 +2,9 @@
  * @file    telem.c
  * @brief   Telemetry task: turns mission events (K7) and status-board
  *          snapshots into MQTT payloads queued for the radio task (K11).
- *          Baseline representation: natural-type K7 messages, JSON
- *          payloads.
+ *          Packed representation (B1.4): K7 carries the 16-bit app event
+ *          word plus K7_PROF / K7_SUMM detail bytes; K11 carries the
+ *          binary payloads built by telem_bin.c.
  * @owner   Buddy 1 (communications)
  * @kind    task
  * @reqs    FR10, FR12, NFR8, NFR17 (A16 evidence)
@@ -14,10 +15,9 @@
 #include "../app_types.h"
 #include "../app_layout.h"
 #include "cfg_telem.h"
-#include "telem_json.h"
+#include "../app_bits.h"
 #include "mqtt_bridge.h"
 #include "../subsystem2/fault.h"
-#include "../subsystem2/odometry.h"
 #include "../subsystem5/status_board.h"
 #include "../subsystem5/sys_tick.h"
 
@@ -28,45 +28,39 @@
 /* Kernel message-buffer cost: 4-byte header + length rounded up to 4. */
 #define TELEM_MBF_HDR_BYTES   (4u)
 
-/* K7 baseline message: kind, type, six values = 32 bytes. */
-#define TELEM_K7_VALUES       (6u)
-#define TELEM_K7_MSG_BYTES    (32u)
+/* K7 packed message: 2-byte event word (+ 5 B profile or 6 B summary).
+   telem_task tells them apart by length.                             */
+#define TELEM_K7_WORD_BYTES   (2u)
+#define TELEM_K7_PROF_LEN     (TELEM_K7_WORD_BYTES + K7_PROF_BYTES)
+#define TELEM_K7_SUMM_LEN     (TELEM_K7_WORD_BYTES + K7_SUMM_BYTES)
+#define TELEM_K7_MSG_BYTES    (8u)
 #define TELEM_K7_MBF_BYTES    (TELEM_K7_ENTRIES \
                                * (TELEM_MBF_HDR_BYTES + TELEM_K7_MSG_BYTES))
 
-#define TELEM_K7_KIND_EVENT   (0u)
-#define TELEM_K7_KIND_PROFILE (1u)
-#define TELEM_K7_KIND_SUMMARY (2u)
-
-/* K11 baseline message: byte 0 = APP_MQ_TYPE_*, then JSON text. */
-#define TELEM_K11_MSG_BYTES   (MQTT_BRIDGE_TX_MAX)
+/* K11 packed message: the binary payload itself (byte 0 = header). */
+#define TELEM_K11_MSG_BYTES   (APP_MQ_PAYLOAD_MAX)
 #define TELEM_K11_MBF_BYTES   (TELEM_K11_ENTRIES \
                                * (TELEM_MBF_HDR_BYTES + TELEM_K11_MSG_BYTES))
 
-#define TELEM_DROPS_MAX       (255u)
-#define TELEM_UPTIME_MAX_S    (65535u)
 #define TELEM_US_PER_MS       (1000u)
 #define TELEM_STATE_PERIOD_US (TELEM_STATE_PERIOD_MS * TELEM_US_PER_MS)
 #define TELEM_WAIT_MIN_MS     (1u)
 #define TELEM_TIME_HALF_RANGE (0x80000000u)  /* wrap-safe "has reached" */
-
-/* Profile and summary fields are 4 mm steps up to 255 (K7_PROF). */
-#define TELEM_MM_PER_STEP     (4u)
-#define TELEM_PROF_MM_MAX     (TELEM_MM_PER_STEP \
-                               * (uint32_t) K7_PROF_WIDTH_MAX)
-
-typedef struct
-{
-    uint32_t kind;                      /* TELEM_K7_KIND_* */
-    uint32_t type;                      /* APP_EVT_* */
-    int32_t  value[TELEM_K7_VALUES];
-} telem_k7_msg_t;
+#define TELEM_MM_STEP_SHIFT   (2u)           /* 4 mm fields             */
 
 #if ((TELEM_K7_MBF_BYTES % 4u) != 0u) || ((TELEM_K11_MBF_BYTES % 4u) != 0u)
 #error "Telemetry message buffers must be a multiple of 4 bytes"
 #endif
-#if (TELEM_HB_EVERY_N_STATE < 1u)
-#error "TELEM_HB_EVERY_N_STATE must be at least 1"
+#if (TELEM_K7_PROF_LEN != 7u) || (TELEM_K7_SUMM_LEN != 8u) \
+    || (TELEM_K7_SUMM_LEN > TELEM_K7_MSG_BYTES)
+#error "K7 detail sizes changed: update the length dispatch in telem_task"
+#endif
+#if (TELEM_HB_EVERY_N_STATE < 1u) || \
+    ((TELEM_HB_EVERY_N_STATE - 1u) > PRV_TEL_HB_DIV_MAX)
+#error "TELEM_HB_EVERY_N_STATE no longer fits PRV_TEL.HB_DIV: widen it"
+#endif
+#if ((MQ_STATE_BYTES + 1u) > APP_MQ_PAYLOAD_MAX)
+#error "The state payload no longer fits one K11 message"
 #endif
 
 /* ---- private data ---------------------------------------------------- */
@@ -78,28 +72,27 @@ static uint32_t g_telem_k11_mbf_buf[TELEM_K11_MBF_BYTES / 4u];
 static ID gh_telem_k7  = 0;
 static ID gh_telem_k11 = 0;
 
-/* Rule 1: one writer each. K7 drops: mission_task (telem_post_*);
-   K11 drops, heartbeat divider and uptime: telem_task.             */
-static volatile uint8_t g_tel_k7_drops  = 0u;
-static volatile uint8_t g_tel_k11_drops = 0u;
-static uint32_t         g_tel_hb_div    = 0u;
-static uint32_t         g_tel_uptime_s  = 0u;
+/* Rule 1: one writer each. PRV_TEL_K7: mission_task (telem_post_*);
+   PRV_TEL (K11 drops, heartbeat divider, uptime): telem_task. Readers
+   load the whole word (one aligned access, atomic).                  */
+static volatile uint8_t  g_tel_k7_word = 0u;
+static volatile uint32_t g_tel_word    = 0u;
 
 /* ---- private function prototypes ------------------------------------- */
 
 static void     telem_task(INT stacd, void * p_exinf);
-static bool     telem_k7_send(telem_k7_msg_t const * p_msg);
+static bool     telem_k7_send(uint8_t const * p_msg, uint32_t len);
 static void     telem_k11_put(uint8_t const * p_msg, uint32_t len);
 static TMO      telem_wait_ms(uint32_t next_us, uint32_t now_us);
-static void     telem_forward(telem_k7_msg_t const * p_msg);
+static void     telem_forward(uint8_t const * p_msg, uint32_t len);
 static void     telem_send_state(void);
 static void     telem_send_heartbeat(void);
-static bool     telem_state_clamp(telem_bin_state_t * p_state);
-static int32_t  telem_clamp_s(int32_t value, int32_t min, int32_t max,
-                              bool * pb_was_clamped);
-static uint32_t telem_clamp_u(uint32_t value, uint32_t max,
-                              bool * pb_was_clamped);
+static uint32_t telem_evt_word(uint32_t type, uint32_t value);
 static uint32_t telem_evt_value_max(uint32_t type);
+static void     telem_k7_put_u(app_bits_writer_t * p_wr, uint32_t value,
+                               int32_t max, uint32_t bits, bool * pb_any);
+static uint32_t telem_tel_get(uint32_t pos, uint32_t bits);
+static void     telem_tel_put(uint32_t pos, uint32_t bits, uint32_t value);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -115,8 +108,8 @@ ER telem_init(void)
     T_CMBF cmbf = {0};
     ER     ercd = E_OK;
 
-    g_tel_k7_drops  = 0u;
-    g_tel_k11_drops = 0u;
+    g_tel_k7_word = 0u;
+    g_tel_word    = 0u;
 
     cmbf.mbfatr = TA_TFIFO | TA_USERBUF;
     cmbf.bufsz  = (SZ) TELEM_K7_MBF_BYTES;   /* cast: kernel size type */
@@ -166,9 +159,10 @@ ER telem_start(void)
 
 /**
  * telem_post_event
- * @brief   Queues an event for telemetry (K7, TMO_POL). The value is
- *          clamped to the type's own width (layout EVT_* groups; types
- *          without a group carry 0), as mission_post_event does.
+ * @brief   Queues an event for telemetry (K7, TMO_POL): the 16-bit app
+ *          event word. The value is clamped to the type's own width
+ *          (layout EVT_* groups; types without a group carry 0), as
+ *          mission_post_event does.
  * @param   type   APP_EVT_*
  * @param   value  event value (D.13)
  * @return  true if queued; false if K7 is full (counted)
@@ -176,118 +170,106 @@ ER telem_start(void)
  */
 bool telem_post_event(uint32_t type, uint32_t value)
 {
-    telem_k7_msg_t msg     = {0u, 0u, {0, 0, 0, 0, 0, 0}};
-    uint32_t const val_max = telem_evt_value_max(type);
+    uint8_t           msg[TELEM_K7_MSG_BYTES] = {0u};
+    app_bits_writer_t wr = {NULL, 0u, 0u, false};
 
-    msg.kind     = TELEM_K7_KIND_EVENT;
-    msg.type     = type;
-    /* cast: <= 2047 after the clamp */
-    msg.value[0] = (int32_t) telem_clamp_u(value, val_max, NULL);
+    app_bits_writer_init(&wr, msg, sizeof(msg));
+    app_bits_write(&wr, telem_evt_word(type, value), MSG_EVT_USED_BITS);
 
-    return telem_k7_send(&msg);
+    return telem_k7_send(msg, app_bits_writer_bytes(&wr));
 }
 
 /**
  * telem_post_profile
- * @brief   Queues an obstacle profile (K7, TMO_POL). Distances are
- *          clamped to the 4 mm x 255 range (SAT, silent); the angle step
- *          to 0..24 (RNG, sets APP_FAULT_RANGE_CLAMP).
+ * @brief   Queues an obstacle profile (K7, TMO_POL): an OBSTACLE event
+ *          word, then the K7_PROF fields. Distances are stored in 4 mm
+ *          steps (SAT, silent); an angle step above 24 (RNG) sets
+ *          APP_FAULT_RANGE_CLAMP.
  * @param   p_profile  obstacle profile
  * @return  true if queued; false if K7 is full (counted)
  * @context mission_task
  */
 bool telem_post_profile(telem_bin_profile_t const * p_profile)
 {
-    telem_k7_msg_t msg       = {0u, 0u, {0, 0, 0, 0, 0, 0}};
-    bool           b_clamped = false;
-    /* cast: positive layout constant */
-    uint32_t const step_max  = (uint32_t) K7_PROF_ANGLE_STEP_MAX;
+    uint8_t           msg[TELEM_K7_MSG_BYTES] = {0u};
+    app_bits_writer_t wr        = {NULL, 0u, 0u, false};
+    bool              b_clamped = false;
 
-    msg.kind = TELEM_K7_KIND_PROFILE;
-    msg.type = APP_EVT_OBSTACLE;
-    /* casts below: every value is clamped to <= 1020 first */
-    msg.value[0] = (int32_t) telem_clamp_u(p_profile->angle_step, step_max,
-                                           &b_clamped);
-    msg.value[1] = (int32_t) telem_clamp_u(p_profile->width_mm,
-                                           TELEM_PROF_MM_MAX, NULL);
-    msg.value[2] = (int32_t) telem_clamp_u(p_profile->nearest_mm,
-                                           TELEM_PROF_MM_MAX, NULL);
-    msg.value[3] = (int32_t) telem_clamp_u(p_profile->clear_left_mm,
-                                           TELEM_PROF_MM_MAX, NULL);
-    msg.value[4] = (int32_t) telem_clamp_u(p_profile->clear_right_mm,
-                                           TELEM_PROF_MM_MAX, NULL);
-    msg.value[5] = (int32_t) telem_clamp_u(p_profile->side,
-                                           (uint32_t) K7_PROF_SIDE_MAX,
-                                           NULL); /* cast: max > 0 */
+    app_bits_writer_init(&wr, msg, sizeof(msg));
+    app_bits_write(&wr, telem_evt_word(APP_EVT_OBSTACLE, 0u),
+                   MSG_EVT_USED_BITS);
+    telem_k7_put_u(&wr, p_profile->angle_step, K7_PROF_ANGLE_STEP_MAX,
+                   K7_PROF_ANGLE_STEP_BITS, &b_clamped);
+    telem_k7_put_u(&wr, p_profile->width_mm >> TELEM_MM_STEP_SHIFT,
+                   K7_PROF_WIDTH_MAX, K7_PROF_WIDTH_BITS, NULL);
+    telem_k7_put_u(&wr, p_profile->nearest_mm >> TELEM_MM_STEP_SHIFT,
+                   K7_PROF_NEAREST_MAX, K7_PROF_NEAREST_BITS, NULL);
+    telem_k7_put_u(&wr, p_profile->clear_left_mm >> TELEM_MM_STEP_SHIFT,
+                   K7_PROF_CLEAR_L_MAX, K7_PROF_CLEAR_L_BITS, NULL);
+    telem_k7_put_u(&wr, p_profile->clear_right_mm >> TELEM_MM_STEP_SHIFT,
+                   K7_PROF_CLEAR_R_MAX, K7_PROF_CLEAR_R_BITS, NULL);
+    telem_k7_put_u(&wr, p_profile->side, K7_PROF_SIDE_MAX,
+                   K7_PROF_SIDE_BITS, NULL);
     if (b_clamped)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
     }
 
-    return telem_k7_send(&msg);
+    return telem_k7_send(msg, app_bits_writer_bytes(&wr));
 }
 
 /**
  * telem_post_summary
- * @brief   Queues the run summary (K7, TMO_POL). Each field is clamped to
- *          its K7_SUMM range; an RNG clamp sets APP_FAULT_RANGE_CLAMP.
+ * @brief   Queues the run summary (K7, TMO_POL): a SUMMARY event word,
+ *          then the K7_SUMM fields. An RNG clamp sets
+ *          APP_FAULT_RANGE_CLAMP.
  * @param   p_summary  end-of-run data
  * @return  true if queued; false if K7 is full (counted)
  * @context mission_task
  */
 bool telem_post_summary(telem_bin_summary_t const * p_summary)
 {
-    telem_k7_msg_t msg       = {0u, 0u, {0, 0, 0, 0, 0, 0}};
-    bool           b_clamped = false;
-    bool           b_any     = false;
+    uint8_t           msg[TELEM_K7_MSG_BYTES] = {0u};
+    app_bits_writer_t wr    = {NULL, 0u, 0u, false};
+    bool              b_any = false;
 
-    msg.kind = TELEM_K7_KIND_SUMMARY;
-    msg.type = APP_EVT_SUMMARY;
-    /* casts below: every max is a positive layout constant <= 32767 */
-    msg.value[0] = (int32_t) telem_clamp_u(p_summary->end_reason,
-                                           (uint32_t) K7_SUMM_END_REASON_MAX,
-                                           NULL);
-    msg.value[1] = (int32_t) telem_clamp_u(p_summary->hump_peak_mm,
-                                           (uint32_t) K7_SUMM_HUMP_PEAK_MAX,
-                                           &b_clamped);
-    b_any        = b_clamped;
-    msg.value[2] = (int32_t) telem_clamp_u(p_summary->odometry_mm,
-                                           (uint32_t) K7_SUMM_ODO_MM_MAX,
-                                           &b_clamped);
-    b_any        = b_any || b_clamped;
-    msg.value[3] = (int32_t) telem_clamp_u(p_summary->faults,
-                                           (uint32_t) K7_SUMM_FAULTS_MAX,
-                                           NULL);
-    msg.value[4] = (int32_t) telem_clamp_u(p_summary->run_time_s,
-                                           (uint32_t) K7_SUMM_RUN_S_MAX,
-                                           &b_clamped);
-    b_any        = b_any || b_clamped;
+    app_bits_writer_init(&wr, msg, sizeof(msg));
+    app_bits_write(&wr, telem_evt_word(APP_EVT_SUMMARY, 0u),
+                   MSG_EVT_USED_BITS);
+    telem_k7_put_u(&wr, p_summary->end_reason, K7_SUMM_END_REASON_MAX,
+                   K7_SUMM_END_REASON_BITS, NULL);
+    telem_k7_put_u(&wr, p_summary->hump_peak_mm, K7_SUMM_HUMP_PEAK_MAX,
+                   K7_SUMM_HUMP_PEAK_BITS, &b_any);
+    telem_k7_put_u(&wr, p_summary->odometry_mm, K7_SUMM_ODO_MM_MAX,
+                   K7_SUMM_ODO_MM_BITS, &b_any);
+    telem_k7_put_u(&wr, p_summary->faults, K7_SUMM_FAULTS_MAX,
+                   K7_SUMM_FAULTS_BITS, NULL);
+    telem_k7_put_u(&wr, p_summary->run_time_s, K7_SUMM_RUN_S_MAX,
+                   K7_SUMM_RUN_S_BITS, &b_any);
     if (b_any)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
     }
 
-    return telem_k7_send(&msg);
+    return telem_k7_send(msg, app_bits_writer_bytes(&wr));
 }
 
 /**
  * telem_drops
- * @brief   K7 + K11 + publish drops, from single-byte reads (atomic).
+ * @brief   K7 + K11 + publish drops, each from one atomic word read.
  * @return  0..255 (saturates)
  * @context any task
  */
 uint32_t telem_drops(void)
 {
-    uint32_t total = (uint32_t) g_tel_k7_drops   /* cast: widening */
-                     + (uint32_t) g_tel_k11_drops /* cast: widening */
-                     + mqtt_bridge_publish_drops();
+    uint32_t const k7    = app_bits_get(g_tel_k7_word, PRV_TEL_K7_DROPS_POS,
+                                        PRV_TEL_K7_DROPS_BITS);
+    uint32_t const k11   = app_bits_get(g_tel_word, PRV_TEL_DROPS_POS,
+                                        PRV_TEL_DROPS_BITS);
+    uint32_t const total = k7 + k11 + mqtt_bridge_publish_drops();
 
-    if (total > TELEM_DROPS_MAX)
-    {
-        total = TELEM_DROPS_MAX;
-    }
-
-    return total;
+    /* cast: positive layout constant 255 */
+    return app_bits_clamp_u(total, (uint32_t) MQ_HB_DROPS_MAX, NULL);
 }
 
 /**
@@ -314,25 +296,23 @@ ID telem_k11_id(void)
  */
 static void telem_task(INT stacd, void * p_exinf)
 {
-    telem_k7_msg_t msg     = {0u, 0u, {0, 0, 0, 0, 0, 0}};
-    uint32_t       next_us = sys_tick_now_us() + TELEM_STATE_PERIOD_US;
-    uint32_t       now_us  = 0u;
-    INT            rcv     = 0;
+    uint8_t  msg[TELEM_K7_MSG_BYTES] = {0u};
+    uint32_t next_us = sys_tick_now_us() + TELEM_STATE_PERIOD_US;
+    uint32_t now_us  = 0u;
+    uint32_t hb_div  = 0u;
+    INT      rcv     = 0;
 
     (void) stacd;     /* unused: kernel start code */
     (void) p_exinf;   /* unused: no extended info  */
 
-    g_tel_hb_div   = 0u;
-    g_tel_uptime_s = 0u;
-
     for (;;)
     {
         now_us = sys_tick_now_us();
-        rcv    = tk_rcv_mbf(gh_telem_k7, &msg, telem_wait_ms(next_us,
-                                                             now_us));
+        rcv    = tk_rcv_mbf(gh_telem_k7, msg, telem_wait_ms(next_us,
+                                                            now_us));
         if (rcv > 0)
         {
-            telem_forward(&msg);
+            telem_forward(msg, (uint32_t) rcv);   /* cast: rcv > 0 */
         }
 
         now_us = sys_tick_now_us();
@@ -340,12 +320,14 @@ static void telem_task(INT stacd, void * p_exinf)
         {
             next_us += TELEM_STATE_PERIOD_US;
             telem_send_state();
-            g_tel_hb_div++;
-            if (g_tel_hb_div >= TELEM_HB_EVERY_N_STATE)
+            hb_div = telem_tel_get(PRV_TEL_HB_DIV_POS, PRV_TEL_HB_DIV_BITS)
+                     + 1u;
+            if (hb_div >= TELEM_HB_EVERY_N_STATE)
             {
-                g_tel_hb_div = 0u;
+                hb_div = 0u;
                 telem_send_heartbeat();
             }
+            telem_tel_put(PRV_TEL_HB_DIV_POS, PRV_TEL_HB_DIV_BITS, hb_div);
         }
     }
 }
@@ -353,27 +335,34 @@ static void telem_task(INT stacd, void * p_exinf)
 /**
  * telem_k7_send
  * @brief   Sends one K7 message without waiting; counts a full K7.
- * @param   p_msg  message to send
+ * @param   p_msg  message bytes
+ * @param   len    2, 7 or 8 bytes
  * @return  true if queued
  * @context mission_task
  */
-static bool telem_k7_send(telem_k7_msg_t const * p_msg)
+static bool telem_k7_send(uint8_t const * p_msg, uint32_t len)
 {
-    bool b_is_sent = false;
+    bool     b_is_sent = false;
+    uint32_t drops     = 0u;
 
     if (E_OK == tk_snd_mbf(gh_telem_k7, p_msg,
-                           (INT) TELEM_K7_MSG_BYTES, /* cast: kernel size */
+                           (INT) len, /* cast: <= 8 */
                            TMO_POL))
     {
         b_is_sent = true;
     }
-    else if (g_tel_k7_drops < TELEM_DROPS_MAX)
-    {
-        g_tel_k7_drops++;
-    }
     else
     {
-        /* saturated at 255 */
+        drops = app_bits_get(g_tel_k7_word, PRV_TEL_K7_DROPS_POS,
+                             PRV_TEL_K7_DROPS_BITS);
+        if (drops < (uint32_t) PRV_TEL_K7_DROPS_MAX) /* cast: 255 */
+        {
+            /* cast: the 8-bit group fits its uint8_t word */
+            g_tel_k7_word = (uint8_t) app_bits_put(g_tel_k7_word,
+                                                   PRV_TEL_K7_DROPS_POS,
+                                                   PRV_TEL_K7_DROPS_BITS,
+                                                   drops + 1u);
+        }
     }
 
     return b_is_sent;
@@ -383,23 +372,29 @@ static bool telem_k7_send(telem_k7_msg_t const * p_msg)
  * telem_k11_put
  * @brief   Queues one payload for the radio task without waiting. A full
  *          K11 or an empty payload (did not fit) is counted as a drop.
- * @param   p_msg  K11 message (route byte + payload)
- * @param   len    message length in bytes (1 = payload did not fit)
+ * @param   p_msg  binary payload (byte 0 = header)
+ * @param   len    payload length (0 = did not fit)
  * @context telem_task
  */
 static void telem_k11_put(uint8_t const * p_msg, uint32_t len)
 {
-    bool b_is_sent = false;
+    bool     b_is_sent = false;
+    uint32_t drops     = 0u;
 
-    if (len > 1u)
+    if (len > 0u)
     {
         b_is_sent = (E_OK == tk_snd_mbf(gh_telem_k11, p_msg,
-                                        (INT) len, /* cast: <= 160 */
+                                        (INT) len, /* cast: <= 20 */
                                         TMO_POL));
     }
-    if ((!b_is_sent) && (g_tel_k11_drops < TELEM_DROPS_MAX))
+    if (!b_is_sent)
     {
-        g_tel_k11_drops++;
+        drops = telem_tel_get(PRV_TEL_DROPS_POS, PRV_TEL_DROPS_BITS);
+        if (drops < (uint32_t) PRV_TEL_DROPS_MAX)   /* cast: 255 */
+        {
+            telem_tel_put(PRV_TEL_DROPS_POS, PRV_TEL_DROPS_BITS,
+                          drops + 1u);
+        }
     }
 }
 
@@ -438,67 +433,69 @@ static TMO telem_wait_ms(uint32_t next_us, uint32_t now_us)
 
 /**
  * telem_forward
- * @brief   Builds the payload for one K7 message and queues it in K11.
- * @param   p_msg  K7 message
+ * @brief   Builds the payload for one K7 message (told apart by length:
+ *          2 = event, 7 = profile, 8 = summary) and queues it in K11.
+ * @param   p_msg  K7 message bytes
+ * @param   len    message length
  * @context telem_task
  */
-static void telem_forward(telem_k7_msg_t const * p_msg)
+static void telem_forward(uint8_t const * p_msg, uint32_t len)
 {
     uint8_t             out[TELEM_K11_MSG_BYTES] = {0u};
-    char *              p_text = (char *) &out[1]; /* cast: JSON bytes */
-    uint32_t const      room   = TELEM_K11_MSG_BYTES - 1u;
-    uint32_t            len    = 0u;
-    telem_bin_profile_t prof   = {0u, 0u, 0u, 0u, 0u, 0u};
-    telem_bin_summary_t summ   = {0u, 0u, 0u, 0u, 0u};
+    uint32_t            out_len = 0u;
+    uint32_t            word    = 0u;
+    app_bits_reader_t   rd      = {NULL, 0u, 0u, false};
+    telem_bin_profile_t prof    = {0u, 0u, 0u, 0u, 0u, 0u};
+    telem_bin_summary_t summ    = {0u, 0u, 0u, 0u, 0u};
 
-    /* casts below: K7 values were clamped to 0..32767 when posted */
-    switch (p_msg->kind)
+    app_bits_reader_init(&rd, p_msg, len);
+    word = app_bits_read(&rd, MSG_EVT_USED_BITS);
+
+    if (TELEM_K7_PROF_LEN == len)
     {
-        case TELEM_K7_KIND_PROFILE:
-            prof.angle_step     = (uint32_t) p_msg->value[0];
-            prof.width_mm       = (uint32_t) p_msg->value[1];
-            prof.nearest_mm     = (uint32_t) p_msg->value[2];
-            prof.clear_left_mm  = (uint32_t) p_msg->value[3];
-            prof.clear_right_mm = (uint32_t) p_msg->value[4];
-            prof.side           = (uint32_t) p_msg->value[5];
-            out[0]              = (uint8_t) APP_MQ_TYPE_PROFILE; /* < 32 */
-            len                 = telem_json_profile(&prof, p_text, room);
-            break;
-
-        case TELEM_K7_KIND_SUMMARY:
-            summ.end_reason   = (uint32_t) p_msg->value[0];
-            summ.hump_peak_mm = (uint32_t) p_msg->value[1];
-            summ.odometry_mm  = (uint32_t) p_msg->value[2];
-            summ.faults       = (uint32_t) p_msg->value[3];
-            summ.run_time_s   = (uint32_t) p_msg->value[4];
-            out[0]            = (uint8_t) APP_MQ_TYPE_SUMMARY; /* < 32 */
-            len               = telem_json_summary(&summ, p_text, room);
-            break;
-
-        default:   /* TELEM_K7_KIND_EVENT */
-            out[0] = (uint8_t) APP_MQ_TYPE_EVENT;   /* cast: < 32 */
-            len    = telem_json_event(p_msg->type,
-                                      (uint32_t) p_msg->value[0],
-                                      p_text, room);
-            break;
+        prof.angle_step     = app_bits_read(&rd, K7_PROF_ANGLE_STEP_BITS);
+        prof.width_mm       = app_bits_read(&rd, K7_PROF_WIDTH_BITS)
+                              << TELEM_MM_STEP_SHIFT;
+        prof.nearest_mm     = app_bits_read(&rd, K7_PROF_NEAREST_BITS)
+                              << TELEM_MM_STEP_SHIFT;
+        prof.clear_left_mm  = app_bits_read(&rd, K7_PROF_CLEAR_L_BITS)
+                              << TELEM_MM_STEP_SHIFT;
+        prof.clear_right_mm = app_bits_read(&rd, K7_PROF_CLEAR_R_BITS)
+                              << TELEM_MM_STEP_SHIFT;
+        prof.side           = app_bits_read(&rd, K7_PROF_SIDE_BITS);
+        out_len             = telem_bin_profile(&prof, out, sizeof(out));
+    }
+    else if (TELEM_K7_SUMM_LEN == len)
+    {
+        summ.end_reason   = app_bits_read(&rd, K7_SUMM_END_REASON_BITS);
+        summ.hump_peak_mm = app_bits_read(&rd, K7_SUMM_HUMP_PEAK_BITS);
+        summ.odometry_mm  = app_bits_read(&rd, K7_SUMM_ODO_MM_BITS);
+        summ.faults       = app_bits_read(&rd, K7_SUMM_FAULTS_BITS);
+        summ.run_time_s   = app_bits_read(&rd, K7_SUMM_RUN_S_BITS);
+        out_len           = telem_bin_summary(&summ, out, sizeof(out));
+    }
+    else
+    {
+        out_len = telem_bin_event(word, out, sizeof(out));
     }
 
-    telem_k11_put(out, len + 1u);
+    telem_k11_put(out, out_len);
 }
 
 /**
  * telem_send_state
  * @brief   Copies a status-board snapshot and the fault mask into a state
- *          sample, applies the MQ_STATE range checks and queues the state
- *          payload.
+ *          sample and queues the state payload. An RNG clamp sets
+ *          APP_FAULT_RANGE_CLAMP.
  * @context telem_task
  */
 static void telem_send_state(void)
 {
-    status_board_t    snap  = {0};
-    telem_bin_state_t state = {0};
+    status_board_t    snap      = {0};
+    telem_bin_state_t state     = {0};
     uint8_t           out[TELEM_K11_MSG_BYTES] = {0u};
-    uint32_t          len   = 0u;
+    uint32_t          len       = 0u;
+    bool              b_clamped = false;
 
     status_board_read(&snap);
     state.sys_state     = status_board_sys_state(&snap);
@@ -517,15 +514,12 @@ static void telem_send_state(void)
     state.motion_class  = status_board_motion_class(&snap);
     state.faults        = fault_get();
 
-    if (telem_state_clamp(&state))
+    len = telem_bin_state(&state, out, sizeof(out), &b_clamped);
+    if (b_clamped)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
     }
-
-    out[0] = (uint8_t) APP_MQ_TYPE_STATE;   /* cast: < 32 */
-    len    = telem_json_state(&state, (char *) &out[1], /* cast: text */
-                              TELEM_K11_MSG_BYTES - 1u);
-    telem_k11_put(out, len + 1u);
+    telem_k11_put(out, len);
 }
 
 /**
@@ -538,153 +532,56 @@ static void telem_send_state(void)
 static void telem_send_heartbeat(void)
 {
     uint8_t        out[TELEM_K11_MSG_BYTES] = {0u};
-    uint32_t       len     = 0u;
-    uint32_t const lat_us  = sys_tick_latency_max_us();
+    uint32_t       len    = 0u;
+    uint32_t const lat_us = sys_tick_latency_max_us();
+    uint32_t       up_s   = telem_tel_get(PRV_TEL_UPTIME_HI_POS,
+                                          PRV_TEL_UPTIME_HI_BITS);
 
-    if (g_tel_uptime_s < TELEM_UPTIME_MAX_S)
+    if (up_s < (uint32_t) PRV_TEL_UPTIME_HI_MAX)   /* cast: 65535 */
     {
-        g_tel_uptime_s++;
+        up_s++;
+        telem_tel_put(PRV_TEL_UPTIME_HI_POS, PRV_TEL_UPTIME_HI_BITS, up_s);
     }
 
-    out[0] = (uint8_t) APP_MQ_TYPE_HEARTBEAT;   /* cast: < 32 */
-    len    = telem_json_heartbeat(g_tel_uptime_s, telem_drops(), lat_us,
-                                  (char *) &out[1], /* cast: text */
-                                  TELEM_K11_MSG_BYTES - 1u);
-    telem_k11_put(out, len + 1u);
+    len = telem_bin_heartbeat(up_s, telem_drops(), lat_us, out,
+                              sizeof(out));
+    telem_k11_put(out, len);
 
 #if APP_TEST && APP_PROBE
     /* A16 harness (B1.1 method A): worst release latency of all slots */
     app_log("[A16] up %d s lat_max %d us drops %d",
-            (int32_t) g_tel_uptime_s, /* cast: <= 65535 */
+            (int32_t) up_s,           /* cast: <= 65535 */
             (int32_t) lat_us,         /* cast: <= 4095  */
             (int32_t) telem_drops()); /* cast: <= 255   */
 #endif
 }
 
 /**
- * telem_state_clamp
- * @brief   Clamps every state field to its MQ_STATE range in place, so
- *          the JSON carries exactly what the packed payload would.
- * @param   p_state  state sample (modified)
- * @return  true if an RNG field was clamped (range assumption broken)
- * @context telem_task
+ * telem_evt_word
+ * @brief   The 16-bit app event word (MSG_EVT layout): value clamped to
+ *          the type's width in bits 0-10, type in bits 11-15.
+ * @param   type   APP_EVT_* (clamped to 0..23)
+ * @param   value  event value
+ * @return  the event word
+ * @context any task
  */
-static bool telem_state_clamp(telem_bin_state_t * p_state)
+static uint32_t telem_evt_word(uint32_t type, uint32_t value)
 {
-    bool b_any = false;
+    /* casts: positive layout constants (23) */
+    uint32_t const evt_type = app_bits_clamp_u(type,
+                                               (uint32_t) MSG_EVT_TYPE_MAX,
+                                               NULL);
+    uint32_t const evt_val  = app_bits_clamp_u(value,
+                                               telem_evt_value_max(evt_type),
+                                               NULL);
+    uint32_t       word     = 0u;
 
-    /* ENUM and mask fields: clamped silently (casts: maxima > 0) */
-    p_state->sys_state    = telem_clamp_u(p_state->sys_state,
-                                          (uint32_t) MQ_STATE_SYS_MAX, NULL);
-    p_state->run_state    = telem_clamp_u(p_state->run_state,
-                                          (uint32_t) MQ_STATE_RUN_MAX, NULL);
-    p_state->motion_state = telem_clamp_u(p_state->motion_state,
-                                          (uint32_t) MQ_STATE_MOT_MAX, NULL);
-    p_state->line_status  = telem_clamp_u(p_state->line_status,
-                                          (uint32_t) MQ_STATE_LINE_MAX, NULL);
-    p_state->motion_class = telem_clamp_u(p_state->motion_class,
-                                          (uint32_t) MQ_STATE_MCLASS_MAX,
-                                          NULL);
-    p_state->faults       = telem_clamp_u(p_state->faults,
-                                          (uint32_t) MQ_STATE_FAULTS_MAX,
-                                          NULL);
+    word = app_bits_put(word, MSG_EVT_VALUE_POS, MSG_EVT_VALUE_BITS,
+                        evt_val);
+    word = app_bits_put(word, MSG_EVT_TYPE_POS, MSG_EVT_TYPE_BITS,
+                        evt_type);
 
-    /* RNG fields: a clamp means a range assumption was broken */
-    p_state->speed_l_cpw   = telem_clamp_s(p_state->speed_l_cpw,
-                                           MQ_STATE_SPEED_L_MIN,
-                                           MQ_STATE_SPEED_L_MAX, &b_any);
-    p_state->speed_r_cpw   = telem_clamp_s(p_state->speed_r_cpw,
-                                           MQ_STATE_SPEED_R_MIN,
-                                           MQ_STATE_SPEED_R_MAX, &b_any);
-    p_state->pos_l_counts  = telem_clamp_s(p_state->pos_l_counts,
-                                           MQ_STATE_POS_L_MIN,
-                                           MQ_STATE_POS_L_MAX, &b_any);
-    p_state->pos_r_counts  = telem_clamp_s(p_state->pos_r_counts,
-                                           MQ_STATE_POS_R_MIN,
-                                           MQ_STATE_POS_R_MAX, &b_any);
-    p_state->steering      = telem_clamp_s(p_state->steering,
-                                           MQ_STATE_STEER_MIN,
-                                           MQ_STATE_STEER_MAX, &b_any);
-    p_state->pitch_ddeg    = telem_clamp_s(p_state->pitch_ddeg,
-                                           MQ_STATE_PITCH_MIN,
-                                           MQ_STATE_PITCH_MAX, &b_any);
-    p_state->turn_rate_dps = telem_clamp_s(p_state->turn_rate_dps,
-                                           MQ_STATE_TURN_MIN,
-                                           MQ_STATE_TURN_MAX, &b_any);
-    p_state->hump_peak_mm  = telem_clamp_u(p_state->hump_peak_mm,
-                                           (uint32_t) MQ_STATE_HUMP_PEAK_MAX,
-                                           &b_any); /* cast: max > 0 */
-    (void) telem_clamp_u(odometry_counts_to_mm(p_state->path_counts),
-                         (uint32_t) MQ_STATE_ODO_MM_MAX, /* cast: > 0 */
-                         &b_any);  /* telem_json_state clamps the text */
-
-    return b_any;
-}
-
-/**
- * telem_clamp_s
- * @brief   Signed clamp to [min, max].
- * @param   value           value to clamp
- * @param   min             lowest valid value
- * @param   max             highest valid value
- * @param   pb_was_clamped  set true if a clamp happened (never cleared;
- *                          may be NULL)
- * @return  the clamped value
- * @context any
- */
-static int32_t telem_clamp_s(int32_t value, int32_t min, int32_t max,
-                             bool * pb_was_clamped)
-{
-    int32_t result    = value;
-    bool    b_clamped = false;
-
-    if (value < min)
-    {
-        result    = min;
-        b_clamped = true;
-    }
-    else if (value > max)
-    {
-        result    = max;
-        b_clamped = true;
-    }
-    else
-    {
-        /* in range */
-    }
-    if (b_clamped && (NULL != pb_was_clamped))
-    {
-        *pb_was_clamped = true;
-    }
-
-    return result;
-}
-
-/**
- * telem_clamp_u
- * @brief   Unsigned clamp to [0, max].
- * @param   value           value to clamp
- * @param   max             highest valid value
- * @param   pb_was_clamped  set true if a clamp happened (never cleared;
- *                          may be NULL)
- * @return  the clamped value
- * @context any
- */
-static uint32_t telem_clamp_u(uint32_t value, uint32_t max,
-                              bool * pb_was_clamped)
-{
-    uint32_t result = value;
-
-    if (value > max)
-    {
-        result = max;
-        if (NULL != pb_was_clamped)
-        {
-            *pb_was_clamped = true;
-        }
-    }
-
-    return result;
+    return word;
 }
 
 /**
@@ -759,6 +656,60 @@ static uint32_t telem_evt_value_max(uint32_t type)
     }
 
     return ((1u << bits) - 1u);
+}
+
+/**
+ * telem_k7_put_u
+ * @brief   Clamps an unsigned value to [0, max] and writes it to a K7
+ *          detail stream.
+ * @param   p_wr    writer
+ * @param   value   value in stored LSB units
+ * @param   max     layout _MAX (non-negative)
+ * @param   bits    layout _BITS
+ * @param   pb_any  set true if this value was clamped (never cleared;
+ *                  may be NULL)
+ * @context mission_task
+ */
+static void telem_k7_put_u(app_bits_writer_t * p_wr, uint32_t value,
+                           int32_t max, uint32_t bits, bool * pb_any)
+{
+    bool           b_clamped = false;
+    /* cast: layout maxima of unsigned fields are >= 0 */
+    uint32_t const raw       = app_bits_clamp_u(value, (uint32_t) max,
+                                                &b_clamped);
+
+    if (b_clamped && (NULL != pb_any))
+    {
+        *pb_any = true;
+    }
+    app_bits_write(p_wr, raw, bits);
+}
+
+/**
+ * telem_tel_get
+ * @brief   Reads one field of the PRV_TEL word.
+ * @param   pos   layout _POS
+ * @param   bits  layout _BITS
+ * @return  the field
+ * @context telem_task
+ */
+static uint32_t telem_tel_get(uint32_t pos, uint32_t bits)
+{
+    return app_bits_get(g_tel_word, pos, bits);
+}
+
+/**
+ * telem_tel_put
+ * @brief   Writes one field of the PRV_TEL word (telem_task is its only
+ *          writer, so the read-modify-write needs no lock).
+ * @param   pos    layout _POS
+ * @param   bits   layout _BITS
+ * @param   value  new field value (already within the field's range)
+ * @context telem_task
+ */
+static void telem_tel_put(uint32_t pos, uint32_t bits, uint32_t value)
+{
+    g_tel_word = app_bits_put(g_tel_word, pos, bits, value);
 }
 
 /*** end of file ***/
