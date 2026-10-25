@@ -566,6 +566,11 @@ static void motion_start_or_latch(uint32_t type, uint32_t param,
  * @brief   Starts a command. ZERO always acts. While APP_MODE_MOTOR_EN is
  *          clear, any driving command is dropped (FR17) and is not started
  *          later when the bit is set.
+ *          The bit is read again here, not taken from step 3: on the
+ *          dual-core build mission_task can set (or clear) MOTOR_EN and
+ *          send this command on the other core after step 3 has read it.
+ *          mission_task always changes the bit before it sends, so this
+ *          read sees the value the command was sent under (test S2-U20).
  * @param   type   APP_CMD_*
  * @param   param  mm, deg or mm/s (validated by motion.c)
  * @param   tag    command tag 0..3
@@ -574,6 +579,8 @@ static void motion_start_or_latch(uint32_t type, uint32_t param,
  */
 static void motion_start_cmd(uint32_t type, uint32_t param, uint32_t tag)
 {
+    gb_is_motor_en = mission_mode_is_set(APP_MODE_MOTOR_EN);
+
     /* casts below: param <= 2047 (validated), fits int32_t */
     if (APP_CMD_ZERO == type)
     {

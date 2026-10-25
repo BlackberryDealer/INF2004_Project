@@ -3,6 +3,8 @@
 #   sim_mission_host      : statechart simulation (mission.c, mission_run.c),
 #                           plus S5-U04 and S5-U05 (-DMISSION_HOST_TEST)
 #   sim_obstacle_host     : obstacle_task simulation (obstacle.c + profile)
+#   test_drv_ultrasonic_host : S5-U09, trigger pulse >= 10 us when
+#                           interrupted and across the timer wrap
 # The simulations compile copies of the real sources in build/ next to a
 # mock app.h, so "../app.h" inside them resolves to the mock.
 # Run: make -C testing/subsystem5/host   (also called by testing/host)
@@ -15,14 +17,22 @@ B       := build/app_program
 
 .PHONY: all clean tree
 
-all: test_obs_profile_host.out sim_mission_host.out sim_obstacle_host.out
+all: test_obs_profile_host.out sim_mission_host.out sim_obstacle_host.out \
+     test_drv_ultrasonic_host.out
 	./test_obs_profile_host.out
+	./test_drv_ultrasonic_host.out
 	./sim_mission_host.out
 	./sim_obstacle_host.out
 
 test_obs_profile_host.out: test_obs_profile_host.c $(S5)/obs_profile.c \
                            $(S5)/obs_profile.h $(S5)/cfg_obstacle.h
 	$(CC) $(CFLAGS) -o $@ test_obs_profile_host.c $(S5)/obs_profile.c
+
+test_drv_ultrasonic_host.out: test_drv_ultrasonic_host.c $(S5)/drv_ultrasonic.c \
+                              $(S5)/drv_ultrasonic.h mock_us/hardware/gpio.h \
+                              mock_us/hardware/timer.h
+	$(CC) $(CFLAGS) -Wconversion -Wsign-conversion -I../../host -Imock_us \
+	    -o $@ test_drv_ultrasonic_host.c $(S5)/drv_ultrasonic.c
 
 tree:
 	rm -rf build
