@@ -164,10 +164,40 @@ int main(void) {
   EV(APP_EVT_RESET, 0); idle_ms(110); CHECK("S5-U16", APP_SYS_BOOT == g_ctx.sys_state || APP_SYS_CAL_IMU == g_ctx.sys_state, "RESET from FAULT -> BOOT (recalibration), not READY");
   CHECK("S5-U16", 1 == g_wdt_enables, "watchdog startup window only on the first boot");
   NONE(); CHECK("S5-U16", APP_SYS_CAL_IMU == g_ctx.sys_state && !g_ctx.b_imu_valid, "recalibration starts, IMU not valid yet");
-  EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); DONE(); DONE(); DONE(); EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IR);
+  /* S5-U32 (on-car log 2026-10-29): a bump while the car is handled
+     latches IMPACT with the motors off; it must not end the next moving
+     state in FAULT. mission clears it when the motors are enabled. */
+  safety_set(SAFETY_IMPACT);                 /* bumped while being placed */
+  EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); NONE();
+  CHECK("S5-U32", APP_SYS_CAL_IR == g_ctx.sys_state && 0u == (g_safety & SAFETY_IMPACT),
+        "IMPACT latched in CAL_IMU is cleared on entering CAL_IR: sweep runs, no FAULT");
+  DONE(); DONE(); DONE(); EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IR);
   CHECK("S5-U16", APP_SYS_READY == g_ctx.sys_state, "recalibrated -> READY");
-  /* S5-U16: IMPACT during RUN -> FAULT */
-  to_run(); safety_set(SAFETY_IMPACT); NONE(); CHECK("S5-U16", APP_SYS_FAULT == g_ctx.sys_state, "IMPACT during FOLLOW -> FAULT");
+  /* S5-U32: a second, real impact DURING the sweep still ends in FAULT */
+  g_fault = 0; g_safety = 0; status_board_read(&snap);
+  mission_enter(&g_ctx, APP_SYS_CAL_IMU, &snap, g_now);
+  safety_set(SAFETY_IMPACT);                 /* stale bump, cleared at entry */
+  EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); NONE();
+  safety_set(SAFETY_IMPACT); NONE();         /* new impact while sweeping */
+  CHECK("S5-U32", APP_SYS_FAULT == g_ctx.sys_state,
+        "impact during the CAL_IR sweep (after the stale one was cleared) -> FAULT");
+  /* S5-U32: a set ESTOP is never cleared by the motor-enable step */
+  g_fault = 0; g_safety = 0; EV(APP_EVT_RESET, 0); idle_ms(110); NONE();
+  status_board_read(&snap); mission_enter(&g_ctx, APP_SYS_CAL_IMU, &snap, g_now);
+  safety_set(SAFETY_ESTOP);
+  EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); NONE();
+  CHECK("S5-U32", 0u != (g_safety & SAFETY_ESTOP),
+        "ESTOP set before CAL_IR is kept (hazard not proven gone)");
+  g_fault = 0; g_safety = 0; EV(APP_EVT_RESET, 0); idle_ms(110); NONE();
+  status_board_read(&snap); mission_enter(&g_ctx, APP_SYS_CAL_IMU, &snap, g_now);
+  EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); DONE(); DONE(); DONE(); EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IR);
+  CHECK("S5-U32", APP_SYS_READY == g_ctx.sys_state, "clean recalibration -> READY");
+  safety_set(SAFETY_IMPACT);                 /* bumped while RUN is pressed */
+  to_run();
+  CHECK("S5-U32", APP_SYS_RUN == g_ctx.sys_state && 0u == (g_safety & SAFETY_IMPACT),
+        "IMPACT latched in READY is cleared at the run start: RUN, no FAULT");
+  /* S5-U16: IMPACT during RUN -> FAULT (still stops the car) */
+  safety_set(SAFETY_IMPACT); NONE(); CHECK("S5-U16", APP_SYS_FAULT == g_ctx.sys_state, "IMPACT during FOLLOW -> FAULT");
   /* persistent fault comes back during recovery -> stay in FAULT */
   g_safety = 0; EV(APP_EVT_RESET, 0); fault_set(APP_FAULT_PIO_LOAD); idle_ms(110);
   CHECK("S5-U18", APP_SYS_FAULT == g_ctx.sys_state && (g_safety & SAFETY_FAULT), "stop fault set again during recovery -> stay in FAULT");

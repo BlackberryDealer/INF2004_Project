@@ -148,6 +148,18 @@ uint32_t status_board_path(status_board_t const * p_snap)
     return p_snap->motion.path_counts;
 }
 
+int32_t status_board_pos_l(status_board_t const * p_snap)
+{
+    (void) p_snap;
+    return 0;
+}
+
+int32_t status_board_pos_r(status_board_t const * p_snap)
+{
+    (void) p_snap;
+    return 0;
+}
+
 int32_t status_board_speed_l(status_board_t const * p_snap)
 {
     return p_snap->motion.speed_l_cpw;
@@ -412,18 +424,18 @@ int main(void)
     g_sim_raw_r = 2000u;
     line_cycle();
 
-    /* 20 mm later (57 counts <= LINE_BRANCH_EARLY_MM), left sensor saturates */
-    g_sim_path += 57u;
+    /* 20 mm later (<= LINE_BRANCH_EARLY_MM), left sensor saturates */
+    g_sim_path += odometry_mm_to_counts(20u);
     g_sim_raw_l = 3500u; /* norm_l = 1000 (sat_l) */
     g_sim_raw_r = 2000u; /* norm_r = 500 (sum = 1500 >= 1400) */
     line_cycle();
 
-    g_sim_path += 40u;   /* >= min_counts (29) */
+    g_sim_path += odometry_mm_to_counts(14u); /* >= LINE_JUNCTION_MIN_MM */
     g_sim_raw_l = 500u;  /* white after -> T-junction */
     g_sim_raw_r = 500u;
     line_cycle();
 
-    g_sim_path += 90u;   /* >= confirm_counts (86) */
+    g_sim_path += odometry_mm_to_counts(32u); /* >= LINE_JUNCTION_CONFIRM_MM */
     line_cycle();
 
     HOST_CHECK("S3-U14",
@@ -440,7 +452,7 @@ int main(void)
     g_sim_raw_r   = 2000u;
     line_cycle();
 
-    g_sim_path += 40u;
+    g_sim_path += odometry_mm_to_counts(14u); /* >= LINE_JUNCTION_MIN_MM */
     g_sim_raw_l = 2000u; /* line still present -> CONFIRM */
     g_sim_raw_r = 2000u;
     line_cycle();
@@ -452,7 +464,7 @@ int main(void)
     barcode_edge_isr(DRV_GPIO_IRQ_BOTH, 264000u);
     barcode_cycle();
 
-    g_sim_path += 90u;
+    g_sim_path += odometry_mm_to_counts(32u); /* >= LINE_JUNCTION_CONFIRM_MM */
     line_cycle();
 
     HOST_CHECK("S3-U14",

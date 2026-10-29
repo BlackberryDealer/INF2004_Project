@@ -42,7 +42,12 @@ void drv_ultrasonic_init(void) {}
 void safety_set(uint32_t b) { g_safety |= b; }
 void fault_set(uint32_t b) { g_fault |= b; }
 uint32_t odometry_counts_to_mm(uint32_t c) { return (c * 349u) / 1000u; }
-bool mission_mode_is_set(uint32_t b) { return 0u != (g_modes & b); }
+/* MOTOR_EN is on by default: the S5-U08 scenarios model RUN, where mission
+   always holds it. S5-U31 switches it off to model BOOT/CAL_IMU/READY. */
+static bool g_motor_en = true;
+bool mission_mode_is_set(uint32_t b) {
+  uint32_t const m = g_modes | (g_motor_en ? APP_MODE_MOTOR_EN : 0u);
+  return 0u != (m & b); }
 bool gpio_get(uint32_t pin) { (void) pin; return g_echo_high; }
 uint32_t in_w(uint32_t port) { (void) port; return g_echo_high ? (1u << PIN_US_ECHO) : 0u; }
 /* world */
@@ -93,6 +98,24 @@ int main(void) {
     cyc(); cyc(); cyc();
     CHECK("S5-U30", 0u != (g_fault & APP_FAULT_NO_ECHO), "sensor never answers: NO_ECHO 3 pings after the grace");
     g_fault = 0; g_silent = 0; w_mode = 0; }
+  /* S5-U31 (on-car logs 2026-10-28/29): with the motors not enabled (BOOT,
+     CAL_IMU, READY) a close echo must not latch ESTOP, since nothing
+     clears it before RUN and it blocked the CAL_IR sweep. Pinging and the
+     board distance stay live; the stop arms as soon as MOTOR_EN is set. */
+  { int ok = 1;
+    g_motor_en = false; w_mode = 0; w_dist = 100; g_safety = 0; nev = 0;
+    for (int i = 0; i < 8; i++) { cyc(); if (g_safety & SAFETY_ESTOP) ok = 0; }
+    CHECK("S5-U31", ok && APP_SCAN_MONITOR == g_state && 0 == nev,
+          "motors off: 100 mm for 8 pings -> no ESTOP, no events, MONITOR");
+    CHECK("S5-U31", 100u == dist(), "motors off: distance still measured and published");
+    g_motor_en = true; cyc(); cyc();
+    CHECK("S5-U31", APP_SCAN_STOPPED == g_state && 0u != (g_safety & SAFETY_ESTOP)
+          && 1 == count_ev(APP_EVT_OBSTACLE),
+          "motors enabled (CAL_IR/RUN): same 100 mm -> ESTOP, OBSTACLE, STOPPED");
+    g_motor_en = false; cyc();
+    CHECK("S5-U31", APP_SCAN_MONITOR == g_state && 90u == g_servo,
+          "motors off again (run ended): back to MONITOR, servo centred");
+    g_motor_en = true; g_safety = 0; nev = 0; w_dist = 1000; cyc(); cyc(); nev = 0; }
   w_mode = 0; w_dist = 1000; cyc(); cyc();
   CHECK("S5-U08", APP_SCAN_MONITOR == g_state && 0 == nev && 1000u == dist(), "far object: MONITOR, 1000 mm measured");
   w_dist = 300; cyc(); CHECK("S5-U08", 300u == dist() && APP_SCAN_MONITOR == g_state, "300 mm, not yet confirmed");

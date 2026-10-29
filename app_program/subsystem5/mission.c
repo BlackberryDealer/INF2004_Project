@@ -137,6 +137,7 @@ static void mission_moves(mission_ctx_t * p_ctx, uint32_t now_us);
 static void mission_faults(mission_ctx_t * p_ctx,
                            status_board_t const * p_snap, uint32_t now_us);
 static void mission_timers(mission_ctx_t * p_ctx, uint32_t now_us);
+static void mission_clear_stale_safety(void);
 static void mission_forward(mission_evt_in_t const * p_evt);
 static void mission_publish(mission_ctx_t const * p_ctx,
                             status_board_mission_t const * p_before);
@@ -483,6 +484,13 @@ static void mission_pass(mission_ctx_t * p_ctx,
     }
     if (p_ctx->b_motion_failed && (APP_SYS_FAULT != p_ctx->sys_state))
     {
+        /* Bring-up diagnosis: this FAULT sets no fault bit of its own.
+           casts: motion state 0..7 and safety bits 0..7 fit int32_t   */
+        app_log("MOVE FAILED (no MOVE_DONE in time, or refused twice):"
+                " motion state %d (6 = ESTOP), safety bits %d"
+                " (1 = ESTOP, 2 = IMPACT)\n",
+                (int32_t) status_board_motion_state(p_snap),
+                (int32_t) safety_get(), 0);
         mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
     }
     p_ctx->b_motion_failed = false;
@@ -582,6 +590,7 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
             p_ctx->cal_start_us = now_us;
             break;
         case APP_SYS_CAL_IR:
+            mission_clear_stale_safety();         /* before MOTOR_EN */
             mission_mode_set(APP_MODE_CAL_IR | APP_MODE_MOTOR_EN);
             p_ctx->cal_start_us   = now_us;
             p_ctx->sweep_start_us = now_us;
@@ -773,6 +782,7 @@ static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
             p_ctx->run_start_path = 0u;           /* odometry rebased */
             p_ctx->b_has_run      = true;
             p_ctx->end_reason     = APP_END_STOP;
+            mission_clear_stale_safety();         /* before MOTOR_EN */
             mission_mode_set(APP_MODE_MOTOR_EN);
             mission_enter(p_ctx, APP_SYS_RUN, p_snap, now_us);
         }
@@ -978,6 +988,35 @@ bool mission_send_move(mission_ctx_t * p_ctx, uint32_t kind, int32_t param,
     }
 
     return b_is_sent;
+}
+
+/**
+ * mission_clear_stale_safety
+ * @brief   Clears an IMPACT latched while the motors were not enabled,
+ *          just before MOTOR_EN is set (CAL_IR entry and the READY -> RUN
+ *          start). A bump while the car is handled or the RUN button is
+ *          pressed is not a collision, and nothing else clears IMPACT
+ *          before RUN, so a latched IMPACT ended every sweep in FAULT
+ *          IMPACT (on-car log 2026-10-29, test S5-U32).
+ *          Only the IMPACT bit seen here is cleared. ESTOP is NOT cleared:
+ *          obstacle_task no longer sets it while MOTOR_EN is clear, and an
+ *          ESTOP that is set means a hazard that only obstacle_task or a
+ *          RESET may release. An impact after this point sets IMPACT again
+ *          and stops the car; imu_task reads IG_SRC1 after every edge, so
+ *          the LSM303D's latched INT1 is already released and the next
+ *          impact raises a new edge. mission_task stays the only task that
+ *          clears safety bits.
+ * @context mission_task
+ */
+static void mission_clear_stale_safety(void)
+{
+    if (0u != (safety_get() & SAFETY_IMPACT))
+    {
+        /* Bring-up diagnosis */
+        app_log("SAFETY IMPACT latched before the motors were enabled:"
+                " cleared\n", 0, 0, 0);
+        safety_clear(SAFETY_IMPACT);
+    }
 }
 
 /**

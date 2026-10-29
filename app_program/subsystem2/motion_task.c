@@ -115,6 +115,14 @@ static uint32_t g_prev_l_us = 0u;    /* time of each trusted count  */
 static uint32_t g_prev_r_us = 0u;
 static uint32_t g_prev_us  = 0u;     /* time of the last read (window) */
 
+/* Bring-up diagnosis: the first impossible read of an episode is recorded
+   in step 2 and printed only after step 9, so the console write can never
+   delay the fault or the motor command of that cycle.                    */
+static bool     gb_enc_log_pending = false;
+static int32_t  g_enc_log_wheel    = 0;    /* 0 = L, 1 = R             */
+static int32_t  g_enc_log_delta    = 0;    /* counts since trusted read */
+static int32_t  g_enc_log_dt_us    = 0;    /* us since trusted read     */
+
 /* This cycle's sensed values */
 static motion_wheel_t g_left  = {0u, 0, 0u, 0, 0};
 static motion_wheel_t g_right = {0u, 0, 0u, 0, 0};
@@ -268,6 +276,16 @@ static void motion_cycle(void)
 
     motion_actuate();                           /* 8 */
     motion_publish();                           /* 9 */
+
+    /* Bring-up diagnosis, after the fault bit and the motor command of
+       this cycle (see gb_enc_log_pending).                             */
+    if (gb_enc_log_pending)
+    {
+        gb_enc_log_pending = false;
+        app_log("ENC impossible: wheel %d (0 = L, 1 = R), %d counts in"
+                " %d us\n", g_enc_log_wheel, g_enc_log_delta,
+                g_enc_log_dt_us);
+    }
 }
 
 /**
@@ -386,6 +404,20 @@ static void motion_sense_wheel(motion_wheel_t * p_wheel, uint32_t raw,
             (*p_streak)++;
         }
         p_wheel->delta = 0;             /* untrusted: no movement */
+    }
+
+    if (MOTION_ENC_FAULT_STREAK == *p_streak)
+    {
+        /* Bring-up diagnosis, once per episode (the streak saturates
+           above this value): record now, print after step 9. cast: dt is
+           capped at 1 s, fits int32_t                                  */
+        if (!gb_enc_log_pending)
+        {
+            gb_enc_log_pending = true;
+            g_enc_log_wheel    = (&g_left == p_wheel) ? 0 : 1;
+            g_enc_log_delta    = delta;
+            g_enc_log_dt_us    = (int32_t) dt_cap;
+        }
     }
 
     if (*p_streak >= MOTION_ENC_FAULT_STREAK)

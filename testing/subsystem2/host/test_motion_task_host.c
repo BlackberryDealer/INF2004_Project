@@ -339,9 +339,9 @@ int main(void)
     HOST_CHECK("S2-U15", (MOTION_PATH2_MAX == g_path2)
                && (0u != (g_sim_faults & APP_FAULT_RANGE_CLAMP)),
                "path saturates at 2 x 131071 and reports RANGE_CLAMP");
-    HOST_CHECK("S2-U15", (g_sim_board.pos_l_counts >= 2865)
-               && (g_sim_board.pos_l_counts <= 2865 + 30),
-               "left wheel travelled the 2865 counts of 1000 mm");
+    HOST_CHECK("S2-U15", (g_sim_board.pos_l_counts >= 3086)
+               && (g_sim_board.pos_l_counts <= 3086 + 30),
+               "left wheel travelled the 3086 counts of 1000 mm");
 
     /* S2-U16: ZERO in BRAKE rebases and acks with its tag; in FOLLOW it
        waits in the latch */
@@ -416,9 +416,9 @@ int main(void)
                "a single glitch raises no ENCODER fault");
     b_done = sim_run_until_done(3000u, &tag);
     HOST_CHECK("S2-U19", b_done && (1u == tag)
-               && (g_sim_board.pos_l_counts >= 2865)
-               && (g_sim_board.pos_l_counts <= 2865 + 30),
-               "MOVE then completes at the real distance (2865 counts)");
+               && (g_sim_board.pos_l_counts >= 3086)
+               && (g_sim_board.pos_l_counts <= 3086 + 30),
+               "MOVE then completes at the real distance (3086 counts)");
 
     sim_reset();
     sim_send(APP_CMD_FWD, 1000u, 1u);

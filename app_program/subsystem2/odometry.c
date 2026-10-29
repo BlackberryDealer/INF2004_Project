@@ -24,6 +24,8 @@
 #define ODOMETRY_PI_DEN             (113u)
 #define ODOMETRY_DEG_PER_REV        (360u)
 #define ODOMETRY_X1000              (1000u)
+#define ODOMETRY_HW_OFFSET          (0x80000000u) /* 2^31: signed -> ordered */
+#define ODOMETRY_HW_SHIFT           (2u)          /* 4 PIO edges per count  */
 
 /* Distance one wheel travels in a full on-the-spot turn = pi x track. */
 #define ODOMETRY_TRACK_CIRC_UM  ((APP_TRACK_UM * ODOMETRY_PI_NUM) \
@@ -75,6 +77,26 @@
 static int32_t odometry_clamp(int32_t value, int32_t limit);
 
 /* ---- public functions ------------------------------------------------- */
+
+/**
+ * odometry_hw_to_counts
+ * @brief   PIO quadrature image (every edge of both channels, 4 per encoder
+ *          line) to an odometry count image (APP_COUNTS_PER_REV per wheel
+ *          turn). The image is a two's-complement count; adding 2^31 turns
+ *          it into an unsigned value that rises with the count, and the
+ *          shift then divides by 4 rounding down, so the result steps by
+ *          exactly one every 4 edges in both directions, also through
+ *          zero. The result is again an image used only for modular
+ *          differences (E3); it is continuous while |count| < 2^31 edges
+ *          (about 170 km of travel at ~2560 edges per 207 mm turn).
+ * @param   hw_image  raw 32-bit PIO count image
+ * @return  count image, 0 .. 2^30 - 1
+ * @context motion_task (via drv_encoder.c), host tests
+ */
+uint32_t odometry_hw_to_counts(uint32_t hw_image)
+{
+    return ((hw_image + ODOMETRY_HW_OFFSET) >> ODOMETRY_HW_SHIFT);
+}
 
 /**
  * odometry_counts_to_mm

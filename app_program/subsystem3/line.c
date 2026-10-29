@@ -24,6 +24,7 @@
 #define LINE_LOST_CNT_MAX     (31u)
 #define LINE_REJOIN_WHITE_MIN (2u)
 #define LINE_ADC_MAX_INIT     (4095u)
+#define LINE_RAW_LOG_CYCLES   (50u)   /* bring-up raw print: every 0.5 s */
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -47,6 +48,7 @@ static uint32_t         g_last_jct        = APP_JCT_NONE;
 static uint32_t         g_jct_min_counts  = 0u;
 static uint32_t         g_jct_conf_counts = 0u;
 static uint32_t         g_branch_early_c  = 0u;
+static uint32_t         g_raw_log_cnt     = 0u;   /* raw print divider */
 
 /* ---- private function prototypes ------------------------------------- */
 
@@ -179,7 +181,27 @@ static void line_cycle(void)
     uint32_t            status   = APP_LINE_LOST;
 
     drv_ir_adc_read(&raw_l, &raw_r);
+
     status_board_read(&snap);
+
+    /* Bring-up diagnosis: while the motors are not enabled (BOOT,
+       CAL_IMU, READY, FAULT; never in CAL_IR or RUN), print both raw ADC
+       codes and both wheel positions every 0.5 s, so a dead or saturated
+       sensor, the counts per wheel turn (A4) and each encoder's sign can
+       be read on the console. casts: ADC codes 0..4095 and positions
+       within +-131071 (A23) fit int32_t                               */
+    if (!mission_mode_is_set(APP_MODE_MOTOR_EN))
+    {
+        g_raw_log_cnt++;
+        if (g_raw_log_cnt >= LINE_RAW_LOG_CYCLES)
+        {
+            g_raw_log_cnt = 0u;
+            app_log("IR raw L %d R %d\n", (int32_t) raw_l,
+                    (int32_t) raw_r, 0);
+            app_log("ENC pos L %d R %d\n", status_board_pos_l(&snap),
+                    status_board_pos_r(&snap), 0);
+        }
+    }
     path = status_board_path(&snap);
 
     if (line_handle_modes(raw_l, raw_r, path, &status))

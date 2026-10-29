@@ -22,10 +22,17 @@
 /* ---- Robot physical constants (rows owned by Buddy 2) ---------------- */
 #define APP_TICK_MS              (10u)
 #define APP_SPEED_WINDOW_MS      (50u)
-#define APP_COUNTS_PER_REV       (585u)    /* MEASURE: A4 (10 hand turns) */
-#define APP_WHEEL_CIRC_UM        (204000u) /* MEASURE: wheel dia x pi     */
+/* A4, car 2026-10-29: about one hand turn gave ~2560 PIO quadrature edges
+   per wheel turn (L -2543, R +2582). drv_encoder.c divides the edge count
+   by 4, so the firmware sees ~640 counts per turn (refine with the 10-turn
+   test). Wheel diameter measured 66 mm: 66 x pi = 207.3 mm. The physical
+   ceiling is 480 mm/s (was 500) so the per-tick delta keeps its 7 bits:
+   15 counts x (1 + 3 late ticks) = 60 <= 63. Still above every commanded
+   speed (<= 300 mm/s).                                                   */
+#define APP_COUNTS_PER_REV       (640u)    /* measured ~, A4 (see above)  */
+#define APP_WHEEL_CIRC_UM        (207345u) /* measured: 66 mm x pi        */
 #define APP_TRACK_UM             (125000u) /* MEASURE: wheel centre-centre */
-#define APP_SPEED_PHYS_MAX_MM_S  (500u)    /* above any commanded speed   */
+#define APP_SPEED_PHYS_MAX_MM_S  (480u)    /* above any commanded speed   */
 #define APP_LATE_TICKS_MAX       (3u)      /* a read may be 3 ticks late  */
 #define APP_RUN_MAX_MM           (32000u)  /* A23: one run <= 32 m        */
 #define APP_RUN_MAX_S            (1023u)   /* A28: one run <= 17 min      */

@@ -18,6 +18,7 @@
 #include <stddef.h>            /* NULL */
 #include "../board_pins.h"
 #include "cfg_motion.h"
+#include "odometry.h"          /* odometry_hw_to_counts(): pure, stdint only */
 #include "hardware/pio.h"
 
 /* quad_enc.pio.h is generated third-party code (pioasm 2.2.0 from the
@@ -200,7 +201,7 @@ static bool drv_encoder_try_block(PIO p_pio, uint32_t pio_index)
  * @brief   Reads one counter as a modular 32-bit image (E3).
  * @param   sm             state machine 0..3
  * @param   b_is_reversed  true if this encoder counts the wrong way
- * @return  raw image; + direction = wheel driving forward
+ * @return  count image (edges / 4); + direction = wheel driving forward
  * @context motion_task
  */
 static uint32_t drv_encoder_raw(uint32_t sm, bool b_is_reversed)
@@ -208,8 +209,9 @@ static uint32_t drv_encoder_raw(uint32_t sm, bool b_is_reversed)
     int32_t const count = quadrature_encoder_get_count(gp_enc_pio, sm);
 
     /* cast: two's-complement image, used only for modular differences
-       (E3), so reinterpreting the sign is intended                     */
-    uint32_t raw = (uint32_t) count;
+       (E3), so reinterpreting the sign is intended. The PIO counts every
+       edge (4 per encoder line); odometry works in edges / 4 (A4).      */
+    uint32_t raw = odometry_hw_to_counts((uint32_t) count);
 
     if (b_is_reversed)
     {

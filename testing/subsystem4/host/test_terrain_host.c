@@ -257,15 +257,17 @@ int main(void)
         a7 = terrain_speed_hist_push(&hist, 0);
         a8 = terrain_speed_hist_push(&hist, 0);
 
+        /* Gain from the measured 324 um per count (A4, 2026-10-29):
+           324 x 1024000 / 24517 = 13532 (Q10), so 1 cpw = 13.2 mg.     */
         HOST_CHECK("S4-U12",
-                   (0 == a0) && (142 == a1) && (284 == a2) && (427 == a3) &&
-                       (569 == a4),
+                   (0 == a0) && (132 == a1) && (264 == a2) && (396 == a3) &&
+                       (528 == a4),
                    "fresh (zero-filled) history: a_fwd = speed x gain");
-        HOST_CHECK("S4-U12", 569 == a5,
-                   "40 - 0 over 50 ms = 569 mg (hand calculation)");
-        HOST_CHECK("S4-U12", 427 == a6, "40 - 10 over 50 ms = 427 mg");
-        HOST_CHECK("S4-U12", -284 == a7, "0 - 20 over 50 ms = -284 mg");
-        HOST_CHECK("S4-U12", -427 == a8, "0 - 30 over 50 ms = -427 mg");
+        HOST_CHECK("S4-U12", 528 == a5,
+                   "40 - 0 over 50 ms = 528 mg (hand calculation)");
+        HOST_CHECK("S4-U12", 396 == a6, "40 - 10 over 50 ms = 396 mg");
+        HOST_CHECK("S4-U12", -264 == a7, "0 - 20 over 50 ms = -264 mg");
+        HOST_CHECK("S4-U12", -396 == a8, "0 - 30 over 50 ms = -396 mg");
     }
     {
         host_replay_result_t u01 = host_replay_hump(20u, 200u, 4u, 1u);

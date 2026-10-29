@@ -21,10 +21,13 @@
 /* ---- Motor driver (PWM slices 4 and 5, 10 kHz) ----------------------- */
 #define MOTION_PWM_WRAP               (12499u) /* 125 MHz / 10 kHz - 1 */
 #define MOTION_DUTY_MAX_PERMILLE      (1000)
-#define MOTION_L_REVERSED             (false)  /* MEASURE: A5 wiring    */
-#define MOTION_R_REVERSED             (false)  /* MEASURE: A5 wiring    */
-#define MOTION_ENC_L_REVERSED         (false)  /* MEASURE: count sign   */
-#define MOTION_ENC_R_REVERSED         (false)  /* MEASURE: count sign   */
+/* A5, measured on the car 2026-10-29: the Robo Pico M1A test button turns
+   the left wheel forward, M2A turns the right wheel BACKWARD. Hand-turning
+   each wheel forward: the right count rises, the left count FALLS.       */
+#define MOTION_L_REVERSED             (false)  /* measured: A5 wiring   */
+#define MOTION_R_REVERSED             (true)   /* measured: A5 wiring   */
+#define MOTION_ENC_L_REVERSED         (true)   /* measured: count sign  */
+#define MOTION_ENC_R_REVERSED         (false)  /* measured: count sign  */
 
 /* ---- Speeds and command limits (NFR15, NFR16) ------------------------ */
 #define MOTION_CRUISE_MM_S            (250)    /* NFR15 */
