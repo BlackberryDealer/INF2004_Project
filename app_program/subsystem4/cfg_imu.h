@@ -13,9 +13,13 @@
  *     fraction IMU_MG_NUM/IMU_MG_DEN (61/500) and this constant is kept
  *     only so the B4.1.3 list stays complete.
  *   - IMU_IMPACT_THS: the per-LSB weight of IG_THS1 is not published for
- *     this part in the register chapter, so the 1.5 g intent in the
- *     comment is nominal only. S4-I03 measures the real threshold and
- *     the value is tuned there, exactly like the TUNE marker says.
+ *     this part in the register chapter. On-car INT1 report 2026-10-29
+ *     (47 steps): IG_SRC1 = X high with a trip-batch X peak of 773 mg and
+ *     Y low with a Y peak of 739 mg, i.e. the threshold lay between 739
+ *     and 773 mg: about 16 mg per step (47 x 16 = 752 mg), not the 32 mg
+ *     that 47 = 1.5 g assumed. Normal driving peaked at 0.6-0.8 g, so the
+ *     car stopped on false impacts. 94 x 16 mg = 1.5 g, the design
+ *     intent. One report only: S4-I03 (taps) must confirm the scale.
  * Pending team decision before merge.
  */
 
@@ -30,7 +34,7 @@
 #define IMU_MAG_OFS_Y            (0)  /* MEASURE: S4-I10 hard-iron Y  */
 #define IMU_MAG_MAX_PITCH_DDEG   (50) /* above 5.0 deg use encoder rate */
 #define IMU_ACC_SAMPLES_MAX      (4u)
-#define IMU_IMPACT_THS           (47u)  /* TUNE: nominal 1.5 g (SQ-B4-2) */
+#define IMU_IMPACT_THS           (94u)  /* 1.5 g at ~16 mg/step (see above) */
 #define IMU_CAL_SAMPLES          (200u) /* 2 s */
 #define IMU_MG_PER_LSB           (2)    /* DLHC only, see SQ-B4-2 */
 #define IMU_MAG_EVERY_N          (5u)   /* magnetometer every 50 ms */
