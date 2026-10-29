@@ -891,7 +891,13 @@
 #define PRV_IMU_A_IMPACT_SEQ_MAX        (15)
 #define PRV_IMU_A_IMPACT_SEQ_OFFSET     (0)
 #define PRV_IMU_A_IMPACT_SEQ_KIND       (APP_KIND_RAW)
-#define PRV_IMU_A_USED_BITS             (PRV_IMU_A_IMPACT_SEQ_POS + PRV_IMU_A_IMPACT_SEQ_BITS)
+#define PRV_IMU_A_NEED_CFG_POS          (PRV_IMU_A_IMPACT_SEQ_POS + PRV_IMU_A_IMPACT_SEQ_BITS)
+#define PRV_IMU_A_NEED_CFG_BITS         (1u)
+#define PRV_IMU_A_NEED_CFG_MIN          (0)
+#define PRV_IMU_A_NEED_CFG_MAX          (1)
+#define PRV_IMU_A_NEED_CFG_OFFSET       (0)
+#define PRV_IMU_A_NEED_CFG_KIND         (APP_KIND_FLAG)
+#define PRV_IMU_A_USED_BITS             (PRV_IMU_A_NEED_CFG_POS + PRV_IMU_A_NEED_CFG_BITS)
 #if (PRV_IMU_A_USED_BITS > 32u)
 #error "Group PRV_IMU_A no longer fits in 32 bits"
 #endif

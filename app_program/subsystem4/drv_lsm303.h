@@ -73,6 +73,7 @@ extern int32_t  drv_lsm303_identity_ok(void);   /* 1 = WHO_AM_I 0x49 */
 extern uint32_t drv_lsm303_fifo_overruns(void); /* saturating, for the
                                                    packed PRV_OFS_B row */
 extern void drv_lsm303_bus_reset(void);
+extern int32_t drv_lsm303_last_error(void); /* -1 timeout, -2 NACK */
 
 #endif /* DRV_LSM303_H */
 

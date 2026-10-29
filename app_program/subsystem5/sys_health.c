@@ -113,6 +113,12 @@ static bool     gb_is_wdt_active = false;
 static bool     gb_is_started    = false;
 static uint32_t g_wdt_load       = SYS_HEALTH_LOAD_START;
 static uint32_t g_boot_us        = 0u;   /* sys_health_enable_watchdog() */
+/* Bring-up diagnosis: longest time between two normal-window feeds. The
+   kernel tick is 10 ms (CNF_TIMER_PERIOD), so mission_task's 10 ms
+   receive timeout can make passes up to ~20 ms apart against the 30 ms
+   window; this measures the real margin on the car. */
+static uint32_t g_last_feed_us    = 0u;
+static uint32_t g_feed_gap_max_us = 0u;
 
 /* ---- private function prototypes ------------------------------------- */
 
@@ -211,8 +217,16 @@ void sys_health_service(void)
     }
     else if (b_fast && (age_us <= limit_us))
     {
+        uint32_t const now_us = sys_tick_now_us();
+
         out_w(SYS_HEALTH_WDT_LOAD, g_wdt_load);           /* feed */
         b_feed            = true;
+        if ((0u != g_last_feed_us)
+            && ((now_us - g_last_feed_us) > g_feed_gap_max_us))
+        {
+            g_feed_gap_max_us = now_us - g_last_feed_us;  /* wrap-safe */
+        }
+        g_last_feed_us = now_us;
     }
     else
     {
@@ -238,6 +252,25 @@ void sys_health_enable_watchdog(void)
     g_boot_us = sys_tick_now_us();
     sys_health_wdt_start(SYS_HEALTH_LOAD_START);
     gb_is_wdt_active = true;
+}
+
+/**
+ * sys_health_feed_gap_max_us
+ * @brief   Longest time between two feeds in the normal 30 ms window
+ *          since the last reset of the figure (bring-up diagnosis).
+ * @param   b_reset  true to start a new measurement after reading
+ * @return  microseconds (0 before two normal feeds)
+ * @context mission_task (the only caller of sys_health_service)
+ */
+uint32_t sys_health_feed_gap_max_us(bool b_reset)
+{
+    uint32_t const gap_us = g_feed_gap_max_us;
+
+    if (b_reset)
+    {
+        g_feed_gap_max_us = 0u;
+    }
+    return gap_us;
 }
 
 /**

@@ -118,6 +118,7 @@ PRV_IMU_A,32,LAST_CLASS,3,1,code,0,6,0,ENUM,P,B4,Last posted class
 PRV_IMU_A,32,MAG_DIV,3,1,tick,0,4,0,RNG,P,B4,Cycles to next magnetometer read
 PRV_IMU_A,32,IMPACT_HOLD,5,1,tick,0,31,0,SAT,P,B4,Impact class hold
 PRV_IMU_A,32,IMPACT_SEQ,4,1,count,0,15,0,RAW,P,B4,Last seen INT1 sequence (low bits)
+PRV_IMU_A,32,NEED_CFG,1,1,flag,0,1,0,FLAG,P,B4,LSM303D registers must be (re)written
 PRV_IMU_B,32,CAL_CNT,8,1,sample,0,200,0,RNG,P,B4,Calibration samples
 PRV_IMU_B,32,CLIMB_CNT,11,1,count,0,2047,0,SAT,P,B4,Climb distance
 PRV_IMU_B,32,HIST_IDX,3,1,slot,0,4,0,RNG,P,B4,Speed history index

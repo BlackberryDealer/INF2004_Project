@@ -50,7 +50,14 @@ void fault_set(uint32_t b) { g_fault |= b; }
 void fault_clear(uint32_t b) { g_fault &= ~b; }
 uint32_t fault_get(void) { return g_fault; }
 static char mlog[256], alog[1024];   /* this pass / since last clear */
+/* Motion model for the run-start ZERO (S5-U33), as motion_task does it:
+   a ZERO received while a safety bit is set (ESTOP state) is only
+   latched; it is started, and its MOVE_DONE posted, on a later 10 ms
+   cycle with no safety bit set; a STOP drops the latch. */
+static bool g_zero_latched;
 static bool mcmd(char const *s, int32_t v, bool tagged) {
+  if (!strcmp(s, "ZERO") && !(tagged && g_refuse > 0)) { g_zero_latched = true; }
+  if (!strcmp(s, "STOP")) { g_zero_latched = false; }
   if (strlen(alog) < 1000) { sprintf(alog + strlen(alog), "%s%d ", s, (int) v); }
   if (tagged && g_refuse > 0) { g_refuse--; sprintf(mlog + strlen(mlog), "REFUSED "); return false; }
   if (tagged) g_tag = (g_tag + 1u) & 3u;
@@ -63,8 +70,9 @@ bool motion_reset_odometry(void) { return mcmd("ZERO", 0, true); }
 uint32_t motion_last_tag(void) { return g_tag; }
 bool motion_follow(int32_t s) { return mcmd("FOL", s, false); }
 bool motion_stop(void) { return mcmd("STOP", 0, false); }
-uint32_t odometry_counts_to_mm(uint32_t c) { return (c * 349u) / 1000u; }
-uint32_t odometry_mm_to_counts(uint32_t d) { return (d * 1000u) / 349u; }
+/* Same constant and rounding as odometry.c (A4: 324 um per count). */
+uint32_t odometry_counts_to_mm(uint32_t c) { return ((c * APP_UM_PER_COUNT) + 500u) / 1000u; }
+uint32_t odometry_mm_to_counts(uint32_t d) { return ((d * 1000u) + (APP_UM_PER_COUNT / 2u)) / APP_UM_PER_COUNT; }
 int32_t odometry_heading_cdeg(int32_t l, int32_t r) { return (l - r) * 16; }
 static char tlog[512];
 bool telem_post_event(uint32_t t, uint32_t v) { if (strlen(tlog) < 400) sprintf(tlog + strlen(tlog), "E%u:%u ", t, v); return true; }
@@ -72,6 +80,11 @@ bool telem_post_profile(telem_bin_profile_t const *p) { sprintf(tlog + strlen(tl
 bool telem_post_summary(telem_bin_summary_t const *p) { sprintf(tlog + strlen(tlog), "SUMM(end%u odo%u) ", p->end_reason, p->odometry_mm); return true; }
 void barcode_map_set(uint32_t c, uint32_t m) { (void) c; (void) m; }
 void sys_health_service(void) {}
+void imu_diag_service(void) {}
+uint32_t sys_health_feed_gap_max_us(bool b) { (void) b; return 0u; }
+void sys_tick_register_feeder(ID t) { (void) t; }
+ER tk_slp_tsk(TMO t) { (void) t; return E_OK; }
+ID tk_get_tid(void) { return 1; }
 static int g_wdt_enables; static bool g_started;
 void sys_health_enable_watchdog(void) { g_wdt_enables++; }
 bool sys_health_is_started(void) { return g_started; }
@@ -100,6 +113,19 @@ static void step(uint32_t type, uint32_t value, bool has) {
 static void idle_ms(uint32_t ms) { for (uint32_t i = 0; i < ms / 10u; i++) NONE(); }
 static void to_run(void) {          /* READY -> RUN through the run-start handshake */
   EV(APP_EVT_START, 0); idle_ms(1000); NONE(); DONE(); idle_ms(30); }
+/* S5-U33: one pass in which the motion model may acknowledge the ZERO.
+   Nothing is injected: MOVE_DONE comes only if the model would send it. */
+static int g_model_acks;
+static void mpass(void) {
+  if (g_zero_latched && (0u == g_safety)) { g_zero_latched = false; g_model_acks++; DONE(); }
+  else { NONE(); } }
+static void mpass_ms(uint32_t ms) { for (uint32_t i = 0; i < ms / 10u; i++) mpass(); }
+/* Back to a clean READY (recalibration through the real sweep). */
+static void to_ready(void) {
+  status_board_t s;
+  g_fault = 0; g_safety = 0; g_zero_latched = false; EV(APP_EVT_RESET, 0); idle_ms(110); NONE();
+  status_board_read(&s); mission_enter(&g_ctx, APP_SYS_CAL_IMU, &s, g_now);
+  EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); DONE(); DONE(); DONE(); EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IR); }
 
 int main(void) {
   status_board_t snap;
@@ -193,9 +219,9 @@ int main(void) {
   EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); DONE(); DONE(); DONE(); EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IR);
   CHECK("S5-U32", APP_SYS_READY == g_ctx.sys_state, "clean recalibration -> READY");
   safety_set(SAFETY_IMPACT);                 /* bumped while RUN is pressed */
-  to_run();
-  CHECK("S5-U32", APP_SYS_RUN == g_ctx.sys_state && 0u == (g_safety & SAFETY_IMPACT),
-        "IMPACT latched in READY is cleared at the run start: RUN, no FAULT");
+  g_model_acks = 0; EV(APP_EVT_START, 0); mpass_ms(1250);
+  CHECK("S5-U32", APP_SYS_RUN == g_ctx.sys_state && 0u == (g_safety & SAFETY_IMPACT) && 1 == g_model_acks,
+        "IMPACT latched in READY is cleared before the ZERO; the motion model acks it: RUN, no FAULT");
   /* S5-U16: IMPACT during RUN -> FAULT (still stops the car) */
   safety_set(SAFETY_IMPACT); NONE(); CHECK("S5-U16", APP_SYS_FAULT == g_ctx.sys_state, "IMPACT during FOLLOW -> FAULT");
   /* persistent fault comes back during recovery -> stay in FAULT */
@@ -216,6 +242,30 @@ int main(void) {
   EV(APP_EVT_START, 0); idle_ms(1010); CHECK("S5-U22", MODE(APP_MODE_RUN_START), "run start waits for ZERO");
   idle_ms(170); CHECK("S5-U22", APP_SYS_READY == g_ctx.sys_state, "still waiting 180 ms after ZERO");
   idle_ms(30); CHECK("S5-U22", APP_SYS_FAULT == g_ctx.sys_state, "no ZERO acknowledgement -> FAULT after 200 ms");
+  /* S5-U33: run start against the motion model (no injected MOVE_DONE) */
+  to_ready(); CHECK("S5-U33", APP_SYS_READY == g_ctx.sys_state, "clean READY");
+  g_model_acks = 0; EV(APP_EVT_START, 0); mpass_ms(500);
+  safety_set(SAFETY_IMPACT);                 /* bump during the 1 s warning */
+  alog[0] = 0; mpass_ms(510);
+  CHECK("S5-U33", MODE(APP_MODE_RUN_START) && strstr(alog, "ZERO0") && 0u == g_safety && 1 == g_model_acks,
+        "IMPACT during the warning: cleared before ZERO, the model acknowledges it");
+  mpass_ms(40);
+  CHECK("S5-U33", APP_SYS_RUN == g_ctx.sys_state && MODE(APP_MODE_MOTOR_EN), "-> RUN");
+  /* a fresh impact while the ZERO is pending -> FAULT IMPACT at once */
+  to_ready(); g_model_acks = 0; EV(APP_EVT_START, 0); mpass_ms(1000);
+  while (!g_ctx.b_run_starting) { mpass(); }  /* the pass that sent ZERO */
+  CHECK("S5-U33", g_zero_latched && g_ctx.b_move_pending, "ZERO sent, not yet acknowledged");
+  safety_set(SAFETY_IMPACT); mpass();
+  CHECK("S5-U33", APP_SYS_FAULT == g_ctx.sys_state && 0 == g_model_acks && !g_zero_latched,
+        "fresh IMPACT with the ZERO pending -> FAULT IMPACT now (not the 200 ms deadline); STOP drops the ZERO");
+  CHECK("S5-U33", !MODE(APP_MODE_MOTOR_EN), "motors never enabled");
+  /* a fresh impact after the ack, in the 30 ms hold -> FAULT, not cleared */
+  to_ready(); g_model_acks = 0; EV(APP_EVT_START, 0);
+  while (0 == g_model_acks) { mpass(); }
+  CHECK("S5-U33", APP_SYS_READY == g_ctx.sys_state && g_ctx.b_zero_done, "ZERO acknowledged, holding RUN_START");
+  safety_set(SAFETY_IMPACT); mpass();
+  CHECK("S5-U33", APP_SYS_FAULT == g_ctx.sys_state && !MODE(APP_MODE_MOTOR_EN),
+        "fresh IMPACT in the run-start hold -> FAULT, motors never enabled");
   /* S5-U27: deadline helper */
   CHECK("S5-U27", mission_move_deadline_ms(MISSION_MV_FWD, 800) >= 8900u && mission_move_deadline_ms(MISSION_MV_FWD, 800) <= 9100u, "800 mm at 150 mm/s -> ~9 000 ms");
   CHECK("S5-U27", mission_move_deadline_ms(MISSION_MV_FWD, 2047) > 20000u, "2 047 mm move gets > 20 s");

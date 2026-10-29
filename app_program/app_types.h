@@ -25,14 +25,14 @@
 /* A4, car 2026-10-29: about one hand turn gave ~2560 PIO quadrature edges
    per wheel turn (L -2543, R +2582). drv_encoder.c divides the edge count
    by 4, so the firmware sees ~640 counts per turn (refine with the 10-turn
-   test). Wheel diameter measured 66 mm: 66 x pi = 207.3 mm. The physical
-   ceiling is 480 mm/s (was 500) so the per-tick delta keeps its 7 bits:
-   15 counts x (1 + 3 late ticks) = 60 <= 63. Still above every commanded
-   speed (<= 300 mm/s).                                                   */
+   test). Wheel diameter measured 66 mm: 66 x pi = 207.3 mm. The 7-bit
+   delta slot is checked over the whole span one read can cover, (1 + 3
+   late ticks) x 10 ms = 40 ms, rounded up once: at 500 mm/s that is
+   ceil(500 x 40 x 640 / 207345) = ceil(61.7) = 62 <= 63.               */
 #define APP_COUNTS_PER_REV       (640u)    /* measured ~, A4 (see above)  */
 #define APP_WHEEL_CIRC_UM        (207345u) /* measured: 66 mm x pi        */
 #define APP_TRACK_UM             (125000u) /* MEASURE: wheel centre-centre */
-#define APP_SPEED_PHYS_MAX_MM_S  (480u)    /* above any commanded speed   */
+#define APP_SPEED_PHYS_MAX_MM_S  (500u)    /* above any commanded speed   */
 #define APP_LATE_TICKS_MAX       (3u)      /* a read may be 3 ticks late  */
 #define APP_RUN_MAX_MM           (32000u)  /* A23: one run <= 32 m        */
 #define APP_RUN_MAX_S            (1023u)   /* A28: one run <= 17 min      */
@@ -45,9 +45,16 @@
 #define APP_WINDOW_COUNTS_MAX (((APP_SPEED_PHYS_MAX_MM_S                     \
                                  * APP_SPEED_WINDOW_MS * APP_COUNTS_PER_REV) \
                                 + APP_WHEEL_CIRC_UM - 1u) / APP_WHEEL_CIRC_UM)
+/* Counts one encoder read can see: a read may be APP_LATE_TICKS_MAX ticks
+   late, so it covers (1 + APP_LATE_TICKS_MAX) ticks of travel. Rounded up
+   once over the whole span (rounding each tick first over-counts). */
+#define APP_SPAN_COUNTS_MAX  (((APP_SPEED_PHYS_MAX_MM_S * APP_TICK_MS        \
+                                * (1u + APP_LATE_TICKS_MAX)                \
+                                * APP_COUNTS_PER_REV) + APP_WHEEL_CIRC_UM   \
+                               - 1u) / APP_WHEEL_CIRC_UM)
 #define APP_RUN_MAX_COUNTS   ((APP_RUN_MAX_MM * 1000u) / APP_UM_PER_COUNT)
 
-#if ((APP_TICK_COUNTS_MAX * (1u + APP_LATE_TICKS_MAX)) > 63u)
+#if (APP_SPAN_COUNTS_MAX > 63u)
 #error "Encoder delta no longer fits 7 bits: widen it in tools/layout.csv"
 #endif
 #if (APP_WINDOW_COUNTS_MAX > 127u)

@@ -115,6 +115,21 @@ int main(void)
                    "same 10 turns backward: 6400 counts the other way");
     }
 
+    /* ---- S2-U22: 500 mm/s physical ceiling vs the packed fields ------
+       Hand values, 640 counts per 207.345 mm turn:
+       one read spans (1 + 3 late) x 10 ms = 40 ms -> 20 mm -> 61.7 -> 62;
+       one tick 10 ms -> 5 mm -> 15.4 -> 16 (rounding each tick first
+       would give 4 x 16 = 64 and wrongly fail the 7-bit slot);
+       50 ms window -> 25 mm -> 77.2 -> 78. */
+    HOST_CHECK("S2-U22", 500u == APP_SPEED_PHYS_MAX_MM_S,
+               "physical speed ceiling is 500 mm/s");
+    HOST_CHECK("S2-U22", 62u == APP_SPAN_COUNTS_MAX,
+               "40 ms read span at 500 mm/s = 62 counts (<= 63: 7-bit delta)");
+    HOST_CHECK("S2-U22", 16u == APP_TICK_COUNTS_MAX,
+               "one 10 ms tick at 500 mm/s = 16 counts");
+    HOST_CHECK("S2-U22", 78u == APP_WINDOW_COUNTS_MAX,
+               "50 ms window at 500 mm/s = 78 counts (<= 127: 8-bit speed)");
+
     /* ---- S2-U11: speed window ---------------------------------------- */
     odometry_window_reset(&win);
     odometry_window_push(&win, 63, -63, 10u);

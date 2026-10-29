@@ -22,6 +22,7 @@ extern ER       sys_tick_start(void);  /* starts R2, R3 */
 
 /* Called once by each periodic task before its loop. */
 extern ER       sys_tick_register(uint32_t slot, ID task_id);
+extern void     sys_tick_register_feeder(ID task_id); /* mission_task */
 
 /* Called by the task right after tk_slp_tsk() returns. Records release
    latency (E7) and counts queued wake-ups as overruns.              */

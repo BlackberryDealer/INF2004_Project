@@ -203,6 +203,7 @@ GROUPS = {
         ('MAG_DIV', 3, 0, 1, 'tick'),
         ('IMPACT_HOLD', 5, 0, 1, 'tick'),
         ('IMPACT_SEQ', 4, 0, 1, 'count'),
+        ('NEED_CFG', 1, 0, 1, 'flag'),
     ],
     'PRV_IMU_B': [
         ('CAL_CNT', 8, 0, 1, 'sample'),

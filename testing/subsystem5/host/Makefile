@@ -46,6 +46,8 @@ tree:
 	   $(APP)/subsystem2/motion.h $(APP)/subsystem2/odometry.h \
 	   $(APP)/subsystem2/cfg_motion.h $(B)/subsystem2/
 	cp $(APP)/subsystem3/barcode.h $(B)/subsystem3/
+	mkdir -p $(B)/subsystem4
+	cp $(APP)/subsystem4/imu.h $(B)/subsystem4/
 	cp $(S5)/*.c $(S5)/*.h $(B)/subsystem5/
 
 sim_mission_host.out: sim_mission_host.c tree

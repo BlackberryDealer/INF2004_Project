@@ -36,6 +36,7 @@ ID  tk_cre_flg(T_CFLG const *p); ER tk_set_flg(ID id, UINT p); ER tk_clr_flg(ID 
 ER  tk_ref_flg(ID id, T_RFLG *r);
 ID  tk_cre_mtx(T_CMTX const *p); ER tk_loc_mtx(ID id, TMO t); ER tk_unl_mtx(ID id);
 ID  app_start_task(FP e, PRI p, uint64_t *s, uint32_t b, char const *n);
+ER  tk_slp_tsk(TMO t); ID tk_get_tid(void);
 void app_check(ER e, char const *w);
 void app_log(char const *f, int32_t a, int32_t b, int32_t c);
 /* Kernel register access used by obstacle.c (SIO GPIO_IN read). */

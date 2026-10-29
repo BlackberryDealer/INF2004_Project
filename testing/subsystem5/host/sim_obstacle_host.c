@@ -41,7 +41,8 @@ void drv_servo_set_deg(uint32_t d) { g_servo = d; }
 void drv_ultrasonic_init(void) {}
 void safety_set(uint32_t b) { g_safety |= b; }
 void fault_set(uint32_t b) { g_fault |= b; }
-uint32_t odometry_counts_to_mm(uint32_t c) { return (c * 349u) / 1000u; }
+/* Same constant and rounding as odometry.c (A4: 324 um per count). */
+uint32_t odometry_counts_to_mm(uint32_t c) { return ((c * APP_UM_PER_COUNT) + 500u) / 1000u; }
 /* MOTOR_EN is on by default: the S5-U08 scenarios model RUN, where mission
    always holds it. S5-U31 switches it off to model BOOT/CAL_IMU/READY. */
 static bool g_motor_en = true;

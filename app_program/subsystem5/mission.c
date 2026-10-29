@@ -16,6 +16,7 @@
 #include "../subsystem2/motion.h"
 #include "../subsystem2/odometry.h"
 #include "../subsystem3/barcode.h"
+#include "../subsystem4/imu.h"
 #include "cfg_mission.h"
 #include "mission_run.h"
 #include "status_board.h"
@@ -40,7 +41,8 @@ typedef struct
 #define MISSION_MBF_BYTES      (MISSION_K4_ENTRIES                     \
                                 * (MISSION_MBF_HDR_BYTES               \
                                    + MISSION_EVT_MSG_BYTES))
-#define MISSION_RCV_TMO_MS     (10)    /* one pass at least every 10 ms */
+#define MISSION_WAKE_TMO_MS    (20)    /* backup if an R2 wake is lost  */
+#define MISSION_EVTS_PER_WAKE  (8u)    /* bounds one wake's work        */
 #define MISSION_STACK_WORDS    (APP_STACK_MISSION_BYTES / 8u)
 
 #define MISSION_US_PER_MS      (1000u)
@@ -336,6 +338,8 @@ static void mission_task(INT stacd, void * p_exinf)
     INT              size     = 0;
     uint32_t         now_us   = 0u;
     uint32_t         hmi_us   = 0u;
+    uint32_t         wdt_log_us = 0u;
+    uint32_t         n_pass   = 0u;
     uint32_t         press    = HMI_NONE;
     bool             b_is_rgb_ok = false;
 
@@ -352,35 +356,61 @@ static void mission_task(INT stacd, void * p_exinf)
     now_us = sys_tick_now_us();
     hmi_us = now_us;
     mission_enter(&g_ctx, APP_SYS_BOOT, &snap, now_us);
+    sys_tick_register_feeder(tk_get_tid());
 
     for (;;)
     {
-        /* 1. next event, or none after 10 ms */
-        size            = tk_rcv_mbf(gh_mission_mbf, &msg, MISSION_RCV_TMO_MS);
-        evt.b_has_event = (size > 0);
-        evt.type        = msg.type;
-        evt.value       = (uint32_t) msg.arg_a;  /* cast: 0..2047 by post */
-
-        /* 2. buttons every 10 ms */
-        now_us          = sys_tick_now_us();
-        btn.b_has_event = false;
-        if ((now_us - hmi_us) >= MISSION_HMI_PERIOD_US)
+        /* 1. Woken by R2 every 10 ms (sys_tick_register_feeder). Waiting
+              in tk_rcv_mbf with a 10 ms timeout made passes 10-20 ms apart
+              on the 10 ms kernel tick, leaving ~10 ms of the 30 ms
+              watchdog window. Then up to MISSION_EVTS_PER_WAKE queued
+              events, one pass each, never waiting; a wake with no event
+              is one pass. Events now wait up to 10 ms (safety stops do
+              not go through K4: they act on FLG_SAFETY directly). */
+        (void) tk_slp_tsk(MISSION_WAKE_TMO_MS);
+        n_pass = 0u;
+        do
         {
-            hmi_us = now_us;
-            press  = hmi_poll();
-            mission_button_event(&g_ctx, press, &btn);
-        }
+            size            = tk_rcv_mbf(gh_mission_mbf, &msg, TMO_POL);
+            n_pass++;
+            evt.b_has_event = (size > 0);
+            evt.type        = msg.type;
+            evt.value       = (uint32_t) msg.arg_a; /* cast: 0..2047 */
 
-        status_board_read(&snap);
-        mission_pass(&g_ctx, &evt, &btn, &snap, now_us);
+            /* 2. buttons every 10 ms */
+            now_us          = sys_tick_now_us();
+            btn.b_has_event = false;
+            if ((now_us - hmi_us) >= MISSION_HMI_PERIOD_US)
+            {
+                hmi_us = now_us;
+                press  = hmi_poll();
+                mission_button_event(&g_ctx, press, &btn);
+            }
 
-        /* 7. LED, buzzer and watchdog */
-        hmi_show(g_ctx.sys_state, now_us);
-        if (!b_is_rgb_ok)
-        {
-            fault_set(APP_FAULT_PIO_LOAD);   /* again every pass (D.13) */
-        }
-        sys_health_service();
+            status_board_read(&snap);
+            mission_pass(&g_ctx, &evt, &btn, &snap, now_us);
+
+            /* 7. LED, buzzer and watchdog */
+            hmi_show(g_ctx.sys_state, now_us);
+            if (!b_is_rgb_ok)
+            {
+                fault_set(APP_FAULT_PIO_LOAD); /* every pass (D.13) */
+            }
+            imu_diag_service();  /* bring-up: one INT1 report line, if any */
+            sys_health_service();
+#if (MISSION_WDT_LOG_MS != 0u)
+            /* Bring-up diagnosis: watchdog margin (window 30 ms) */
+            if ((now_us - wdt_log_us)
+                >= (MISSION_WDT_LOG_MS * MISSION_US_PER_MS))
+            {
+                wdt_log_us = now_us;
+                /* cast: a gap is far below INT32_MAX */
+                app_log("WDT longest feed gap %d us in the last 2 s"
+                        " (watchdog fires at 30000)\n",
+                        (int32_t) sys_health_feed_gap_max_us(true), 0, 0);
+            }
+#endif
+        } while ((size > 0) && (n_pass < MISSION_EVTS_PER_WAKE));
     }
 }
 
@@ -738,8 +768,9 @@ static void mission_st_cal_ir(mission_ctx_t * p_ctx, uint32_t type,
 /**
  * mission_st_ready
  * @brief   READY: START -> 1 s warning (buzzer + LED) -> run start: set
- *          RUN_START, ZERO the odometry and wait for its tagged MOVE_DONE
- *          (deadline 200 ms -> FAULT), hold RUN_START >= 30 ms so line,
+ *          clear a stale IMPACT, set RUN_START, ZERO the odometry and wait
+ *          for its tagged MOVE_DONE (deadline 200 ms -> FAULT; an IMPACT
+ *          from here on -> FAULT IMPACT), hold RUN_START >= 30 ms so line,
  *          barcode and IMU reset their per-run state, then clear it, set
  *          MOTOR_EN and enter RUN with run_start_path = 0.
  * @context mission_task
@@ -765,6 +796,10 @@ static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
         p_ctx->b_run_starting   = true;
         p_ctx->b_zero_done      = false;
         p_ctx->run_start_set_us = now_us;
+        /* Before the ZERO: with IMPACT set, motion_task sits in ESTOP and
+           only latches the ZERO, so no MOVE_DONE would come back and the
+           200 ms deadline would end the start in FAULT (S5-U33). */
+        mission_clear_stale_safety();
         mission_mode_set(APP_MODE_RUN_START);
         (void) mission_send_move(p_ctx, MISSION_MV_ZERO, 0, now_us);
     }
@@ -782,7 +817,6 @@ static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
             p_ctx->run_start_path = 0u;           /* odometry rebased */
             p_ctx->b_has_run      = true;
             p_ctx->end_reason     = APP_END_STOP;
-            mission_clear_stale_safety();         /* before MOTOR_EN */
             mission_mode_set(APP_MODE_MOTOR_EN);
             mission_enter(p_ctx, APP_SYS_RUN, p_snap, now_us);
         }
@@ -870,7 +904,9 @@ static void mission_recover_done(mission_ctx_t * p_ctx, bool b_again,
 /**
  * mission_faults
  * @brief   Reports newly set fault bits to telemetry; enters FAULT on any
- *          stop fault, and on an IMPACT during CAL_IR or RUN (review R07).
+ *          stop fault, and on an IMPACT during CAL_IR, the run start or RUN
+ *          (review R07). In the run start the IMPACT was already cleared
+ *          once (mission_clear_stale_safety), so a new one is real.
  * @context mission_task
  */
 static void mission_faults(mission_ctx_t * p_ctx,
@@ -879,7 +915,9 @@ static void mission_faults(mission_ctx_t * p_ctx,
     uint32_t const faults = fault_get();
     uint32_t const fresh  = faults & ~p_ctx->last_faults;
     bool const     b_move = (APP_SYS_CAL_IR == p_ctx->sys_state)
-                            || (APP_SYS_RUN == p_ctx->sys_state);
+                            || (APP_SYS_RUN == p_ctx->sys_state)
+                            || ((APP_SYS_READY == p_ctx->sys_state)
+                                && p_ctx->b_run_starting);
 
     for (uint32_t idx = 0u; idx < APP_FAULT_COUNT; idx++)
     {
@@ -898,7 +936,8 @@ static void mission_faults(mission_ctx_t * p_ctx,
     }
     else if (b_move && (0u != (safety_get() & SAFETY_IMPACT)))
     {
-        app_log("FAULT IMPACT (IMU INT1 while moving)\n", 0, 0, 0);
+        app_log("FAULT IMPACT (IMU INT1 while moving or starting)\n",
+                0, 0, 0);
         mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
     }
     else
@@ -993,19 +1032,21 @@ bool mission_send_move(mission_ctx_t * p_ctx, uint32_t kind, int32_t param,
 /**
  * mission_clear_stale_safety
  * @brief   Clears an IMPACT latched while the motors were not enabled,
- *          just before MOTOR_EN is set (CAL_IR entry and the READY -> RUN
- *          start). A bump while the car is handled or the RUN button is
- *          pressed is not a collision, and nothing else clears IMPACT
- *          before RUN, so a latched IMPACT ended every sweep in FAULT
- *          IMPACT (on-car log 2026-10-29, test S5-U32).
- *          Only the IMPACT bit seen here is cleared. ESTOP is NOT cleared:
- *          obstacle_task no longer sets it while MOTOR_EN is clear, and an
+ *          before the motors are used: on CAL_IR entry (before MOTOR_EN)
+ *          and at the end of the READY warning (before the run-start ZERO,
+ *          which motion_task only latches while it is in ESTOP). A bump
+ *          while the car is handled or the RUN button is pressed is not a
+ *          collision, and nothing else clears IMPACT before RUN (on-car
+ *          log 2026-10-29, tests S5-U32 and S5-U33). An IMPACT after this
+ *          point, in CAL_IR, the run start or RUN, is a FAULT
+ *          (mission_faults).
+ *          Only the IMPACT bit is cleared. ESTOP is NOT cleared:
+ *          obstacle_task does not set it while MOTOR_EN is clear, and an
  *          ESTOP that is set means a hazard that only obstacle_task or a
- *          RESET may release. An impact after this point sets IMPACT again
- *          and stops the car; imu_task reads IG_SRC1 after every edge, so
- *          the LSM303D's latched INT1 is already released and the next
- *          impact raises a new edge. mission_task stays the only task that
- *          clears safety bits.
+ *          RESET may release. Clearing the bit does not re-arm the
+ *          LSM303D: imu_task reads IG_SRC1 (outside CAL_IMU and RUN_START)
+ *          to release the latched INT1. mission_task stays the only task
+ *          that clears safety bits.
  * @context mission_task
  */
 static void mission_clear_stale_safety(void)

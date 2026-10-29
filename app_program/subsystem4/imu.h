@@ -14,6 +14,7 @@
 
 extern ER imu_init(void);
 extern ER imu_start(void);
+extern void imu_diag_service(void); /* mission_task: INT1 report line */
 
 #endif /* IMU_H */
 
