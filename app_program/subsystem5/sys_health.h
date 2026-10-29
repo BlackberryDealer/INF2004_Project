@@ -37,6 +37,7 @@ extern void sys_health_service(void);
    (or SYS_HEALTH_RADIO_WAIT_MS has passed); until then it feeds the
    startup window with the same fresh-check-in rule.                    */
 extern void sys_health_enable_watchdog(void);
+extern uint32_t sys_health_feed_gap_max_us(bool b_reset); /* diag */
 extern bool sys_health_is_started(void);  /* all four first check-ins */
 
 #endif /* SYS_HEALTH_H */

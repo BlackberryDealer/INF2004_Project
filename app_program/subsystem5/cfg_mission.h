@@ -13,6 +13,7 @@
 #include "../subsystem2/cfg_motion.h"
 
 #define MISSION_CAL_TIMEOUT_MS      (10000u)
+#define MISSION_WDT_LOG_MS          (2000u)   /* 0 = no feed-gap log    */
 #define MISSION_CAL_SWEEP_DEG       (30)      /* left 30, right 60, left 30 */
 #define MISSION_CAL_SWEEP_MAX_MS    (3000u)
 #define MISSION_START_WARN_MS       (1000u)

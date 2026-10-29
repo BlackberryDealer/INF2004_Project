@@ -35,6 +35,14 @@
 #define IMU_MG_PER_LSB           (2)    /* DLHC only, see SQ-B4-2 */
 #define IMU_MAG_EVERY_N          (5u)   /* magnetometer every 50 ms */
 #define IMU_I2C_ERR_MAX          (3u)
+#define IMU_INIT_TRIES           (5u)   /* power-on: the LSM303D may NACK */
+#define IMU_INIT_RETRY_MS        (20u)  /* between start-up tries        */
+/* IMU_DIAG_IMPACT: 1 = report each INT1 on the console (S4-I03); 0 for
+   the RAM report. mission_task prints it (imu_diag_service): printing
+   from imu_task starved mission_task, the watchdog feeder (emulator,
+   2026-10-29). */
+#define IMU_DIAG_IMPACT          (1)
+#define IMU_DIAG_WAIT_READS      (5u)   /* reads to wait for a good one */
 #define IMU_CLASS_MIN_GAP_TICKS  (20u) /* 200 ms between events  */
 #define IMU_IMPACT_HOLD_TICKS    (20u) /* class IMPACT shown for 200 ms */
 #define IMU_TURNING_DPS          (30)  /* TUNE */

@@ -90,7 +90,7 @@ int main(void)
     st.pos_r_counts  = -1000;
     st.line_status   = 0u;
     st.steering      = -250;
-    st.path_counts   = 2865u;   /* 1000 mm */
+    st.path_counts   = 3086u;   /* 1000 mm (324 um per count) */
     st.pitch_ddeg    = 45;
     st.hump_peak_mm  = 12u;
     st.turn_rate_dps = -90;
@@ -167,7 +167,7 @@ int main(void)
     st.pos_r_counts  = 131071;
     st.line_status   = 3u;
     st.steering      = 1000;
-    st.path_counts   = 93888u;   /* 32767 mm */
+    st.path_counts   = 101132u;  /* 32767 mm (324 um per count) */
     st.pitch_ddeg    = 450;
     st.hump_peak_mm  = 127u;
     st.turn_rate_dps = 360;
@@ -184,7 +184,7 @@ int main(void)
     st.pos_r_counts  = -6789;
     st.line_status   = 1u;
     st.steering      = -321;
-    st.path_counts   = 2865u;    /* 1000 mm */
+    st.path_counts   = 3086u;    /* 1000 mm (324 um per count) */
     st.pitch_ddeg    = 87;
     st.hump_peak_mm  = 33u;
     st.turn_rate_dps = -45;

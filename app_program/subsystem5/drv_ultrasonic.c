@@ -36,13 +36,18 @@ void drv_ultrasonic_init(void)
 /**
  * drv_ultrasonic_trigger
  * @brief   Drives TRIG high for 10 us (busy wait, within the 20 us rule).
+ *          The start time is read after TRIG goes high: an interrupt or
+ *          pre-emption before that read can then only lengthen the
+ *          pulse, never shorten it below 10 us (test S5-U09). Unsigned
+ *          subtraction keeps the wait correct across the timer wrap.
  * @context obstacle_task
  */
 void drv_ultrasonic_trigger(void)
 {
-    uint32_t const start_us = time_us_32();
+    uint32_t start_us = 0u;
 
     gpio_put(PIN_US_TRIG, true);
+    start_us = time_us_32();
     while ((time_us_32() - start_us) <= DRV_US_TRIG_PULSE_US)
     {
         /* busy: 10..11 us, allowed (<= 20 us) */

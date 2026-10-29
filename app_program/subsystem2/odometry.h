@@ -14,6 +14,7 @@
 
 #include <stdint.h>
 
+extern uint32_t odometry_hw_to_counts(uint32_t hw_image); /* edges / 4 */
 extern uint32_t odometry_counts_to_mm(uint32_t counts);
 extern uint32_t odometry_mm_to_counts(uint32_t distance_mm);
 extern int32_t  odometry_cpw_to_mm_s(int32_t speed_cpw);

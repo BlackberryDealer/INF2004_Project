@@ -55,6 +55,7 @@
 #define OBS_SEEN_RESCAN        (0x1u)
 #define OBS_SEEN_STOPPED       (0x2u)
 #define OBS_SEEN_RESUME        (0x4u)
+#define OBS_DIST_LOG_PINGS     (8u)          /* bring-up print: ~0.5 s */
 
 /* Echo record: written only by obstacle_echo_isr. Natural types, the
    same information as the packed MSG_ECHO word (Phase 4).            */
@@ -107,6 +108,7 @@ static uint32_t           g_pass_mark     = 0u;   /* path counts */
 static uint32_t           g_scan_start_us = 0u;
 static uint32_t           g_measured      = 0u;   /* bit n: step measured */
 static uint32_t           g_inferred      = 0u;   /* bit n: step filled   */
+static uint32_t           g_dist_log_cnt  = 0u;   /* bring-up print divider */
 static uint16_t           g_obs_scan[APP_SCAN_STEPS];
 static status_board_obs_t g_part =
 {
@@ -239,12 +241,40 @@ static void obstacle_cycle(void)
     obstacle_reading_t reading = {APP_DIST_NONE_MM, true, false};
     uint32_t           rising  = 0u;
 
+    bool               b_is_armed = false;
+
     obstacle_ping(&reading);
     obstacle_modes(&rising);
+
+    /* The stop is armed only while the motors may drive (APP_MODE_MOTOR_EN:
+       CAL_IR sweep and RUN). Before that there is nothing to stop, and an
+       ESTOP latched in BOOT stayed set until RESET, so it blocked the
+       CAL_IR sweep and the car went to FAULT without moving (on-car logs
+       2026-10-28/29, test S5-U31). Pings, NO_ECHO and the board distance
+       stay live while unarmed.                                          */
+    b_is_armed = mission_mode_is_set(APP_MODE_MOTOR_EN);
 
     if (0u != (rising & OBS_SEEN_RESUME))
     {
         obstacle_enter(APP_SCAN_MONITOR);
+    }
+    else if (!b_is_armed)
+    {
+        if (APP_SCAN_MONITOR != g_state)
+        {
+            obstacle_enter(APP_SCAN_MONITOR);
+        }
+
+        /* Bring-up diagnosis: what the sensor sees while unarmed, every
+           ~0.5 s. cast: distance 0..2047 mm, lost flag 0..1 fit int32_t */
+        g_dist_log_cnt++;
+        if (g_dist_log_cnt >= OBS_DIST_LOG_PINGS)
+        {
+            g_dist_log_cnt = 0u;
+            app_log("US dist %d mm, lost %d\n",
+                    (int32_t) reading.distance_mm,
+                    reading.b_is_lost ? 1 : 0, 0);
+        }
     }
     else
     {
@@ -639,6 +669,10 @@ static void obstacle_step_approach(obstacle_reading_t const * p_rd)
     {
         safety_set(SAFETY_ESTOP);                 /* brake first (NFR6) */
         (void) mission_post_event(APP_EVT_OBSTACLE, 0u);   /* counted */
+        /* Bring-up diagnosis (after the brake). casts: distance 0..2047
+           and lost count 0..3 fit int32_t                              */
+        app_log("OBSTACLE STOP (ESTOP): distance %d mm, lost echoes %d\n",
+                (int32_t) p_rd->distance_mm, (int32_t) g_lost, 0);
         obstacle_enter(APP_SCAN_STOPPED);
     }
     else if (g_far >= OBS_CLEAR_READINGS)
@@ -754,6 +788,9 @@ static void obstacle_step_watch(obstacle_reading_t const * p_rd)
     {
         safety_set(SAFETY_ESTOP);
         (void) mission_post_event(APP_EVT_SIDE_TOO_CLOSE, 0u); /* counted */
+        /* Bring-up diagnosis (after the brake). cast: 0..2047 mm */
+        app_log("OBSTACLE SIDE TOO CLOSE (ESTOP): distance %d mm\n",
+                (int32_t) p_rd->distance_mm, 0, 0);
         obstacle_enter(APP_SCAN_STOPPED);
     }
 }

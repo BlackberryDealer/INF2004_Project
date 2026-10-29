@@ -26,9 +26,16 @@
  * deep, so a read queues one command at a time and collects each byte
  * before the next (as the SDK's i2c_read_blocking does); queueing a whole
  * 4-sample burst at once (25 commands) dropped the STOP and timed out.
- * IC_TAR is written once while the block is disabled. Transfers poll with
- * a 1 ms deadline from sys_tick_now_us(); this busy-wait is the one listed
- * exception to Part A rule 7 and is measured on the bench (S4-I09).
+ * IC_TAR is written once while the block is disabled. Each bus step (one
+ * received byte, or the STOP) polls with its own 1 ms deadline from
+ * sys_tick_now_us(); this busy-wait is the one listed exception to Part A
+ * rule 7 and is measured on the bench (S4-I09). The deadline is per step,
+ * and the bus is sampled once more after the deadline is seen to have
+ * passed, so time imu_task spends preempted (on the dual-core build the
+ * radio and USB tasks, priorities 3-4, share a core with it) can never be
+ * mistaken for a silent bus: the controller simply holds SCL low between
+ * commands until the task resumes (on-car boot log 2026-10-29: FAULT IMU,
+ * 3 I2C errors in a row, during cyw43_init).
  *
  * Timing at 400 kHz (22.5 us per byte): FIFO status read = 4 bytes
  * (90 us), 2 samples = 15 bytes (338 us), 4 samples = 27 bytes (608 us),
@@ -102,7 +109,7 @@ extern uint32_t sys_tick_now_us(void);
 #define LSM303_FIFO_SRC_OVRN     (0x40u) /* overrun, bit 6             */
 
 /* Bus timings */
-#define LSM303_BUS_TIMEOUT_US (1000u)      /* per-transfer deadline      */
+#define LSM303_STEP_TIMEOUT_US (1000u)     /* per bus step (byte, STOP)  */
 #define LSM303_ENABLE_WAIT_US (100u) /* IC_ENABLE / ABORT settle bound */
 #define LSM303_SYS_HZ         (125000000u) /* template fixed clock  */
 #define LSM303_BUS_HZ         (400000u)
@@ -117,6 +124,7 @@ extern uint32_t sys_tick_now_us(void);
 /* ---- private data ---------------------------------------------------- */
 
 static uint32_t g_lsm303_fifo_ovr = 0u; /* saturating, imu_task context */
+static int32_t  g_lsm303_last_err = 0;  /* last failed transfer's code   */
 
 /* ---- private function prototypes ------------------------------------- */
 
@@ -124,8 +132,8 @@ static int32_t lsm303_hw_write_config(void);
 static int32_t lsm303_tx2(uint8_t reg, uint8_t val);
 static int32_t lsm303_rx(uint8_t reg, uint8_t * p_out, uint32_t count);
 static void    lsm303_begin(void);
-static int32_t lsm303_wait_rx(uint32_t start_us);
-static int32_t lsm303_wait_stop(uint32_t start_us);
+static int32_t lsm303_wait_rx(void);
+static int32_t lsm303_wait_stop(void);
 static void    lsm303_recover(void);
 static void    lsm303_set_enable(bool b_on);
 static void    lsm303_rx_drain(void);
@@ -352,6 +360,19 @@ void drv_lsm303_bus_reset(void)
                                        in the I2C fault path */
 }
 
+/**
+ * drv_lsm303_last_error
+ * @brief   Code of the most recent failed transfer, for the console
+ *          message when imu_task raises APP_FAULT_IMU.
+ * @return  0 (none yet), -1 timeout (bus silent for a whole step) or
+ *          -2 abort (NACK or lost arbitration)
+ * @context imu_task
+ */
+int32_t drv_lsm303_last_error(void)
+{
+    return g_lsm303_last_err;
+}
+
 /* ---- private functions ------------------------------------------------ */
 
 /**
@@ -464,17 +485,17 @@ static int32_t lsm303_hw_write_config(void)
  */
 static int32_t lsm303_tx2(uint8_t reg, uint8_t val)
 {
-    uint32_t start_us = sys_tick_now_us();
-    int32_t  ercd     = 0;
+    int32_t ercd = 0;
 
     lsm303_begin();
     i2c1_hw->data_cmd = reg;
     i2c1_hw->data_cmd = I2C_IC_DATA_CMD_STOP_BITS | val;
     /* 2 commands: far below the 16-entry TX FIFO */
 
-    ercd = lsm303_wait_stop(start_us);
+    ercd = lsm303_wait_stop();
     if (0 != ercd)
     {
+        g_lsm303_last_err = ercd;
         lsm303_recover();
     }
 
@@ -497,9 +518,8 @@ static int32_t lsm303_tx2(uint8_t reg, uint8_t val)
  */
 static int32_t lsm303_rx(uint8_t reg, uint8_t * p_out, uint32_t count)
 {
-    uint32_t start_us = sys_tick_now_us();
-    uint32_t idx      = 0u;
-    int32_t  ercd     = 0;
+    uint32_t idx  = 0u;
+    int32_t  ercd = 0;
 
     lsm303_begin();
     i2c1_hw->data_cmd = reg;
@@ -518,7 +538,7 @@ static int32_t lsm303_rx(uint8_t reg, uint8_t * p_out, uint32_t count)
         }
         i2c1_hw->data_cmd = cmd;
 
-        ercd = lsm303_wait_rx(start_us);
+        ercd = lsm303_wait_rx();
         if (0 == ercd)
         {
             p_out[idx] = (uint8_t)(i2c1_hw->data_cmd & 0xFFu);
@@ -528,10 +548,11 @@ static int32_t lsm303_rx(uint8_t reg, uint8_t * p_out, uint32_t count)
 
     if (0 == ercd)
     {
-        ercd = lsm303_wait_stop(start_us);
+        ercd = lsm303_wait_stop();
     }
     if (0 != ercd)
     {
+        g_lsm303_last_err = ercd;
         lsm303_recover();
     }
 
@@ -554,16 +575,22 @@ static void lsm303_begin(void)
 /**
  * lsm303_wait_rx
  * @brief   Polls until one received byte is in the RX FIFO, a TX abort
- *          (NACK, lost arbitration) is flagged, or the per-transfer
- *          deadline passes.
- * @param   start_us  deadline base from sys_tick_now_us()
+ *          (NACK, lost arbitration) is flagged, or this step's deadline
+ *          passes. The clock is read BEFORE the hardware in every pass, so
+ *          a pass that finds the deadline passed (e.g. after the task was
+ *          preempted) still looks at the bus once more before it gives up.
  * @return  0, LSM303_ERR_ABORT or LSM303_ERR_TIMEOUT
  * @context imu_task
  */
-static int32_t lsm303_wait_rx(uint32_t start_us)
+static int32_t lsm303_wait_rx(void)
 {
+    uint32_t const start_us = sys_tick_now_us();
+
     for (;;)
     {
+        bool const b_expired =
+            ((sys_tick_now_us() - start_us) > LSM303_STEP_TIMEOUT_US);
+
         if (0u != (i2c1_hw->raw_intr_stat & I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS))
         {
             return LSM303_ERR_ABORT;
@@ -572,7 +599,7 @@ static int32_t lsm303_wait_rx(uint32_t start_us)
         {
             return 0;
         }
-        if ((sys_tick_now_us() - start_us) > LSM303_BUS_TIMEOUT_US)
+        if (b_expired)
         {
             return LSM303_ERR_TIMEOUT;
         }
@@ -583,16 +610,20 @@ static int32_t lsm303_wait_rx(uint32_t start_us)
  * lsm303_wait_stop
  * @brief   Polls until the STOP condition has been sent (STOP_DET), then
  *          clears it. A TX abort also ends in STOP, so the abort flag is
- *          checked first and wins.
- * @param   start_us  deadline base from sys_tick_now_us()
+ *          checked first and wins. Clock before hardware, as in
+ *          lsm303_wait_rx.
  * @return  0, LSM303_ERR_ABORT or LSM303_ERR_TIMEOUT
  * @context imu_task
  */
-static int32_t lsm303_wait_stop(uint32_t start_us)
+static int32_t lsm303_wait_stop(void)
 {
+    uint32_t const start_us = sys_tick_now_us();
+
     for (;;)
     {
-        uint32_t const stat = i2c1_hw->raw_intr_stat;
+        bool const     b_expired =
+            ((sys_tick_now_us() - start_us) > LSM303_STEP_TIMEOUT_US);
+        uint32_t const stat      = i2c1_hw->raw_intr_stat;
 
         if (0u != (stat & I2C_IC_RAW_INTR_STAT_TX_ABRT_BITS))
         {
@@ -603,7 +634,7 @@ static int32_t lsm303_wait_stop(uint32_t start_us)
             (void)i2c1_hw->clr_stop_det; /* read clears; always reads 0 */
             return 0;
         }
-        if ((sys_tick_now_us() - start_us) > LSM303_BUS_TIMEOUT_US)
+        if (b_expired)
         {
             return LSM303_ERR_TIMEOUT;
         }

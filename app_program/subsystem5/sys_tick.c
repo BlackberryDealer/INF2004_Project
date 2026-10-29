@@ -48,6 +48,10 @@ static volatile uint16_t g_lat_max_us[SYS_TICK_SLOT_COUNT] =
 };
 static volatile uint8_t  g_overruns[SYS_TICK_SLOT_COUNT] = {0u, 0u, 0u, 0u};
 
+/* mission_task (the watchdog feeder), also woken by R2 but kept out of
+   the latency and overrun statistics (NFR17 covers the 4 slots). */
+static volatile ID g_feeder_tid = 0;
+
 static ID gh_r2_cyc = 0;
 static ID gh_r3_cyc = 0;
 
@@ -121,6 +125,22 @@ ER sys_tick_register(uint32_t slot, ID task_id)
     }
 
     return ercd;
+}
+
+/**
+ * sys_tick_register_feeder
+ * @brief   Records the watchdog feeder (mission_task) for the R2 wake.
+ *          With the 10 ms kernel tick (CNF_TIMER_PERIOD) a 10 ms receive
+ *          timeout waits 10-20 ms, which left only ~10 ms of the 30 ms
+ *          watchdog window (on-car/emulator trace 2026-10-29); R2 makes
+ *          the feeder's passes 10 ms apart like the other fast tasks.
+ * @param   task_id the calling task's ID (tk_get_tid())
+ * @return  none
+ * @context mission_task, once before its loop
+ */
+void sys_tick_register_feeder(ID task_id)
+{
+    g_feeder_tid = task_id;
 }
 
 /**
@@ -230,7 +250,8 @@ uint32_t sys_tick_overruns(uint32_t slot)
 
 /**
  * sys_tick_10ms_handler
- * @brief   R2: stamps the release and wakes line, motion and IMU tasks.
+ * @brief   R2: stamps the release and wakes line, motion and IMU tasks,
+ *          then mission_task (the watchdog feeder).
  * @param   p_exinf unused
  * @context cyclic handler (interrupt context)
  */
@@ -243,6 +264,10 @@ static void sys_tick_10ms_handler(void * p_exinf)
     for (uint32_t idx = 0u; idx < SYS_TICK_FAST_SLOTS; idx++)
     {
         sys_tick_wake(idx);
+    }
+    if (g_feeder_tid > 0)
+    {
+        (void) tk_wup_tsk(g_feeder_tid); /* E_QOVR: it is behind anyway */
     }
 }
 

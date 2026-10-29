@@ -59,6 +59,10 @@ static int32_t   g_sim_duty_r    = 0;
 static bool      gb_sim_braked   = true;
 static bool      gb_sim_motor_en = true;
 static bool      gb_sim_safety   = false;
+/* S2-U20: MOTOR_EN value the "other core" writes at the moment motion_task
+   drains K5, i.e. after step 3 has read the bit. 0 = no change, 1 = set,
+   2 = clear. Models mission_task changing FLG_MODE on the other core.   */
+static uint32_t  g_sim_en_on_rcv = 0u;
 static uint32_t  g_sim_faults    = 0u;
 static status_board_motion_t g_sim_board;
 
@@ -143,6 +147,20 @@ bool motion_cmd_receive(uint32_t * p_type, uint32_t * p_param,
                         uint32_t * p_tag)
 {
     bool b_has = (g_sim_k5_count > 0u);
+
+    if (1u == g_sim_en_on_rcv)
+    {
+        gb_sim_motor_en = true;     /* set after step 3 read it */
+    }
+    else if (2u == g_sim_en_on_rcv)
+    {
+        gb_sim_motor_en = false;    /* cleared after step 3 read it */
+    }
+    else
+    {
+        /* no change */
+    }
+    g_sim_en_on_rcv = 0u;
 
     if (b_has)
     {
@@ -256,6 +274,7 @@ static void sim_reset(void)
     g_sim_k5_head = 0u; g_sim_k5_count = 0u; g_sim_evt_count = 0u;
     g_sim_acc_l = 0; g_sim_acc_r = 0; g_sim_glitch = 0u;
     gb_sim_motor_en = true; gb_sim_safety = false; g_sim_faults = 0u;
+    g_sim_en_on_rcv = 0u;
     gb_is_pend_valid = false; g_path2 = 0u; g_strk_l = 0u; g_strk_r = 0u;
     g_stall_l = 0u; g_stall_r = 0u;
     motion_cancel_active();
@@ -320,9 +339,9 @@ int main(void)
     HOST_CHECK("S2-U15", (MOTION_PATH2_MAX == g_path2)
                && (0u != (g_sim_faults & APP_FAULT_RANGE_CLAMP)),
                "path saturates at 2 x 131071 and reports RANGE_CLAMP");
-    HOST_CHECK("S2-U15", (g_sim_board.pos_l_counts >= 2865)
-               && (g_sim_board.pos_l_counts <= 2865 + 30),
-               "left wheel travelled the 2865 counts of 1000 mm");
+    HOST_CHECK("S2-U15", (g_sim_board.pos_l_counts >= 3086)
+               && (g_sim_board.pos_l_counts <= 3086 + 30),
+               "left wheel travelled the 3086 counts of 1000 mm");
 
     /* S2-U16: ZERO in BRAKE rebases and acks with its tag; in FOLLOW it
        waits in the latch */
@@ -397,9 +416,9 @@ int main(void)
                "a single glitch raises no ENCODER fault");
     b_done = sim_run_until_done(3000u, &tag);
     HOST_CHECK("S2-U19", b_done && (1u == tag)
-               && (g_sim_board.pos_l_counts >= 2865)
-               && (g_sim_board.pos_l_counts <= 2865 + 30),
-               "MOVE then completes at the real distance (2865 counts)");
+               && (g_sim_board.pos_l_counts >= 3086)
+               && (g_sim_board.pos_l_counts <= 3086 + 30),
+               "MOVE then completes at the real distance (3086 counts)");
 
     sim_reset();
     sim_send(APP_CMD_FWD, 1000u, 1u);
@@ -437,6 +456,48 @@ int main(void)
     HOST_CHECK("S2-U19", (g_raw0_l == raw0_before)
                && (g_left.pos == (int32_t) (raw_read - raw0_before)),
                "no resync; position equals the counter read: nothing lost");
+
+    /* S2-U20 (review 2026-10-26): dual-core race. mission_task sets
+       MOTOR_EN and sends the command on the other core after motion_task
+       read the bit in step 3 but before it drains K5 in step 4. The
+       command must start, not be dropped as if the motors were off.     */
+    sim_reset();
+    gb_sim_motor_en = false;
+    sim_cycles(3u);
+    sim_send(APP_CMD_LEFT, 30u, 1u);    /* first CAL_IR sweep leg */
+    g_sim_en_on_rcv = 1u;
+    sim_cycle();
+    HOST_CHECK("S2-U20", APP_MOT_TURN_L == g_state,
+               "first calibration turn starts when MOTOR_EN was set late");
+    b_done = sim_run_until_done(200u, &tag);
+    HOST_CHECK("S2-U20", b_done && (1u == tag),
+               "that turn completes with its MOVE_DONE");
+
+    sim_reset();
+    gb_sim_motor_en = false;
+    sim_cycles(3u);
+    sim_send(APP_CMD_FOLLOW, 250u, 2u); /* first RUN command */
+    g_sim_en_on_rcv = 1u;
+    sim_cycles(20u);
+    HOST_CHECK("S2-U20", (APP_MOT_FOLLOW == g_state) && (!gb_sim_braked),
+               "first FOLLOW starts and drives when MOTOR_EN was set late");
+
+    /* The other direction: MOTOR_EN cleared after step 3 read it set.
+       The command must be rejected (FR17), never driven, and not started
+       later when the bit comes back.                                    */
+    sim_reset();
+    gb_sim_motor_en = true;
+    sim_cycles(3u);
+    sim_send(APP_CMD_FWD, 500u, 3u);
+    g_sim_en_on_rcv = 2u;
+    sim_cycle();
+    HOST_CHECK("S2-U20", (APP_MOT_BRAKE == g_state) && gb_sim_braked,
+               "command after MOTOR_EN cleared late is rejected, braked");
+    gb_sim_motor_en = true;
+    sim_cycles(5u);
+    HOST_CHECK("S2-U20", (APP_MOT_BRAKE == g_state) && gb_sim_braked
+               && (0u == sim_count_events(APP_EVT_MOVE_DONE, 3u)),
+               "rejected command is not started when MOTOR_EN returns");
 
     return (0 == HOST_SUMMARY("motion_task")) ? 0 : 1;
 }

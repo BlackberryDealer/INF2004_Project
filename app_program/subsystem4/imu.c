@@ -77,7 +77,7 @@ static int16_t g_mag_mz = 0;
    per word; the ISR-owned SH_IMU byte stays separate (rule 1). */
 static uint32_t g_imu_prv_a; /* I2C_ERR, GOOD_CNT, CLASS_GAP,
                                 LAST_CLASS, MAG_DIV, IMPACT_HOLD,
-                                IMPACT_SEQ (low 4 bits) */
+                                IMPACT_SEQ (low 4 bits), NEED_CFG */
 static uint32_t g_imu_prv_b; /* CAL_CNT (HIST_IDX lives in the history
                                 word inside terrain.c) */
 static uint32_t g_imu_prv_c; /* PREV_HDG, PREV_HDG_VALID, RUN_PEAK */
@@ -105,6 +105,39 @@ static int32_t  g_avg_ax_mg         = 0; /* calibrated averages */
 static int32_t  g_avg_ay_mg         = 0;
 static int32_t  g_avg_az_mg         = 1000; /* flat rest: az = +1000 mg */
 static int32_t  g_a_fwd_mg          = 0;
+static volatile uint32_t g_imu_isr_us = 0u; /* last INT1 edge, R1 time;
+                                               ISR is the only writer   */
+#if (IMU_DIAG_IMPACT != 0)
+/* Bring-up diagnosis (S4-I03, IG_THS1 weight not yet measured). One FIFO
+   read: sample count (-1 = failed read), largest single raw (pre-offset)
+   X and Y sample in LSB, sensor axes as INT1 sees them, and the read
+   time. Kept for the read before and at the handling of an INT1, then
+   printed with the next successful read, so the trip sample is in one
+   of the three unless the FIFO overran or kept a backlog. */
+typedef struct
+{
+    int32_t  n_samples;
+    int32_t  peak_x;
+    int32_t  peak_y;
+    uint32_t read_us;
+} imu_dbg_read_t;
+
+static imu_dbg_read_t g_dbg_prev = {-1, 0, 0, 0u};
+static imu_dbg_read_t g_dbg_now  = {-1, 0, 0, 0u};
+static imu_dbg_read_t g_dbg_snap_prev = {-1, 0, 0, 0u};
+static imu_dbg_read_t g_dbg_snap_now  = {-1, 0, 0, 0u};
+static imu_dbg_read_t g_dbg_snap_next = {-1, 0, 0, 0u};
+static uint32_t       g_dbg_isr_us     = 0u;
+static uint32_t       g_dbg_handled_us = 0u;
+static int32_t        g_dbg_src        = 0;
+static int32_t        g_dbg_speed      = 0;
+static uint32_t       g_dbg_wait       = 0u; /* reads left; 0 = idle */
+static uint32_t       g_dbg_line       = 0u; /* mission_task: lines done */
+/* 1 = a report is complete and mission_task owns the snapshots until it
+   has printed them; imu_task writes them first and sets this last. */
+static volatile uint32_t g_dbg_ready   = 0u;
+#define IMU_DBG_LINES (8u) /* lines in one INT1 report */
+#endif
 static int32_t  g_turn_dps          = 0;
 static bool     gb_is_turn_from_enc = false;
 static int32_t  g_pitch_ddeg        = 0;
@@ -123,6 +156,14 @@ static void imu_read_mag_if_due(uint32_t n_samples, bool * pb_mag_cycle,
 static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw);
 static int32_t  imu_encoder_rate(int32_t pos_l, int32_t pos_r);
 static void     imu_i2c_result(bool b_ok, bool b_is_acc);
+static bool     imu_configure_if_needed(void);
+static void     imu_need_cfg_set(bool b_need);
+#if (IMU_DIAG_IMPACT != 0)
+static void     imu_dbg_peak(int32_t * p_peak, int32_t value);
+static void     imu_dbg_after_read(void);
+static int32_t  imu_dbg_age_us(imu_dbg_read_t const * p_read);
+static void     imu_dbg_print_peak(imu_dbg_read_t const * p_read);
+#endif
 static void     imu_calibrate(bool b_mode_set, bool b_read_ok);
 static void     imu_run_start(int32_t pos_l, int32_t pos_r);
 static void     imu_turn_rate(bool b_mag_cycle, bool b_mag_read, int32_t pos_l,
@@ -140,15 +181,32 @@ static void     imu_clamp_fault(bool b_was_clamped);
 /**
  * imu_init
  * @brief   Initialises the LSM303D driver (I2C1, 400 kHz, all
- *          registers from the B4.1.1 table). imu_task owns no kernel
- *          objects: everything it needs comes from the shared services.
- * @return  0 (E_OK) or a negative I2C error from the driver
+ *          registers from the B4.1.1 table), up to IMU_INIT_TRIES times
+ *          IMU_INIT_RETRY_MS apart: right after switch-on the sensor can
+ *          still NACK (on-car boot log 2026-10-29: imu_init -2, then
+ *          CAL_TIMEOUT). If every try fails, NEED_CFG stays set and
+ *          imu_task keeps trying. imu_task owns no kernel objects:
+ *          everything it needs comes from the shared services.
+ * @return  0 (E_OK) or the last negative I2C error from the driver
  * @context usermain
  */
 ER imu_init(void)
 {
-    return (ER)drv_lsm303_init(); /* cast: driver returns 0 or <0,
-                                     same sign convention as ER */
+    int32_t  ercd  = -1;
+    uint32_t tries = 0u;
+
+    for (tries = 0u; (tries < IMU_INIT_TRIES) && (0 != ercd); tries++)
+    {
+        if (tries > 0u)
+        {
+            (void)tk_dly_tsk(IMU_INIT_RETRY_MS); /* E_OK or released early */
+        }
+        ercd = drv_lsm303_init();
+    }
+    imu_need_cfg_set(0 != ercd);
+
+    return (ER)ercd; /* cast: driver returns 0 or <0, same sign
+                        convention as ER */
 }
 
 /**
@@ -178,6 +236,67 @@ ER imu_start(void)
     }
 
     return ercd;
+}
+
+/**
+ * imu_diag_service
+ * @brief   Bring-up diagnosis (S4-I03): prints one line of a completed
+ *          INT1 report per call (IMU_DBG_LINES lines), then releases the
+ *          snapshots back to imu_task. Does nothing when IMU_DIAG_IMPACT
+ *          is 0 or no report is waiting.
+ * @return  none
+ * @context mission_task, once per pass (the console print costs the
+ *          watchdog feeder only its own time)
+ */
+void imu_diag_service(void)
+{
+#if (IMU_DIAG_IMPACT != 0)
+    if (0u == g_dbg_ready)
+    {
+        return;
+    }
+    g_dbg_line++;
+    switch (g_dbg_line)
+    {
+        case 1u:
+            /* casts: times and counts are far below INT32_MAX here */
+            app_log("IMPACT INT1: edge at %d ms, handled %d us later,"
+                    " IG_SRC1 %d (66 = X high, 72 = Y high)\n",
+                    (int32_t)(g_dbg_isr_us / 1000u),
+                    (int32_t)(g_dbg_handled_us - g_dbg_isr_us), g_dbg_src);
+            break;
+        case 2u:
+            app_log("  speed %d counts per 50 ms, FIFO overruns so far %d\n",
+                    g_dbg_speed, (int32_t)drv_lsm303_fifo_overruns(), 0);
+            break;
+        case 3u:
+            app_log("  read before: %d samples (-1 = failed), at %d us"
+                    " after the edge\n", g_dbg_snap_prev.n_samples,
+                    imu_dbg_age_us(&g_dbg_snap_prev), 0);
+            break;
+        case 4u:
+            imu_dbg_print_peak(&g_dbg_snap_prev);
+            break;
+        case 5u:
+            app_log("  read at handling: %d samples (-1 = failed), at %d us"
+                    " after the edge\n", g_dbg_snap_now.n_samples,
+                    imu_dbg_age_us(&g_dbg_snap_now), 0);
+            break;
+        case 6u:
+            imu_dbg_print_peak(&g_dbg_snap_now);
+            break;
+        case 7u:
+            app_log("  next read: %d samples (-1 = failed), at %d us"
+                    " after the edge\n", g_dbg_snap_next.n_samples,
+                    imu_dbg_age_us(&g_dbg_snap_next), 0);
+            break;
+        default:
+            imu_dbg_print_peak(&g_dbg_snap_next);
+            g_dbg_line  = 0u;
+            g_dbg_ready = 0u; /* snapshots back to imu_task */
+            break;
+    }
+#endif
 }
 
 /* ---- private functions ------------------------------------------------ */
@@ -216,8 +335,12 @@ static void imu_task(INT stacd, void * p_exinf)
         sys_tick_cycle_start(SYS_TICK_SLOT_IMU);
         sys_health_check_in(SYS_HEALTH_BIT_IMU);
 
-        /* 2. Sensors. */
-        imu_read_sensors(&b_read_ok, &b_mag_cycle, &b_mag_read);
+        /* 2. Sensors (or, after a failed transfer, rewrite the LSM303D
+           registers first: a supply dip resets the sensor to power-down). */
+        if (imu_configure_if_needed())
+        {
+            imu_read_sensors(&b_read_ok, &b_mag_cycle, &b_mag_read);
+        }
 
         /* 3. Board snapshot. */
         status_board_read(&snap);
@@ -359,8 +482,8 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
 static void imu_int1_isr(uint32_t events, uint32_t now_us)
 {
     (void)events; /* only rising edges are enabled */
-    (void)now_us; /* not needed */
 
+    g_imu_isr_us = now_us; /* aligned 32-bit store: atomic on the M0+ */
     safety_set_from_isr(SAFETY_IMPACT);
     g_imu_impact_seq++; /* volatile uint8_t, ISR is the only writer */
 }
@@ -387,6 +510,10 @@ static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
 
     bool b_acc_ok = imu_read_acc(&n_samples);
 
+#if (IMU_DIAG_IMPACT != 0)
+    imu_dbg_after_read();
+#endif
+
     /* Calibration may only sum a cycle that brought new samples: on an
        empty FIFO g_avg_raw_* still holds last cycle's average, which
        would be counted twice. */
@@ -411,6 +538,13 @@ static bool imu_read_acc(uint32_t * p_n_samples)
     uint32_t         n_samples = 0u;
 
     *p_n_samples = 0u;
+#if (IMU_DIAG_IMPACT != 0)
+    g_dbg_prev = g_dbg_now;
+    g_dbg_now.n_samples = -1; /* until the transfer succeeds */
+    g_dbg_now.peak_x    = 0;
+    g_dbg_now.peak_y    = 0;
+    g_dbg_now.read_us   = sys_tick_now_us();
+#endif
 
     ercd = drv_lsm303_read_acc(samples, IMU_ACC_SAMPLES_MAX);
     if (ercd < 0)
@@ -448,6 +582,9 @@ static bool imu_read_acc(uint32_t * p_n_samples)
 
         imu_i2c_result(true, true);
         n_samples = (uint32_t)ercd; /* cast: count >= 0 here */
+#if (IMU_DIAG_IMPACT != 0)
+        g_dbg_now.n_samples = ercd; /* 0..4 */
+#endif
         if (n_samples > 0u)
         {
             for (idx = 0u; idx < n_samples; idx++)
@@ -455,6 +592,10 @@ static bool imu_read_acc(uint32_t * p_n_samples)
                 sum_x += (int32_t)samples[idx].acc_x;
                 sum_y += (int32_t)samples[idx].acc_y;
                 sum_z += (int32_t)samples[idx].acc_z;
+#if (IMU_DIAG_IMPACT != 0)
+                imu_dbg_peak(&g_dbg_now.peak_x, (int32_t)samples[idx].acc_x);
+                imu_dbg_peak(&g_dbg_now.peak_y, (int32_t)samples[idx].acc_y);
+#endif
             }
             /* Signed average: (sum x recip[n]) / 32768, never >> on a
                signed value (review F-07). |sum| <= 4 x 32768, so the
@@ -569,20 +710,146 @@ static void imu_i2c_result(bool b_ok, bool b_is_acc)
 
     g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_GOOD_CNT_POS,
                                PRV_IMU_A_GOOD_CNT_BITS, 0u);
+    imu_need_cfg_set(true); /* the sensor may have lost its registers */
     if (err_cnt < IMU_I2C_ERR_MAX)
     {
         err_cnt++;
         g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_I2C_ERR_POS,
                                    PRV_IMU_A_I2C_ERR_BITS, err_cnt);
     }
-    if ((err_cnt >= IMU_I2C_ERR_MAX) &&
+    /* Not before start-up has finished (radio settled, BOOT ends): the
+       radio's power-up can make the LSM303D NACK for a while (on-car
+       boot log 2026-10-29); the registers are rewritten as soon as it
+       answers. A sensor still failing afterwards faults on its next
+       error, err_cnt having stayed at the maximum. */
+    if ((err_cnt >= IMU_I2C_ERR_MAX) && sys_health_is_started() &&
         (TERRAIN_FAULT != imu_terrain_state_get()))
     {
         imu_terrain_state_set(TERRAIN_FAULT);
+        /* Bring-up diagnosis: -1 = the bus stayed silent for a whole
+           1 ms step (wiring, power, a hung LSM303D), -2 = NACK (sensor
+           not answering, e.g. still booting after a supply dip). */
+        app_log("IMU I2C: last error %d (-1 timeout, -2 NACK)\n",
+                drv_lsm303_last_error(), 0, 0);
         fault_set(APP_FAULT_IMU);
         drv_lsm303_bus_reset();
     }
 }
+
+/**
+ * imu_configure_if_needed
+ * @brief   While NEED_CFG is set, rewrites the LSM303D registers instead
+ *          of reading it this cycle (about 12 short writes, under 1 ms).
+ *          A failed rewrite counts as an I2C error like any other.
+ * @return  true if the sensor is configured and may be read this cycle
+ * @context imu_task
+ */
+static bool imu_configure_if_needed(void)
+{
+    if (0u == app_bits_get(g_imu_prv_a, PRV_IMU_A_NEED_CFG_POS,
+                           PRV_IMU_A_NEED_CFG_BITS))
+    {
+        return true;
+    }
+    if (0 != drv_lsm303_init())
+    {
+        imu_i2c_result(false, false);
+        return false;
+    }
+    imu_need_cfg_set(false);
+    /* Bring-up diagnosis */
+    app_log("IMU registers written again (sensor answered)\n", 0, 0, 0);
+    return false; /* read from the next cycle: the FIFO restarts empty */
+}
+
+/**
+ * imu_need_cfg_set
+ * @brief   Sets or clears the packed NEED_CFG flag.
+ * @param   b_need  true if the registers must be (re)written
+ * @return  none
+ * @context usermain (imu_init) or imu_task
+ */
+static void imu_need_cfg_set(bool b_need)
+{
+    g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_NEED_CFG_POS,
+                               PRV_IMU_A_NEED_CFG_BITS, b_need ? 1u : 0u);
+}
+
+#if (IMU_DIAG_IMPACT != 0)
+/**
+ * imu_dbg_peak
+ * @brief   Keeps the sample of largest magnitude (bring-up diagnosis).
+ * @param   p_peak  running peak, raw LSB, sign kept
+ * @param   value   new raw sample
+ * @return  none
+ * @context imu_task
+ */
+static void imu_dbg_peak(int32_t * p_peak, int32_t value)
+{
+    int32_t const mag_new  = (value < 0) ? -value : value;
+    int32_t const mag_peak = (*p_peak < 0) ? -*p_peak : *p_peak;
+
+    if (mag_new > mag_peak)
+    {
+        *p_peak = value;
+    }
+}
+
+/**
+ * imu_dbg_after_read
+ * @brief   After each FIFO read: if an INT1 was handled, waits for the
+ *          next successful read (at most IMU_DIAG_WAIT_READS reads), then
+ *          hands the report to mission_task (imu_diag_service), which
+ *          prints it. Printing from imu_task starved mission_task, the
+ *          watchdog feeder (emulator, 2026-10-29). An INT1 while a report
+ *          is still being printed is not reported.
+ * @return  none
+ * @context imu_task
+ */
+static void imu_dbg_after_read(void)
+{
+    if (0u == g_dbg_wait)
+    {
+        return;
+    }
+    if ((g_dbg_now.n_samples <= 0) && (g_dbg_wait > 1u))
+    {
+        g_dbg_wait--; /* empty or failed: try the next read */
+        return;
+    }
+    g_dbg_wait      = 0u;
+    g_dbg_snap_next = g_dbg_now;
+    g_dbg_ready     = 1u; /* last: hands the snapshots to mission_task */
+}
+
+/**
+ * imu_dbg_age_us
+ * @brief   Read time relative to the INT1 edge. The samples of a read were
+ *          taken in the up to 20 ms before it (200 Hz, at most 4 a read).
+ * @param   p_read  the read
+ * @return  us after the edge (negative = before it)
+ * @context imu_task
+ */
+static int32_t imu_dbg_age_us(imu_dbg_read_t const * p_read)
+{
+    /* cast: signed difference of two wrapping 32-bit times */
+    return (int32_t)(p_read->read_us - g_dbg_isr_us);
+}
+
+/**
+ * imu_dbg_print_peak
+ * @brief   Raw peaks of one read in mg (0.122 mg per LSB, sensor axes).
+ * @param   p_read  the read
+ * @return  none
+ * @context imu_task
+ */
+static void imu_dbg_print_peak(imu_dbg_read_t const * p_read)
+{
+    app_log("    raw peak X %d Y %d mg\n",
+            (p_read->peak_x * IMU_MG_NUM) / IMU_MG_DEN,
+            (p_read->peak_y * IMU_MG_NUM) / IMU_MG_DEN, 0);
+}
+#endif
 
 /**
  * imu_calibrate
@@ -680,6 +947,11 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
                             PRV_OFS_B_AZ_MAX, PRV_OFS_B_AZ_OFFSET, &b_clamped));
         imu_clamp_fault(b_clamped);
 
+        /* Bring-up diagnosis: gravity at rest on each axis. INT1 compares
+           raw X/Y, so any tilt here is taken off the impact margin. */
+        app_log("IMU at rest, raw before offsets: ax %d ay %d az %d mg\n",
+                ofs_ax, ofs_ay,
+                ofs_az + IMU_REST_AZ_MG);
         gb_cal_done_once = true;
         imu_terrain_state_set(TERRAIN_FLAT);
         terrain_reset(&g_terrain);
@@ -945,18 +1217,31 @@ static void imu_classify(int32_t speed_cpw)
         /* Read INT1_SRC_A: it clears the latched interrupt so a repeated
            tap can raise a new rising edge (B4.1.1, S4-I03). A read error
            is not counted here; the next accelerometer transfer reports
-           the bus fault itself. */
+           the bus fault itself. The sequence is only marked as seen when
+           the read succeeded: otherwise INT1 would stay latched high and
+           no later impact could raise a new edge. A failed read is
+           simply tried again next cycle. */
         int32_t src_byte = drv_lsm303_read_int1_src();
 
-        g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_IMPACT_SEQ_POS,
-                                   PRV_IMU_A_IMPACT_SEQ_BITS,
-                                   seq_now & IMU_IMPACT_SEQ_MASK);
-        impact_hold = IMU_IMPACT_HOLD_TICKS;
-#if (IMU_LOG_HUMPS != 0)
-        app_log("impact src %d\n", src_byte, 0, 0);
-#else
-        (void)src_byte; /* unused when impact logging is off */
+        if (src_byte >= 0)
+        {
+            g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_IMPACT_SEQ_POS,
+                                       PRV_IMU_A_IMPACT_SEQ_BITS,
+                                       seq_now & IMU_IMPACT_SEQ_MASK);
+#if (IMU_DIAG_IMPACT != 0)
+            if (0u == g_dbg_ready) /* mission_task is not printing one */
+            {
+                g_dbg_snap_prev  = g_dbg_prev;
+                g_dbg_snap_now   = g_dbg_now;
+                g_dbg_isr_us     = g_imu_isr_us;
+                g_dbg_handled_us = sys_tick_now_us();
+                g_dbg_src        = src_byte;
+                g_dbg_speed      = speed_cpw;
+                g_dbg_wait       = IMU_DIAG_WAIT_READS;
+            }
 #endif
+        }
+        impact_hold = IMU_IMPACT_HOLD_TICKS;
     }
     else if (impact_hold > 0u)
     {
