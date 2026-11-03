@@ -94,6 +94,11 @@ static char const * const g_fault_names[APP_FAULT_COUNT] =
 /* Console state names for startup diagnosis. No % conversions. */
 #define MISSION_SYS_STATE_COUNT (APP_SYS_FAULT + 1u)
 
+/* CAL_IR substeps after the three sweep legs (0, 1, 2) */
+#define MISSION_CAL_SUB_DONE    (3u)  /* sweep over, or stopped on time */
+#define MISSION_CAL_SUB_SETTLE  (4u)  /* a turn ended: wait for 0 speed */
+#define MISSION_CAL_SUB_CORRECT (5u)  /* heading return turn running */
+
 static char const * const g_state_names[MISSION_SYS_STATE_COUNT] =
 {
     "STATE BOOT (white): waiting for task check-ins and radio init\n",
@@ -113,6 +118,9 @@ static void mission_button_event(mission_ctx_t const * p_ctx, uint32_t press,
                                  mission_evt_in_t * p_btn);
 static void mission_note_high_water(void);
 static void mission_ctx_reset(mission_ctx_t * p_ctx);
+static void mission_cal_settle(mission_ctx_t * p_ctx,
+                               status_board_t const * p_snap,
+                               uint32_t now_us);
 static void mission_pass(mission_ctx_t * p_ctx,
                          mission_evt_in_t const * p_evt,
                          mission_evt_in_t const * p_btn,
@@ -624,6 +632,9 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
             mission_mode_set(APP_MODE_CAL_IR | APP_MODE_MOTOR_EN);
             p_ctx->cal_start_us   = now_us;
             p_ctx->sweep_start_us = now_us;
+            p_ctx->cal_diff0      = status_board_pos_l(p_snap)
+                                    - status_board_pos_r(p_snap);
+            p_ctx->cal_corr_cnt   = 0u;
             (void) mission_send_move(p_ctx, MISSION_MV_LEFT,
                                      MISSION_CAL_SWEEP_DEG, now_us);
             break;
@@ -688,8 +699,9 @@ static void mission_st_cal_imu(mission_ctx_t * p_ctx, uint32_t type,
 /**
  * mission_st_cal_ir
  * @brief   CAL_IR: sweep left 30, right 60, left 30 over the line (each
- *          leg starts on the tagged MOVE_DONE), then clear CAL_IR and
- *          MOTOR_EN; CAL_DONE(IR) -> READY. Sweep over 3 s -> stop;
+ *          leg starts on the tagged MOVE_DONE), turn back to the start
+ *          heading (mission_cal_settle), then clear CAL_IR and
+ *          MOTOR_EN; CAL_DONE(IR) -> READY. Sweep over 4 s -> stop;
  *          10 s in total -> CAL_TIMEOUT fault.
  * @context mission_task
  */
@@ -729,16 +741,31 @@ static void mission_st_cal_ir(mission_ctx_t * p_ctx, uint32_t type,
         }
         else
         {
-            mission_mode_clear(cal_ir);           /* sweep done */
+            /* last leg or a return turn done (or a stale one after) */
         }
-        if (p_ctx->substep < 3u)
+        if (p_ctx->substep < 2u)
         {
             p_ctx->substep++;
+        }
+        else if ((2u == p_ctx->substep)
+                 || (MISSION_CAL_SUB_CORRECT == p_ctx->substep))
+        {
+            p_ctx->substep = MISSION_CAL_SUB_SETTLE;
+        }
+        else
+        {
+            /* DONE or SETTLE: nothing to start */
         }
     }
     else
     {
         /* waiting for the sweep or the result */
+    }
+
+    if ((APP_SYS_CAL_IR == p_ctx->sys_state)
+        && (MISSION_CAL_SUB_SETTLE == p_ctx->substep))
+    {
+        mission_cal_settle(p_ctx, p_snap, now_us);
     }
 
     if (APP_SYS_CAL_IR != p_ctx->sys_state)
@@ -752,16 +779,73 @@ static void mission_st_cal_ir(mission_ctx_t * p_ctx, uint32_t type,
         fault_set(APP_FAULT_CAL_TIMEOUT);
         mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
     }
-    else if ((p_ctx->substep < 3u)
+    else if ((MISSION_CAL_SUB_DONE != p_ctx->substep)
              && ((now_us - p_ctx->sweep_start_us) >= sweep_us))
     {
-        mission_stop_motion(p_ctx);               /* sweep took > 3 s */
+        mission_stop_motion(p_ctx);               /* sweep took > 4 s */
         mission_mode_clear(cal_ir);
-        p_ctx->substep = 3u;
+        p_ctx->substep = MISSION_CAL_SUB_DONE;
     }
     else
     {
         /* in time */
+    }
+}
+
+/**
+ * mission_cal_settle
+ * @brief   CAL_IR after a turn: once both wheels stand still, compare the
+ *          encoder heading with the one at CAL_IR entry. Within
+ *          MISSION_CAL_HEADING_TOL_CDEG (or after MISSION_CAL_CORR_MAX
+ *          return turns): sweep done, clear CAL_IR and MOTOR_EN. Else
+ *          turn back by the error (+ = turned right, so turn left).
+ * @context mission_task
+ */
+static void mission_cal_settle(mission_ctx_t * p_ctx,
+                               status_board_t const * p_snap,
+                               uint32_t now_us)
+{
+    int32_t const diff_now = status_board_pos_l(p_snap)
+                             - status_board_pos_r(p_snap);
+    int32_t const err_cdeg = odometry_heading_cdeg(diff_now, 0)
+                             - odometry_heading_cdeg(p_ctx->cal_diff0, 0);
+    int32_t const mag_cdeg = (err_cdeg < 0) ? -err_cdeg : err_cdeg;
+    int32_t       turn_deg = 0;
+
+    if ((0 != status_board_speed_l(p_snap))
+        || (0 != status_board_speed_r(p_snap)))
+    {
+        /* still coasting from the last turn */
+    }
+    else if ((mag_cdeg <= MISSION_CAL_HEADING_TOL_CDEG)
+             || (p_ctx->cal_corr_cnt >= MISSION_CAL_CORR_MAX))
+    {
+        if (!p_ctx->b_is_quiet)
+        {
+            /* cast: return turn count 0..2 */
+            app_log("CAL_IR sweep done: heading %d cdeg from the start"
+                    " (+ = right) after %d return turns\n",
+                    err_cdeg, (int32_t) p_ctx->cal_corr_cnt, 0);
+        }
+        mission_mode_clear(APP_MODE_CAL_IR | APP_MODE_MOTOR_EN);
+        p_ctx->substep = MISSION_CAL_SUB_DONE;
+    }
+    else
+    {
+        /* event time: division allowed */
+        turn_deg = (mag_cdeg + (MISSION_CDEG_PER_DEG / 2))
+                   / MISSION_CDEG_PER_DEG;
+        if (!p_ctx->b_is_quiet)
+        {
+            app_log("CAL_IR heading %d cdeg from the start (+ = right):"
+                    " turning back %d deg\n", err_cdeg, turn_deg, 0);
+        }
+        (void) mission_send_move(p_ctx,
+                                 (err_cdeg > 0) ? MISSION_MV_LEFT
+                                                : MISSION_MV_RIGHT,
+                                 turn_deg, now_us);
+        p_ctx->cal_corr_cnt++;
+        p_ctx->substep = MISSION_CAL_SUB_CORRECT;
     }
 }
 

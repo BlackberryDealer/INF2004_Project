@@ -36,6 +36,14 @@ typedef struct
     uint32_t seq0;
 } line_track_jct_t;
 
+/* Smoothed steering with a memory of the side the line was last seen. */
+typedef struct
+{
+    int32_t filt;       /* smoothed error, permille                  */
+    int32_t prev;       /* smoothed error of the previous cycle      */
+    int32_t last_side;  /* +1 = line last left, -1 = right, 0 = none */
+} line_track_steer_t;
+
 typedef struct
 {
     uint32_t norm_l;
@@ -53,6 +61,9 @@ extern bool     line_track_cal_finish(line_track_cal_t * p_cal,
 extern uint32_t line_track_normalise(uint32_t raw, uint32_t white,
                                      uint32_t black, uint32_t recip_q16);
 extern int32_t  line_track_steering(uint32_t norm_l, uint32_t norm_r);
+extern void     line_track_steer_reset(line_track_steer_t * p_st);
+extern int32_t  line_track_steer_step(line_track_steer_t * p_st,
+                                      uint32_t norm_l, uint32_t norm_r);
 extern void     line_track_jct_reset(line_track_jct_t * p_jct);
 extern uint32_t line_track_jct_step(line_track_jct_t * p_jct,
                                     line_track_jct_in_t const * p_in);

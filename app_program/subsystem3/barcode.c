@@ -27,6 +27,7 @@
 #define BAR_WIDTH_DIVISOR    (312500u)
 #define BAR_WIDTH_MAX_01MM   (255u)
 #define BAR_ELEM_CNT_MAX     (63u)
+#define BAR_LOG_MIN_ELEM     (4u)  /* shorter captures are line/branch edges */
 #define BAR_BRANCH_MIN_01MM  (BAR_BRANCH_MIN_MM * 10u)
 #define BAR_MAP_CHAR_MASK    (0x3Fu)
 #define BAR_MAP_CMD_SHIFT    (6u)
@@ -56,6 +57,7 @@ static volatile uint8_t    g_bar_tail                   = 0u;
 static volatile uint8_t    g_bar_overflow               = 0u;
 static uint32_t            g_bar_last_us                = 0u; /* E5 */
 static volatile uint8_t    g_bar_branch_seq             = 0u;
+static volatile uint32_t   g_bar_edge_cnt               = 0u; /* ISR only */
 static uint32_t            g_bar_state                  = BAR_STATE_IDLE;
 static uint32_t            g_bar_n_elem                 = 0u;
 static uint32_t            g_bar_last_level             = 0u;
@@ -219,6 +221,30 @@ uint32_t barcode_branch_seq(void)
     return (uint32_t) g_bar_branch_seq;
 }
 
+/**
+ * barcode_edge_count
+ * @brief   Bring-up diagnosis: DO edges accepted by the ISR since boot.
+ * @return  Wrapping edge count.
+ * @context line_task (console line while the motors are off)
+ */
+uint32_t barcode_edge_count(void)
+{
+    return g_bar_edge_cnt;
+}
+
+/**
+ * barcode_do_level
+ * @brief   Bring-up diagnosis: the barcode DO level now.
+ * @return  1 = black under the sensor, 0 = white.
+ * @context line_task (console line while the motors are off)
+ */
+uint32_t barcode_do_level(void)
+{
+    bool const b_pin_high = (0u != (in_w(GPIO_IN) & BAR_DO_PIN_MASK));
+
+    return (BAR_DO_BLACK_IS_HIGH == b_pin_high) ? 1u : 0u;
+}
+
 /* ---- private functions ------------------------------------------------ */
 
 /**
@@ -288,6 +314,7 @@ static void barcode_edge_isr(uint32_t events, uint32_t now_us)
             /* Fits in 15-bit gap domain. */
         }
         g_bar_last_us = now_us;
+        g_bar_edge_cnt++;   /* aligned 32-bit, ISR is the only writer */
 
         if (next == g_bar_tail)
         {
@@ -479,6 +506,12 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
     if (level == g_bar_last_level)
     {
         /* Two consecutive identical levels: an edge was missed -> discard. */
+        if (g_bar_n_elem >= BAR_LOG_MIN_ELEM)
+        {
+            /* Bring-up diagnosis. cast: count <= 63 */
+            app_log("BAR capture dropped: edge missed after %d elements\n",
+                    (int32_t) g_bar_n_elem, 0, 0);
+        }
         g_bar_state  = BAR_STATE_IDLE;
         g_bar_n_elem = 0u;
     }
@@ -592,6 +625,12 @@ static void barcode_check_timeouts(uint32_t path)
     {
         if (g_bar_n_elem < BAR_ELEMENTS)
         {
+            if (g_bar_n_elem >= BAR_LOG_MIN_ELEM)
+            {
+                /* Bring-up diagnosis: a barcode needs 29. cast: <= 63 */
+                app_log("BAR capture dropped: %d elements (a barcode has"
+                        " 29)\n", (int32_t) g_bar_n_elem, 0, 0);
+            }
             g_bar_state  = BAR_STATE_IDLE;
             g_bar_n_elem = 0u;
         }

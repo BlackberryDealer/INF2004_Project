@@ -30,7 +30,10 @@
 #define MOTION_ENC_R_REVERSED         (false)  /* measured: count sign  */
 
 /* ---- Speeds and command limits (NFR15, NFR16) ------------------------ */
-#define MOTION_CRUISE_MM_S            (250)    /* NFR15 */
+/* Cruise 250 -> 180 mm/s (team decision 2026-11-03): at 250 the car ran
+   off the line on curves. NFR15 (cruise >= 250) must be updated to match
+   in the requirements and traceability.                               */
+#define MOTION_CRUISE_MM_S            (180)    /* NFR15 (revised), TUNE */
 #define MOTION_SLOW_MM_S              (150)    /* NFR15 turns/search  */
 #define MOTION_FOLLOW_MAX_MM_S        (300)
 #define MOTION_MOVE_SPEED_MM_S        (150)    /* NFR16 bypass legs   */
@@ -39,9 +42,22 @@
 #define MOTION_REVERSE_MAX_MM         (150)    /* NFR16               */
 #define MOTION_MOVE_MAX_MM            (2047)
 #define MOTION_TURN_MAX_DEG           (360)
+/* Creep (on-car logs 2026-11-03): braking from 150 mm/s carried each
+   spin turn about 9 mm of wheel travel past its target, and small turns
+   about twice as far as asked. The last MOTION_CREEP_ZONE_MM of every
+   MOVE and TURN (wheel travel) now run at MOTION_CREEP_MM_S, so the
+   brake starts slow. If both wheels stand still for
+   MOTION_CREEP_STUCK_TICKS inside the zone after having moved (creep
+   duty too low to keep turning), the command ends there instead of
+   hanging until mission's deadline.                                   */
+#define MOTION_CREEP_MM_S             (80)     /* TUNE */
+#define MOTION_CREEP_ZONE_MM          (20u)    /* TUNE */
+#define MOTION_CREEP_STUCK_TICKS      (15u)    /* 150 ms */
 
 /* ---- Control gains (Q8 = value x 256) -------------------------------- */
-#define MOTION_KP_STEER_Q8            (5)    /* TUNE: cpw/steer unit x256 */
+/* 5 -> 3 (on-car 2026-11-03): at 5 a full error turned the car at about
+   115 deg/s and it swayed on straights; the damping is in line_track.c. */
+#define MOTION_KP_STEER_Q8            (3)    /* TUNE: cpw/steer unit x256 */
 #define MOTION_K_HEADING_Q8           (64)   /* TUNE: cpw/count drift x256 */
 #define MOTION_KFF_Q8                 (3556) /* TUNE: 1000 / 72 cpw x256 */
 #define MOTION_KP_Q8                  (2560)   /* TUNE */

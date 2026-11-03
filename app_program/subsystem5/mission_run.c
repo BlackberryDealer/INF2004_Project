@@ -82,6 +82,8 @@ static void run_request(mission_ctx_t * p_ctx, uint32_t sys_state,
 static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
                      uint32_t now_us);
 static void run_post_profile(status_board_t const * p_snap);
+static void run_log_event(mission_ctx_t const * p_ctx,
+                          char const * p_format, uint32_t value);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -287,11 +289,24 @@ static void run_follow(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         switch (p_evt->type)
         {
             case APP_EVT_BARCODE:
+                run_log_event(p_ctx, "BARCODE value %d: armed, slow until"
+                              " the next junction\n", p_evt->value);
                 run_arm(p_ctx, p_evt->value, p_snap);
                 run_goto(p_ctx, APP_RUN_ARMED, p_snap, now_us);
                 break;
             case APP_EVT_LINE_LOST:
+                run_log_event(p_ctx, "LINE LOST (both sensors white 200 ms):"
+                              " searching, path %d mm\n",
+                              odometry_counts_to_mm(status_board_path(p_snap)));
                 run_goto(p_ctx, APP_RUN_SEARCH_LINE, p_snap, now_us);
+                break;
+            case APP_EVT_UNMAPPED:
+                run_log_event(p_ctx, "BARCODE char index %d decoded but has"
+                              " no command: route unchanged\n", p_evt->value);
+                break;
+            case APP_EVT_INVALID:
+                run_log_event(p_ctx, "BARCODE read but not valid Code 39"
+                              " (%d): ignored\n", p_evt->value);
                 break;
             case APP_EVT_OBSTACLE_AHEAD:
                 (void) motion_follow(MOTION_SLOW_MM_S);   /* in range */
@@ -323,13 +338,44 @@ static void run_armed(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         switch (p_evt->type)
         {
             case APP_EVT_JUNCTION:
+                run_log_event(p_ctx, "JUNCTION type %d: executing the armed"
+                              " barcode turn\n", p_evt->value);
                 run_goto(p_ctx, APP_RUN_EXECUTE_TURN, p_snap, now_us);
                 break;
             case APP_EVT_BARCODE:
+                run_log_event(p_ctx, "BARCODE value %d: replaces the armed"
+                              " command\n", p_evt->value);
                 run_arm(p_ctx, p_evt->value, p_snap);  /* newer replaces */
                 break;
             case APP_EVT_LINE_LOST:
-                run_goto(p_ctx, APP_RUN_SEARCH_LINE, p_snap, now_us);
+                if (APP_BAR_CMD_UTURN == p_ctx->armed_cmd)
+                {
+                    /* A U-turn barcode before a dead end: the line end is
+                       its junction (on-car 2026-11-03: the car drove off
+                       the end with a U-turn armed).                     */
+                    run_log_event(p_ctx, "LINE END with a U-turn armed:"
+                                  " turning, path %d mm\n",
+                                  odometry_counts_to_mm(
+                                      status_board_path(p_snap)));
+                    run_goto(p_ctx, APP_RUN_EXECUTE_TURN, p_snap, now_us);
+                }
+                else
+                {
+                    run_log_event(p_ctx, "LINE LOST (both sensors white 200"
+                                  " ms): searching, path %d mm\n",
+                                  odometry_counts_to_mm(
+                                      status_board_path(p_snap)));
+                    run_goto(p_ctx, APP_RUN_SEARCH_LINE, p_snap, now_us);
+                }
+                break;
+            case APP_EVT_UNMAPPED:
+                run_log_event(p_ctx, "BARCODE char index %d decoded but has"
+                              " no command: armed command kept\n",
+                              p_evt->value);
+                break;
+            case APP_EVT_INVALID:
+                run_log_event(p_ctx, "BARCODE read but not valid Code 39"
+                              " (%d): ignored\n", p_evt->value);
                 break;
             default:
                 break;           /* OBSTACLE_AHEAD/CONTINUE: already slow */
@@ -399,6 +445,13 @@ static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
 
     if (p_evt->b_has_event && (APP_EVT_LINE_FOUND == p_evt->type))
     {
+        if (!p_ctx->b_is_quiet)
+        {
+            /* cast: elapsed ms < 2^31 */
+            app_log("LINE FOUND again after %d ms of search\n",
+                    (int32_t) ((now_us - p_ctx->search_start_us)
+                               / RUN_US_PER_MS), 0, 0);
+        }
         mission_stop_motion(p_ctx);
         run_follow_or_armed(p_ctx, p_snap, now_us);
     }
@@ -476,6 +529,13 @@ static void run_avoid(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         && ((now_us - p_ctx->fr9_start_us) > fr9us)
         && (MISSION_REQ_NONE == p_ctx->sys_request))
     {
+        if (!p_ctx->b_is_quiet)
+        {
+            /* casts: step 0..6, substep 0..3 */
+            app_log("REJOIN FAIL: FR9 5 s limit, avoid step %d substep %d\n",
+                    (int32_t) p_ctx->avoid_step, (int32_t) p_ctx->substep,
+                    0);
+        }
         fault_set(APP_FAULT_REACQUIRE_FAIL);       /* FR9: > 5 s */
         run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
     }
@@ -491,6 +551,24 @@ static void run_avoid_step(mission_ctx_t * p_ctx,
                            mission_evt_in_t const * p_evt, uint32_t type,
                            status_board_t const * p_snap, uint32_t now_us)
 {
+    int32_t const diff_now = status_board_pos_l(p_snap)
+                             - status_board_pos_r(p_snap);
+
+    if ((APP_EVT_MOVE_DONE == type) && (!p_ctx->b_is_quiet)
+        && (APP_AVOID_TURN_OUT <= p_ctx->avoid_step)
+        && (APP_AVOID_REJOIN >= p_ctx->avoid_step))
+    {
+        /* Bring-up diagnosis: where each bypass move ended. casts: step
+           1..5, path since the stop < 2^31 mm                          */
+        app_log("AVOID step %d done: heading %d cdeg from the stop"
+                " (+ = right), %d mm since the stop\n",
+                (int32_t) p_ctx->avoid_step,
+                odometry_heading_cdeg(diff_now, 0)
+                - odometry_heading_cdeg(p_ctx->diff_at_stop, 0),
+                (int32_t) odometry_counts_to_mm(status_board_path(p_snap)
+                                                - p_ctx->path_at_stop));
+    }
+
     switch (p_ctx->avoid_step)
     {
         case APP_AVOID_WAIT_PLAN:
@@ -641,6 +719,18 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
         p_ctx->rejoin_e_mm  = (p_ctx->leg_lat_mm * RUN_SQRT2_X1000) / 1000u;
         p_ctx->rejoin_start = status_board_path(p_snap);
         p_ctx->substep      = RUN_SUB_SECOND;
+        if (!p_ctx->b_is_quiet)
+        {
+            /* casts: distances < 2047 mm */
+            app_log("REJOIN: line expected at %d mm (accept %d..%d mm)\n",
+                    (int32_t) p_ctx->rejoin_e_mm,
+                    (int32_t) ((p_ctx->rejoin_e_mm
+                                * (RUN_PCT - MISSION_REJOIN_WIN_PCT))
+                               / RUN_PCT),
+                    (int32_t) ((p_ctx->rejoin_e_mm
+                                * (RUN_PCT + MISSION_REJOIN_WIN_PCT))
+                               / RUN_PCT));
+        }
         /* cast: <= 1020 x 1.414 x 1.3 < 2047 */
         (void) mission_send_move(p_ctx, MISSION_MV_FWD,
                                  (int32_t) ((p_ctx->rejoin_e_mm
@@ -653,6 +743,13 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
     {
         done = odometry_counts_to_mm(status_board_path(p_snap)
                                      - p_ctx->rejoin_start);
+        if (!p_ctx->b_is_quiet)
+        {
+            /* casts: distance < 2047 mm, width 0..255 mm */
+            app_log("REJOIN: LINE_FOUND at %d mm, width %d mm (want %d)\n",
+                    (int32_t) done, (int32_t) p_evt->value,
+                    (int32_t) MISSION_REJOIN_WIDTH_MM);
+        }
         if ((done >= lo) && (done <= hi)
             && (p_evt->value + MISSION_REJOIN_WIDTH_TOL_MM
                 >= MISSION_REJOIN_WIDTH_MM)
@@ -668,6 +765,11 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
     }
     else if ((RUN_SUB_SECOND == p_ctx->substep) && (APP_EVT_MOVE_DONE == type))
     {
+        if (!p_ctx->b_is_quiet)
+        {
+            app_log("REJOIN FAIL: drove the whole window, no line accepted\n",
+                    0, 0, 0);
+        }
         fault_set(APP_FAULT_REACQUIRE_FAIL);    /* no line in the window */
         run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
     }
@@ -865,6 +967,23 @@ static void run_post_profile(status_board_t const * p_snap)
     prof.clear_right_mm = status_board_clear_right(p_snap);
     prof.side           = status_board_plan_side(p_snap);
     (void) telem_post_profile(&prof);   /* a full K7 is counted there */
+}
+
+/**
+ * run_log_event
+ * @brief   Bring-up diagnosis: one console line with one value, unless
+ *          the test matrix runs quiet.
+ * @param   p_format printf-style format with one %d
+ * @param   value    the value (event value or distance, < 2^31)
+ * @context mission_task
+ */
+static void run_log_event(mission_ctx_t const * p_ctx,
+                          char const * p_format, uint32_t value)
+{
+    if (!p_ctx->b_is_quiet)
+    {
+        app_log(p_format, (int32_t) value, 0, 0); /* cast: < 2^31 */
+    }
 }
 
 /*** end of file ***/

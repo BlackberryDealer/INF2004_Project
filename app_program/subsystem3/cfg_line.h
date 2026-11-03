@@ -20,6 +20,23 @@
 #define LINE_SAT_THRESHOLD       (900u)  /* channel fully over black    */
 #define LINE_JCT_SUM_MIN         (1400u) /* TUNE: nL + nR on a junction */
 #define LINE_LOST_CYCLES         (20u)   /* 200 ms, NFR4 definition     */
+/* Steering (on-car 2026-11-03: the car wandered off a straight line and
+   kept needing a LINE_LOST search). norm_l - norm_r is 0 whenever both
+   sensors read white, so the car drove straight on with no idea where
+   the line went. Now: both white -> steer back toward the side the line
+   was last seen on; and the error is smoothed (1/LINE_STEER_FILT_DIV of
+   the change per 10 ms cycle) so sensor noise does not jerk the wheels. */
+/* Damping (on-car 2026-11-03: the car still swayed on straights): the
+   output adds LINE_STEER_KD x the change of the smoothed error since the
+   last cycle, so a fast swing toward the line is braked before it
+   overshoots. 0 = plain smoothed error. Output clamped to +-1000.      */
+#define LINE_RECOVER_STEER       (350)   /* TUNE: both white, permille  */
+#define LINE_SIDE_MIN            (150)   /* TUNE: |error| that sets side */
+#define LINE_STEER_FILT_DIV      (2)     /* TUNE: 1 = no smoothing      */
+/* On-car 2026-11-03: of KP/KD 3/0, 3/4 and 2/6, 3/0 was the smoothest
+   and the only one that never lost the line; damping is kept switchable. */
+#define LINE_STEER_KD            (0)     /* TUNE: 0 = no damping        */
+#define LINE_STEER_MAX           (1000)  /* SB steering field domain    */
 #define LINE_JUNCTION_MIN_MM     (10u)   /* TUNE from A22 logs          */
 #define LINE_JUNCTION_CONFIRM_MM (30u)   /* TUNE from A22 logs          */
 /* SPEC-QUESTION: LINE_BRANCH_EARLY_MM (40u) is from spec v1.5.3 (finding F-03,

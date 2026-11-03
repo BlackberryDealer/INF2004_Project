@@ -38,6 +38,7 @@
 #include "../subsystem5/sys_tick.h"
 #include "../subsystem5/sys_health.h"
 #include "../subsystem5/drv_gpio_irq.h"
+#include <bsp/libbsp.h> /* gpio_get_val(): INT1 level in R1 */
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -107,6 +108,9 @@ static int32_t  g_avg_az_mg         = 1000; /* flat rest: az = +1000 mg */
 static int32_t  g_a_fwd_mg          = 0;
 static volatile uint32_t g_imu_isr_us = 0u; /* last INT1 edge, R1 time;
                                                ISR is the only writer   */
+/* Rising edges on GP19 with the pin already low again in R1 (noise, not
+   an impact). Written only by the INT1 callback (R1). */
+static volatile uint32_t g_imu_int1_glitches = 0u;
 #if (IMU_DIAG_IMPACT != 0)
 /* Bring-up diagnosis (S4-I03, IG_THS1 weight not yet measured). One FIFO
    read: sample count (-1 = failed read), largest single raw (pre-offset)
@@ -137,6 +141,7 @@ static uint32_t       g_dbg_line       = 0u; /* mission_task: lines done */
    has printed them; imu_task writes them first and sets this last. */
 static volatile uint32_t g_dbg_ready   = 0u;
 #define IMU_DBG_LINES (8u) /* lines in one INT1 report */
+#define IMU_GLITCH_LOG_US (1000000u) /* noise-edge line at most 1/s */
 #endif
 static int32_t  g_turn_dps          = 0;
 static bool     gb_is_turn_from_enc = false;
@@ -251,6 +256,23 @@ ER imu_start(void)
 void imu_diag_service(void)
 {
 #if (IMU_DIAG_IMPACT != 0)
+    static uint32_t s_glitch_seen    = 0u;
+    static uint32_t s_glitch_last_us = 0u;
+    uint32_t const  glitches         = g_imu_int1_glitches;
+    uint32_t const  now_us           = sys_tick_now_us();
+
+    /* Bring-up diagnosis: report ignored INT1 noise edges, at most once
+       per IMU_GLITCH_LOG_US so a noisy wire cannot flood the console. */
+    if ((glitches != s_glitch_seen)
+        && ((now_us - s_glitch_last_us) >= IMU_GLITCH_LOG_US))
+    {
+        /* casts: counts stay far below INT32_MAX in a run */
+        app_log("INT1 noise edge ignored (GP19 low in R1): %d new, %d total\n",
+                (int32_t)(glitches - s_glitch_seen), (int32_t)glitches, 0);
+        s_glitch_seen    = glitches;
+        s_glitch_last_us = now_us;
+    }
+
     if (0u == g_dbg_ready)
     {
         return;
@@ -483,9 +505,21 @@ static void imu_int1_isr(uint32_t events, uint32_t now_us)
 {
     (void)events; /* only rising edges are enabled */
 
-    g_imu_isr_us = now_us; /* aligned 32-bit store: atomic on the M0+ */
-    safety_set_from_isr(SAFETY_IMPACT);
-    g_imu_impact_seq++; /* volatile uint8_t, ISR is the only writer */
+    /* INT1 is latched (CTRL5 LIR1): a real impact holds GP19 high until
+       imu_task reads IG_SRC1, milliseconds later. Motor switching noise
+       on the wire gives rising edges that are over before R1 runs
+       (on-car logs 2026-11-03: two FAULT IMPACTs in RUN with IG_SRC1 21,
+       IA clear, peaks under 1.2 g). Such an edge is counted, not used. */
+    if (0u == gpio_get_val(PIN_IMU_INT1))
+    {
+        g_imu_int1_glitches++; /* aligned 32-bit, ISR is the only writer */
+    }
+    else
+    {
+        g_imu_isr_us = now_us; /* aligned 32-bit store: atomic on M0+ */
+        safety_set_from_isr(SAFETY_IMPACT);
+        g_imu_impact_seq++; /* volatile uint8_t, ISR is the only writer */
+    }
 }
 
 /**

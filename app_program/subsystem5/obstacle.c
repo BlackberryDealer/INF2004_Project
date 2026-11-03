@@ -246,13 +246,18 @@ static void obstacle_cycle(void)
     obstacle_ping(&reading);
     obstacle_modes(&rising);
 
-    /* The stop is armed only while the motors may drive (APP_MODE_MOTOR_EN:
-       CAL_IR sweep and RUN). Before that there is nothing to stop, and an
-       ESTOP latched in BOOT stayed set until RESET, so it blocked the
-       CAL_IR sweep and the car went to FAULT without moving (on-car logs
-       2026-10-28/29, test S5-U31). Pings, NO_ECHO and the board distance
+    /* The stop is armed only while the car drives (APP_MODE_MOTOR_EN)
+       outside the CAL_IR sweep, i.e. in RUN. Before that there is nothing
+       to stop, and an ESTOP latched in BOOT stayed set until RESET, so it
+       blocked the CAL_IR sweep and the car went to FAULT without moving
+       (on-car logs 2026-10-28/29, test S5-U31). The sweep only spins on
+       the spot, so it never approaches what the sensor sees, but turning
+       swings the beam across nearby things: a near echo then a lost one
+       latched ESTOP and stopped the sweep mid-turn (on-car logs
+       2026-11-03, test S5-U34). Pings, NO_ECHO and the board distance
        stay live while unarmed.                                          */
-    b_is_armed = mission_mode_is_set(APP_MODE_MOTOR_EN);
+    b_is_armed = mission_mode_is_set(APP_MODE_MOTOR_EN)
+                 && (!mission_mode_is_set(APP_MODE_CAL_IR));
 
     if (0u != (rising & OBS_SEEN_RESUME))
     {

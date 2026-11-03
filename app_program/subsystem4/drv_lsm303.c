@@ -99,7 +99,12 @@ extern uint32_t sys_tick_now_us(void);
 #define LSM303_VAL_CTRL7     (0x00u) /* MD = continuous conversion      */
 #define LSM303_VAL_FIFO_CTRL (0x40u) /* FM = stream mode                */
 #define LSM303_VAL_IG_CFG1   (0x0Au) /* OR, X-high or Y-high event      */
-#define LSM303_VAL_IG_DUR1   (0x00u)
+/* IG_DUR1: samples (1/ODR, 5 ms at 200 Hz) the X/Y-high event must last
+   before INT1 fires. 0 let a single 5 ms motor-vibration spike trip
+   IMPACT ~150 ms into RUN (on-car log 2026-11-03: X -1160 mg, nothing
+   hit). 2 = 10 ms: a real collision at run speed lasts longer. TUNE:
+   S4-I03 (taps) must still trip with this value.                    */
+#define LSM303_VAL_IG_DUR1   (0x02u)
 
 /* Identity byte expected from WHO_AM_I (0x0F) */
 #define LSM303_WHO_AM_I_D (DRV_LSM303_WHO_AM_I)

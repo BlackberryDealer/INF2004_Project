@@ -247,5 +247,59 @@ int main(void)
     HOST_CHECK("S3-U14", (APP_JCT_T == cls) && (1u == fires),
                "Late barcode branch (in CONFIRM) sets barcode-side flag");
 
+    /* S3-U16 (on-car 2026-11-03): smoothed, damped steering with side
+       memory */
+    {
+        line_track_steer_t st;
+        int32_t            out = 0;
+
+        line_track_steer_reset(&st);
+        out = line_track_steer_step(&st, 0u, 0u);
+        HOST_CHECK("S3-U16", 0 == out,
+                   "both white, line never seen: no steering");
+        out = line_track_steer_step(&st, 1000u, 0u);
+        HOST_CHECK("S3-U16", (1000 / LINE_STEER_FILT_DIV) == st.filt,
+                   "step to +1000 is smoothed, not applied at once");
+        HOST_CHECK("S3-U16", (out >= st.filt) && (out <= LINE_STEER_MAX),
+                   "rising error: damping term adds, output clamped");
+        for (uint32_t i = 0u; i < 20u; i++)
+        {
+            out = line_track_steer_step(&st, 1000u, 0u);
+        }
+        HOST_CHECK("S3-U16", (out > 990) && (out <= 1000),
+                   "held error converges to +1000 (no damping when steady)");
+        out = line_track_steer_step(&st, 600u, 400u);
+        HOST_CHECK("S3-U16", (out < st.filt) || (0 == LINE_STEER_KD),
+                   "error falling fast: damping pulls the output below it");
+        for (uint32_t i = 0u; i < 20u; i++)
+        {
+            out = line_track_steer_step(&st, 1000u, 0u);
+        }
+        for (uint32_t i = 0u; i < 20u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U16", (out >= LINE_RECOVER_STEER)
+                   && (out <= (LINE_RECOVER_STEER + 10)),
+                   "line lost to the left: keep steering left (recover)");
+        for (uint32_t i = 0u; i < 20u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 800u);
+        }
+        for (uint32_t i = 0u; i < 20u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U16", (out <= -LINE_RECOVER_STEER)
+                   && (out >= -(LINE_RECOVER_STEER + 10)),
+                   "line lost to the right: recover to the right");
+        for (uint32_t i = 0u; i < 20u; i++)
+        {
+            out = line_track_steer_step(&st, 500u, 500u);
+        }
+        HOST_CHECK("S3-U16", (out > -10) && (out < 10),
+                   "centred on the line: steering settles to 0");
+    }
+
     return (0 == HOST_SUMMARY("line_track")) ? 0 : 1;
 }

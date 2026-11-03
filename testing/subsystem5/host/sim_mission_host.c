@@ -146,16 +146,21 @@ int main(void) {
   idle_ms(990); CHECK("S5-U07", APP_SYS_READY == g_ctx.sys_state && !MODE(APP_MODE_RUN_START), "still warning");
   alog[0] = 0; idle_ms(20); CHECK("S5-U20", MODE(APP_MODE_RUN_START) && strstr(alog, "ZERO0") && g_ctx.b_move_pending, "run start: RUN_START set, ZERO sent");
   DONE(); CHECK("S5-U20", APP_SYS_READY == g_ctx.sys_state, "ZERO acked, RUN_START held for 30 ms");
-  alog[0] = 0; idle_ms(30); CHECK("S5-U20", APP_SYS_RUN == g_ctx.sys_state && !MODE(APP_MODE_RUN_START) && MODE(APP_MODE_MOTOR_EN) && 0u == g_ctx.run_start_path && !strcmp(alog, "FOL250 "), "-> RUN: RUN_START cleared, MOTOR_EN set, path 0, FOLLOW cruise");
+  alog[0] = 0; idle_ms(30); CHECK("S5-U20", APP_SYS_RUN == g_ctx.sys_state && !MODE(APP_MODE_RUN_START) && MODE(APP_MODE_MOTOR_EN) && 0u == g_ctx.run_start_path && !strcmp(alog, "FOL180 "), "-> RUN: RUN_START cleared, MOTOR_EN set, path 0, FOLLOW cruise");
   /* barcode turn */
   EV(APP_EVT_BARCODE, (1u << 6) | 11u); CHECK("S5-U07", APP_RUN_ARMED == g_ctx.run_state && !strcmp(mlog, "FOL150 "), "BARCODE(RIGHT) -> ARMED slow");
   EV(APP_EVT_JUNCTION, 1); CHECK("S5-U07", !strcmp(mlog, "STOP0 F60 "), "JUNCTION -> stop, advance 60 (tracked)");
   DONE(); CHECK("S5-U07", !strcmp(mlog, "R90 "), "turn right 90");
-  DONE(); CHECK("S5-U07", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL250 ") && !g_ctx.b_move_pending, "turn done -> FOLLOW cruise; FOLLOW is never tracked");
+  DONE(); CHECK("S5-U07", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL180 ") && !g_ctx.b_move_pending, "turn done -> FOLLOW cruise; FOLLOW is never tracked");
+  /* S5-U35 (on-car 2026-11-03): a U-turn barcode before a dead end; the line end is its junction */
+  EV(APP_EVT_BARCODE, (3u << 6) | 13u); CHECK("S5-U35", APP_RUN_ARMED == g_ctx.run_state && !strcmp(mlog, "FOL150 "), "BARCODE(UTURN, 'D') -> ARMED slow");
+  EV(APP_EVT_LINE_LOST, 0); CHECK("S5-U35", APP_RUN_EXECUTE_TURN == g_ctx.run_state && !strcmp(mlog, "STOP0 F60 "), "line end with a U-turn armed -> stop, advance 60 (no search)");
+  DONE(); CHECK("S5-U35", !strcmp(mlog, "L180 "), "turn 180");
+  DONE(); CHECK("S5-U35", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL180 ") && !g_ctx.b_is_armed, "U-turn done -> FOLLOW cruise, disarmed");
   /* S5-U15: search sends STOP first */
   EV(APP_EVT_LINE_LOST, 0); CHECK("S5-U15", APP_RUN_SEARCH_LINE == g_ctx.run_state && !strcmp(mlog, "STOP0 L60 "), "LINE_LOST -> STOP first, then turn left 60");
   DONE(); CHECK("S5-U15", !strcmp(mlog, "R120 "), "next leg on the tagged MOVE_DONE: right 120");
-  EV(APP_EVT_LINE_FOUND, 0); CHECK("S5-U15", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "STOP0 FOL250 ") && !g_ctx.b_move_pending, "LINE_FOUND during a leg -> FOLLOW, pending cleared");
+  EV(APP_EVT_LINE_FOUND, 0); CHECK("S5-U15", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "STOP0 FOL180 ") && !g_ctx.b_move_pending, "LINE_FOUND during a leg -> FOLLOW, pending cleared");
   /* obstacle + bypass */
   safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP; mot.pos_l_counts = 1000; mot.pos_r_counts = 900;
   EV(APP_EVT_OBSTACLE, 0); NONE(); CHECK("S5-U07", APP_RUN_AVOID == g_ctx.run_state && MODE(APP_MODE_STOPPED | APP_MODE_RESCAN), "OBSTACLE -> AVOID, standstill -> scan request");
@@ -173,7 +178,7 @@ int main(void) {
   DONE(); CHECK("S5-U07", !strcmp(mlog, "L8 "), "heading +8 deg -> turn left 8");
   DONE(); CHECK("S5-U07", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL150 ") && MODE(APP_MODE_RESUME), "bypass done -> FOLLOW slow, RESUME");
   idle_ms(160); CHECK("S5-U07", !MODE(APP_MODE_RESUME), "RESUME cleared after 150 ms");
-  mot.path_counts += odometry_mm_to_counts(151u); NONE(); CHECK("S5-U07", !MODE(APP_MODE_JUNCTION_INHIBIT) && !strcmp(mlog, "FOL250 "), "inhibits cleared 150 mm later, cruise");
+  mot.path_counts += odometry_mm_to_counts(151u); NONE(); CHECK("S5-U07", !MODE(APP_MODE_JUNCTION_INHIBIT) && !strcmp(mlog, "FOL180 "), "inhibits cleared 150 mm later, cruise");
   /* S5-U21: STOP during WAIT_PLAN leaves ESTOP set; recovery clears it */
   safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP;
   EV(APP_EVT_OBSTACLE, 0); NONE(); EV(APP_EVT_STOP, 0);

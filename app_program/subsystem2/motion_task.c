@@ -87,6 +87,9 @@ static int32_t  g_base_cpw    = 0;     /* base set-point, cpw          */
 static uint32_t g_target2     = 0u;    /* 2 x target counts            */
 static uint32_t g_prog2       = 0u;    /* this command's own progress  */
 static int32_t  g_diff_start  = 0;     /* pos_l - pos_r at the start   */
+static int32_t  g_creep_cpw   = 0;     /* creep set-point, base's sign */
+static uint32_t g_creep_zone2 = 0u;    /* 2 x creep zone counts        */
+static uint32_t g_creep_still = 0u;    /* still ticks inside the zone  */
 
 /* One-slot latch for a command that arrives while moving */
 static bool     gb_is_pend_valid = false;
@@ -151,6 +154,8 @@ static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r);
 static void motion_state_move(int32_t * p_sp_l, int32_t * p_sp_r);
 static void motion_state_turn(int32_t * p_sp_l, int32_t * p_sp_r);
 static void motion_finish_if_done(void);
+static bool motion_in_creep_zone(void);
+static int32_t motion_move_base(void);
 static void motion_control(int32_t sp_l, int32_t sp_r);
 static void motion_stall_check(void);
 static uint32_t motion_stall_count(uint32_t count, int32_t duty,
@@ -668,6 +673,9 @@ static void motion_start_cmd(uint32_t type, uint32_t param, uint32_t tag)
 static void motion_start_move(uint32_t state, int32_t base_cpw,
                               uint32_t target2, uint32_t tag)
 {
+    int32_t const creep = odometry_mm_s_to_cpw(MOTION_CREEP_MM_S);
+    int32_t const mag   = (base_cpw < 0) ? -base_cpw : base_cpw;
+
     motion_reset_control();
     g_act_tag    = tag;
     g_base_cpw   = base_cpw;
@@ -675,6 +683,18 @@ static void motion_start_move(uint32_t state, int32_t base_cpw,
     g_prog2      = 0u;
     g_diff_start = g_left.pos - g_right.pos;
     g_state      = state;
+
+    /* Creep never faster than the command itself; same sign as base. */
+    if (creep >= mag)
+    {
+        g_creep_cpw = base_cpw;
+    }
+    else
+    {
+        g_creep_cpw = (base_cpw < 0) ? -creep : creep;
+    }
+    g_creep_zone2 = 2u * odometry_mm_to_counts(MOTION_CREEP_ZONE_MM);
+    g_creep_still = 0u;
 }
 
 /**
@@ -796,9 +816,10 @@ static void motion_state_move(int32_t * p_sp_l, int32_t * p_sp_r)
     /* Signed division by 256: shift with sign fix-up, no library call.
        |drift| <= 262142 here (A23), x 64 < 2^31.                       */
     int32_t const corr = (drift * MOTION_K_HEADING_Q8) / MOTION_Q8_ONE;
+    int32_t const base = motion_move_base();
 
-    *p_sp_l = g_base_cpw - corr;
-    *p_sp_r = g_base_cpw + corr;
+    *p_sp_l = base - corr;
+    *p_sp_r = base + corr;
 
     motion_finish_if_done();
 }
@@ -813,15 +834,17 @@ static void motion_state_move(int32_t * p_sp_l, int32_t * p_sp_r)
  */
 static void motion_state_turn(int32_t * p_sp_l, int32_t * p_sp_r)
 {
+    int32_t const base = motion_move_base();
+
     if (APP_MOT_TURN_L == g_state)
     {
-        *p_sp_l = -g_base_cpw;
-        *p_sp_r = g_base_cpw;
+        *p_sp_l = -base;
+        *p_sp_r = base;
     }
     else
     {
-        *p_sp_l = g_base_cpw;
-        *p_sp_r = -g_base_cpw;
+        *p_sp_l = base;
+        *p_sp_r = -base;
     }
 
     motion_finish_if_done();
@@ -829,14 +852,25 @@ static void motion_state_turn(int32_t * p_sp_l, int32_t * p_sp_r)
 
 /**
  * motion_finish_if_done
- * @brief   A MOVE or TURN whose own progress reached its target: brake,
- *          BRAKE, MOVE_DONE with the command's tag.
+ * @brief   A MOVE or TURN whose own progress reached its target, or that
+ *          stood still for MOTION_CREEP_STUCK_TICKS in the creep zone
+ *          after moving: brake, BRAKE, MOVE_DONE with the command's tag.
  * @return  none
  * @context motion_task
  */
 static void motion_finish_if_done(void)
 {
-    if (g_prog2 >= g_target2)
+    if ((g_prog2 > 0u) && motion_in_creep_zone()
+        && (0 == g_left.delta) && (0 == g_right.delta))
+    {
+        g_creep_still++;
+    }
+    else
+    {
+        g_creep_still = 0u;
+    }
+
+    if ((g_prog2 >= g_target2) || (g_creep_still >= MOTION_CREEP_STUCK_TICKS))
     {
         uint32_t const tag = g_act_tag;
 
@@ -844,6 +878,41 @@ static void motion_finish_if_done(void)
         g_state = APP_MOT_BRAKE;
         (void) mission_post_event(APP_EVT_MOVE_DONE, tag); /* see zero */
     }
+}
+
+/**
+ * motion_in_creep_zone
+ * @brief   True while a MOVE or TURN has at most MOTION_CREEP_ZONE_MM of
+ *          wheel travel left (and is not yet done).
+ * @return  true inside the creep zone
+ * @context motion_task
+ */
+static bool motion_in_creep_zone(void)
+{
+    return ((g_target2 > g_prog2) && ((g_target2 - g_prog2) <= g_creep_zone2));
+}
+
+/**
+ * motion_move_base
+ * @brief   Base set-point of the running MOVE or TURN: the command speed,
+ *          or the creep speed in the last MOTION_CREEP_ZONE_MM.
+ * @return  base set-point, cpw (negative for MOVE_BACK)
+ * @context motion_task
+ */
+static int32_t motion_move_base(void)
+{
+    int32_t base = g_base_cpw;
+
+    if (motion_in_creep_zone())
+    {
+        base = g_creep_cpw;
+    }
+    else
+    {
+        /* full command speed */
+    }
+
+    return base;
 }
 
 /**
