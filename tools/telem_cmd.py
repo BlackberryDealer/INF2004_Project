@@ -234,7 +234,8 @@ def main(argv):
                     help="print the command bytes, do not connect")
     ap.add_argument("--self-test", action="store_true",
                     help="host test S1-U43, then exit")
-    ap.add_argument("command", nargs="?", choices=sorted(CMD_TYPES))
+    ap.add_argument("command", nargs="?", type=str.lower,
+                    choices=sorted(CMD_TYPES))
     ap.add_argument("char", nargs="?",
                     help="map only: Code 39 character, e.g. W")
     ap.add_argument("bar_cmd", nargs="?",
