@@ -76,3 +76,21 @@ during run 2: median 14 ms, p90 71 ms, max 169 ms, 0 lost.
   `FAULT bit 6 RANGE_CLAMP (info only)`.
 - Still open: the WDT feed gap is about 12 ms of the 30 ms limit, with the
   sensor debug prints (about 10 lines/s on the console) still enabled.
+
+## 4_remote_stop (S1-I04)
+
+Same firmware as 3_nodelay, car on the track. Only `decode.txt` was kept
+(Hanz's decoder window, HH:MM:SS arrival time, UTC+8); no ping, console or
+broker capture. Unlike runs 1 to 3, a command was sent: STOP (`0x89`) to
+`c28/c` with paho from the laptop.
+
+- 20:16:20 RUN pressed (GP20): `STATE_CHANGE SYS=4`.
+- 20:16:26 `CMD_STOP`, then in the same second `SUMMARY END_REASON=0
+  ODO_MM=1260mm RUN_S=6s` and `STATE_CHANGE SYS=5` (FINISHED).
+- 20:16:27 first STATE in FINISHED: `MOT=0`, wheels slowing; 0 mm/s after.
+- No FAULT state and no OFFLINE in the whole capture. DROPS stayed at 40 (all
+  from before the broker connection at boot).
+- Other things seen: `FAULTS=64` (RANGE_CLAMP, info only) from boot; RUN
+  switched between FOLLOW (0) and SEARCH_LINE (3) about once a second while
+  driving; STATE arrived in a burst after a 3 s pause at 20:16:39 to 20:16:42
+  with DROPS +0.
