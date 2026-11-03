@@ -779,8 +779,10 @@ static void motion_state_step(int32_t * p_sp_l, int32_t * p_sp_r)
 
 /**
  * motion_state_follow
- * @brief   FOLLOW: base speed corrected by the steering error. + steering
- *          = line left of centre = slow the left wheel (app_types.h).
+ * @brief   FOLLOW: base speed, cut by up to MOTION_CURVE_SLOW_PCT in
+ *          proportion to |steering|, corrected by the steering error.
+ *          + steering = line left of centre = slow the left wheel
+ *          (app_types.h).
  * @param   p_sp_l  receives the left set-point, cpw
  * @param   p_sp_r  receives the right set-point, cpw
  * @return  none
@@ -788,16 +790,24 @@ static void motion_state_step(int32_t * p_sp_l, int32_t * p_sp_r)
  */
 static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r)
 {
-    status_board_t snap = {0};
-    int32_t        diff = 0;
+    status_board_t snap  = {0};
+    int32_t        steer = 0;
+    int32_t        cut   = 0;
+    int32_t        base  = 0;
+    int32_t        diff  = 0;
 
     status_board_read(&snap);
+    steer = status_board_steering(&snap);
 
+    /* |steer| <= 1000 (board domain) x 131 fits; result <= 128. cast:
+       small non-negative value fits int32_t                            */
+    cut  = (int32_t) ((motion_abs_capped(steer) * MOTION_CURVE_SLOW_Q10)
+                      >> 10);
     /* Signed division by 256: shift with sign fix-up, no library call. */
-    diff    = (status_board_steering(&snap) * MOTION_KP_STEER_Q8)
-              / MOTION_Q8_ONE;
-    *p_sp_l = g_base_cpw - diff;
-    *p_sp_r = g_base_cpw + diff;
+    base = (g_base_cpw * (MOTION_Q8_ONE - cut)) / MOTION_Q8_ONE;
+    diff = (steer * MOTION_KP_STEER_Q8) / MOTION_Q8_ONE;
+    *p_sp_l = base - diff;
+    *p_sp_r = base + diff;
 }
 
 /**

@@ -28,6 +28,7 @@
 #define BAR_WIDTH_MAX_01MM   (255u)
 #define BAR_ELEM_CNT_MAX     (63u)
 #define BAR_LOG_MIN_ELEM     (4u)  /* shorter captures are line/branch edges */
+#define BAR_GLITCH_01MM      (BAR_GLITCH_UM / 100u)
 #define BAR_BRANCH_MIN_01MM  (BAR_BRANCH_MIN_MM * 10u)
 #define BAR_MAP_CHAR_MASK    (0x3Fu)
 #define BAR_MAP_CMD_SHIFT    (6u)
@@ -61,6 +62,8 @@ static volatile uint32_t   g_bar_edge_cnt               = 0u; /* ISR only */
 static uint32_t            g_bar_state                  = BAR_STATE_IDLE;
 static uint32_t            g_bar_n_elem                 = 0u;
 static uint32_t            g_bar_last_level             = 0u;
+static uint32_t            g_bar_fix_cnt                = 0u; /* level fixes */
+static uint32_t            g_bar_carry_16us             = 0u; /* flicker time */
 static uint32_t            g_bar_mark                   = 0u;
 static uint8_t             g_bar_widths[BAR_CAPTURE_MAX];
 static uint32_t            g_quiet_counts               = 0u;
@@ -265,6 +268,8 @@ static void barcode_init_state(void)
     g_bar_state       = BAR_STATE_IDLE;
     g_bar_n_elem      = 0u;
     g_bar_last_level  = 0u;
+    g_bar_fix_cnt     = 0u;
+    g_bar_carry_16us  = 0u;
     g_bar_mark        = 0u;
     g_quiet_counts    = odometry_mm_to_counts(BAR_QUIET_MM);
     g_cooldown_counts = odometry_mm_to_counts(BAR_COOLDOWN_MM);
@@ -478,6 +483,8 @@ static void barcode_edge_idle(uint32_t level, uint32_t path)
     if (1u == level)
     {
         g_bar_n_elem     = 0u;
+        g_bar_fix_cnt    = 0u;
+        g_bar_carry_16us = 0u;
         g_bar_mark       = path;
         g_bar_last_level = 1u;
         g_bar_state      = BAR_STATE_CAPTURING;
@@ -503,7 +510,56 @@ static void barcode_edge_idle(uint32_t level, uint32_t path)
 static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
                                    uint32_t cpw, uint32_t path)
 {
-    if (level == g_bar_last_level)
+    uint32_t lvl  = level;  /* DO level after the edge, maybe fixed */
+    /* Travel during this edge's own gap, 0.1 mm (formula below). Product
+       < 2^32: gap16 <= 32767, cpw <= 127, APP_UM_PER_COUNT ~= 324.      */
+    uint32_t const w_own =
+        ((gap_16us * cpw) * APP_UM_PER_COUNT) / BAR_WIDTH_DIVISOR;
+    uint32_t gap_all = gap_16us + g_bar_carry_16us;
+
+    if (gap_all > BAR_GAP_MAX)
+    {
+        gap_all = BAR_GAP_MAX;
+    }
+    else
+    {
+        /* fits the 15-bit gap domain */
+    }
+
+    if (w_own < BAR_GLITCH_01MM)
+    {
+        /* Flicker at a bar edge: no element; its time joins the next. */
+        g_bar_carry_16us = gap_all;
+        g_bar_mark       = path;
+        lvl              = g_bar_last_level;  /* nothing alternates */
+    }
+    else
+    {
+        g_bar_carry_16us = 0u;
+    }
+
+    /* Bars and gaps alternate, so a level equal to the last one was read
+       while DO was still flickering: take the alternating level, up to
+       BAR_LEVEL_FIX_MAX times per capture (on-car 2026-11-03).         */
+    if (w_own < BAR_GLITCH_01MM)
+    {
+        /* flicker handled above */
+    }
+    else if ((lvl == g_bar_last_level) && (g_bar_fix_cnt < BAR_LEVEL_FIX_MAX))
+    {
+        g_bar_fix_cnt++;
+        lvl = (0u == g_bar_last_level) ? 1u : 0u;
+    }
+    else
+    {
+        /* level alternates as expected (or too many fixes already) */
+    }
+
+    if (w_own < BAR_GLITCH_01MM)
+    {
+        /* flicker: nothing to store */
+    }
+    else if (lvl == g_bar_last_level)
     {
         /* Two consecutive identical levels: an edge was missed -> discard. */
         if (g_bar_n_elem >= BAR_LOG_MIN_ELEM)
@@ -522,7 +578,7 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
            Product < 2^32 because gap16 <= 32767, cpw <= 127, and
            APP_UM_PER_COUNT ~= 349 (max product ~= 1.45e9). */
         uint32_t width_01mm =
-            ((gap_16us * cpw) * APP_UM_PER_COUNT) / BAR_WIDTH_DIVISOR;
+            ((gap_all * cpw) * APP_UM_PER_COUNT) / BAR_WIDTH_DIVISOR;
 
         if (width_01mm > BAR_WIDTH_MAX_01MM)
         {
@@ -552,7 +608,7 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
             /* Saturate at 63 (6-bit N_ELEM). */
         }
 
-        g_bar_last_level = level;
+        g_bar_last_level = lvl;
         g_bar_mark       = path;
 
         if ((1u == g_bar_n_elem) && (width_01mm >= BAR_BRANCH_MIN_01MM))

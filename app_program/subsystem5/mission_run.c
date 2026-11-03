@@ -216,8 +216,14 @@ static void run_goto(mission_ctx_t * p_ctx, uint32_t run_state,
             /* STOP first: motion is still in FOLLOW and would only latch
                the turn (review R06)                                     */
             p_ctx->search_start_us = now_us;
+            /* Sweep first toward the side the line was last seen: the
+               steering then holds line.c's recovery value (+ = left).
+               Always-left-first swung the wrong way half the time
+               (on-car 2026-11-03).                                     */
+            p_ctx->search_first = (status_board_steering(p_snap) < 0)
+                                  ? MISSION_MV_RIGHT : MISSION_MV_LEFT;
             mission_stop_motion(p_ctx);
-            (void) mission_send_move(p_ctx, MISSION_MV_LEFT,
+            (void) mission_send_move(p_ctx, p_ctx->search_first,
                                      MISSION_SEARCH_SWEEP_DEG, now_us);
             break;
         case APP_RUN_AVOID:
@@ -434,14 +440,17 @@ static void run_execute(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
 
 /**
  * run_search
- * @brief   SEARCH_LINE: sweep left 60, right 120, left 60 until the line
- *          is found; 5 s without it -> LINE_LOST_STOP (FR14).
+ * @brief   SEARCH_LINE: sweep 60 toward the side the line was last seen,
+ *          120 back, 60 again until the line is found; 5 s without it
+ *          -> LINE_LOST_STOP (FR14).
  * @context mission_task
  */
 static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                        status_board_t const * p_snap, uint32_t now_us)
 {
     uint32_t const limit_us = MISSION_SEARCH_TIMEOUT_MS * RUN_US_PER_MS;
+    uint32_t const other    = (MISSION_MV_RIGHT == p_ctx->search_first)
+                              ? MISSION_MV_LEFT : MISSION_MV_RIGHT;
 
     if (p_evt->b_has_event && (APP_EVT_LINE_FOUND == p_evt->type))
     {
@@ -459,13 +468,13 @@ static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
     {
         if (RUN_SUB_FIRST == p_ctx->substep)
         {
-            (void) mission_send_move(p_ctx, MISSION_MV_RIGHT,
+            (void) mission_send_move(p_ctx, other,
                                      2 * MISSION_SEARCH_SWEEP_DEG, /* 120 */
                                      now_us);
         }
         else if (RUN_SUB_SECOND == p_ctx->substep)
         {
-            (void) mission_send_move(p_ctx, MISSION_MV_LEFT,
+            (void) mission_send_move(p_ctx, p_ctx->search_first,
                                      MISSION_SEARCH_SWEEP_DEG, now_us);
         }
         else
@@ -476,6 +485,13 @@ static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         {
             p_ctx->substep++;
         }
+    }
+    else if (p_evt->b_has_event && ((APP_EVT_BARCODE == p_evt->type)
+                                    || (APP_EVT_UNMAPPED == p_evt->type)
+                                    || (APP_EVT_INVALID == p_evt->type)))
+    {
+        run_log_event(p_ctx, "BARCODE event (value %d) during the line"
+                      " search: ignored\n", p_evt->value);
     }
     else
     {

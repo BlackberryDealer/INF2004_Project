@@ -57,6 +57,7 @@ typedef struct
     uint32_t leg_lat_mm;
     uint32_t leg_fwd_mm;
     uint32_t rejoin_e_mm;        /* expected rejoin distance */
+    uint32_t search_first;       /* MISSION_MV_LEFT/RIGHT: first sweep */
 
     int32_t  cal_diff0;          /* pos_l - pos_r when CAL_IR started */
     uint32_t cal_corr_cnt;       /* heading return turns after the sweep */
