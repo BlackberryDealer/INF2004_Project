@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PicoCar Live</title>
+<!--
+  PicoCar Live - telemetry and remote commands for the CSC28 car.
+  Owner: Buddy 1 (communications). Setup: tools/dashboard/README.md.
+  No internet or install needed: open this file in a browser while
+  Mosquitto runs with its WebSocket listener (port 9001).
+-->
+<style>
+:root {
+    color-scheme: light;
+    --bg: #f3f3f1;
+    --surface: #fcfcfb;
+    --surface-2: #f0efec;
+    --border: #e1e0db;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --text-3: #7a7973;
+    --grid: #e7e6e1;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --serious: #ec835a;
+    --critical: #d03b3b;
+    --run: #2a78d6;
+    --led-boot: #c3c2b7;
+    --btn-text: #ffffff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 1px 8px rgba(0, 0, 0, .04);
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #121211;
+        --surface: #1a1a19;
+        --surface-2: #232321;
+        --border: #2f2f2c;
+        --text: #f0efec;
+        --text-2: #c3c2b7;
+        --text-3: #8f8e86;
+        --grid: #2a2a28;
+        --series-1: #3987e5;
+        --series-2: #d95926;
+        --run: #3987e5;
+        --led-boot: #f0efec;
+        --shadow: none;
+    }
+}
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121211;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --border: #2f2f2c;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --text-3: #8f8e86;
+    --grid: #2a2a28;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --run: #3987e5;
+    --led-boot: #f0efec;
+    --shadow: none;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+.mono, kbd, code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.num { font-variant-numeric: tabular-nums; }
+button, input, select { font: inherit; color: inherit; }
+
+/* ---- top bar ---------------------------------------------------------- */
+header.top {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: baseline; gap: 8px; margin-right: auto; }
+.brand h1 { font-size: 17px; margin: 0; letter-spacing: -.01em; }
+.brand span { color: var(--text-3); font-size: 12px; }
+.conn { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.conn input {
+    width: 130px; padding: 5px 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface-2);
+}
+.conn input.port { width: 64px; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 999px; font-size: 12px;
+    background: var(--surface-2); color: var(--text-2);
+    border: 1px solid var(--border); white-space: nowrap;
+}
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+.pill.good i { background: var(--good); }
+.pill.warn i { background: var(--warning); }
+.pill.bad i { background: var(--critical); }
+.pill b { color: var(--text); font-weight: 600; }
+
+.btn {
+    padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface-2);
+}
+.btn:hover:not(:disabled) { border-color: var(--text-3); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--series-1); border-color: transparent; color: var(--btn-text); }
+.icon-btn { padding: 5px 9px; }
+
+/* ---- layout ----------------------------------------------------------- */
+main {
+    display: grid; gap: 14px; padding: 14px 16px 40px;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    max-width: 1500px; margin: 0 auto;
+}
+.card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow);
+    min-width: 0;
+}
+.card h2 {
+    font-size: 12px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-3);
+    margin: 0 0 10px; display: flex; align-items: center; gap: 8px;
+}
+.card h2 .spacer { margin-left: auto; }
+.span-12 { grid-column: span 12; }
+.span-8 { grid-column: span 8; }
+.span-7 { grid-column: span 7; }
+.span-6 { grid-column: span 6; }
+.span-5 { grid-column: span 5; }
+.span-4 { grid-column: span 4; }
+.span-3 { grid-column: span 3; }
+@media (max-width: 1100px) {
+    .span-8, .span-7, .span-5, .span-4 { grid-column: span 12; }
+    .span-6, .span-3 { grid-column: span 6; }
+}
+@media (max-width: 700px) {
+    .span-6, .span-3 { grid-column: span 12; }
+    main { padding: 12px 16px 32px; gap: 12px; }
+    .conn input { width: 110px; }
+    header.top { position: static; }
+    .led { width: 40px; height: 40px; }
+    .state-name { font-size: 30px; }
+    .hero { gap: 12px; }
+    .hero-stats { margin-left: 0; width: 100%; justify-content: flex-start; }
+    .hero-stats div { text-align: left; }
+    .flow-l { width: 100%; }
+    .summary-big .v { font-size: 16px; }
+}
+
+/* ---- state hero ------------------------------------------------------- */
+.hero { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.led {
+    width: 64px; height: 64px; border-radius: 50%; flex: none;
+    position: relative;
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--led) 18%, transparent),
+                0 0 26px color-mix(in srgb, var(--led) 55%, transparent);
+    background: var(--led);
+}
+.led.blink { animation: blink 1s steps(1, end) infinite; }
+@keyframes blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .led.blink { animation: none; } }
+.state-name { font-size: 40px; font-weight: 700; line-height: 1.05; letter-spacing: -.02em; }
+.state-sub { color: var(--text-2); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 2px 9px; border-radius: 999px; font-size: 12px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text-2); white-space: nowrap;
+}
+.chip b { color: var(--text); font-weight: 600; }
+.next {
+    margin-top: 14px; padding: 10px 12px; border-radius: 8px;
+    background: var(--surface-2); border-left: 4px solid var(--led, var(--text-3));
+    font-size: 15px;
+}
+.next strong { font-weight: 650; }
+.hero-stats { margin-left: auto; display: flex; gap: 22px; }
+.hero-stats div { text-align: right; }
+.hero-stats .v { font-size: 26px; font-weight: 650; }
+.hero-stats .l { font-size: 12px; color: var(--text-3); }
+
+/* flow strip */
+.flow { margin-top: 14px; font-size: 12px; display: grid; gap: 6px; }
+.flow-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.flow-l { width: 70px; flex: none; color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.flow .st {
+    padding: 4px 9px; border-radius: 6px; border: 1px solid var(--border);
+    color: var(--text-3); background: var(--surface);
+}
+.flow .st.on { color: var(--text); border-color: var(--led); background: color-mix(in srgb, var(--led) 16%, var(--surface)); font-weight: 650; }
+.flow .arr { color: var(--text-3); }
+.flow .arr.cmd { color: var(--text-2); font-weight: 600; }
+.flow .sep { width: 1px; height: 20px; background: var(--border); margin: 0 6px; }
+
+/* ---- controls --------------------------------------------------------- */
+.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cmdbtn {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    padding: 12px 14px; border-radius: 10px; cursor: pointer; text-align: left;
+    border: 2px solid transparent; color: var(--btn-text);
+    transition: transform .06s ease, filter .1s ease, opacity .1s ease;
+}
+.cmdbtn .t { font-size: 18px; font-weight: 700; letter-spacing: .02em; }
+.cmdbtn .d { font-size: 12px; opacity: .9; }
+.cmdbtn kbd {
+    margin-top: 4px; font-size: 11px; padding: 0 5px; border-radius: 4px;
+    background: rgba(255, 255, 255, .22);
+}
+.cmdbtn:active:not(:disabled) { transform: scale(.98); }
+.cmdbtn:hover:not(:disabled) { filter: brightness(1.06); }
+.cmdbtn:disabled { opacity: .32; cursor: not-allowed; filter: grayscale(.6); }
+.cmdbtn.start { background: var(--good); }
+.cmdbtn.stop { background: var(--critical); }
+.cmdbtn.reset { background: #6250d6; }
+.cmdbtn.snap { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.cmdbtn.snap kbd { background: var(--border); }
+.cmdbtn.suggest { border-color: var(--text); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 18%, transparent); }
+.feedback {
+    margin-top: 12px; min-height: 42px; padding: 9px 12px; border-radius: 8px;
+    background: var(--surface-2); color: var(--text-2); font-size: 13px;
+}
+.feedback.ok { color: var(--text); border-left: 4px solid var(--good); }
+.feedback.wait { color: var(--text); border-left: 4px solid var(--warning); }
+.feedback.bad { color: var(--text); border-left: 4px solid var(--critical); }
+.ctl-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--text-3); }
+.ctl-foot label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+details.map { margin-top: 10px; font-size: 13px; }
+details.map summary { cursor: pointer; color: var(--text-2); }
+.map-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+.map-row select { padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); }
+
+/* ---- tiles ------------------------------------------------------------ */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.tile { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); min-width: 0; }
+.tile .l { font-size: 12px; color: var(--text-3); display: flex; justify-content: space-between; }
+.tile .v { font-size: 24px; font-weight: 650; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .v.txt { font-size: 18px; line-height: 32px; }
+.tile .v small { font-size: 13px; font-weight: 500; color: var(--text-2); margin-left: 3px; }
+.bar { height: 6px; border-radius: 3px; background: var(--grid); margin-top: 8px; position: relative; overflow: hidden; }
+.bar > i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--series-1); }
+.bar.center::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--text-3); }
+.swatch { display: inline-block; width: 10px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+
+.faults { display: flex; flex-wrap: wrap; gap: 6px; }
+.fault { padding: 4px 9px; border-radius: 6px; font-size: 12px; border: 1px solid var(--border); color: var(--text-3); }
+.fault.set.stop { background: var(--critical); border-color: var(--critical); color: #fff; font-weight: 650; }
+.fault.set.info { background: color-mix(in srgb, var(--warning) 30%, var(--surface)); border-color: var(--warning); color: var(--text); font-weight: 650; }
+.fault-note { margin-top: 8px; font-size: 12px; color: var(--text-3); }
+
+/* ---- charts ----------------------------------------------------------- */
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+.chart { position: relative; }
+.chart .head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; margin-bottom: 4px; }
+.chart .head .t { font-weight: 600; }
+.chart .head .lg { color: var(--text-2); font-size: 12px; display: flex; gap: 10px; }
+.chart canvas { width: 100%; height: 150px; display: block; border-radius: 6px; cursor: crosshair; }
+.tip {
+    position: absolute; pointer-events: none; z-index: 5; display: none;
+    background: var(--text); color: var(--surface); font-size: 12px;
+    padding: 5px 8px; border-radius: 6px; white-space: nowrap;
+}
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 2px 9px; font-size: 12px; cursor: pointer; color: var(--text-2); }
+.seg button.on { background: var(--surface-2); color: var(--text); font-weight: 600; }
+
+/* ---- health, summary, profile ----------------------------------------- */
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13px; }
+.kv dt { color: var(--text-3); }
+.kv dd { margin: 0; text-align: right; font-weight: 600; }
+.kv dd.warn { color: var(--serious); }
+.kv dd.bad { color: var(--critical); }
+.muted { color: var(--text-3); }
+.summary-big { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+.summary-big div { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.summary-big .v { font-size: 20px; font-weight: 650; }
+.summary-big .l { font-size: 11px; color: var(--text-3); }
+.profile svg { width: 100%; height: auto; max-height: 220px; display: block; }
+
+/* ---- log -------------------------------------------------------------- */
+.log-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+.log-tools input[type=search] { flex: 1 1 160px; min-width: 120px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); }
+.log-tools label { display: inline-flex; gap: 5px; align-items: center; color: var(--text-2); cursor: pointer; }
+.log { max-height: 340px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.log table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.log th { position: sticky; top: 0; background: var(--surface-2); text-align: left; font-weight: 600; color: var(--text-2); padding: 6px 8px; }
+.log td { padding: 4px 8px; border-top: 1px solid var(--border); vertical-align: top; }
+.log td.time { color: var(--text-3); white-space: nowrap; }
+.log td.kind { white-space: nowrap; }
+.log td.hex { color: var(--text-3); white-space: nowrap; }
+.tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+.tag.cmd { border-color: var(--series-1); color: var(--series-1); }
+.tag.state { border-color: var(--good); color: var(--good); }
+.tag.fault { border-color: var(--critical); color: var(--critical); }
+.tag.reject { border-color: var(--serious); color: var(--serious); }
+.hide-hex .hex { display: none; }
+
+.banner {
+    grid-column: span 12; display: none; padding: 10px 14px; border-radius: 10px;
+    border: 1px solid var(--critical); background: color-mix(in srgb, var(--critical) 10%, var(--surface));
+}
+.banner.show { display: block; }
+.help { font-size: 13px; color: var(--text-2); }
+.help code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header class="top">
+    <div class="brand"><h1>PicoCar Live</h1><span>CSC28 telemetry &amp; commands</span></div>
+    <form class="conn" id="connForm" autocomplete="off">
+        <input id="host" aria-label="Broker address" placeholder="broker IP" spellcheck="false">
+        <input id="port" class="port" aria-label="WebSocket port" inputmode="numeric" placeholder="9001">
+        <button class="btn primary" id="connBtn" type="submit">Connect</button>
+    </form>
+    <div class="pills">
+        <span class="pill" id="pBroker" title="Dashboard to Mosquitto (WebSocket)"><i></i>Broker <b>off</b></span>
+        <span class="pill" id="pCar" title="Car availability on c28/a (retained, OFFLINE is the car's last will)"><i></i>Car <b>unknown</b></span>
+        <span class="pill" id="pTele" title="STATE messages on c28/s (5 Hz expected)"><i></i>Telemetry <b>none</b></span>
+    </div>
+    <button class="btn icon-btn" id="themeBtn" type="button" title="Switch light / dark">◐</button>
+</header>
+
+<main>
+    <div class="banner" id="banner"></div>
+
+    <!-- state -->
+    <section class="card span-7" id="stateCard" aria-live="polite">
+        <h2>Car state <span class="spacer"></span><span class="muted num" id="stateAge"></span></h2>
+        <div class="hero">
+            <div class="led" id="led"></div>
+            <div>
+                <div class="state-name" id="stateName">NO DATA</div>
+                <div class="state-sub" id="stateSub"></div>
+            </div>
+            <div class="hero-stats">
+                <div><div class="v num" id="heroTime">–</div><div class="l">run time</div></div>
+                <div><div class="v num" id="heroDist">–</div><div class="l">distance</div></div>
+            </div>
+        </div>
+        <div class="next" id="next">Connect to the broker to start.</div>
+        <div class="flow" id="flow"></div>
+    </section>
+
+    <!-- controls -->
+    <section class="card span-5">
+        <h2>Commands <span class="spacer"></span><span class="muted" style="text-transform:none;letter-spacing:0">to c28/c, QoS 1</span></h2>
+        <div class="controls">
+            <button class="cmdbtn start" data-cmd="start" type="button"><span class="t">START</span><span class="d">READY → 1 s beep → RUN</span><kbd>S</kbd></button>
+            <button class="cmdbtn stop" data-cmd="stop" type="button"><span class="t">STOP</span><span class="d">RUN → FINISHED</span><kbd>Space</kbd></button>
+            <button class="cmdbtn reset" data-cmd="reset" type="button"><span class="t">RESET</span><span class="d">FINISHED / LOST → READY · FAULT → BOOT</span><kbd>R</kbd></button>
+            <button class="cmdbtn snap" data-cmd="summary" type="button"><span class="t">SUMMARY</span><span class="d">"Send me a summary now"</span><kbd>Q</kbd></button>
+        </div>
+        <div class="feedback" id="feedback">Commands unlock as the car's state allows them. STOP is always available.</div>
+        <div class="ctl-foot">
+            <label title="Enable every button whatever the state (for when telemetry is missing)"><input type="checkbox" id="unlock"> Unlock all buttons</label>
+            <span>Car accepts 1 command per type per 100 ms</span>
+        </div>
+        <details class="map">
+            <summary>Remap a barcode (MAP)</summary>
+            <div class="map-row">
+                <span>Barcode</span><select id="mapChar" aria-label="Code 39 character"></select>
+                <span>now means</span><select id="mapCmd" aria-label="Command"></select>
+                <button class="btn" id="mapSend" type="button">Send MAP</button>
+            </div>
+        </details>
+    </section>
+
+    <!-- live tiles -->
+    <section class="card span-8">
+        <h2>Live readings <span class="spacer"></span><span class="muted" style="text-transform:none;letter-spacing:0" id="tilesNote">from c28/s</span></h2>
+        <div class="tiles">
+            <div class="tile"><div class="l"><span><span class="swatch" style="background:var(--series-1)"></span>Left wheel</span></div><div class="v num" id="tSpeedL">–</div><div class="bar"><i id="bSpeedL"></i></div></div>
+            <div class="tile"><div class="l"><span><span class="swatch" style="background:var(--series-2)"></span>Right wheel</span></div><div class="v num" id="tSpeedR">–</div><div class="bar"><i id="bSpeedR" style="background:var(--series-2)"></i></div></div>
+            <div class="tile"><div class="l"><span>Line error</span><span id="tSteerDir"></span></div><div class="v num" id="tSteer">–</div><div class="bar center"><i id="bSteer"></i></div></div>
+            <div class="tile"><div class="l">Odometer</div><div class="v num" id="tOdo">–</div></div>
+            <div class="tile"><div class="l">Line sensor</div><div class="v txt" id="tLine">–</div></div>
+            <div class="tile"><div class="l">Motor</div><div class="v txt" id="tMot">–</div></div>
+            <div class="tile"><div class="l">Pitch</div><div class="v num" id="tPitch">–</div></div>
+            <div class="tile"><div class="l">Turn rate</div><div class="v num" id="tTurn">–</div></div>
+            <div class="tile"><div class="l">Motion</div><div class="v txt" id="tMclass">–</div></div>
+            <div class="tile"><div class="l">Hump peak</div><div class="v num" id="tHump">–</div></div>
+            <div class="tile"><div class="l">Encoders L / R</div><div class="v num" id="tPos" style="font-size:17px">–</div></div>
+        </div>
+        <h2 style="margin-top:16px">Faults</h2>
+        <div class="faults" id="faults"></div>
+        <div class="fault-note"><span style="color:var(--critical)">■</span> stops the car (needs RESET) &nbsp; <span style="color:var(--warning)">■</span> informational only</div>
+    </section>
+
+    <!-- link health -->
+    <section class="card span-4">
+        <h2>Link health <span class="spacer"></span><span class="muted" style="text-transform:none;letter-spacing:0">c28/h, 1 Hz</span></h2>
+        <dl class="kv num">
+            <dt>Car uptime</dt><dd id="hUptime">–</dd>
+            <dt>State rate (expect 5 Hz)</dt><dd id="hRate">–</dd>
+            <dt>Gaps &gt; 400 ms (this session)</dt><dd id="hGaps">–</dd>
+            <dt>Longest gap</dt><dd id="hMaxGap">–</dd>
+            <dt>Car-side drops</dt><dd id="hDrops">–</dd>
+            <dt>Radio latency max (NFR17 ≤ 1000 µs)</dt><dd id="hLat">–</dd>
+            <dt>Last heartbeat</dt><dd id="hAge">–</dd>
+            <dt>Messages / rejected</dt><dd id="hCount">–</dd>
+        </dl>
+        <button class="btn" id="resetStats" type="button" style="margin-top:12px;font-size:12px">Reset session counters</button>
+    </section>
+
+    <!-- charts -->
+    <section class="card span-12">
+        <h2>Trends <span class="spacer"></span>
+            <span class="seg" id="win"><button type="button" data-s="30">30 s</button><button type="button" data-s="60">60 s</button><button type="button" data-s="120">2 min</button></span>
+        </h2>
+        <div class="charts">
+            <div class="chart" data-chart="speed"><div class="head"><span class="t">Wheel speed (mm/s)</span><span class="lg"><span><span class="swatch" style="background:var(--series-1)"></span>Left</span><span><span class="swatch" style="background:var(--series-2)"></span>Right</span></span></div><canvas></canvas></div>
+            <div class="chart" data-chart="steer"><div class="head"><span class="t">Line error (‰, + = line to the left)</span><span class="lg"></span></div><canvas></canvas></div>
+            <div class="chart" data-chart="pitch"><div class="head"><span class="t">Pitch (deg)</span><span class="lg"></span></div><canvas></canvas></div>
+            <div class="chart" data-chart="turn"><div class="head"><span class="t">Turn rate (deg/s)</span><span class="lg"></span></div><canvas></canvas></div>
+        </div>
+    </section>
+
+    <!-- run summary -->
+    <section class="card span-6">
+        <h2>Run summary <span class="spacer"></span><span class="muted" style="text-transform:none;letter-spacing:0" id="sumWhen">c28/e</span></h2>
+        <div id="summary"><p class="muted">The car sends a SUMMARY when a run ends; press SUMMARY for a snapshot any time.</p></div>
+    </section>
+
+    <!-- obstacle profile -->
+    <section class="card span-6 profile">
+        <h2>Obstacle profile <span class="spacer"></span><span class="muted" style="text-transform:none;letter-spacing:0" id="profWhen">c28/e</span></h2>
+        <div id="profile"><p class="muted">Shown when the car scans an obstacle (PROFILE message).</p></div>
+    </section>
+
+    <!-- log -->
+    <section class="card span-12">
+        <h2>Message log <span class="spacer"></span><span class="muted num" id="logCount" style="text-transform:none;letter-spacing:0"></span></h2>
+        <div class="log-tools">
+            <input type="search" id="logFilter" placeholder="Filter (e.g. BARCODE, FAULT, c28/c)" aria-label="Filter log">
+            <label><input type="checkbox" id="logState"> include STATE / HEARTBEAT</label>
+            <label><input type="checkbox" id="logHex"> show bytes</label>
+            <label><input type="checkbox" id="logPause"> pause</label>
+            <button class="btn" id="logClear" type="button">Clear</button>
+            <button class="btn" id="logExport" type="button">Export CSV</button>
+        </div>
+        <div class="log hide-hex" id="logBox">
+            <table><thead><tr><th>Time</th><th>Topic</th><th>Type</th><th>What happened</th><th class="hex">Bytes</th></tr></thead><tbody id="logBody"></tbody></table>
+        </div>
+    </section>
+
+    <section class="card span-12 help">
+        <h2>Setup</h2>
+        Run Mosquitto with a WebSocket listener (add <code>listener 9001</code> and <code>protocol websockets</code> to <code>C:\mosq\car.conf</code>), then connect to the laptop's IP and port 9001.
+        No car? Run <code>py tools\dashboard\fake_car.py</code> for a pretend one. Full steps: <code>tools/dashboard/README.md</code>.
+        Decoding matches <code>tools/telem_decode.py</code> byte for byte (host test S1-U44).
+    </section>
+</main>
+
+<script src="telem_tables.js"></script>
+<script src="decode.js"></script>
+<script src="mqtt_ws.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>
