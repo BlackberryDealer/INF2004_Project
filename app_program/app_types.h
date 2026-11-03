@@ -99,7 +99,8 @@
 #define APP_EVT_STATE_CHANGE     (21u)
 #define APP_EVT_SUMMARY          (22u)
 #define APP_EVT_MAP              (23u)
-#define APP_EVT_COUNT            (24u)
+#define APP_EVT_SNAPSHOT         (24u)   /* remote "summary now" request */
+#define APP_EVT_COUNT            (25u)
 #define APP_EVT_TYPE_BITS        (5u)
 
 #if (APP_EVT_COUNT > 32u)
@@ -250,10 +251,12 @@
 #define APP_MQ_TYPE_HEARTBEAT (4u)
 #define APP_MQ_TYPE_ONLINE    (5u)
 #define APP_MQ_TYPE_OFFLINE   (6u)
+#define APP_MQ_TYPE_SNAPSHOT  (7u)    /* reply to CMD_SNAP */
 #define APP_MQ_TYPE_CMD_START (16u)
 #define APP_MQ_TYPE_CMD_STOP  (17u)
 #define APP_MQ_TYPE_CMD_RESET (18u)
 #define APP_MQ_TYPE_CMD_MAP   (19u)
+#define APP_MQ_TYPE_CMD_SNAP  (20u)   /* "send me a summary now" */
 #define APP_MQ_PAYLOAD_MAX    (20u)   /* bytes; largest is state = 18 */
 
 #endif /* APP_TYPES_H */

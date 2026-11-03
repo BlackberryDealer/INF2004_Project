@@ -78,6 +78,8 @@ static char tlog[512];
 bool telem_post_event(uint32_t t, uint32_t v) { if (strlen(tlog) < 400) sprintf(tlog + strlen(tlog), "E%u:%u ", t, v); return true; }
 bool telem_post_profile(telem_bin_profile_t const *p) { sprintf(tlog + strlen(tlog), "PROF%u ", p->side); return true; }
 bool telem_post_summary(telem_bin_summary_t const *p) { sprintf(tlog + strlen(tlog), "SUMM(end%u odo%u) ", p->end_reason, p->odometry_mm); return true; }
+static telem_bin_snapshot_t g_snapshot; static int g_snapshots;
+bool telem_post_snapshot(telem_bin_snapshot_t const *p) { g_snapshot = *p; g_snapshots++; if (strlen(tlog) < 400) sprintf(tlog + strlen(tlog), "SNAP(sys%u odo%u s%u) ", p->sys_state, p->odometry_mm, p->run_time_s); return true; }
 void barcode_map_set(uint32_t c, uint32_t m) { (void) c; (void) m; }
 void sys_health_service(void) {}
 void imu_diag_service(void) {}
@@ -285,6 +287,15 @@ int main(void) {
   /* Wi-Fi loss is not a transition */
   g_fault = 0; g_safety = 0; EV(APP_EVT_RESET, 0); idle_ms(110); fault_set(APP_FAULT_WIFI_LOSS); NONE();
   CHECK("S5-U07", APP_SYS_FAULT != g_ctx.sys_state, "Wi-Fi loss is not a transition");
+  /* S1-U41: remote "summary now" (APP_EVT_SNAPSHOT) answers in every state and changes nothing */
+  to_ready(); g_snapshots = 0; EV(APP_EVT_SNAPSHOT, 0);
+  CHECK("S1-U41", 1 == g_snapshots && APP_SYS_READY == g_snapshot.sys_state && 0u == g_snapshot.odometry_mm && 0u == g_snapshot.run_time_s && APP_SYS_READY == g_ctx.sys_state, "READY, no run yet: snapshot with 0 mm, 0 s; state unchanged");
+  mot.path_counts = 0u; to_run(); mot.path_counts += odometry_mm_to_counts(500u); idle_ms(2000);   /* path 0: the run-start ZERO */ mlog[0] = 0; EV(APP_EVT_SNAPSHOT, 0);
+  CHECK("S1-U41", 2 == g_snapshots && APP_SYS_RUN == g_snapshot.sys_state && APP_RUN_FOLLOW == g_snapshot.run_state && 500u == g_snapshot.odometry_mm && 2u == g_snapshot.run_time_s && APP_SYS_RUN == g_ctx.sys_state && !strcmp(mlog, ""), "RUN: distance and time so far (500 mm, 2 s), no motion command, still RUN");
+  EV(APP_EVT_STOP, 0); mot.path_counts += odometry_mm_to_counts(300u); idle_ms(3000); EV(APP_EVT_SNAPSHOT, 0);
+  CHECK("S1-U41", 3 == g_snapshots && APP_SYS_FINISHED == g_snapshot.sys_state && 500u == g_snapshot.odometry_mm && 2u == g_snapshot.run_time_s, "FINISHED: distance and time frozen at the end of the run");
+  fault_set(APP_FAULT_RANGE_CLAMP); EV(APP_EVT_SNAPSHOT, 0);
+  CHECK("S1-U41", 4 == g_snapshots && 0u != (g_snapshot.faults & APP_FAULT_RANGE_CLAMP) && APP_SYS_FINISHED == g_ctx.sys_state, "faults reported; FINISHED kept");
   printf("[TEST] S5-U07 mission simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
   { int p0 = pass_n, f0 = fail_n;
     /* S5-U04 (moved from target, Fix 3): flood K4 from one task */
@@ -301,7 +312,7 @@ int main(void) {
     qn = 0; mbf_used = 0;
     /* S5-U05 (moved from target, Fix 2): every state x every event type */
     { uint32_t cases = 0u, bad = mission_test_matrix(&cases);
-      CHECK("S5-U05", 432u == cases, "432 state/event combinations tried");
+      CHECK("S5-U05", 450u == cases, "450 state/event combinations tried (18 states x 25 types)");
       CHECK("S5-U05", 0u == bad, "every outcome is a defined state"); }
     printf("[TEST] S5-U04/U05 mission host tests SUMMARY %d passed, %d failed\n", pass_n - p0, fail_n - f0); }
   return fail_n;

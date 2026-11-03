@@ -32,6 +32,18 @@ typedef struct
     uint32_t run_time_s;       /* 0..1023 */
 } telem_bin_summary_t;
 
+/* Reply to the remote "summary now" command (CMD_SNAP): the run so far,
+   or the last run's totals once it has ended.                        */
+typedef struct
+{
+    uint32_t sys_state;        /* APP_SYS_* */
+    uint32_t run_state;        /* APP_RUN_* */
+    uint32_t hump_peak_mm;     /* 0..127 */
+    uint32_t odometry_mm;      /* 0..32767, this run */
+    uint32_t faults;           /* APP_FAULT_* mask, 10 bits */
+    uint32_t run_time_s;       /* 0..1023 */
+} telem_bin_snapshot_t;
+
 /* One state sample, copied by telem_task from the status board getters
    and fault_get(). Natural units, as the board returns them.          */
 typedef struct
@@ -73,6 +85,10 @@ extern uint32_t telem_bin_profile(telem_bin_profile_t const * p_prof,
 /* MQ_SUMM (7 B). */
 extern uint32_t telem_bin_summary(telem_bin_summary_t const * p_summ,
                                   uint8_t * p_buf, uint32_t size);
+
+/* MQ_SNAP (7 B). */
+extern uint32_t telem_bin_snapshot(telem_bin_snapshot_t const * p_snap,
+                                   uint8_t * p_buf, uint32_t size);
 
 /* MQ_HB (6 B). */
 extern uint32_t telem_bin_heartbeat(uint32_t uptime_s, uint32_t drops,

@@ -53,10 +53,12 @@ TYPE_GROUP = {
     4: ("HEARTBEAT", "MQ_HB"),
     5: ("ONLINE", None),
     6: ("OFFLINE", None),
+    7: ("SNAPSHOT", "MQ_SNAP"),
     16: ("CMD_START", None),
     17: ("CMD_STOP", None),
     18: ("CMD_RESET", None),
     19: ("CMD_MAP", "MQ_MAP"),
+    20: ("CMD_SNAP", None),
 }
 
 # APP_EVT_* names whose EVT_ group in layout.csv is spelled differently.

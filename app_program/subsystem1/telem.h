@@ -20,6 +20,7 @@ extern ER   telem_start(void);  /* starts telem_task */
 extern bool telem_post_event(uint32_t type, uint32_t value);
 extern bool telem_post_profile(telem_bin_profile_t const * p_profile);
 extern bool telem_post_summary(telem_bin_summary_t const * p_summary);
+extern bool telem_post_snapshot(telem_bin_snapshot_t const * p_snap);
 
 extern uint32_t telem_drops(void);  /* K7 + K11 + publish drops, 0..255 */
 extern ID       telem_k11_id(void);  /* K11 ID, for mqtt_bridge.c only */

@@ -195,6 +195,28 @@ int main(void)
                              == g_post_value[5]),
                "MAP command posts APP_EVT_MAP with char and command");
 
+    /* S1-U40: SNAP ("summary now") is 1 byte 0xA1 and posts
+       APP_EVT_SNAPSHOT through the mission queue, rate-limited per type */
+    g_now_us += 1000000u;
+    HOST_CHECK("S1-U40", 0xA1u == telem_bin_header(APP_MQ_TYPE_CMD_SNAP),
+               "SNAP command byte is 0xA1");
+    post_cmd(APP_MQ_TYPE_CMD_SNAP);
+    HOST_CHECK("S1-U40", (7u == g_posts)
+                         && (APP_EVT_SNAPSHOT == g_post_type[6])
+                         && (0u == g_post_value[6]),
+               "SNAP posts APP_EVT_SNAPSHOT (value 0) to mission");
+    g_now_us += 50000u;
+    post_cmd(APP_MQ_TYPE_CMD_SNAP);
+    HOST_CHECK("S1-U40", (7u == g_posts) && (1u == new_cmd_drops()),
+               "second SNAP 50 ms later is rate-limited and counted");
+    g_now_us += 50000u;
+    post_cmd(APP_MQ_TYPE_CMD_SNAP);
+    cmd[0] = (uint8_t) telem_bin_header(APP_MQ_TYPE_CMD_SNAP);
+    g_now_us += 1000000u;
+    mqtt_bridge_post_command(cmd, 2u);              /* SNAP, 2 bytes */
+    HOST_CHECK("S1-U40", (8u == g_posts) && (1u == new_cmd_drops()),
+               "SNAP 100 ms later accepted; a 2-byte SNAP is rejected");
+
     /* S1-U11: wrong version or length rejected and counted */
     g_now_us += 1000000u;
     cmd[0] = (uint8_t) (telem_bin_header(APP_MQ_TYPE_CMD_STOP) + 1u);
@@ -210,7 +232,7 @@ int main(void)
     mqtt_bridge_post_command(cmd, 1u);              /* not a command */
     mqtt_bridge_post_command(NULL, 1u);
     mqtt_bridge_post_command(cmd, 0u);
-    HOST_CHECK("S1-U11", (6u == g_posts) && (8u == new_cmd_drops()),
+    HOST_CHECK("S1-U11", (8u == g_posts) && (8u == new_cmd_drops()),
                "wrong version, length, type or char: rejected, counted");
 
     for (idx = 0u; idx < 300u; idx++)
@@ -251,6 +273,10 @@ int main(void)
     mqtt_bridge_route(APP_MQ_TYPE_OFFLINE, &p_top, &qos, &b_ret);
     HOST_CHECK("S1-U31", (0 == strcmp(p_top, TELEM_TOPIC_AVAIL))
                          && (1u == qos) && b_ret, "availability route");
+    mqtt_bridge_route(APP_MQ_TYPE_SNAPSHOT, &p_top, &qos, &b_ret);
+    HOST_CHECK("S1-U40", (0 == strcmp(p_top, TELEM_TOPIC_EVENT))
+                         && (1u == qos) && (!b_ret),
+               "snapshot reply goes to the event topic, QoS 1");
     mqtt_bridge_route(30u, &p_top, &qos, &b_ret);
     HOST_CHECK("S1-U31", (0 == strcmp(p_top, TELEM_TOPIC_EVENT))
                          && (0u == qos) && (!b_ret), "unknown route");

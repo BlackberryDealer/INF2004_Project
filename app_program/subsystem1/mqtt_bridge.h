@@ -30,7 +30,8 @@ extern uint32_t mqtt_bridge_availability(bool b_is_online,
                                          uint8_t * p_buf, uint32_t size);
 
 /* A complete payload received on the command topic. Validates,
-   rate-limits, posts START / STOP / RESET / MAP to the mission queue. */
+   rate-limits, posts START / STOP / RESET / MAP / SNAP to the mission
+   queue.                                                               */
 extern void     mqtt_bridge_post_command(uint8_t const * p_payload,
                                          uint32_t length);
 

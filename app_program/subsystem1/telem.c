@@ -28,11 +28,13 @@
 /* Kernel message-buffer cost: 4-byte header + length rounded up to 4. */
 #define TELEM_MBF_HDR_BYTES   (4u)
 
-/* K7 packed message: 2-byte event word (+ 5 B profile or 6 B summary).
-   telem_task tells them apart by length.                             */
+/* K7 packed message: 2-byte event word (+ 5 B profile, 6 B summary or
+   6 B snapshot). telem_task tells them apart by length, and summary
+   from snapshot by the event type in the word.                       */
 #define TELEM_K7_WORD_BYTES   (2u)
 #define TELEM_K7_PROF_LEN     (TELEM_K7_WORD_BYTES + K7_PROF_BYTES)
 #define TELEM_K7_SUMM_LEN     (TELEM_K7_WORD_BYTES + K7_SUMM_BYTES)
+#define TELEM_K7_SNAP_LEN     (TELEM_K7_WORD_BYTES + K7_SNAP_BYTES)
 #define TELEM_K7_MSG_BYTES    (8u)
 #define TELEM_K7_MBF_BYTES    (TELEM_K7_ENTRIES \
                                * (TELEM_MBF_HDR_BYTES + TELEM_K7_MSG_BYTES))
@@ -52,7 +54,7 @@
 #error "Telemetry message buffers must be a multiple of 4 bytes"
 #endif
 #if (TELEM_K7_PROF_LEN != 7u) || (TELEM_K7_SUMM_LEN != 8u) \
-    || (TELEM_K7_SUMM_LEN > TELEM_K7_MSG_BYTES)
+    || (TELEM_K7_SNAP_LEN != 8u) || (TELEM_K7_SUMM_LEN > TELEM_K7_MSG_BYTES)
 #error "K7 detail sizes changed: update the length dispatch in telem_task"
 #endif
 #if (TELEM_HB_EVERY_N_STATE < 1u) || \
@@ -255,6 +257,44 @@ bool telem_post_summary(telem_bin_summary_t const * p_summary)
 }
 
 /**
+ * telem_post_snapshot
+ * @brief   Queues the reply to a remote "summary now" (K7, TMO_POL): a
+ *          SNAPSHOT event word, then the K7_SNAP fields. An RNG clamp
+ *          sets APP_FAULT_RANGE_CLAMP.
+ * @param   p_snap  the run so far (or the last run once it has ended)
+ * @return  true if queued; false if K7 is full (counted)
+ * @context mission_task
+ */
+bool telem_post_snapshot(telem_bin_snapshot_t const * p_snap)
+{
+    uint8_t           msg[TELEM_K7_MSG_BYTES] = {0u};
+    app_bits_writer_t wr    = {NULL, 0u, 0u, false};
+    bool              b_any = false;
+
+    app_bits_writer_init(&wr, msg, sizeof(msg));
+    app_bits_write(&wr, telem_evt_word(APP_EVT_SNAPSHOT, 0u),
+                   MSG_EVT_USED_BITS);
+    telem_k7_put_u(&wr, p_snap->sys_state, K7_SNAP_SYS_MAX,
+                   K7_SNAP_SYS_BITS, NULL);
+    telem_k7_put_u(&wr, p_snap->run_state, K7_SNAP_RUN_MAX,
+                   K7_SNAP_RUN_BITS, NULL);
+    telem_k7_put_u(&wr, p_snap->hump_peak_mm, K7_SNAP_HUMP_PEAK_MAX,
+                   K7_SNAP_HUMP_PEAK_BITS, &b_any);
+    telem_k7_put_u(&wr, p_snap->odometry_mm, K7_SNAP_ODO_MM_MAX,
+                   K7_SNAP_ODO_MM_BITS, &b_any);
+    telem_k7_put_u(&wr, p_snap->faults, K7_SNAP_FAULTS_MAX,
+                   K7_SNAP_FAULTS_BITS, NULL);
+    telem_k7_put_u(&wr, p_snap->run_time_s, K7_SNAP_RUN_S_MAX,
+                   K7_SNAP_RUN_S_BITS, &b_any);
+    if (b_any)
+    {
+        fault_set(APP_FAULT_RANGE_CLAMP);
+    }
+
+    return telem_k7_send(msg, app_bits_writer_bytes(&wr));
+}
+
+/**
  * telem_drops
  * @brief   K7 + K11 + publish drops, each from one atomic word read.
  * @return  0..255 (saturates)
@@ -434,19 +474,21 @@ static TMO telem_wait_ms(uint32_t next_us, uint32_t now_us)
 /**
  * telem_forward
  * @brief   Builds the payload for one K7 message (told apart by length:
- *          2 = event, 7 = profile, 8 = summary) and queues it in K11.
+ *          2 = event, 7 = profile, 8 = summary or snapshot, by the event
+ *          type in the word) and queues it in K11.
  * @param   p_msg  K7 message bytes
  * @param   len    message length
  * @context telem_task
  */
 static void telem_forward(uint8_t const * p_msg, uint32_t len)
 {
-    uint8_t             out[TELEM_K11_MSG_BYTES] = {0u};
-    uint32_t            out_len = 0u;
-    uint32_t            word    = 0u;
-    app_bits_reader_t   rd      = {NULL, 0u, 0u, false};
-    telem_bin_profile_t prof    = {0u, 0u, 0u, 0u, 0u, 0u};
-    telem_bin_summary_t summ    = {0u, 0u, 0u, 0u, 0u};
+    uint8_t              out[TELEM_K11_MSG_BYTES] = {0u};
+    uint32_t             out_len = 0u;
+    uint32_t             word    = 0u;
+    app_bits_reader_t    rd      = {NULL, 0u, 0u, false};
+    telem_bin_profile_t  prof    = {0u, 0u, 0u, 0u, 0u, 0u};
+    telem_bin_summary_t  summ    = {0u, 0u, 0u, 0u, 0u};
+    telem_bin_snapshot_t snap    = {0u, 0u, 0u, 0u, 0u, 0u};
 
     app_bits_reader_init(&rd, p_msg, len);
     word = app_bits_read(&rd, MSG_EVT_USED_BITS);
@@ -464,6 +506,18 @@ static void telem_forward(uint8_t const * p_msg, uint32_t len)
                               << TELEM_MM_STEP_SHIFT;
         prof.side           = app_bits_read(&rd, K7_PROF_SIDE_BITS);
         out_len             = telem_bin_profile(&prof, out, sizeof(out));
+    }
+    else if ((TELEM_K7_SNAP_LEN == len)
+             && (APP_EVT_SNAPSHOT == app_bits_get(word, MSG_EVT_TYPE_POS,
+                                                  MSG_EVT_TYPE_BITS)))
+    {
+        snap.sys_state    = app_bits_read(&rd, K7_SNAP_SYS_BITS);
+        snap.run_state    = app_bits_read(&rd, K7_SNAP_RUN_BITS);
+        snap.hump_peak_mm = app_bits_read(&rd, K7_SNAP_HUMP_PEAK_BITS);
+        snap.odometry_mm  = app_bits_read(&rd, K7_SNAP_ODO_MM_BITS);
+        snap.faults       = app_bits_read(&rd, K7_SNAP_FAULTS_BITS);
+        snap.run_time_s   = app_bits_read(&rd, K7_SNAP_RUN_S_BITS);
+        out_len           = telem_bin_snapshot(&snap, out, sizeof(out));
     }
     else if (TELEM_K7_SUMM_LEN == len)
     {

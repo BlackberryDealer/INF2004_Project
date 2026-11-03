@@ -6,15 +6,19 @@
 #   S1-U20..U23  test_app_bits_host.c    (app_bits.c + generated app_layout.h)
 #   S1-U24       gen_layout.py rejects a broken copy of tools/layout.csv
 #   S1-U14       gen_layout.py rejects MQ_HB.DROPS one bit wider (9 bits)
-#   S1-U01, U02 (packed), S1-U10  test_telem_bin_host.c (binary builders;
+#   S1-U01, U02 (packed), S1-U10, U42  test_telem_bin_host.c (binary builders;
 #                writes the golden vectors in golden/, which
 #                tools/telem_decode.py --golden must reproduce)
-#   S1-U11, U12, U30..U35  test_mqtt_bridge_host.c (mqtt_bridge.c + mock
+#   S1-U11, U12, U30..U35, U40  test_mqtt_bridge_host.c (mqtt_bridge.c + mock
 #                kernel; links telem_bin.c, app_bits.c, odometry.c)
 #   S1-U13, U15, U36, U37, U39  test_mqtt_utk_host.c (radio-task mqtt_utk.c +
 #                mock lwIP in mock_lwip/ + mock bridge)
 #   S1-U38       test_lwip_sizing_host.c (real lwipopts.h: MQTT request
 #                slots and output ring hold 4 s of telemetry)
+#   S1-U43       tools/telem_cmd.py --self-test (laptop command bytes agree
+#                with app_types.h; a SNAPSHOT reply decodes)
+#   (S1-U41 is in testing/subsystem5/host/sim_mission_host.c: it needs the
+#    mission statechart)
 #
 # Kernel-side files (mqtt_bridge.c) are copied into build/ next to a mock
 # app.h, so "../app.h" inside them resolves to the mock.
@@ -36,9 +40,9 @@ B       := build/app_program
 SB_MSG_FIELDS := $(shell grep -cE '^\#define (SB|MSG)_[A-Z0-9_]+_POS ' $(LAYOUT))
 
 .PHONY: all app_bits gen_layout_reject gen_layout_reject_mq mqtt_bridge \
-        mqtt_utk lwip_sizing tree telem_bin clean
+        mqtt_utk lwip_sizing telem_cmd tree telem_bin clean
 all: app_bits gen_layout_reject gen_layout_reject_mq telem_bin mqtt_bridge \
-     mqtt_utk lwip_sizing
+     mqtt_utk lwip_sizing telem_cmd
 
 test_app_bits_host.out: test_app_bits_host.c $(APP_DIR)/app_bits.c \
                         $(APP_DIR)/app_bits.h $(LAYOUT) ../../host/host_test.h
@@ -130,6 +134,9 @@ test_lwip_sizing_host.out: test_lwip_sizing_host.c $(LWIPOPTS) \
 
 lwip_sizing: test_lwip_sizing_host.out
 	./test_lwip_sizing_host.out
+
+telem_cmd:
+	$(PYTHON) $(TOOLS)/telem_cmd.py --self-test
 
 clean:
 	rm -rf *.out build

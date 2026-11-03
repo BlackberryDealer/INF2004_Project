@@ -141,6 +141,14 @@ GROUPS = {
         ('FAULTS', 10, 0, 1, 'mask'),
         ('RUN_S', 10, 0, 1, 's'),
     ],
+    'K7_SNAP': [
+        ('SYS', 3, 0, 1, 'code'),
+        ('RUN', 3, 0, 1, 'code'),
+        ('HUMP_PEAK', 7, 0, 1, 'mm'),
+        ('ODO_MM', 15, 0, 1, 'mm'),
+        ('FAULTS', 10, 0, 1, 'mask'),
+        ('RUN_S', 10, 0, 1, 's'),
+    ],
     'MQ_HDR': [
         ('VER', 3, 0, 1, 'code'),
         ('TYPE', 5, 0, 1, 'code'),
@@ -182,6 +190,14 @@ GROUPS = {
         ('FAULTS', 10, 0, 1, 'mask'),
         ('RUN_S', 10, 0, 1, 's'),
         ('PAD', 4, 0, 1, '-'),
+    ],
+    'MQ_SNAP': [
+        ('SYS', 3, 0, 1, 'code'),
+        ('RUN', 3, 0, 1, 'code'),
+        ('HUMP_PEAK', 7, 0, 1, 'mm'),
+        ('ODO_MM', 15, 0, 1, 'mm'),
+        ('FAULTS', 10, 0, 1, 'mask'),
+        ('RUN_S', 10, 0, 1, 's'),
     ],
     'MQ_HB': [
         ('UPTIME_S', 16, 0, 1, 's'),
@@ -257,7 +273,7 @@ GROUPS = {
     'PRV_BRIDGE': [
         ('CMD_DROPS', 8, 0, 1, 'count'),
         ('PUB_DROPS', 8, 0, 1, 'count'),
-        ('CMD_SEEN', 4, 0, 1, 'mask'),
+        ('CMD_SEEN', 5, 0, 1, 'mask'),
     ],
     'PRV_MQTT': [
         ('BACKOFF', 2, 0, 1, 'exponent'),
