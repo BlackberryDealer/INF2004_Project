@@ -25,6 +25,8 @@
  */
 
 #include "lwip/apps/mqtt.h"
+#include "lwip/apps/mqtt_priv.h"	/* client->conn, for nodelay */
+#include "lwip/altcp.h"
 #include "lwip/ip_addr.h"
 #include "lwip/timeouts.h"
 #include "wifi_secrets.h"
@@ -272,6 +274,17 @@ static void connection_cb(mqtt_client_t *c, void *arg, mqtt_connection_status_t 
 		 * permanently after the first disconnect. */
 		connecting = 0;
 		mq_put(PRV_MQTT_BACKOFF_POS, PRV_MQTT_BACKOFF_BITS, 0);
+
+		/* Nagle off (2026-11-03 on-car capture): with it on, one lost
+		 * segment held every later publish back, so no duplicate ACKs
+		 * came and only the 1-2 s retransmit timer recovered it (STATE
+		 * gaps of 1.3-2.1 s on a phone hotspot with ~3 % loss). Sent at
+		 * once, later publishes draw duplicate ACKs and fast retransmit
+		 * repairs the loss sooner. Telemetry is a few small packets a
+		 * second, so the extra headers cost nothing. */
+		if(client->conn != NULL) {
+			altcp_nagle_disable(client->conn);
+		}
 
 		tm_printf((UB*)"mqtt: connected to " MQTT_BROKER_IP "\n");
 		mqtt_bridge_link_changed(true);

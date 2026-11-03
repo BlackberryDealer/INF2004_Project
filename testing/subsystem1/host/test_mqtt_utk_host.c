@@ -4,7 +4,8 @@
  *          B1.2.5) against mock lwIP and mock bridge functions: pending
  *          payload and publish refusals (S1-U13, S1-U15), reconnect
  *          back-off (S1-U36), last will, availability and command
- *          forwarding (S1-U37). The real source is included so its
+ *          forwarding (S1-U37), Nagle off on connect (S1-U39). The
+ *          real source is included so its
  *          private state can be checked.
  * @owner   Buddy 1 (communications)
  * @kind    test
@@ -41,9 +42,20 @@ static uint32_t           g_retry_ms;
 static uint32_t           g_retry_armed;
 static uint32_t           g_drain_armed;
 
+static uint32_t           g_nagle_off;
+static struct altcp_pcb * g_nagle_conn;
+static int                g_pcb_dummy;
+
 mqtt_client_t * mqtt_client_new(void)
 {
+    g_client_obj.conn = (struct altcp_pcb *) (void *) &g_pcb_dummy;
     return &g_client_obj;
+}
+
+void altcp_nagle_disable(struct altcp_pcb * conn)
+{
+    g_nagle_off++;
+    g_nagle_conn = conn;
 }
 
 u8_t mqtt_client_is_connected(mqtt_client_t * p_client)
@@ -306,6 +318,9 @@ int main(void)
                          && (1u == g_sub_qos),
                "subscribed to the bridge's command topic at QoS 1");
     HOST_CHECK("S1-U37", g_drain_armed > 0u, "drain chain started");
+    HOST_CHECK("S1-U39", (1u == g_nagle_off)
+                         && (g_client_obj.conn == g_nagle_conn),
+               "accepted: Nagle turned off on the client's connection");
 
     /* commands: raw bytes on the command topic reach the bridge */
     g_pub_cb(NULL, "c28/c", 2u);

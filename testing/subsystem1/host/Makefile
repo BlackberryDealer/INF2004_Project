@@ -11,7 +11,7 @@
 #                tools/telem_decode.py --golden must reproduce)
 #   S1-U11, U12, U30..U35  test_mqtt_bridge_host.c (mqtt_bridge.c + mock
 #                kernel; links telem_bin.c, app_bits.c, odometry.c)
-#   S1-U13, U15, U36, U37  test_mqtt_utk_host.c (radio-task mqtt_utk.c +
+#   S1-U13, U15, U36, U37, U39  test_mqtt_utk_host.c (radio-task mqtt_utk.c +
 #                mock lwIP in mock_lwip/ + mock bridge)
 #   S1-U38       test_lwip_sizing_host.c (real lwipopts.h: MQTT request
 #                slots and output ring hold 4 s of telemetry)

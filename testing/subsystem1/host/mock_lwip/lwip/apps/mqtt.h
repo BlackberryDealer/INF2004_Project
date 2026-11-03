@@ -13,7 +13,8 @@ typedef int8_t   err_t;
 #define ERR_MEM  (-1)
 #define ERR_TIMEOUT (-3)
 #define ERR_RTE  (-4)
-typedef struct mqtt_client_s { int dummy; } mqtt_client_t;
+struct altcp_pcb;   /* opaque, as in lwIP */
+typedef struct mqtt_client_s { int dummy; struct altcp_pcb * conn; } mqtt_client_t;
 typedef enum
 {
     MQTT_CONNECT_ACCEPTED = 0,
