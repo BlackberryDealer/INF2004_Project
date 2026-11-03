@@ -80,3 +80,9 @@ Add a new row for every run. Never edit or delete old rows.
 | — | A10, S1-I01..I07, S1-I10 | — | — | pending | — | needs the car, the lab AP and the laptop broker |
 | 2026-11-03 | S1-U38 | `b1-wifi-latency` | Hanz | PASS | `make -C testing/host` | 2 PASS; FAILS on main (4 slots, 256 B ring); host suite 417 PASS, barr_check no findings |
 | 2026-11-03 | S1-U39 | `b1-wifi-latency` | Hanz | PASS | `make -C testing/host` | FAILS without the mqtt_utk.c change; host suite 418 PASS, barr_check no findings |
+| 2026-11-03 | A10 | `013ca60` (MQTT=1 build) | Hanz | PASS | `logs/2026-11-03_mqtt_wifi/1_before/` | car (`csc28-car`) joins the phone hotspot and connects to Mosquitto on the laptop; `telem_decode.py` shows ONLINE, STATE 18 B, HEARTBEAT 6 B |
+| 2026-11-03 | S1-I01 | `013ca60` | Hanz | FAIL | `logs/2026-11-03_mqtt_wifi/1_before/` | 588 STATE in 119.4 s (rate OK) but 14 gaps > 400 ms (longest 1.7 s), 3 heartbeats lost, 2 keepalive disconnects, DROPS stuck at 255. Cause: radio power save + 4 lwIP MQTT slots + Nagle; fixed in `9d4a68a`, `38a72b5` |
+| 2026-11-03 | S1-I01 | `9d4a68a` | Hanz | FAIL | `logs/2026-11-03_mqtt_wifi/2_pmoff/` | drops +13 in 120 s, but 17 gaps > 400 ms (longest 7.8 s), 1 disconnect |
+| 2026-11-03 | S1-I01 | `38a72b5` | Hanz | PASS | `logs/2026-11-03_mqtt_wifi/3_nodelay/` | 600 STATE in 120 s, exactly 5 in every second; longest gap 324 ms; DROPS +0; 0 disconnects; console `wifi: power save off (0)` |
+| 2026-11-03 | S1-I02 (heartbeat part) | `38a72b5` | Hanz | PASS | `logs/2026-11-03_mqtt_wifi/3_nodelay/` | 120 of 120 heartbeats in 120 s; event latency part not measured yet |
+| 2026-11-03 | S1-I06 (observation only) | `38a72b5` | Hanz | FAIL (observed) | heartbeat `LAT_MAX_US`, `3_nodelay/decode.txt` | worst release latency since boot 1555 -> 1684 us in READY with the radio on (NFR17 <= 1000 us); the proper `TEST=1 PROBE=1` run is still to do |
