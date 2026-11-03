@@ -294,6 +294,13 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
                 tm_printf((UB*)"wifi: link up, ip=%d.%d.%d.%d\n",
                           (int)(ip & 0xff), (int)((ip >> 8) & 0xff),
                           (int)((ip >> 16) & 0xff), (int)((ip >> 24) & 0xff));
+                /* Power saving off (CSC28 B1, 2026-11-03): the default
+                 * CYW43_PERFORMANCE_PM lets the radio doze between beacons,
+                 * so the broker's TCP ACKs waited up to 510 ms on a phone
+                 * hotspot and telemetry backed up. The car runs from its
+                 * own battery, so the extra radio current does not matter. */
+                tm_printf((UB*)"wifi: power save off (%d)\n",
+                          cyw43_wifi_pm(&cyw43_state, CYW43_NONE_PM));
             } else {
                 tm_printf((UB*)"wifi: link status -> %s (%d)\n",
                           link_status_str(radio_status.link_status),

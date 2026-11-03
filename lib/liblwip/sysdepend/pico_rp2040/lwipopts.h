@@ -64,6 +64,17 @@
  * (NFR9a 7.5 s). keep_alive = 5 would give 8 s and fail. */
 #define MQTT_CYCLIC_TIMER_INTERVAL  1
 
+/* CSC28 B1: room for a Wi-Fi stall. lwIP keeps every publish (QoS 0 too)
+ * in a request slot until TCP reports it sent, and its bytes in the output
+ * ring until then. The defaults (4 slots, 256 B) ran out after < 1 s of a
+ * slow phone hotspot (2026-11-03 on-car capture: pings up to 510 ms, STATE
+ * gaps up to 1.7 s, heartbeat DROPS 71 -> 255 in 160 s): mqtt_publish()
+ * then returns ERR_MEM and mqtt_utk.c drops the payload after two tries.
+ * Sized for 4 s (the keepalive) of state + heartbeat, 6 messages/s:
+ * 24 slots and 24 x 31 B = 744 B of ring. Checked by host test S1-U38. */
+#define MQTT_REQ_MAX_IN_FLIGHT      24
+#define MQTT_OUTPUT_RINGBUF_SIZE    1024
+
 #define LWIP_ARP                    1
 #define LWIP_ETHERNET               1
 #define LWIP_ICMP                   1
