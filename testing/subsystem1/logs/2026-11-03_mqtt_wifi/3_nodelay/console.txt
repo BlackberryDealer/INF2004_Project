@@ -1,0 +1,1185 @@
+20:01:29.459 
+20:01:29.459 
+20:01:29.459 microT-Kernel Version 3.00
+20:01:29.459 
+20:01:29.459 
+20:01:29.459 === CSC28 PicoCar on micro T-Kernel (spec 0x6300, product 0x0003) ===
+20:01:29.459 dual-core (SMP) build
+20:01:29.459 GP0 func 31 GP1 func 31
+20:01:29.459 RESET cause watchdog 0
+20:01:29.459 ENC PIO1 SM 0 1 offset 0
+20:01:29.459 7 tasks started
+20:01:29.459 STATE BOOT (white): waiting for task check-ins and radio init
+20:01:29.459 wifi: cyw43_utk_task starting (proc 1)
+20:01:29.459 wifi: cyw43_init() ...
+20:01:29.459 wifi: cyw43_init() returned, bringing interface up ...
+20:01:29.459 FAULT bit 6 RANGE_CLAMP (info only)
+20:01:29.459 US dist 176 mm, lost 0
+20:01:29.459 IR raw L 1267 R 1106
+20:01:29.459 ENC pos L 0 R 0
+20:01:29.459 BAR DO 0 (1 = black), edges 0
+20:01:29.459 US dist 124 mm, lost 0
+20:01:29.459 IR raw L 1255 R 1114
+20:01:29.459 ENC pos L 0 R 0
+20:01:29.459 BAR DO 0 (1 = black), edges 0
+20:01:29.459 wifi: joining "Hpi~" ...
+20:01:29.459 US dist 164 mm, lost 0
+20:01:29.459 IR raw L 1259 R 1112
+20:01:29.459 ENC pos L 0 R 0
+20:01:29.459 BAR DO 0 (1 = black), edges 0
+20:01:29.459 wifi: link status -> joined AP, waiting for IP (1)
+20:01:29.459 STATE CAL_IMU (yellow blink): keep the car still, 2 s
+20:01:29.459 WDT longest feed gap 10382 us in the last 2 s (watchdog fires at 30000)
+20:01:29.459 US dist 164 mm, lost 0
+20:01:29.459 IR raw L 1254 R 1116
+20:01:29.459 ENC pos L 0 R 0
+20:01:29.459 BAR DO 0 (1 = black), edges 0
+20:01:29.459 US dist 164 mm, lost 0
+20:01:29.459 IR raw L 1253 R 1115
+20:01:29.459 ENC pos L 0 R 0
+20:01:29.459 BAR DO 0 (1 = black), edges 0
+20:01:29.459 US dist 164 mm, lost 0
+20:01:29.459 IR raw L 1265 R 1115
+20:01:29.459 ENC pos L 0 R 0
+20:01:29.459 BAR DO 0 (1 = black), edges 0
+20:01:29.459 US dist 232 mm, lost 0
+20:01:29.460 IR raw L 1260 R 1109
+20:01:29.460 ENC pos L 0 R 0
+20:01:29.460 BAR DO 0 (1 = black), edges 0
+20:01:29.460 IMU at rest, raw before offsets: ax -195 ay 42 az -825 mg
+20:01:29.460 STATE CAL_IR (yellow blink): sweeping over the line
+20:01:29.460 US dist 160 mm, lost 0
+20:01:29.460 WDT longest feed gap 10939 us in the last 2 s (watchdog fires at 30000)
+20:01:29.460 US dist 184 mm, lost 0
+20:01:29.460 wifi: link status -> joined AP, no IP yet (2)
+20:01:29.460 US dist 168 mm, lost 0
+20:01:29.460 CAL_IR sweep done: heading -148 cdeg from the start (+ = right) after 0 return turns
+20:01:29.460 IR cal OK: span L 470 R 413
+20:01:29.460 STATE READY (green): press and release RUN (GP20) to start
+20:01:29.460 US dist 172 mm, lost 0
+20:01:29.460 IR raw L 1302 R 1172
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 WDT longest feed gap 11545 us in the last 2 s (watchdog fires at 30000)
+20:01:29.460 IR raw L 1314 R 1165
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 wifi: link up, ip=10.14.95.206
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 wifi: power save off (0)
+20:01:29.460 mqtt: connected to 10.14.95.64
+20:01:29.460 IR raw L 1313 R 1170
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1311 R 1166
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1301 R 1153
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 WDT longest feed gap 12559 us in the last 2 s (watchdog fires at 30000)
+20:01:29.460 IR raw L 1307 R 1167
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1311 R 1150
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1309 R 1166
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1290 R 1165
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 WDT longest feed gap 12008 us in the last 2 s (watchdog fires at 30000)
+20:01:29.460 IR raw L 1315 R 1175
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1317 R 1166
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1314 R 1175
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1308 R 1168
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 WDT longest feed gap 12117 us in the last 2 s (watchdog fires at 30000)
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1314 R 1170
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1317 R 1163
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.460 BAR DO 0 (1 = black), edges 6
+20:01:29.460 US dist 180 mm, lost 0
+20:01:29.460 IR raw L 1313 R 1169
+20:01:29.460 ENC pos L 2 R 12
+20:01:29.461 BAR DO 0 (1 = black), edges 6
+20:01:29.461 US dist 180 mm, lost 0
+20:01:29.461 IR raw L 1313 R 1174
+20:01:29.461 ENC pos L 2 R 12
+20:01:29.461 BAR DO 0 (1 = black), edges 6
+20:01:29.461 WDT longest feed gap 11997 us in the last 2 s (watchdog fires at 30000)
+20:01:29.461 US dist 180 mm, lost 0
+20:01:29.461 IR raw L 1304 R 1159
+20:01:29.461 ENC pos L 2 R 12
+20:01:29.461 BAR DO 0 (1 = black), edges 6
+20:01:29.461 US dist 180 mm, lost 0
+20:01:29.461 IR raw L 1312 R 1167
+20:01:29.461 ENC pos L 2 R 12
+20:01:29.461 BAR DO 0 (1 = black), edges 6
+20:01:29.461 US dist 180 mm, lost 0
+20:01:29.660 IR raw L 1312 R 1160
+20:01:29.660 ENC pos L 2 R 12
+20:01:29.660 BAR DO 0 (1 = black), edges 6
+20:01:29.660 US dist 180 mm, lost 0
+20:01:29.660 IR raw L 1304 R 1172
+20:01:29.660 ENC pos L 2 R 12
+20:01:29.660 BAR DO 0 (1 = black), edges 6
+20:01:29.660 US dist 180 mm, lost 0
+20:01:29.660 WDT longest feed gap 11972 us in the last 2 s (watchdog fires at 30000)
+20:01:29.660 IR raw L 1324 R 1171
+20:01:29.660 ENC pos L 2 R 12
+20:01:29.660 BAR DO 0 (1 = blackUS dist 180 mm, lost 0
+20:01:30.079 IR raw L 1316 R 1151
+20:01:30.079 ENC pos L 2 R 12
+20:01:30.080 BAR DO 0 (1 = black), edges 6
+20:01:30.280 US dist 180 mm, lost 0
+20:01:30.484 WDT longest feed gap 11932 us in the last 2 s (watchdog fires at 30000)
+20:01:30.484 IR raw L 1308 R 1164
+20:01:30.484 ENC pos L 2 R 12
+20:01:30.484 BAR DO 0 (1 = black), edges 6
+20:01:30.686 US dist 180 mm, lost 0
+20:01:31.095 IR raw L 1324 R 1172
+20:01:31.096 ENC pos L 2 R 12
+20:01:31.096 BAR DO 0 (1 = black), edges 6
+20:01:31.096 US dist 180 mm, lost 0
+20:01:31.510 IR raw L 1324 R 1177
+20:01:31.510 ENC pos L 2 R 12
+20:01:31.510 BAR DO 0 (1 = black), edges 6
+20:01:31.710 US dist 180 mm, lost 0
+20:01:31.918 IR raw L 1316 R 1159
+20:01:31.918 ENC pos L 2 R 12
+20:01:31.918 BAR DO 0 (1 = black), edges 6
+20:01:32.122 US dist 180 mm, lost 0
+20:01:32.536 WDT longest feed gap 11667 us in the last 2 s (watchdog fires at 30000)
+20:01:32.536 IR raw L 1315 R 1181
+20:01:32.536 ENC pos L 2 R 12
+20:01:32.536 BAR DO 0 (1 = black), edges 6
+20:01:32.536 US dist 180 mm, lost 0
+20:01:32.943 IR raw L 1316 R 1162
+20:01:32.943 ENC pos L 2 R 12
+20:01:32.943 BAR DO 0 (1 = black), edges 6
+20:01:33.150 US dist 180 mm, lost 0
+20:01:33.562 IR raw L 1316 R 1171
+20:01:33.562 ENC pos L 2 R 12
+20:01:33.562 BAR DO 0 (1 = black), edges 6
+20:01:33.562 US dist 180 mm, lost 0
+20:01:33.966 IR raw L 1319 R 1172
+20:01:33.966 ENC pos L 2 R 12
+20:01:33.966 BAR DO 0 (1 = black), edges 6
+20:01:33.966 US dist 180 mm, lost 0
+20:01:34.378 WDT longest feed gap 11736 us in the last 2 s (watchdog fires at 30000)
+20:01:34.579 IR raw L 1315 R 1158
+20:01:34.579 ENC pos L 2 R 12
+20:01:34.579 BAR DO 0 (1 = black), edges 6
+20:01:34.579 US dist 180 mm, lost 0
+20:01:34.991 IR raw L 1313 R 1157
+20:01:34.991 ENC pos L 2 R 12
+20:01:34.991 BAR DO 0 (1 = black), edges 6
+20:01:34.991 US dist 180 mm, lost 0
+20:01:35.405 US dist 180 mm, lost 0
+20:01:35.405 IR raw L 1307 R 1181
+20:01:35.405 ENC pos L 2 R 12
+20:01:35.405 BAR DO 0 (1 = black), edges 6
+20:01:36.035 US dist 180 mm, lost 0
+20:01:36.035 IR raw L 1305 R 1177
+20:01:36.035 ENC pos L 2 R 12
+20:01:36.035 BAR DO 0 (1 = black), edges 6
+20:01:36.449 WDT longest feed gap 11731 us in the last 2 s (watchdog fires at 30000)
+20:01:36.449 US dist 180 mm, lost 0
+20:01:36.450 IR raw L 1314 R 1159
+20:01:36.450 ENC pos L 2 R 12
+20:01:36.450 BAR DO 0 (1 = black), edges 6
+20:01:36.859 US dist 180 mm, lost 0
+20:01:37.068 IR raw L 1329 R 1165
+20:01:37.068 ENC pos L 2 R 12
+20:01:37.068 BAR DO 0 (1 = black), edges 6
+20:01:37.477 US dist 180 mm, lost 0
+20:01:37.477 IR raw L 1316 R 1169
+20:01:37.478 ENC pos L 2 R 12
+20:01:37.478 BAR DO 0 (1 = black), edges 6
+20:01:37.907 US dist 180 mm, lost 0
+20:01:38.108 IR raw L 1314 R 1171
+20:01:38.108 ENC pos L 2 R 12
+20:01:38.108 BAR DO 0 (1 = black), edges 6
+20:01:38.319 US dist 180 mm, lost 0
+20:01:38.526 WDT longest feed gap 11679 us in the last 2 s (watchdog fires at 30000)
+20:01:38.526 IR raw L 1307 R 1168
+20:01:38.526 ENC pos L 2 R 12
+20:01:38.526 BAR DO 0 (1 = black), edges 6
+20:01:38.951 US dist 180 mm, lost 0
+20:01:38.951 IR raw L 1310 R 1170
+20:01:38.951 ENC pos L 2 R 12
+20:01:38.951 BAR DO 0 (1 = black), edges 6
+20:01:39.359 US dist 180 mm, lost 0
+20:01:39.574 IR raw L 1315 R 1161
+20:01:39.574 ENC pos L 2 R 12
+20:01:39.574 BAR DO 0 (1 = black), edges 6
+20:01:39.782 US dist 180 mm, lost 0
+20:01:39.991 IR raw L 1316 R 1154
+20:01:39.991 ENC pos L 2 R 12
+20:01:39.991 BAR DO 0 (1 = black), edges 6
+20:01:40.193 US dist 180 mm, lost 0
+20:01:40.405 WDT longest feed gap 11860 us in the last 2 s (watchdog fires at 30000)
+20:01:40.609 IR raw L 1319 R 1164
+20:01:40.609 ENC pos L 2 R 12
+20:01:40.609 BAR DO 0 (1 = black), edges 6
+20:01:40.824 US dist 180 mm, lost 0
+20:01:41.026 IR raw L 1329 R 1184
+20:01:41.026 ENC pos L 2 R 12
+20:01:41.026 BAR DO 0 (1 = black), edges 6
+20:01:41.229 US dist 180 mm, lost 0
+20:01:41.432 IR raw L 1328 R 1172
+20:01:41.432 ENC pos L 2 R 12
+20:01:41.432 BAR DO 0 (1 = black), edges 6
+20:01:41.636 US dist 180 mm, lost 0
+20:01:42.045 IR raw L 1318 R 1176
+20:01:42.046 ENC pos L 2 R 12
+20:01:42.046 BAR DO 0 (1 = black), edges 6
+20:01:42.253 US dist 180 mm, lost 0
+20:01:42.454 WDT longest feed gap 11724 us in the last 2 s (watchdog fires at 30000)
+20:01:42.455 IR raw L 1320 R 1185
+20:01:42.455 ENC pos L 2 R 12
+20:01:42.455 BAR DO 0 (1 = black), edges 6
+20:01:42.659 US dist 180 mm, lost 0
+20:01:43.076 IR raw L 1319 R 1176
+20:01:43.077 ENC pos L 2 R 12
+20:01:43.077 BAR DO 0 (1 = black), edges 6
+20:01:43.077 US dist 180 mm, lost 0
+20:01:43.495 IR raw L 1317 R 1178
+20:01:43.495 ENC pos L 2 R 12
+20:01:43.495 BAR DO 0 (1 = black), edges 6
+20:01:43.708 US dist 180 mm, lost 0
+20:01:44.120 IR raw L 1319 R 1170
+20:01:44.120 ENC pos L 2 R 12
+20:01:44.120 BAR DO 0 (1 = black), edges 6
+20:01:44.120 US dist 180 mm, lost 0
+20:01:44.549 WDT longest feed gap 11756 us in the last 2 s (watchdog fires at 30000)
+20:01:44.549 IR raw L 1313 R 1168
+20:01:44.549 ENC pos L 2 R 12
+20:01:44.549 BAR DO 0 (1 = black), edges 6
+20:01:44.549 US dist 180 mm, lost 0
+20:01:44.974 IR raw L 1316 R 1161
+20:01:44.974 ENC pos L 2 R 12
+20:01:44.974 BAR DO 0 (1 = black), edges 6
+20:01:45.181 US dist 180 mm, lost 0
+20:01:45.588 IR raw L 1315 R 1167
+20:01:45.588 ENC pos L 2 R 12
+20:01:45.588 BAR DO 0 (1 = black), edges 6
+20:01:45.588 US dist 180 mm, lost 0
+20:01:46.013 IR raw L 1318 R 1179
+20:01:46.013 ENC pos L 2 R 12
+20:01:46.013 BAR DO 0 (1 = black), edges 6
+20:01:46.013 US dist 180 mm, lost 0
+20:01:46.423 WDT longest feed gap 11604 us in the last 2 s (watchdog fires at 30000)
+20:01:46.423 IR raw L 1317 R 1170
+20:01:46.423 ENC pos L 2 R 12
+20:01:46.423 BAR DO 0 (1 = black), edges 6
+20:01:46.631 US dist 180 mm, lost 0
+20:01:47.034 IR raw L 1314 R 1171
+20:01:47.034 ENC pos L 2 R 12
+20:01:47.034 BAR DO 0 (1 = black), edges 6
+20:01:47.034 US dist 180 mm, lost 0
+20:01:47.447 US dist 180 mm, lost 0
+20:01:47.447 IR raw L 1315 R 1156
+20:01:47.447 ENC pos L 2 R 12
+20:01:47.447 BAR DO 0 (1 = black), edges 6
+20:01:48.066 US dist 180 mm, lost 0
+20:01:48.066 IR raw L 1306 R 1169
+20:01:48.066 ENC pos L 2 R 12
+20:01:48.066 BAR DO 0 (1 = black), edges 6
+20:01:48.471 US dist 180 mm, lost 0
+20:01:48.472 WDT longest feed gap 11729 us in the last 2 s (watchdog fires at 30000)
+20:01:48.472 IR raw L 1312 R 1172
+20:01:48.472 ENC pos L 2 R 12
+20:01:48.472 BAR DO 0 (1 = black), edges 6
+20:01:48.889 US dist 180 mm, lost 0
+20:01:49.090 IR raw L 1321 R 1167
+20:01:49.090 ENC pos L 2 R 12
+20:01:49.090 BAR DO 0 (1 = black), edges 6
+20:01:49.515 US dist 180 mm, lost 0
+20:01:49.515 IR raw L 1313 R 1157
+20:01:49.515 ENC pos L 2 R 12
+20:01:49.515 BAR DO 0 (1 = black), edges 6
+20:01:49.922 US dist 180 mm, lost 0
+20:01:49.922 IR raw L 1309 R 1175
+20:01:49.922 ENC pos L 2 R 12
+20:01:49.922 BAR DO 0 (1 = black), edges 6
+20:01:50.342 US dist 180 mm, lost 0
+20:01:50.556 WDT longest feed gap 11789 us in the last 2 s (watchdog fires at 30000)
+20:01:50.556 IR raw L 1320 R 1176
+20:01:50.556 ENC pos L 2 R 12
+20:01:50.556 BAR DO 0 (1 = black), edges 6
+20:01:50.763 US dist 180 mm, lost 0
+20:01:50.976 IR raw L 1306 R 1176
+20:01:50.976 ENC pos L 2 R 12
+20:01:50.976 BAR DO 0 (1 = black), edges 6
+20:01:51.395 US dist 180 mm, lost 0
+20:01:51.601 IR raw L 1310 R 1178
+20:01:51.601 ENC pos L 2 R 12
+20:01:51.601 BAR DO 0 (1 = black), edges 6
+20:01:51.804 US dist 180 mm, lost 0
+20:01:52.014 IR raw L 1318 R 1171
+20:01:52.015 ENC pos L 2 R 12
+20:01:52.015 BAR DO 0 (1 = black), edges 6
+20:01:52.217 US dist 180 mm, lost 0
+20:01:52.431 WDT longest feed gap 11669 us in the last 2 s (watchdog fires at 30000)
+20:01:52.431 IR raw L 1307 R 1177
+20:01:52.431 ENC pos L 2 R 12
+20:01:52.431 BAR DO 0 (1 = black), edges 6
+20:01:52.846 US dist 180 mm, lost 0
+20:01:53.053 IR raw L 1306 R 1181
+20:01:53.053 ENC pos L 2 R 12
+20:01:53.053 BAR DO 0 (1 = black), edges 6
+20:01:53.256 US dist 180 mm, lost 0
+20:01:53.467 IR raw L 1314 R 1173
+20:01:53.467 ENC pos L 2 R 12
+20:01:53.467 BAR DO 0 (1 = black), edges 6
+20:01:53.668 US dist 180 mm, lost 0
+20:01:54.088 IR raw L 1319 R 1178
+20:01:54.088 ENC pos L 2 R 12
+20:01:54.088 BAR DO 0 (1 = black), edges 6
+20:01:54.289 US dist 180 mm, lost 0
+20:01:54.498 WDT longest feed gap 11779 us in the last 2 s (watchdog fires at 30000)
+20:01:54.498 IR raw L 1315 R 1179
+20:01:54.498 ENC pos L 2 R 12
+20:01:54.498 BAR DO 0 (1 = black), edges 6
+20:01:54.708 US dist 180 mm, lost 0
+20:01:54.923 IR raw L 1312 R 1163
+20:01:54.923 ENC pos L 2 R 12
+20:01:54.923 BAR DO 0 (1 = black), edges 6
+20:01:55.126 US dist 180 mm, lost 0
+20:01:55.552 IR raw L 1323 R 1170
+20:01:55.552 ENC pos L 2 R 12
+20:01:55.552 BAR DO 0 (1 = black), edges 6
+20:01:55.552 US dist 180 mm, lost 0
+20:01:55.970 IR raw L 1308 R 1169
+20:01:55.970 ENC pos L 2 R 12
+20:01:55.970 BAR DO 0 (1 = black), edges 6
+20:01:56.176 US dist 180 mm, lost 0
+20:01:56.592 WDT longest feed gap 11713 us in the last 2 s (watchdog fires at 30000)
+20:01:56.592 IR raw L 1311 R 1183
+20:01:56.592 ENC pos L 2 R 12
+20:01:56.592 BAR DO 0 (1 = black), edges 6
+20:01:56.592 US dist 180 mm, lost 0
+20:01:57.008 IR raw L 1310 R 1169
+20:01:57.008 ENC pos L 2 R 12
+20:01:57.008 BAR DO 0 (1 = black), edges 6
+20:01:57.008 US dist 180 mm, lost 0
+20:01:57.423 IR raw L 1313 R 1163
+20:01:57.423 ENC pos L 2 R 12
+20:01:57.423 BAR DO 0 (1 = black), edges 6
+20:01:57.629 US dist 180 mm, lost 0
+20:01:58.050 IR raw L 1305 R 1172
+20:01:58.050 ENC pos L 2 R 12
+20:01:58.050 BAR DO 0 (1 = black), edges 6
+20:01:58.050 US dist 180 mm, lost 0
+20:01:58.463 IR raw L 1316 R 1166
+20:01:58.463 ENC pos L 2 R 12
+20:01:58.463 BAR DO 0 (1 = black), edges 6
+20:01:58.465 WDT longest feed gap 11690 us in the last 2 s (watchdog fires at 30000)
+20:01:58.465 US dist 180 mm, lost 0
+20:01:59.082 IR raw L 1304 R 1179
+20:01:59.083 ENC pos L 2 R 12
+20:01:59.083 BAR DO 0 (1 = black), edges 6
+20:01:59.083 US dist 180 mm, lost 0
+20:01:59.499 US dist 180 mm, lost 0
+20:01:59.499 IR raw L 1328 R 1182
+20:01:59.499 ENC pos L 2 R 12
+20:01:59.500 BAR DO 0 (1 = black), edges 6
+20:01:59.912 US dist 180 mm, lost 0
+20:02:00.127 IR raw L 1323 R 1180
+20:02:00.127 ENC pos L 2 R 12
+20:02:00.127 BAR DO 0 (1 = black), edges 6
+20:02:00.544 US dist 180 mm, lost 0
+20:02:00.544 IR raw L 1325 R 1180
+20:02:00.544 ENC pos L 2 R 12
+20:02:00.544 BAR DO 0 (1 = black), edges 6
+20:02:00.544 WDT longest feed gap 11803 us in the last 2 s (watchdog fires at 30000)
+20:02:00.959 US dist 180 mm, lost 0
+20:02:00.959 IR raw L 1310 R 1167
+20:02:00.959 ENC pos L 2 R 12
+20:02:00.959 BAR DO 0 (1 = black), edges 6
+20:02:01.368 US dist 180 mm, lost 0
+20:02:01.569 IR raw L 1323 R 1169
+20:02:01.569 ENC pos L 2 R 12
+20:02:01.569 BAR DO 0 (1 = black), edges 6
+20:02:01.987 US dist 180 mm, lost 0
+20:02:01.987 IR raw L 1319 R 1170
+20:02:01.987 ENC pos L 2 R 12
+20:02:01.987 BAR DO 0 (1 = black), edges 6
+20:02:02.405 US dist 180 mm, lost 0
+20:02:02.620 IR raw L 1318 R 1164
+20:02:02.620 ENC pos L 2 R 12
+20:02:02.620 BAR DO 0 (1 = black), edges 6
+20:02:02.620 WDT longest feed gap 11797 us in the last 2 s (watchdog fires at 30000)
+20:02:02.831 US dist 180 mm, lost 0
+20:02:03.037 IR raw L 1308 R 1171
+20:02:03.037 ENC pos L 2 R 12
+20:02:03.037 BAR DO 0 (1 = black), edges 6
+20:02:03.240 US dist 180 mm, lost 0
+20:02:03.453 IR raw L 1312 R 1176
+20:02:03.453 ENC pos L 2 R 12
+20:02:03.453 BAR DO 0 (1 = black), edges 6
+20:02:03.868 US dist 180 mm, lost 0
+20:02:04.084 IR raw L 1320 R 1173
+20:02:04.084 ENC pos L 2 R 12
+20:02:04.084 BAR DO 0 (1 = black), edges 6
+20:02:04.296 US dist 180 mm, lost 0
+20:02:04.511 IR raw L 1307 R 1173
+20:02:04.511 ENC pos L 2 R 12
+20:02:04.511 BAR DO 0 (1 = black), edges 6
+20:02:04.511 WDT longest feed gap 11914 us in the last 2 s (watchdog fires at 30000)
+20:02:04.711 US dist 180 mm, lost 0
+20:02:04.919 IR raw L 1323 R 1176
+20:02:04.919 ENC pos L 2 R 12
+20:02:04.919 BAR DO 0 (1 = black), edges 6
+20:02:05.327 US dist 180 mm, lost 0
+20:02:05.537 IR raw L 1309 R 1182
+20:02:05.537 ENC pos L 2 R 12
+20:02:05.537 BAR DO 0 (1 = black), edges 6
+20:02:05.744 US dist 180 mm, lost 0
+20:02:05.953 IR raw L 1310 R 1174
+20:02:05.953 ENC pos L 2 R 12
+20:02:05.953 BAR DO 0 (1 = black), edges 6
+20:02:06.160 US dist 180 mm, lost 0
+20:02:06.578 IR raw L 1314 R 1177
+20:02:06.579 ENC pos L 2 R 12
+20:02:06.579 BAR DO 0 (1 = black), edges 6
+20:02:06.579 WDT longest feed gap 11664 us in the last 2 s (watchdog fires at 30000)
+20:02:06.792 US dist 180 mm, lost 0
+20:02:06.993 IR raw L 1319 R 1179
+20:02:06.993 ENC pos L 2 R 12
+20:02:06.993 BAR DO 0 (1 = black), edges 6
+20:02:07.202 US dist 180 mm, lost 0
+20:02:07.622 IR raw L 1321 R 1173
+20:02:07.622 ENC pos L 2 R 12
+20:02:07.622 BAR DO 0 (1 = black), edges 6
+20:02:07.622 US dist 180 mm, lost 0
+20:02:08.035 IR raw L 1322 R 1169
+20:02:08.036 ENC pos L 2 R 12
+20:02:08.036 BAR DO 0 (1 = black), edges 6
+20:02:08.036 US dist 180 mm, lost 0
+20:02:08.439 IR raw L 1320 R 1182
+20:02:08.439 ENC pos L 2 R 12
+20:02:08.439 BAR DO 0 (1 = black), edges 6
+20:02:08.439 WDT longest feed gap 11638 us in the last 2 s (watchdog fires at 30000)
+20:02:08.640 US dist 180 mm, lost 0
+20:02:09.061 IR raw L 1303 R 1167
+20:02:09.062 ENC pos L 2 R 12
+20:02:09.062 BAR DO 0 (1 = black), edges 6
+20:02:09.062 US dist 180 mm, lost 0
+20:02:09.477 IR raw L 1310 R 1168
+20:02:09.477 ENC pos L 2 R 12
+20:02:09.478 BAR DO 0 (1 = black), edges 6
+20:02:09.478 US dist 180 mm, lost 0
+20:02:10.105 IR raw L 1309 R 1158
+20:02:10.105 ENC pos L 2 R 12
+20:02:10.105 BAR DO 0 (1 = black), edges 6
+20:02:10.105 US dist 180 mm, lost 0
+20:02:10.518 IR raw L 1318 R 1173
+20:02:10.518 ENC pos L 2 R 12
+20:02:10.518 BAR DO 0 (1 = black), edges 6
+20:02:10.518 WDT longest feed gap 11919 us in the last 2 s (watchdog fires at 30000)
+20:02:10.518 US dist 180 mm, lost 0
+20:02:10.933 IR raw L 1306 R 1168
+20:02:10.934 ENC pos L 2 R 12
+20:02:10.934 BAR DO 0 (1 = black), edges 6
+20:02:10.934 US dist 180 mm, lost 0
+20:02:11.553 US dist 180 mm, lost 0
+20:02:11.553 IR raw L 1316 R 1163
+20:02:11.553 ENC pos L 2 R 12
+20:02:11.553 BAR DO 0 (1 = black), edges 6
+20:02:11.968 US dist 180 mm, lost 0
+20:02:11.969 IR raw L 1313 R 1170
+20:02:11.969 ENC pos L 2 R 12
+20:02:11.969 BAR DO 0 (1 = black), edges 6
+20:02:12.384 US dist 180 mm, lost 0
+20:02:12.588 IR raw L 1312 R 1172
+20:02:12.588 ENC pos L 2 R 12
+20:02:12.588 BAR DO 0 (1 = black), edges 6
+20:02:12.588 WDT longest feed gap 11758 us in the last 2 s (watchdog fires at 30000)
+20:02:12.999 US dist 180 mm, lost 0
+20:02:12.999 IR raw L 1313 R 1177
+20:02:12.999 ENC pos L 2 R 12
+20:02:13.000 BAR DO 0 (1 = black), edges 6
+20:02:13.413 US dist 180 mm, lost 0
+20:02:13.413 IR raw L 1317 R 1179
+20:02:13.413 ENC pos L 2 R 12
+20:02:13.413 BAR DO 0 (1 = black), edges 6
+20:02:13.833 US dist 180 mm, lost 0
+20:02:14.044 IR raw L 1321 R 1170
+20:02:14.045 ENC pos L 2 R 12
+20:02:14.045 BAR DO 0 (1 = black), edges 6
+20:02:14.464 US dist 180 mm, lost 0
+20:02:14.464 IR raw L 1320 R 1177
+20:02:14.465 ENC pos L 2 R 12
+20:02:14.465 BAR DO 0 (1 = black), edges 6
+20:02:14.465 WDT longest feed gap 11718 us in the last 2 s (watchdog fires at 30000)
+20:02:14.875 US dist 180 mm, lost 0
+20:02:15.084 IR raw L 1314 R 1172
+20:02:15.084 ENC pos L 2 R 12
+20:02:15.084 BAR DO 0 (1 = black), edges 6
+20:02:15.298 US dist 180 mm, lost 0
+20:02:15.506 IR raw L 1312 R 1168
+20:02:15.506 ENC pos L 2 R 12
+20:02:15.506 BAR DO 0 (1 = black), edges 6
+20:02:15.714 US dist 180 mm, lost 0
+20:02:15.917 IR raw L 1309 R 1182
+20:02:15.917 ENC pos L 2 R 12
+20:02:15.917 BAR DO 0 (1 = black), edges 6
+20:02:16.324 US dist 180 mm, lost 0
+20:02:16.532 IR raw L 1320 R 1158
+20:02:16.532 ENC pos L 2 R 12
+20:02:16.532 BAR DO 0 (1 = black), edges 6
+20:02:16.532 WDT longest feed gap 11798 us in the last 2 s (watchdog fires at 30000)
+20:02:16.735 US dist 180 mm, lost 0
+20:02:16.945 IR raw L 1317 R 1171
+20:02:16.945 ENC pos L 2 R 12
+20:02:16.945 BAR DO 0 (1 = black), edges 6
+20:02:17.348 US dist 180 mm, lost 0
+20:02:17.565 IR raw L 1317 R 1178
+20:02:17.565 ENC pos L 2 R 12
+20:02:17.565 BAR DO 0 (1 = black), edges 6
+20:02:17.772 US dist 180 mm, lost 0
+20:02:17.981 IR raw L 1310 R 1179
+20:02:17.981 ENC pos L 2 R 12
+20:02:17.981 BAR DO 0 (1 = black), edges 6
+20:02:18.190 US dist 180 mm, lost 0
+20:02:18.608 IR raw L 1316 R 1169
+20:02:18.608 ENC pos L 2 R 12
+20:02:18.608 BAR DO 0 (1 = black), edges 6
+20:02:18.608 WDT longest feed gap 11734 us in the last 2 s (watchdog fires at 30000)
+20:02:18.608 US dist 180 mm, lost 0
+20:02:19.016 IR raw L 1313 R 1174
+20:02:19.016 ENC pos L 2 R 12
+20:02:19.017 BAR DO 0 (1 = black), edges 6
+20:02:19.216 US dist 180 mm, lost 0
+20:02:19.430 IR raw L 1314 R 1159
+20:02:19.430 ENC pos L 2 R 12
+20:02:19.430 BAR DO 0 (1 = black), edges 6
+20:02:19.640 US dist 180 mm, lost 0
+20:02:20.046 IR raw L 1320 R 1158
+20:02:20.046 ENC pos L 2 R 12
+20:02:20.046 BAR DO 0 (1 = black), edges 6
+20:02:20.046 US dist 180 mm, lost 0
+20:02:20.464 IR raw L 1319 R 1178
+20:02:20.464 ENC pos L 2 R 12
+20:02:20.464 BAR DO 0 (1 = black), edges 6
+20:02:20.464 WDT longest feed gap 11762 us in the last 2 s (watchdog fires at 30000)
+20:02:20.665 US dist 180 mm, lost 0
+20:02:21.089 IR raw L 1328 R 1167
+20:02:21.089 ENC pos L 2 R 12
+20:02:21.089 BAR DO 0 (1 = black), edges 6
+20:02:21.089 US dist 180 mm, lost 0
+20:02:21.492 IR raw L 1312 R 1179
+20:02:21.492 ENC pos L 2 R 12
+20:02:21.492 BAR DO 0 (1 = black), edges 6
+20:02:21.492 US dist 180 mm, lost 0
+20:02:22.096 IR raw L 1321 R 1169
+20:02:22.096 ENC pos L 2 R 12
+20:02:22.097 BAR DO 0 (1 = black), edges 6
+20:02:22.097 US dist 180 mm, lost 0
+20:02:22.513 IR raw L 1312 R 1178
+20:02:22.513 ENC pos L 2 R 12
+20:02:22.513 BAR DO 0 (1 = black), edges 6
+20:02:22.513 US dist 180 mm, lost 0
+20:02:22.513 WDT longest feed gap 11662 us in the last 2 s (watchdog fires at 30000)
+20:02:22.921 IR raw L 1318 R 1166
+20:02:22.921 ENC pos L 2 R 12
+20:02:22.921 BAR DO 0 (1 = black), edges 6
+20:02:22.921 US dist 180 mm, lost 0
+20:02:23.558 US dist 180 mm, lost 0
+20:02:23.558 IR raw L 1320 R 1181
+20:02:23.558 ENC pos L 2 R 12
+20:02:23.558 BAR DO 0 (1 = black), edges 6
+20:02:23.965 US dist 180 mm, lost 0
+20:02:23.965 IR raw L 1314 R 1170
+20:02:23.965 ENC pos L 2 R 12
+20:02:23.965 BAR DO 0 (1 = black), edges 6
+20:02:24.380 US dist 180 mm, lost 0
+20:02:24.580 IR raw L 1316 R 1175
+20:02:24.580 ENC pos L 2 R 12
+20:02:24.580 BAR DO 0 (1 = black), edges 6
+20:02:24.580 WDT longest feed gap 11586 us in the last 2 s (watchdog fires at 30000)
+20:02:24.997 US dist 180 mm, lost 0
+20:02:24.997 IR raw L 1324 R 1171
+20:02:24.997 ENC pos L 2 R 12
+20:02:24.997 BAR DO 0 (1 = black), edges 6
+20:02:25.397 US dist 180 mm, lost 0
+20:02:25.612 IR raw L 1322 R 1175
+20:02:25.612 ENC pos L 2 R 12
+20:02:25.613 BAR DO 0 (1 = black), edges 6
+20:02:25.822 US dist 180 mm, lost 0
+20:02:26.023 IR raw L 1321 R 1171
+20:02:26.023 ENC pos L 2 R 12
+20:02:26.023 BAR DO 0 (1 = black), edges 6
+20:02:26.428 US dist 180 mm, lost 0
+20:02:26.428 IR raw L 1316 R 1187
+20:02:26.428 ENC pos L 2 R 12
+20:02:26.428 BAR DO 0 (1 = black), edges 6
+20:02:26.643 WDT longest feed gap 11660 us in the last 2 s (watchdog fires at 30000)
+20:02:26.859 US dist 180 mm, lost 0
+20:02:27.064 IR raw L 1321 R 1171
+20:02:27.064 ENC pos L 2 R 12
+20:02:27.065 BAR DO 0 (1 = black), edges 6
+20:02:27.272 US dist 180 mm, lost 0
+20:02:27.478 IR raw L 1315 R 1166
+20:02:27.479 ENC pos L 2 R 12
+20:02:27.479 BAR DO 0 (1 = black), edges 6
+20:02:27.893 US dist 180 mm, lost 0
+20:02:28.096 IR raw L 1317 R 1167
+20:02:28.096 ENC pos L 2 R 12
+20:02:28.096 BAR DO 0 (1 = black), edges 6
+20:02:28.312 US dist 180 mm, lost 0
+20:02:28.519 IR raw L 1317 R 1167
+20:02:28.519 ENC pos L 2 R 12
+20:02:28.520 BAR DO 0 (1 = black), edges 6
+20:02:28.520 WDT longest feed gap 11783 us in the last 2 s (watchdog fires at 30000)
+20:02:28.720 US dist 180 mm, lost 0
+20:02:28.933 IR raw L 1315 R 1168
+20:02:28.933 ENC pos L 2 R 12
+20:02:28.933 BAR DO 0 (1 = black), edges 6
+20:02:29.344 US dist 180 mm, lost 0
+20:02:29.551 IR raw L 1315 R 1183
+20:02:29.551 ENC pos L 2 R 12
+20:02:29.551 BAR DO 0 (1 = black), edges 6
+20:02:29.762 US dist 180 mm, lost 0
+20:02:29.978 IR raw L 1323 R 1178
+20:02:29.978 ENC pos L 2 R 12
+20:02:29.978 BAR DO 0 (1 = black), edges 6
+20:02:30.189 US dist 180 mm, lost 0
+20:02:30.608 IR raw L 1314 R 1191
+20:02:30.608 ENC pos L 2 R 12
+20:02:30.608 BAR DO 0 (1 = black), edges 6
+20:02:30.608 WDT longest feed gap 11805 us in the last 2 s (watchdog fires at 30000)
+20:02:30.608 US dist 180 mm, lost 0
+20:02:31.028 IR raw L 1312 R 1167
+20:02:31.028 ENC pos L 2 R 12
+20:02:31.028 BAR DO 0 (1 = black), edges 6
+20:02:31.231 US dist 180 mm, lost 0
+20:02:31.434 IR raw L 1327 R 1167
+20:02:31.434 ENC pos L 2 R 12
+20:02:31.434 BAR DO 0 (1 = black), edges 6
+20:02:31.644 US dist 180 mm, lost 0
+20:02:32.061 IR raw L 1316 R 1183
+20:02:32.061 ENC pos L 2 R 12
+20:02:32.061 BAR DO 0 (1 = black), edges 6
+20:02:32.061 US dist 180 mm, lost 0
+20:02:32.475 IR raw L 1312 R 1171
+20:02:32.475 ENC pos L 2 R 12
+20:02:32.475 BAR DO 0 (1 = black), edges 6
+20:02:32.686 WDT longest feed gap 11881 us in the last 2 s (watchdog fires at 30000)
+20:02:32.686 US dist 180 mm, lost 0
+20:02:33.109 IR raw L 1320 R 1174
+20:02:33.109 ENC pos L 2 R 12
+20:02:33.109 BAR DO 0 (1 = black), edges 6
+20:02:33.109 US dist 180 mm, lost 0
+20:02:33.512 IR raw L 1310 R 1172
+20:02:33.512 ENC pos L 2 R 12
+20:02:33.512 BAR DO 0 (1 = black), edges 6
+20:02:33.512 US dist 180 mm, lost 0
+20:02:33.934 IR raw L 1310 R 1168
+20:02:33.935 ENC pos L 2 R 12
+20:02:33.935 BAR DO 0 (1 = black), edges 6
+20:02:34.145 US dist 180 mm, lost 0
+20:02:34.552 IR raw L 1316 R 1178
+20:02:34.552 ENC pos L 2 R 12
+20:02:34.552 BAR DO 0 (1 = black), edges 6
+20:02:34.552 US dist 180 mm, lost 0
+20:02:34.552 WDT longest feed gap 11914 us in the last 2 s (watchdog fires at 30000)
+20:02:34.982 IR raw L 1314 R 1162
+20:02:34.982 ENC pos L 2 R 12
+20:02:34.982 BAR DO 0 (1 = black), edges 6
+20:02:34.982 US dist 180 mm, lost 0
+20:02:35.401 US dist 180 mm, lost 0
+20:02:35.401 IR raw L 1317 R 1164
+20:02:35.401 ENC pos L 2 R 12
+20:02:35.401 BAR DO 0 (1 = black), edges 6
+20:02:36.026 US dist 180 mm, lost 0
+20:02:36.026 IR raw L 1307 R 1172
+20:02:36.027 ENC pos L 2 R 12
+20:02:36.027 BAR DO 0 (1 = black), edges 6
+20:02:36.432 US dist 180 mm, lost 0
+20:02:36.432 IR raw L 1313 R 1173
+20:02:36.432 ENC pos L 2 R 12
+20:02:36.432 BAR DO 0 (1 = black), edges 6
+20:02:36.636 WDT longest feed gap 11814 us in the last 2 s (watchdog fires at 30000)
+20:02:36.846 US dist 180 mm, lost 0
+20:02:37.055 IR raw L 1309 R 1176
+20:02:37.055 ENC pos L 2 R 12
+20:02:37.055 BAR DO 0 (1 = black), edges 6
+20:02:37.462 US dist 180 mm, lost 0
+20:02:37.462 IR raw L 1317 R 1172
+20:02:37.462 ENC pos L 2 R 12
+20:02:37.462 BAR DO 0 (1 = black), edges 6
+20:02:37.885 US dist 180 mm, lost 0
+20:02:38.099 IR raw L 1322 R 1175
+20:02:38.099 ENC pos L 2 R 12
+20:02:38.099 BAR DO 0 (1 = black), edges 6
+20:02:38.310 US dist 180 mm, lost 0
+20:02:38.514 IR raw L 1323 R 1155
+20:02:38.514 ENC pos L 2 R 12
+20:02:38.514 BAR DO 0 (1 = black), edges 6
+20:02:38.514 WDT longest feed gap 11676 us in the last 2 s (watchdog fires at 30000)
+20:02:38.925 US dist 180 mm, lost 0
+20:02:38.925 IR raw L 1320 R 1159
+20:02:38.925 ENC pos L 2 R 12
+20:02:38.925 BAR DO 0 (1 = black), edges 6
+20:02:39.333 US dist 180 mm, lost 0
+20:02:39.542 IR raw L 1324 R 1164
+20:02:39.542 ENC pos L 2 R 12
+20:02:39.542 BAR DO 0 (1 = black), edges 6
+20:02:39.754 US dist 180 mm, lost 0
+20:02:39.956 IR raw L 1305 R 1172
+20:02:39.956 ENC pos L 2 R 12
+20:02:39.956 BAR DO 0 (1 = black), edges 6
+20:02:40.369 US dist 180 mm, lost 0
+20:02:40.575 IR raw L 1319 R 1165
+20:02:40.575 ENC pos L 2 R 12
+20:02:40.575 BAR DO 0 (1 = black), edges 6
+20:02:40.575 WDT longest feed gap 11726 us in the last 2 s (watchdog fires at 30000)
+20:02:40.785 US dist 180 mm, lost 0
+20:02:40.999 IR raw L 1320 R 1164
+20:02:41.000 ENC pos L 2 R 12
+20:02:41.000 BAR DO 0 (1 = black), edges 6
+20:02:41.202 US dist 180 mm, lost 0
+20:02:41.616 IR raw L 1328 R 1174
+20:02:41.616 ENC pos L 2 R 12
+20:02:41.617 BAR DO 0 (1 = black), edges 6
+20:02:41.825 US dist 180 mm, lost 0
+20:02:42.039 IR raw L 1314 R 1185
+20:02:42.039 ENC pos L 2 R 12
+20:02:42.039 BAR DO 0 (1 = black), edges 6
+20:02:42.243 US dist 180 mm, lost 0
+20:02:42.450 IR raw L 1314 R 1177
+20:02:42.450 ENC pos L 2 R 12
+20:02:42.450 BAR DO 0 (1 = black), edges 6
+20:02:42.659 WDT longest feed gap 11772 us in the last 2 s (watchdog fires at 30000)
+20:02:42.659 US dist 180 mm, lost 0
+20:02:43.074 IR raw L 1327 R 1166
+20:02:43.075 ENC pos L 2 R 12
+20:02:43.075 BAR DO 0 (1 = black), edges 6
+20:02:43.075 US dist 180 mm, lost 0
+20:02:43.487 IR raw L 1320 R 1179
+20:02:43.487 ENC pos L 2 R 12
+20:02:43.487 BAR DO 0 (1 = black), edges 6
+20:02:43.694 US dist 180 mm, lost 0
+20:02:44.113 IR raw L 1321 R 1169
+20:02:44.113 ENC pos L 2 R 12
+20:02:44.113 BAR DO 0 (1 = black), edges 6
+20:02:44.113 US dist 180 mm, lost 0
+20:02:44.524 IR raw L 1316 R 1168
+20:02:44.524 ENC pos L 2 R 12
+20:02:44.524 BAR DO 0 (1 = black), edges 6
+20:02:44.524 US dist 180 mm, lost 0
+20:02:44.731 WDT longest feed gap 11730 us in the last 2 s (watchdog fires at 30000)
+20:02:44.931 IR raw L 1312 R 1168
+20:02:44.931 ENC pos L 2 R 12
+20:02:44.931 BAR DO 0 (1 = black), edges 6
+20:02:45.132 US dist 180 mm, lost 0
+20:02:45.542 IR raw L 1324 R 1165
+20:02:45.542 ENC pos L 2 R 12
+20:02:45.542 BAR DO 0 (1 = black), edges 6
+20:02:45.542 US dist 180 mm, lost 0
+20:02:45.957 IR raw L 1307 R 1183
+20:02:45.957 ENC pos L 2 R 12
+20:02:45.957 BAR DO 0 (1 = black), edges 6
+20:02:45.957 US dist 180 mm, lost 0
+20:02:46.580 IR raw L 1299 R 1177
+20:02:46.580 ENC pos L 2 R 12
+20:02:46.581 BAR DO 0 (1 = black), edges 6
+20:02:46.581 US dist 180 mm, lost 0
+20:02:46.581 WDT longest feed gap 11716 us in the last 2 s (watchdog fires at 30000)
+20:02:46.999 IR raw L 1314 R 1155
+20:02:46.999 ENC pos L 2 R 12
+20:02:46.999 BAR DO 0 (1 = black), edges 6
+20:02:46.999 US dist 180 mm, lost 0
+20:02:47.414 US dist 180 mm, lost 0
+20:02:47.414 IR raw L 1311 R 1169
+20:02:47.414 ENC pos L 2 R 12
+20:02:47.414 BAR DO 0 (1 = black), edges 6
+20:02:48.046 US dist 180 mm, lost 0
+20:02:48.046 IR raw L 1309 R 1176
+20:02:48.046 ENC pos L 2 R 12
+20:02:48.046 BAR DO 0 (1 = black), edges 6
+20:02:48.460 US dist 180 mm, lost 0
+20:02:48.460 IR raw L 1317 R 1158
+20:02:48.460 ENC pos L 2 R 12
+20:02:48.460 BAR DO 0 (1 = black), edges 6
+20:02:48.661 WDT longest feed gap 11808 us in the last 2 s (watchdog fires at 30000)
+20:02:48.864 US dist 180 mm, lost 0
+20:02:49.077 IR raw L 1308 R 1169
+20:02:49.077 ENC pos L 2 R 12
+20:02:49.077 BAR DO 0 (1 = black), edges 6
+20:02:49.481 US dist 180 mm, lost 0
+20:02:49.481 IR raw L 1320 R 1174
+20:02:49.481 ENC pos L 2 R 12
+20:02:49.481 BAR DO 0 (1 = black), edges 6
+20:02:49.905 US dist 180 mm, lost 0
+20:02:50.114 IR raw L 1313 R 1175
+20:02:50.115 ENC pos L 2 R 12
+20:02:50.115 BAR DO 0 (1 = black), edges 6
+20:02:50.329 US dist 180 mm, lost 0
+20:02:50.537 IR raw L 1321 R 1170
+20:02:50.537 ENC pos L 2 R 12
+20:02:50.537 BAR DO 0 (1 = black), edges 6
+20:02:50.746 WDT longest feed gap 11663 us in the last 2 s (watchdog fires at 30000)
+20:02:50.947 US dist 180 mm, lost 0
+20:02:50.947 IR raw L 1313 R 1163
+20:02:50.947 ENC pos L 2 R 12
+20:02:50.947 BAR DO 0 (1 = black), edges 6
+20:02:51.362 US dist 180 mm, lost 0
+20:02:51.577 IR raw L 1321 R 1174
+20:02:51.577 ENC pos L 2 R 12
+20:02:51.577 BAR DO 0 (1 = black), edges 6
+20:02:51.786 US dist 180 mm, lost 0
+20:02:51.997 IR raw L 1310 R 1173
+20:02:51.997 ENC pos L 2 R 12
+20:02:51.997 BAR DO 0 (1 = black), edges 6
+20:02:52.204 US dist 180 mm, lost 0
+20:02:52.607 IR raw L 1311 R 1162
+20:02:52.607 ENC pos L 2 R 12
+20:02:52.607 BAR DO 0 (1 = black), edges 6
+20:02:52.607 WDT longest feed gap 11737 us in the last 2 s (watchdog fires at 30000)
+20:02:52.811 US dist 180 mm, lost 0
+20:02:53.019 IR raw L 1312 R 1180
+20:02:53.020 ENC pos L 2 R 12
+20:02:53.020 BAR DO 0 (1 = black), edges 6
+20:02:53.223 US dist 180 mm, lost 0
+20:02:53.424 IR raw L 1313 R 1178
+20:02:53.424 ENC pos L 2 R 12
+20:02:53.424 BAR DO 0 (1 = black), edges 6
+20:02:53.637 US dist 180 mm, lost 0
+20:02:54.045 IR raw L 1321 R 1188
+20:02:54.045 ENC pos L 2 R 12
+20:02:54.045 BAR DO 0 (1 = black), edges 6
+20:02:54.248 US dist 180 mm, lost 0
+20:02:54.461 IR raw L 1308 R 1170
+20:02:54.461 ENC pos L 2 R 12
+20:02:54.461 BAR DO 0 (1 = black), edges 6
+20:02:54.663 WDT longest feed gap 11985 us in the last 2 s (watchdog fires at 30000)
+20:02:54.663 US dist 180 mm, lost 0
+20:02:55.071 IR raw L 1321 R 1182
+20:02:55.071 ENC pos L 2 R 12
+20:02:55.071 BAR DO 0 (1 = black), edges 6
+20:02:55.279 US dist 180 mm, lost 0
+20:02:55.480 IR raw L 1315 R 1162
+20:02:55.480 ENC pos L 2 R 12
+20:02:55.480 BAR DO 0 (1 = black), edges 6
+20:02:55.682 US dist 180 mm, lost 0
+20:02:56.108 IR raw L 1320 R 1181
+20:02:56.108 ENC pos L 2 R 12
+20:02:56.108 BAR DO 0 (1 = black), edges 6
+20:02:56.108 US dist 180 mm, lost 0
+20:02:56.512 IR raw L 1321 R 1174
+20:02:56.512 ENC pos L 2 R 12
+20:02:56.512 BAR DO 0 (1 = black), edges 6
+20:02:56.724 US dist 180 mm, lost 0
+20:02:56.724 WDT longest feed gap 11842 us in the last 2 s (watchdog fires at 30000)
+20:02:56.925 IR raw L 1305 R 1172
+20:02:56.925 ENC pos L 2 R 12
+20:02:56.925 BAR DO 0 (1 = black), edges 6
+20:02:57.135 US dist 180 mm, lost 0
+20:02:57.555 IR raw L 1308 R 1156
+20:02:57.556 ENC pos L 2 R 12
+20:02:57.556 BAR DO 0 (1 = black), edges 6
+20:02:57.556 US dist 180 mm, lost 0
+20:02:57.968 IR raw L 1325 R 1187
+20:02:57.968 ENC pos L 2 R 12
+20:02:57.968 BAR DO 0 (1 = black), edges 6
+20:02:57.968 US dist 180 mm, lost 0
+20:02:58.597 IR raw L 1298 R 1165
+20:02:58.597 ENC pos L 2 R 12
+20:02:58.597 BAR DO 0 (1 = black), edges 6
+20:02:58.597 US dist 180 mm, lost 0
+20:02:58.597 WDT longest feed gap 12137 us in the last 2 s (watchdog fires at 30000)
+20:02:59.014 IR raw L 1307 R 1168
+20:02:59.014 ENC pos L 2 R 12
+20:02:59.014 BAR DO 0 (1 = black), edges 6
+20:02:59.014 US dist 180 mm, lost 0
+20:02:59.436 US dist 180 mm, lost 0
+20:02:59.436 IR raw L 1315 R 1172
+20:02:59.436 ENC pos L 2 R 12
+20:02:59.436 BAR DO 0 (1 = black), edges 6
+20:03:00.059 US dist 180 mm, lost 0
+20:03:00.059 IR raw L 1313 R 1158
+20:03:00.059 ENC pos L 2 R 12
+20:03:00.059 BAR DO 0 (1 = black), edges 6
+20:03:00.463 US dist 180 mm, lost 0
+20:03:00.463 IR raw L 1302 R 1169
+20:03:00.463 ENC pos L 2 R 12
+20:03:00.463 BAR DO 0 (1 = black), edges 6
+20:03:00.677 WDT longest feed gap 11945 us in the last 2 s (watchdog fires at 30000)
+20:03:00.890 US dist 180 mm, lost 0
+20:03:01.101 IR raw L 1313 R 1172
+20:03:01.101 ENC pos L 2 R 12
+20:03:01.101 BAR DO 0 (1 = black), edges 6
+20:03:01.513 US dist 180 mm, lost 0
+20:03:01.513 IR raw L 1318 R 1165
+20:03:01.513 ENC pos L 2 R 12
+20:03:01.513 BAR DO 0 (1 = black), edges 6
+20:03:01.926 US dist 180 mm, lost 0
+20:03:01.926 IR raw L 1320 R 1168
+20:03:01.926 ENC pos L 2 R 12
+20:03:01.926 BAR DO 0 (1 = black), edges 6
+20:03:02.328 US dist 180 mm, lost 0
+20:03:02.531 IR raw L 1317 R 1175
+20:03:02.531 ENC pos L 2 R 12
+20:03:02.531 BAR DO 0 (1 = black), edges 6
+20:03:02.743 WDT longest feed gap 11845 us in the last 2 s (watchdog fires at 30000)
+20:03:02.955 US dist 180 mm, lost 0
+20:03:02.955 IR raw L 1317 R 1166
+20:03:02.955 ENC pos L 2 R 12
+20:03:02.955 BAR DO 0 (1 = black), edges 6
+20:03:03.384 US dist 180 mm, lost 0
+20:03:03.592 IR raw L 1321 R 1182
+20:03:03.592 ENC pos L 2 R 12
+20:03:03.592 BAR DO 0 (1 = black), edges 6
+20:03:03.801 US dist 180 mm, lost 0
+20:03:04.006 IR raw L 1328 R 1171
+20:03:04.006 ENC pos L 2 R 12
+20:03:04.006 BAR DO 0 (1 = black), edges 6
+20:03:04.210 US dist 180 mm, lost 0
+20:03:04.626 IR raw L 1316 R 1179
+20:03:04.626 ENC pos L 2 R 12
+20:03:04.626 BAR DO 0 (1 = black), edges 6
+20:03:04.626 WDT longest feed gap 11843 us in the last 2 s (watchdog fires at 30000)
+20:03:04.834 US dist 180 mm, lost 0
+20:03:05.047 IR raw L 1307 R 1166
+20:03:05.047 ENC pos L 2 R 12
+20:03:05.047 BAR DO 0 (1 = black), edges 6
+20:03:05.260 US dist 180 mm, lost 0
+20:03:05.475 IR raw L 1313 R 1173
+20:03:05.475 ENC pos L 2 R 12
+20:03:05.475 BAR DO 0 (1 = black), edges 6
+20:03:05.684 US dist 180 mm, lost 0
+20:03:06.091 IR raw L 1311 R 1169
+20:03:06.091 ENC pos L 2 R 12
+20:03:06.091 BAR DO 0 (1 = black), edges 6
+20:03:06.302 US dist 180 mm, lost 0
+20:03:06.508 IR raw L 1321 R 1165
+20:03:06.508 ENC pos L 2 R 12
+20:03:06.508 BAR DO 0 (1 = black), edges 6
+20:03:06.724 US dist 180 mm, lost 0
+20:03:06.724 WDT longest feed gap 11775 us in the last 2 s (watchdog fires at 30000)
+20:03:06.931 IR raw L 1316 R 1180
+20:03:06.931 ENC pos L 2 R 12
+20:03:06.931 BAR DO 0 (1 = black), edges 6
+20:03:07.135 US dist 180 mm, lost 0
+20:03:07.541 IR raw L 1312 R 1179
+20:03:07.541 ENC pos L 2 R 12
+20:03:07.541 BAR DO 0 (1 = black), edges 6
+20:03:07.748 US dist 180 mm, lost 0
+20:03:07.950 IR raw L 1317 R 1177
+20:03:07.950 ENC pos L 2 R 12
+20:03:07.950 BAR DO 0 (1 = black), edges 6
+20:03:08.158 US dist 180 mm, lost 0
+20:03:08.561 IR raw L 1326 R 1182
+20:03:08.561 ENC pos L 2 R 12
+20:03:08.561 BAR DO 0 (1 = black), edges 6
+20:03:08.561 US dist 180 mm, lost 0
+20:03:08.773 WDT longest feed gap 11834 us in the last 2 s (watchdog fires at 30000)
+20:03:08.984 IR raw L 1310 R 1170
+20:03:08.984 ENC pos L 2 R 12
+20:03:08.984 BAR DO 0 (1 = black), edges 6
+20:03:09.190 US dist 180 mm, lost 0
+20:03:09.617 IR raw L 1326 R 1183
+20:03:09.617 ENC pos L 2 R 12
+20:03:09.617 BAR DO 0 (1 = black), edges 6
+20:03:09.617 US dist 180 mm, lost 0
+20:03:10.024 IR raw L 1318 R 1175
+20:03:10.024 ENC pos L 2 R 12
+20:03:10.024 BAR DO 0 (1 = black), edges 6
+20:03:10.024 US dist 180 mm, lost 0
+20:03:10.436 IR raw L 1308 R 1174
+20:03:10.437 ENC pos L 2 R 12
+20:03:10.437 BAR DO 0 (1 = black), edges 6
+20:03:10.437 US dist 180 mm, lost 0
+20:03:10.641 WDT longest feed gap 11955 us in the last 2 s (watchdog fires at 30000)
+20:03:11.050 IR raw L 1307 R 1174
+20:03:11.050 ENC pos L 2 R 12
+20:03:11.050 BAR DO 0 (1 = black), edges 6
+20:03:11.050 US dist 180 mm, lost 0
+20:03:11.453 US dist 180 mm, lost 0
+20:03:11.453 IR raw L 1320 R 1173
+20:03:11.453 ENC pos L 2 R 12
+20:03:11.453 BAR DO 0 (1 = black), edges 6
+20:03:12.080 US dist 180 mm, lost 0
+20:03:12.080 IR raw L 1315 R 1164
+20:03:12.080 ENC pos L 2 R 12
+20:03:12.080 BAR DO 0 (1 = black), edges 6
+20:03:12.490 US dist 180 mm, lost 0
+20:03:12.490 IR raw L 1310 R 1159
+20:03:12.490 ENC pos L 2 R 12
+20:03:12.490 BAR DO 0 (1 = black), edges 6
+20:03:12.705 WDT longest feed gap 11639 us in the last 2 s (watchdog fires at 30000)
+20:03:12.907 US dist 180 mm, lost 0
+20:03:13.119 IR raw L 1316 R 1162
+20:03:13.119 ENC pos L 2 R 12
+20:03:13.119 BAR DO 0 (1 = black), edges 6
+20:03:13.330 US dist 180 mm, lost 0
+20:03:13.532 IR raw L 1306 R 1174
+20:03:13.532 ENC pos L 2 R 12
+20:03:13.532 BAR DO 0 (1 = black), edges 6
+20:03:13.950 US dist 180 mm, lost 0
+20:03:13.951 IR raw L 1314 R 1166
+20:03:13.951 ENC pos L 2 R 12
+20:03:13.951 BAR DO 0 (1 = black), edges 6
+20:03:14.357 US dist 180 mm, lost 0
+20:03:14.567 IR raw L 1318 R 1175
+20:03:14.567 ENC pos L 2 R 12
+20:03:14.567 BAR DO 0 (1 = black), edges 6
+20:03:14.767 WDT longest feed gap 11955 us in the last 2 s (watchdog fires at 30000)
+20:03:14.768 US dist 180 mm, lost 0
+20:03:14.975 IR raw L 1311 R 1167
+20:03:14.975 ENC pos L 2 R 12
+20:03:14.975 BAR DO 0 (1 = black), edges 6
+20:03:15.389 US dist 180 mm, lost 0
+20:03:15.603 IR raw L 1317 R 1179
+20:03:15.604 ENC pos L 2 R 12
+20:03:15.604 BAR DO 0 (1 = black), edges 6
+20:03:15.805 US dist 180 mm, lost 0
+20:03:16.014 IR raw L 1312 R 1174
+20:03:16.015 ENC pos L 2 R 12
+20:03:16.015 BAR DO 0 (1 = black), edges 6
+20:03:16.215 US dist 180 mm, lost 0
+20:03:16.430 IR raw L 1326 R 1172
+20:03:16.430 ENC pos L 2 R 12
+20:03:16.430 BAR DO 0 (1 = black), edges 6
+20:03:16.845 WDT longest feed gap 11881 us in the last 2 s (watchdog fires at 30000)
+20:03:16.845 US dist 180 mm, lost 0
+20:03:17.047 IR raw L 1316 R 1161
+20:03:17.047 ENC pos L 2 R 12
+20:03:17.047 BAR DO 0 (1 = black), edges 6
+20:03:17.260 US dist 180 mm, lost 0
+20:03:17.470 IR raw L 1310 R 1173
+20:03:17.470 ENC pos L 2 R 12
+20:03:17.470 BAR DO 0 (1 = black), edges 6
+20:03:17.671 US dist 180 mm, lost 0
+20:03:18.071 IR raw L 1305 R 1176
+20:03:18.071 ENC pos L 2 R 12
+20:03:18.071 BAR DO 0 (1 = black), edges 6
+20:03:18.274 US dist 180 mm, lost 0
+20:03:18.475 IR raw L 1318 R 1165
+20:03:18.476 ENC pos L 2 R 12
+20:03:18.476 BAR DO 0 (1 = black), edges 6
+20:03:18.684 US dist 180 mm, lost 0
+20:03:18.684 WDT longest feed gap 11658 us in the last 2 s (watchdog fires at 30000)
+20:03:19.087 IR raw L 1309 R 1172
+20:03:19.087 ENC pos L 2 R 12
+20:03:19.087 BAR DO 0 (1 = black), edges 6
+20:03:19.087 US dist 180 mm, lost 0
+20:03:19.503 IR raw L 1321 R 1174
+20:03:19.503 ENC pos L 2 R 12
+20:03:19.503 BAR DO 0 (1 = black), edges 6
+20:03:19.717 US dist 180 mm, lost 0
+20:03:19.929 IR raw L 1314 R 1159
+20:03:19.929 ENC pos L 2 R 12
+20:03:19.929 BAR DO 0 (1 = black), edges 6
+20:03:20.138 US dist 180 mm, lost 0
+20:03:20.553 IR raw L 1316 R 1167
+20:03:20.554 ENC pos L 2 R 12
+20:03:20.554 BAR DO 0 (1 = black), edges 6
+20:03:20.554 US dist 180 mm, lost 0
+20:03:20.756 WDT longest feed gap 11555 us in the last 2 s (watchdog fires at 30000)
+20:03:20.971 IR raw L 1319 R 1170
+20:03:20.971 ENC pos L 2 R 12
+20:03:20.971 BAR DO 0 (1 = black), edges 6
+20:03:21.180 US dist 180 mm, lost 0
+20:03:21.596 IR raw L 1314 R 1176
+20:03:21.596 ENC pos L 2 R 12
+20:03:21.596 BAR DO 0 (1 = black), edges 6
+20:03:21.596 US dist 180 mm, lost 0
+20:03:22.013 IR raw L 1304 R 1159
+20:03:22.013 ENC pos L 2 R 12
+20:03:22.013 BAR DO 0 (1 = black), edges 6
+20:03:22.013 US dist 180 mm, lost 0
+20:03:22.420 IR raw L 1313 R 1179
+20:03:22.421 ENC pos L 2 R 12
+20:03:22.421 BAR DO 0 (1 = black), edges 6
+20:03:22.627 US dist 180 mm, lost 0
+20:03:22.836 WDT longest feed gap 11666 us in the last 2 s (watchdog fires at 30000)
+20:03:23.038 IR raw L 1323 R 1177
+20:03:23.038 ENC pos L 2 R 12
+20:03:23.038 BAR DO 0 (1 = black), edges 6
+20:03:23.038 US dist 180 mm, lost 0
+20:03:23.438 US dist 180 mm, lost 0
+20:03:23.438 IR raw L 1306 R 1160
+20:03:23.438 ENC pos L 2 R 12
+20:03:23.438 BAR DO 0 (1 = black), edges 6
+20:03:24.078 US dist 180 mm, lost 0
+20:03:24.078 IR raw L 1327 R 1174
+20:03:24.078 ENC pos L 2 R 12
+20:03:24.078 BAR DO 0 (1 = black), edges 6
+20:03:24.489 US dist 180 mm, lost 0
+20:03:24.489 IR raw L 1320 R 1172
+20:03:24.489 ENC pos L 2 R 12
+20:03:24.489 BAR DO 0 (1 = black), edges 6
+20:03:24.694 WDT longest feed gap 11889 us in the last 2 s (watchdog fires at 30000)
+20:03:24.903 US dist 180 mm, lost 0
+20:03:25.112 IR raw L 1307 R 1181
+20:03:25.112 ENC pos L 2 R 12
+20:03:25.112 BAR DO 0 (1 = black), edges 6
+20:03:25.327 US dist 180 mm, lost 0
+20:03:25.542 IR raw L 1314 R 1154
+20:03:25.542 ENC pos L 2 R 12
+20:03:25.542 BAR DO 0 (1 = black), edges 6
+20:03:25.953 US dist 180 mm, lost 0
+20:03:25.953 IR raw L 1321 R 1172
+20:03:25.953 ENC pos L 2 R 12
+20:03:25.953 BAR DO 0 (1 = black), edges 6
+20:03:26.355 US dist 180 mm, lost 0
+20:03:26.558 IR raw L 1306 R 1182
+20:03:26.558 ENC pos L 2 R 12
+20:03:26.559 BAR DO 0 (1 = black), edges 6
+20:03:26.769 WDT longest feed gap 11850 us in the last 2 s (watchdog fires at 30000)
+20:03:26.769 US dist 180 mm, lost 0
+20:03:26.971 IR raw L 1310 R 1162
+20:03:26.972 ENC pos L 2 R 12
+20:03:26.972 BAR DO 0 (1 = black), edges 6
+20:03:27.390 US dist 180 mm, lost 0
+20:03:27.598 IR raw L 1326 R 1183
+20:03:27.599 ENC pos L 2 R 12
+20:03:27.599 BAR DO 0 (1 = black), edges 6
+20:03:27.806 US dist 180 mm, lost 0
+20:03:28.011 IR raw L 1326 R 1174
+20:03:28.011 ENC pos L 2 R 12
+20:03:28.011 BAR DO 0 (1 = black), edges 6
+20:03:28.213 US dist 180 mm, lost 0
+20:03:28.422 IR raw L 1313 R 1167
+20:03:28.422 ENC pos L 2 R 12
+20:03:28.422 BAR DO 0 (1 = black), edges 6
+20:03:28.829 WDT longest feed gap 11772 us in the last 2 s (watchdog fires at 30000)
+20:03:28.829 US dist 180 mm, lost 0
+20:03:29.045 IR raw L 1330 R 1170
+20:03:29.045 ENC pos L 2 R 12
+20:03:29.045 BAR DO 0 (1 = black), edges 6
+20:03:29.246 US dist 180 mm, lost 0
+20:03:29.447 IR raw L 1312 R 1178
+20:03:29.447 ENC pos L 2 R 12
+20:03:29.447 BAR DO 0 (1 = black), edges 6
