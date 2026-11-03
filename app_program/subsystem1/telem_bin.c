@@ -184,6 +184,37 @@ uint32_t telem_bin_summary(telem_bin_summary_t const * p_summ,
 }
 
 /**
+ * telem_bin_snapshot
+ * @brief   MQ_SNAP payload (reply to CMD_SNAP).
+ * @param   p_snap  snapshot
+ * @param   p_buf   output bytes
+ * @param   size    bytes available at p_buf
+ * @return  payload length (7), or 0 if it did not fit
+ * @context telem_task
+ */
+uint32_t telem_bin_snapshot(telem_bin_snapshot_t const * p_snap,
+                            uint8_t * p_buf, uint32_t size)
+{
+    app_bits_writer_t wr = {NULL, 0u, 0u, false};
+
+    telem_bin_begin(&wr, p_buf, size, APP_MQ_TYPE_SNAPSHOT);
+    telem_bin_put_u(&wr, p_snap->sys_state, MQ_SNAP_SYS_MAX,
+                    MQ_SNAP_SYS_BITS, NULL);
+    telem_bin_put_u(&wr, p_snap->run_state, MQ_SNAP_RUN_MAX,
+                    MQ_SNAP_RUN_BITS, NULL);
+    telem_bin_put_u(&wr, p_snap->hump_peak_mm, MQ_SNAP_HUMP_PEAK_MAX,
+                    MQ_SNAP_HUMP_PEAK_BITS, NULL);
+    telem_bin_put_u(&wr, p_snap->odometry_mm, MQ_SNAP_ODO_MM_MAX,
+                    MQ_SNAP_ODO_MM_BITS, NULL);
+    telem_bin_put_u(&wr, p_snap->faults, MQ_SNAP_FAULTS_MAX,
+                    MQ_SNAP_FAULTS_BITS, NULL);
+    telem_bin_put_u(&wr, p_snap->run_time_s, MQ_SNAP_RUN_S_MAX,
+                    MQ_SNAP_RUN_S_BITS, NULL);
+
+    return telem_bin_end(&wr);
+}
+
+/**
  * telem_bin_heartbeat
  * @brief   MQ_HB payload (every field saturates).
  * @param   uptime_s    seconds since boot

@@ -149,6 +149,9 @@ static void mission_faults(mission_ctx_t * p_ctx,
 static void mission_timers(mission_ctx_t * p_ctx, uint32_t now_us);
 static void mission_clear_stale_safety(void);
 static void mission_forward(mission_evt_in_t const * p_evt);
+static void mission_snapshot(mission_ctx_t const * p_ctx,
+                             mission_evt_in_t const * p_evt,
+                             status_board_t const * p_snap, uint32_t now_us);
 static void mission_publish(mission_ctx_t const * p_ctx,
                             status_board_mission_t const * p_before);
 static void mission_part(mission_ctx_t const * p_ctx,
@@ -534,6 +537,7 @@ static void mission_pass(mission_ctx_t * p_ctx,
     p_ctx->b_motion_failed = false;
     mission_publish(p_ctx, &before);                    /* 5 */
     mission_forward(p_evt);                             /* 6 */
+    mission_snapshot(p_ctx, p_evt, p_snap, now_us);
 #if APP_TEST
     mission_log_ignored(p_ctx, p_evt, &before);
 #endif
@@ -598,6 +602,11 @@ static void mission_dispatch(mission_ctx_t * p_ctx,
 static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
                           status_board_t const * p_snap, uint32_t now_us)
 {
+    if ((APP_SYS_RUN == p_ctx->sys_state) && (APP_SYS_RUN != sys_state))
+    {
+        p_ctx->run_end_us   = now_us;          /* frozen for snapshots */
+        p_ctx->run_end_path = status_board_path(p_snap);
+    }
     p_ctx->sys_state      = sys_state;
     p_ctx->substep        = 0u;
     p_ctx->b_run_starting = false;
@@ -1331,6 +1340,49 @@ static void mission_summary(mission_ctx_t const * p_ctx,
     summ.faults       = fault_get();
     summ.run_time_s   = (secs > MISSION_RUN_S_MAX) ? MISSION_RUN_S_MAX : secs;
     (void) telem_post_summary(&summ);    /* a full K7 is counted there */
+}
+
+/**
+ * mission_snapshot
+ * @brief   Reply to a remote "summary now" (APP_EVT_SNAPSHOT from the
+ *          MQTT command CMD_SNAP): state, peak hump, faults, and the
+ *          distance and time of the run so far. Once the run has ended
+ *          they stay at the values from the moment it ended; before the
+ *          first run (or after RESET) they are 0. Changes no state.
+ * @context mission_task (event time: division allowed)
+ */
+static void mission_snapshot(mission_ctx_t const * p_ctx,
+                             mission_evt_in_t const * p_evt,
+                             status_board_t const * p_snap, uint32_t now_us)
+{
+    telem_bin_snapshot_t reply  = {0u, 0u, 0u, 0u, 0u, 0u};
+    uint32_t             end_us = now_us;
+    uint32_t             path   = status_board_path(p_snap);
+    uint32_t             odo    = 0u;
+    uint32_t             secs   = 0u;
+
+    if (p_evt->b_has_event && (APP_EVT_SNAPSHOT == p_evt->type))
+    {
+        if (p_ctx->b_has_run)
+        {
+            if (APP_SYS_RUN != p_ctx->sys_state)
+            {
+                end_us = p_ctx->run_end_us;
+                path   = p_ctx->run_end_path;
+            }
+            odo  = odometry_counts_to_mm(path - p_ctx->run_start_path);
+            secs = (end_us - p_ctx->run_start_us) / MISSION_US_PER_S;
+        }
+        reply.sys_state    = p_ctx->sys_state;
+        reply.run_state    = p_ctx->run_state;
+        reply.hump_peak_mm = status_board_hump_peak(p_snap);
+        reply.odometry_mm  = (odo > MISSION_ODO_MAX_MM) ? MISSION_ODO_MAX_MM
+                                                        : odo;
+        reply.faults       = fault_get();
+        reply.run_time_s   = (secs > MISSION_RUN_S_MAX) ? MISSION_RUN_S_MAX
+                                                        : secs;
+        (void) telem_post_snapshot(&reply);  /* a full K7 is counted there */
+    }
 }
 
 /**

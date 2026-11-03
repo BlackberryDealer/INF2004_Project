@@ -50,6 +50,7 @@ typedef struct
     uint32_t path_at_stop;       /* path counts when the bypass started */
     int32_t  diff_at_stop;       /* pos_l - pos_r when the bypass started */
     uint32_t run_start_path;     /* path counts at START */
+    uint32_t run_end_path;       /* path counts when the last run ended */
     uint32_t rejoin_start;       /* path counts at the rejoin move */
     uint32_t inhibit_mark;       /* path counts to clear the inhibits */
 
@@ -67,6 +68,7 @@ typedef struct
     uint32_t fr9_start_us;
     uint32_t resume_start_us;
     uint32_t run_start_us;
+    uint32_t run_end_us;         /* when the last run ended */
 
     bool     b_is_warning;       /* 1 s start warning running */
     bool     b_resume_pending;   /* RESUME set, clear it 150 ms later */

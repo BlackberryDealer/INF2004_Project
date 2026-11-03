@@ -29,12 +29,13 @@
 #define BRIDGE_CMD_STOP       (1u)
 #define BRIDGE_CMD_RESET      (2u)
 #define BRIDGE_CMD_MAP        (3u)
-#define BRIDGE_CMD_COUNT      (4u)
+#define BRIDGE_CMD_SNAP       (4u)
+#define BRIDGE_CMD_COUNT      (5u)
 #define BRIDGE_CMD_NONE       (BRIDGE_CMD_COUNT)
 
 #define BRIDGE_US_PER_10MS    (10000u)
 #define BRIDGE_CMD_GAP_10MS   (TELEM_CMD_MIN_GAP_MS / 10u)
-#define BRIDGE_CMD_LEN        (1u)     /* START, STOP, RESET: header only */
+#define BRIDGE_CMD_LEN        (1u)     /* START STOP RESET SNAP: header  */
 #define BRIDGE_MAP_LEN        (2u)     /* MAP: header + MQ_MAP byte       */
 
 #if (BRIDGE_CMD_GAP_10MS < 1u) || (BRIDGE_CMD_GAP_10MS > PRV_CMD_T_LAST_MAX)
@@ -51,7 +52,7 @@
    seen mask) is read by telem_task as one aligned word (atomic).       */
 static uint16_t          g_cmd_last_10ms[BRIDGE_CMD_COUNT] =
 {
-    0u, 0u, 0u, 0u
+    0u, 0u, 0u, 0u, 0u
 };
 static volatile uint32_t g_bridge_word = 0u;
 
@@ -114,9 +115,10 @@ uint32_t mqtt_bridge_take(uint8_t * p_buf, uint32_t buf_size,
 /**
  * mqtt_bridge_route
  * @brief   Topic, QoS and retain flag for a payload type: STATE -> state
- *          topic QoS 0; EVENT, PROFILE, SUMMARY -> event topic QoS 1;
- *          HEARTBEAT -> hb topic QoS 0; ONLINE/OFFLINE -> availability
- *          topic QoS 1 retained; anything else -> event topic QoS 0.
+ *          topic QoS 0; EVENT, PROFILE, SUMMARY, SNAPSHOT -> event topic
+ *          QoS 1; HEARTBEAT -> hb topic QoS 0; ONLINE/OFFLINE ->
+ *          availability topic QoS 1 retained; anything else -> event
+ *          topic QoS 0.
  * @param   mq_type         APP_MQ_TYPE_*
  * @param   pp_topic        receives the topic
  * @param   p_qos           receives the QoS
@@ -140,6 +142,7 @@ void mqtt_bridge_route(uint8_t mq_type, char const ** pp_topic, uint8_t * p_qos,
         case APP_MQ_TYPE_EVENT:
         case APP_MQ_TYPE_PROFILE:
         case APP_MQ_TYPE_SUMMARY:
+        case APP_MQ_TYPE_SNAPSHOT:
             qos = 1u;
             break;
 
@@ -204,8 +207,8 @@ uint32_t mqtt_bridge_availability(bool b_is_online, uint8_t * p_buf,
 
 /**
  * mqtt_bridge_post_command
- * @brief   Validates a binary command (version 1; START / STOP / RESET
- *          are 1 byte, MAP is 2 bytes with the MQ_MAP fields in byte 1),
+ * @brief   Validates a binary command (version 1; START / STOP / RESET /
+ *          SNAP are 1 byte, MAP is 2 bytes with the MQ_MAP fields in byte 1),
  *          applies the 100 ms per-type rate limit and posts it to the
  *          mission queue. Anything else counts as a command drop.
  * @param   p_payload  received bytes
@@ -244,6 +247,10 @@ void mqtt_bridge_post_command(uint8_t const * p_payload, uint32_t length)
             case BRIDGE_CMD_MAP:
                 evt   = APP_EVT_MAP;
                 value = map_val;
+                break;
+
+            case BRIDGE_CMD_SNAP:
+                evt = APP_EVT_SNAPSHOT;   /* mission builds the reply */
                 break;
 
             default:   /* BRIDGE_CMD_START */
@@ -353,6 +360,10 @@ static uint32_t bridge_parse_command(uint8_t const * p_payload,
         else if (APP_MQ_TYPE_CMD_RESET == type)
         {
             cmd_idx = BRIDGE_CMD_RESET;
+        }
+        else if (APP_MQ_TYPE_CMD_SNAP == type)
+        {
+            cmd_idx = BRIDGE_CMD_SNAP;
         }
         else
         {

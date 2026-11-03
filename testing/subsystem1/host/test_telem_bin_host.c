@@ -65,6 +65,10 @@ int main(void)
     {
         0x19u, 0x65u, 0x10u, 0x27u, 0x00u, 0xECu, 0x01u
     };
+    static uint8_t const exp_snap[7]    =
+    {
+        0x39u, 0x5Cu, 0x86u, 0x9Du, 0x00u, 0x84u, 0x01u
+    };
     static uint8_t const exp_hb[6]      =
     {
         0x21u, 0xFFu, 0xFFu, 0xFFu, 0xFFu, 0x0Fu
@@ -76,6 +80,7 @@ int main(void)
     telem_bin_state_t   st    = {0};
     telem_bin_profile_t prof  = {0};
     telem_bin_summary_t summ  = {0};
+    telem_bin_snapshot_t snap = {0};
     golden_t            gold  = {{NULL}, {0}, 0u};
 
     HOST_INIT();
@@ -144,6 +149,19 @@ int main(void)
     HOST_CHECK("S1-U02", (0x29u == telem_bin_header(APP_MQ_TYPE_ONLINE))
                          && (0x31u == telem_bin_header(APP_MQ_TYPE_OFFLINE)),
                "availability bytes 0x29 online, 0x31 offline");
+    /* S1-U42: snapshot (reply to CMD_SNAP), hand-computed bytes */
+    snap.sys_state    = 4u;     /* RUN */
+    snap.run_state    = 3u;     /* SEARCH_LINE */
+    snap.hump_peak_mm = 25u;
+    snap.odometry_mm  = 1260u;
+    snap.faults       = 64u;    /* RANGE_CLAMP */
+    snap.run_time_s   = 6u;
+    len = telem_bin_snapshot(&snap, out, OUT_BYTES);
+    HOST_CHECK("S1-U42", bytes_are(out, len, exp_snap, 7u),
+               "snapshot payload is 7 exact bytes (header 0x39)");
+    HOST_CHECK("S1-U42", 0u == telem_bin_snapshot(&snap, out, 6u),
+               "snapshot into a 6-byte buffer returns 0");
+
     HOST_CHECK("S1-U02", 0u == telem_bin_summary(&summ, out, 6u),
                "too-small buffer returns 0");
 
@@ -249,6 +267,32 @@ int main(void)
     golden_add(&gold, "FAULTS", 1023);
     golden_add(&gold, "RUN_S", 1023);
     b_ok = golden_write("summary_max", out, len, &gold) && b_ok;
+
+    (void) memset(&snap, 0, sizeof(snap));
+    len  = telem_bin_snapshot(&snap, out, OUT_BYTES);
+    gold.count = 0u;
+    golden_add(&gold, "SYS", 0);
+    golden_add(&gold, "RUN", 0);
+    golden_add(&gold, "HUMP_PEAK", 0);
+    golden_add(&gold, "ODO_MM", 0);
+    golden_add(&gold, "FAULTS", 0);
+    golden_add(&gold, "RUN_S", 0);
+    b_ok = golden_write("snapshot_min", out, len, &gold) && b_ok;
+    snap.sys_state    = 7u;
+    snap.run_state    = 4u;
+    snap.hump_peak_mm = 127u;
+    snap.odometry_mm  = 32767u;
+    snap.faults       = 1023u;
+    snap.run_time_s   = 1023u;
+    len  = telem_bin_snapshot(&snap, out, OUT_BYTES);
+    gold.count = 0u;
+    golden_add(&gold, "SYS", 7);
+    golden_add(&gold, "RUN", 4);
+    golden_add(&gold, "HUMP_PEAK", 127);
+    golden_add(&gold, "ODO_MM", 32767);
+    golden_add(&gold, "FAULTS", 1023);
+    golden_add(&gold, "RUN_S", 1023);
+    b_ok = golden_write("snapshot_max", out, len, &gold) && b_ok;
 
     len  = telem_bin_heartbeat(0u, 0u, 0u, out, OUT_BYTES);
     gold.count = 0u;

@@ -45,6 +45,12 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | FAULTS | MQ_SUMM | 0..1023 × 1 mask | 1 | 10 | 10 | RAW | S | as K7_SUMM |
 | RUN_S | MQ_SUMM | 0..1023 × 1 s | 1 | 10 | 10 | RNG | S | as K7_SUMM |
 | PAD | MQ_SUMM | 0..0 × 1 - | 1 | 0 | 4 | PAD | S | Zero |
+| SYS | MQ_SNAP | 0..7 × 1 code | 1 | 3 | 3 | ENUM | S | as K7_SNAP |
+| RUN | MQ_SNAP | 0..4 × 1 code | 1 | 3 | 3 | ENUM | S | as K7_SNAP |
+| HUMP_PEAK | MQ_SNAP | 0..127 × 1 mm | 1 | 7 | 7 | RNG | S | as K7_SNAP |
+| ODO_MM | MQ_SNAP | 0..32767 × 1 mm | 1 | 15 | 15 | RNG | S | as K7_SNAP |
+| FAULTS | MQ_SNAP | 0..1023 × 1 mask | 1 | 10 | 10 | RAW | S | as K7_SNAP |
+| RUN_S | MQ_SNAP | 0..1023 × 1 s | 1 | 10 | 10 | RNG | S | as K7_SNAP |
 | UPTIME_S | MQ_HB | 0..65535 × 1 s | 1 | 16 | 16 | SAT | S | Seconds since boot |
 | DROPS | MQ_HB | 0..255 × 1 count | 1 | 8 | 8 | SAT | S | telem_drops() |
 | LAT_MAX_US | MQ_HB | 0..4095 × 1 us | 1 | 12 | 12 | SAT | S | sys_tick_latency_max_us() |
@@ -57,12 +63,12 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | DROPS | PRV_TEL_K7 | 0..255 × 1 count | 1 | 8 | 8 | SAT | P | K7 drops; written only in mission_task context |
 | CMD_DROPS | PRV_BRIDGE | 0..255 × 1 count | 1 | 8 | 8 | SAT | P | Rejected or rate-limited commands |
 | PUB_DROPS | PRV_BRIDGE | 0..255 × 1 count | 1 | 8 | 8 | SAT | P | Payloads abandoned after 2 publish tries |
-| CMD_SEEN | PRV_BRIDGE | 0..15 × 1 mask | 1 | 4 | 4 | RAW | P | One bit per command type (START STOP RESET MAP) set at its first acceptance; a mask so RAW; radio task only |
+| CMD_SEEN | PRV_BRIDGE | 0..31 × 1 mask | 1 | 5 | 5 | RAW | P | One bit per command type (START STOP RESET MAP SNAP) set at its first acceptance; a mask so RAW; radio task only |
 | BACKOFF | PRV_MQTT | 0..3 × 1 exponent | 1 | 2 | 2 | RNG | P | Back-off 1 2 4 8 s; radio task only |
 | PEND_TRIES | PRV_MQTT | 0..2 × 1 count | 1 | 2 | 2 | RNG | P | Publish tries of the pending payload |
 | PEND_LEN | PRV_MQTT | 0..20 × 1 byte | 1 | 5 | 5 | RNG | P | Pending payload length (0 = none) |
 | PEND_TYPE | PRV_MQTT | 0..31 × 1 code | 1 | 5 | 5 | ENUM | P | APP_MQ_TYPE_* of the pending payload |
-| LAST | PRV_CMD_T | 0..65535 × 10 ms | 10 | 16 | 16 | RAW | P | Last accepted command time x4 (START STOP RESET MAP); 10 ms units; wraps; radio task only |
+| LAST | PRV_CMD_T | 0..65535 × 10 ms | 10 | 16 | 16 | RAW | P | Last accepted command time x5 (START STOP RESET MAP SNAP); 10 ms units; wraps; radio task only |
 
 ## B2
 
@@ -166,7 +172,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | ARMED | SB_MIS0 | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | A barcode command is stored |
 | ARMED_CMD | SB_MIS0 | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | APP_BAR_CMD_* |
 | VALUE | MSG_EVT | 0..2047 × 1 per type | 1 | 11 | 11 | RNG | S | K4/K7 event value (width per EVT_ group) |
-| TYPE | MSG_EVT | 0..23 × 1 code | 1 | 5 | 5 | ENUM | S | APP_EVT_* |
+| TYPE | MSG_EVT | 0..24 × 1 code | 1 | 5 | 5 | ENUM | S | APP_EVT_* |
 | WIDTH | MSG_ECHO | 0..4095 × 4 us | 4 | 12 | 12 | SAT | S | Echo pulse width; 4095 = no echo |
 | SEQ | MSG_ECHO | 0..3 × 1 count | 1 | 2 | 2 | RAW | S | Ping sequence (wraps by design) |
 | VALID | MSG_ECHO | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | Width is a complete measurement |
@@ -189,6 +195,12 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | ODO_MM | K7_SUMM | 0..32767 × 1 mm | 1 | 15 | 15 | RNG | S | Distance travelled (A23) |
 | FAULTS | K7_SUMM | 0..1023 × 1 mask | 1 | 10 | 10 | RAW | S | APP_FAULT_* mask |
 | RUN_S | K7_SUMM | 0..1023 × 1 s | 1 | 10 | 10 | RNG | S | Run time (A28) |
+| SYS | K7_SNAP | 0..7 × 1 code | 1 | 3 | 3 | ENUM | S | APP_SYS_* when the snapshot was taken |
+| RUN | K7_SNAP | 0..4 × 1 code | 1 | 3 | 3 | ENUM | S | APP_RUN_* when the snapshot was taken |
+| HUMP_PEAK | K7_SNAP | 0..127 × 1 mm | 1 | 7 | 7 | RNG | S | Highest hump this run |
+| ODO_MM | K7_SNAP | 0..32767 × 1 mm | 1 | 15 | 15 | RNG | S | Distance this run so far (A23) |
+| FAULTS | K7_SNAP | 0..1023 × 1 mask | 1 | 10 | 10 | RAW | S | APP_FAULT_* mask |
+| RUN_S | K7_SNAP | 0..1023 × 1 s | 1 | 10 | 10 | RNG | S | Run time so far; frozen once the run ends (A28) |
 
 ## Groups
 
@@ -224,11 +236,13 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | EVT_MAP | 8 | 11 |
 | K7_PROF | 38 | 40 |
 | K7_SUMM | 44 | 48 |
+| K7_SNAP | 48 | 48 |
 | MQ_HDR | 8 | 8 |
 | MQ_STATE | 136 | 136 |
 | MQ_EVT | 16 | 16 |
 | MQ_PROF | 40 | 40 |
 | MQ_SUMM | 48 | 48 |
+| MQ_SNAP | 48 | 48 |
 | MQ_HB | 40 | 40 |
 | MQ_MAP | 8 | 8 |
 | PRV_IMU_A | 32 | 32 |
@@ -244,7 +258,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | SH_IMU | 8 | 8 |
 | PRV_TEL | 27 | 32 |
 | PRV_TEL_K7 | 8 | 8 |
-| PRV_BRIDGE | 20 | 32 |
+| PRV_BRIDGE | 21 | 32 |
 | PRV_MQTT | 14 | 16 |
 | PRV_CMD_T | 16 | 16 |
 

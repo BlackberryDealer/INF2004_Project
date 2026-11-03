@@ -99,6 +99,18 @@ Topic `picocar/csc28-car/event` → `c28/e`, QoS 1. Queue: K7 → K11.
 
 K7 entry (message + 4-byte header, rounded to 4): baseline 36 B → packed 12 B.
 
+### Snapshot (reply to CMD_SNAP, "summary now")
+
+Topic `c28/e`, QoS 1. Queue: K7 → K11. Added 2026-11-03 after the packed
+format, so there is no baseline or topic-shortening row.
+
+| Row | Tag / step | Topic B | Payload B | K11 entry B | MQTT packet B |
+|---|---|---:|---:|---:|---:|
+| baseline | `w10-baseline` | 23 | not in baseline | — | — |
+| payload packing | binary, short topic (`MQ_SNAP`) | 5 | 7 | 12 | 18 |
+
+K7 entry: 2-byte event word + 6-byte `K7_SNAP` = 8 B message → 12 B.
+
 ### Heartbeat (1 Hz)
 
 Topic `picocar/csc28-car/hb` → `c28/h`, QoS 0. Queue: K11.
@@ -159,6 +171,16 @@ Topic `picocar/csc28-car/cmd` → `c28/c`, QoS 1. Queue: none (laptop → car).
 |---|---|---:|---:|---:|---:|
 | baseline | `w10-baseline` | 21 | not in baseline | — | — |
 | payload packing | 4.2–4.4 `w13-packed` (binary, short topic) | 5 | 2 | — | 13 |
+
+### Command SNAP ("summary now")
+
+Topic `c28/c`, QoS 1. Queue: none (laptop → car). Byte `0xA1`
+(`tools/telem_cmd.py summary`).
+
+| Row | Tag / step | Topic B | Payload B | K11 entry B | MQTT packet B |
+|---|---|---:|---:|---:|---:|
+| baseline | `w10-baseline` | 21 | not in baseline | — | — |
+| payload packing | binary, short topic | 5 | 1 | — | 12 |
 
 ## Pending hardware measurements (S1-I10)
 
