@@ -419,6 +419,14 @@ static void mission_task(INT stacd, void * p_exinf)
                 app_log("WDT longest feed gap %d us in the last 2 s"
                         " (watchdog fires at 30000)\n",
                         (int32_t) sys_health_feed_gap_max_us(true), 0, 0);
+                if (APP_SYS_RUN == g_ctx.sys_state)
+                {
+                    /* Bring-up diagnosis: barcode sensor activity while
+                       driving. casts: count modulo 2^31, level 0..1 */
+                    app_log("BAR edges %d so far (DO now %d)\n",
+                            (int32_t) (barcode_edge_count() & 0x7FFFFFFFu),
+                            (int32_t) barcode_do_level(), 0);
+                }
             }
 #endif
         } while ((size > 0) && (n_pass < MISSION_EVTS_PER_WAKE));

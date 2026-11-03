@@ -58,6 +58,14 @@
 /* 5 -> 3 (on-car 2026-11-03): at 5 a full error turned the car at about
    115 deg/s and it swayed on straights; the damping is in line_track.c. */
 #define MOTION_KP_STEER_Q8            (3)    /* TUNE: cpw/steer unit x256 */
+/* Curve slow-down (on-car 2026-11-03: with KP 3 the car swung and jerked
+   on curves; a higher KP swayed on straights). In FOLLOW the base speed
+   drops in proportion to |steering|, by MOTION_CURVE_SLOW_PCT at full
+   error, so a curve gets a tighter path while straights (small error)
+   keep cruise speed. Q10 factor: |steer| <= 1000 x it >> 10 = Q8 cut. */
+#define MOTION_CURVE_SLOW_PCT         (50)   /* TUNE: 0 = off */
+#define MOTION_CURVE_SLOW_Q10         ((MOTION_CURVE_SLOW_PCT * 262144) \
+                                       / 100000)
 #define MOTION_K_HEADING_Q8           (64)   /* TUNE: cpw/count drift x256 */
 #define MOTION_KFF_Q8                 (3556) /* TUNE: 1000 / 72 cpw x256 */
 #define MOTION_KP_Q8                  (2560)   /* TUNE */

@@ -12,6 +12,16 @@
 
 #define BAR_DO_BLACK_IS_HIGH      (true)  /* MEASURE: A3 */
 #define BAR_EDGE_REJECT_US        (1000u) /* chatter filter */
+/* LM393 chatter (on-car 2026-11-03): the module has no hysteresis and DO
+   flickers for longer than the 1 ms ISR filter at a bar edge (33 edges
+   for a 30-edge barcode, capture dropped "edge missed"). In barcode_task:
+   an element shorter than BAR_GLITCH_UM of travel (real ones are >= 1.5
+   mm) is a flicker: it is dropped and its time added to the next one;
+   and up to BAR_LEVEL_FIX_MAX edges per capture whose level reads the
+   same as the last one (read mid-flicker) take the alternating level.
+   Code 39 still validates the result.                                  */
+#define BAR_GLITCH_UM             (600u)  /* < 0.4 x BAR_NARROW_MIN_UM */
+#define BAR_LEVEL_FIX_MAX         (3u)
 #define BAR_NARROW_MIN_UM         (1500u) /* half-scale narrow bar */
 #define BAR_WIDE_MAX_UM           (9000u) /* full-scale wide bar */
 #define BAR_DECODE_SPEED_MIN_MM_S (50u)

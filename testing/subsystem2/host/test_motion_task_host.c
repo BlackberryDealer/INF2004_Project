@@ -117,9 +117,10 @@ void status_board_read(status_board_t * p_snapshot)
 {
     (void) memset(p_snapshot, 0, sizeof(*p_snapshot));
 }
+static int32_t g_sim_steer = 0;   /* line steering the mock board shows */
 int32_t status_board_steering(status_board_t const * p_snap)
 {
-    (void) p_snap; return 0;
+    (void) p_snap; return g_sim_steer;
 }
 void status_board_write_motion(status_board_motion_t const * p_part)
 {
@@ -567,6 +568,35 @@ int main(void)
     b_done = sim_run_until_done(200u, &tag);
     HOST_CHECK("S2-U23", b_done && (1u == tag) && (g_prog2 >= g_target2),
                "short move completes on its count once the wheels turn");
+
+    /* S2-U24 (on-car 2026-11-03): FOLLOW slows down in proportion to
+       |steering| so curves get a tighter path; straights keep cruise. */
+    {
+        int32_t sp_l = 0;
+        int32_t sp_r = 0;
+
+        sim_reset();
+        sim_send(APP_CMD_FOLLOW, 180u, 1u);
+        sim_cycles(3u);
+        g_sim_steer = 0;
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U24", (APP_MOT_FOLLOW == g_state)
+                   && (sp_l == g_base_cpw) && (sp_r == g_base_cpw),
+                   "on the line (steering 0): both wheels at cruise");
+        g_sim_steer = 1000;
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U24", (sp_r > sp_l)
+                   && (((sp_l + sp_r) / 2) <= ((g_base_cpw * 55) / 100))
+                   && (((sp_l + sp_r) / 2) >= ((g_base_cpw * 45) / 100)),
+                   "full left error: turn left at about half speed");
+        g_sim_steer = -200;
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U24", (sp_l > sp_r)
+                   && (((sp_l + sp_r) / 2) < g_base_cpw)
+                   && (((sp_l + sp_r) / 2) >= ((g_base_cpw * 85) / 100)),
+                   "small right error: turn right, only a little slower");
+        g_sim_steer = 0;
+    }
 
     return (0 == HOST_SUMMARY("motion_task")) ? 0 : 1;
 }

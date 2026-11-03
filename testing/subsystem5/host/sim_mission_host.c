@@ -83,6 +83,8 @@ bool telem_post_snapshot(telem_bin_snapshot_t const *p) { g_snapshot = *p; g_sna
 void barcode_map_set(uint32_t c, uint32_t m) { (void) c; (void) m; }
 void sys_health_service(void) {}
 void imu_diag_service(void) {}
+uint32_t barcode_edge_count(void) { return 0u; }
+uint32_t barcode_do_level(void) { return 0u; }
 uint32_t sys_health_feed_gap_max_us(bool b) { (void) b; return 0u; }
 void sys_tick_register_feeder(ID t) { (void) t; }
 ER tk_slp_tsk(TMO t) { (void) t; return E_OK; }
@@ -163,6 +165,13 @@ int main(void) {
   EV(APP_EVT_LINE_LOST, 0); CHECK("S5-U15", APP_RUN_SEARCH_LINE == g_ctx.run_state && !strcmp(mlog, "STOP0 L60 "), "LINE_LOST -> STOP first, then turn left 60");
   DONE(); CHECK("S5-U15", !strcmp(mlog, "R120 "), "next leg on the tagged MOVE_DONE: right 120");
   EV(APP_EVT_LINE_FOUND, 0); CHECK("S5-U15", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "STOP0 FOL180 ") && !g_ctx.b_move_pending, "LINE_FOUND during a leg -> FOLLOW, pending cleared");
+  /* S5-U36 (on-car 2026-11-03): the search sweeps first toward the side the line was last seen (steering < 0 = right) */
+  { status_board_line_t ln; memset(&ln, 0, sizeof(ln)); ln.steering = -350; ln.line_status = APP_LINE_LOST; ln.b_is_calibrated = true; status_board_write_line(&ln);
+    EV(APP_EVT_LINE_LOST, 0); CHECK("S5-U36", APP_RUN_SEARCH_LINE == g_ctx.run_state && !strcmp(mlog, "STOP0 R60 "), "line last seen right -> STOP, turn right 60 first");
+    DONE(); CHECK("S5-U36", !strcmp(mlog, "L120 "), "then left 120");
+    DONE(); CHECK("S5-U36", !strcmp(mlog, "R60 "), "then right 60");
+    ln.steering = 0; ln.line_status = APP_LINE_ON; status_board_write_line(&ln);
+    EV(APP_EVT_LINE_FOUND, 0); CHECK("S5-U36", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "STOP0 FOL180 "), "found -> FOLLOW"); }
   /* obstacle + bypass */
   safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP; mot.pos_l_counts = 1000; mot.pos_r_counts = 900;
   EV(APP_EVT_OBSTACLE, 0); NONE(); CHECK("S5-U07", APP_RUN_AVOID == g_ctx.run_state && MODE(APP_MODE_STOPPED | APP_MODE_RESCAN), "OBSTACLE -> AVOID, standstill -> scan request");

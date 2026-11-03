@@ -286,6 +286,75 @@ static uint32_t sim_feed_barcode_edges(uint32_t char_idx, uint32_t start_us)
     return now_us;
 }
 
+/* Same barcode as sim_feed_barcode_edges, but with LM393-style chatter
+   (on-car 2026-11-03): at element misread_elem the ISR reads the OLD
+   level and the real level follows 800 us later; after element
+   bounce_elem a flicker edge back to the old level comes 1500 us later,
+   then the real level again 1700 us later.                          */
+static uint32_t sim_feed_barcode_chatter(uint32_t char_idx,
+                                         uint32_t start_us,
+                                         uint32_t misread_elem,
+                                         uint32_t bounce_elem)
+{
+    uint32_t durations_us[BAR_ELEMENTS] = {0u};
+    uint32_t chars[3]                   = { CODE39_STAR, char_idx, CODE39_STAR };
+    uint32_t c_idx                      = 0u;
+    uint32_t elem                       = 0u;
+    uint32_t now_us                     = start_us;
+    bool     b_level                    = true;
+
+    for (c_idx = 0u; c_idx < 3u; c_idx++)
+    {
+        uint16_t const pat = g_sim_patterns[chars[c_idx]];
+        uint32_t       bit = 0u;
+
+        for (bit = 0u; bit < 9u; bit++)
+        {
+            bool const b_wide = (0u != (pat & (uint16_t) (1u << (8u - bit))));
+
+            durations_us[elem] = b_wide ? 30000u : 12000u;
+            elem++;
+        }
+        if (c_idx < 2u)
+        {
+            durations_us[elem] = 12000u;
+            elem++;
+        }
+    }
+
+    gb_sim_bar_pin = true;
+    barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+
+    for (elem = 0u; elem < BAR_ELEMENTS; elem++)
+    {
+        bool const b_old = b_level;
+
+        now_us += durations_us[elem];
+        b_level = !b_level;
+        if (elem == misread_elem)
+        {
+            gb_sim_bar_pin = b_old;            /* read mid-flicker */
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+            gb_sim_bar_pin = b_level;          /* settles 800 us later */
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us + 800u);
+        }
+        else
+        {
+            gb_sim_bar_pin = b_level;
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+        }
+        if (elem == bounce_elem)
+        {
+            gb_sim_bar_pin = b_old;            /* flicker back ... */
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us + 1500u);
+            gb_sim_bar_pin = b_level;          /* ... and settle */
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us + 1700u);
+        }
+    }
+
+    return now_us;
+}
+
 int main(void)
 {
     uint32_t exp_val     = 0u;
@@ -343,6 +412,28 @@ int main(void)
                (APP_EVT_BARCODE == g_sim_evts[0].type) &&
                (exp_val == g_sim_evts[0].value),
                "newly mapped character 'E' -> RIGHT decoded and posted");
+
+    /* ---- S3-U17 (on-car 2026-11-03: LM393 chatter at bar edges) ----- */
+    sim_reset();
+    g_sim_path = 100u;
+    (void) sim_feed_barcode_chatter(13u, 50000u, 10u, BAR_ELEMENTS);
+    barcode_cycle();
+    exp_val = mission_evt_barcode_value(APP_BAR_CMD_UTURN, 13u);
+    HOST_CHECK("S3-U17",
+               (1u == g_sim_evt_cnt) &&
+               (APP_EVT_BARCODE == g_sim_evts[0].type) &&
+               (exp_val == g_sim_evts[0].value),
+               "'D' with one edge read mid-flicker still decodes as U-turn");
+
+    sim_reset();
+    g_sim_path = 100u;
+    (void) sim_feed_barcode_chatter(13u, 50000u, BAR_ELEMENTS, 6u);
+    barcode_cycle();
+    HOST_CHECK("S3-U17",
+               (1u == g_sim_evt_cnt) &&
+               (APP_EVT_BARCODE == g_sim_evts[0].type) &&
+               (exp_val == g_sim_evts[0].value),
+               "'D' with a flicker edge 1.5 ms after a bar edge still decodes");
 
     /* ---- S3-U09 (Rejoin mode, review F-02) --------------------------- */
     sim_reset();
