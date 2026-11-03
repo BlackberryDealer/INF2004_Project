@@ -13,6 +13,8 @@
 #                kernel; links telem_bin.c, app_bits.c, odometry.c)
 #   S1-U13, U15, U36, U37  test_mqtt_utk_host.c (radio-task mqtt_utk.c +
 #                mock lwIP in mock_lwip/ + mock bridge)
+#   S1-U38       test_lwip_sizing_host.c (real lwipopts.h: MQTT request
+#                slots and output ring hold 4 s of telemetry)
 #
 # Kernel-side files (mqtt_bridge.c) are copied into build/ next to a mock
 # app.h, so "../app.h" inside them resolves to the mock.
@@ -34,9 +36,9 @@ B       := build/app_program
 SB_MSG_FIELDS := $(shell grep -cE '^\#define (SB|MSG)_[A-Z0-9_]+_POS ' $(LAYOUT))
 
 .PHONY: all app_bits gen_layout_reject gen_layout_reject_mq mqtt_bridge \
-        mqtt_utk tree telem_bin clean
+        mqtt_utk lwip_sizing tree telem_bin clean
 all: app_bits gen_layout_reject gen_layout_reject_mq telem_bin mqtt_bridge \
-     mqtt_utk
+     mqtt_utk lwip_sizing
 
 test_app_bits_host.out: test_app_bits_host.c $(APP_DIR)/app_bits.c \
                         $(APP_DIR)/app_bits.h $(LAYOUT) ../../host/host_test.h
@@ -120,6 +122,14 @@ test_mqtt_utk_host.out: test_mqtt_utk_host.c $(MQTT_UTK) $(S1)/mqtt_bridge.h \
 
 mqtt_utk: test_mqtt_utk_host.out
 	./test_mqtt_utk_host.out
+
+LWIPOPTS := ../../../lib/liblwip/sysdepend/pico_rp2040/lwipopts.h
+test_lwip_sizing_host.out: test_lwip_sizing_host.c $(LWIPOPTS) \
+                           $(S1)/cfg_telem.h $(APP_DIR)/app_types.h
+	$(CC) $(CFLAGS) -o $@ test_lwip_sizing_host.c
+
+lwip_sizing: test_lwip_sizing_host.out
+	./test_lwip_sizing_host.out
 
 clean:
 	rm -rf *.out build

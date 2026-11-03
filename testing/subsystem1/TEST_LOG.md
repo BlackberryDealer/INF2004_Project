@@ -34,6 +34,7 @@ Define a test here before running it. Test IDs never change.
 | S1-U35 | **Added.** MAP command posts `APP_EVT_MAP` with char and command | FR11 (optional MAP) | auto (host) | `test_mqtt_bridge_host.c` | `[TEST] S1-U35 PASS` |
 | S1-U36 | **Added.** Back-off: retries at 1, 2, 4, 8, 8 s; the 2 ms poll loop cannot cut the wait short; an immediate connect failure takes the same path; refused link reported down | NFR9b | auto (host) | `test_mqtt_utk_host.c` | `[TEST] S1-U36 PASS` |
 | S1-U37 | **Added.** Connect uses the 4 s keepalive and a retained QoS 1 last will with the offline payload; on ACCEPTED: link up, back-off reset, online published, command topic subscribed at QoS 1, drain started; command bytes forwarded unfiltered, other topics ignored | NFR9a, B1.2 | auto (host) | `test_mqtt_utk_host.c` | `[TEST] S1-U37 PASS` |
+| S1-U38 | **Added.** The real `lwipopts.h` gives lwIP MQTT enough request slots and output ring for 4 s (the keepalive) of state + heartbeat: 24 messages of 31 B | NFR8, NFR9 | auto (host) | `make -C testing/subsystem1/host` (`lwip_sizing` target) | `[TEST] S1-U38 PASS` ×2 |
 | S1-I01 | State 5 Hz ± 10 % over 60 s | NFR8a | broker log | `tools/telem_decode.py` with timestamps, 60 s | 270–330 state messages |
 | S1-I02 | Event ≤ 500 ms after it happens; heartbeat 1 Hz ± 10 % | NFR8b, c | broker log | console event time vs broker time; heartbeat count over 60 s | ≤ 500 ms; 54–66 heartbeats |
 | S1-I03 | Broker killed: loss detected ≤ 7.5 s; retries at 1, 2, 4, 8, 8 s; `FAULT_WIFI_LOSS` set then cleared | NFR9a, b | manual (bench) | stop Mosquitto, watch console and broker | ≤ 7.5 s; retry times as listed |
@@ -76,3 +77,4 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | build (normal, TEST=1, TEST=1 PROBE=1), BARR, layout | `5bb213b` | Hanz | PASS | `logs/2026-10-22_build_packed.txt` | 0 warnings; barr_check no findings; layout.csv 155 rows OK |
 | — | S1-U03, S1-U12 (target smoke) | — | — | pending | — | needs the Pico: flash the TEST=1 image |
 | — | A10, S1-I01..I07, S1-I10 | — | — | pending | — | needs the car, the lab AP and the laptop broker |
+| 2026-11-03 | S1-U38 | `b1-wifi-latency` | Hanz | PASS | `make -C testing/host` | 2 PASS; FAILS on main (4 slots, 256 B ring); host suite 417 PASS, barr_check no findings |
