@@ -403,4 +403,82 @@ static uint32_t line_track_jct_confirm(line_track_jct_t * p_jct,
     return jct_class;
 }
 
+/**
+ * line_track_steer_reset
+ * @brief   Forgets the smoothed error and the last side (new run or new
+ *          calibration).
+ * @param   p_st  Steering state.
+ * @return  none
+ * @context line_task
+ */
+void line_track_steer_reset(line_track_steer_t * p_st)
+{
+    p_st->filt      = 0;
+    p_st->prev      = 0;
+    p_st->last_side = 0;
+}
+
+/**
+ * line_track_steer_step
+ * @brief   One 10 ms steering step. Both sensors white: target is
+ *          LINE_RECOVER_STEER toward the side the line was last seen on
+ *          (0 if never seen). Otherwise the target is norm_l - norm_r,
+ *          and an error of at least LINE_SIDE_MIN records its side. The
+ *          smoothed error moves 1/LINE_STEER_FILT_DIV of the way to the
+ *          target; the output adds LINE_STEER_KD x its change since the
+ *          last cycle (damping), clamped to +-LINE_STEER_MAX.
+ * @param   p_st    Steering state.
+ * @param   norm_l  Left normalised reading (0..1000).
+ * @param   norm_r  Right normalised reading (0..1000).
+ * @return  Damped steering error, -1000..+1000 (+ = line left).
+ * @context line_task (10 ms hot path)
+ */
+int32_t line_track_steer_step(line_track_steer_t * p_st,
+                              uint32_t norm_l, uint32_t norm_r)
+{
+    int32_t const raw     = line_track_steering(norm_l, norm_r);
+    bool const    b_white = ((norm_l < LINE_WHITE_THRESHOLD)
+                             && (norm_r < LINE_WHITE_THRESHOLD));
+    int32_t       target  = raw;
+    int32_t       out     = 0;
+
+    if (b_white)
+    {
+        target = p_st->last_side * LINE_RECOVER_STEER;
+    }
+    else if (raw >= LINE_SIDE_MIN)
+    {
+        p_st->last_side = 1;
+    }
+    else if (raw <= -LINE_SIDE_MIN)
+    {
+        p_st->last_side = -1;
+    }
+    else
+    {
+        /* near centre: keep the last side */
+    }
+
+    /* |target - filt| <= 2000: no overflow; C99 division truncates */
+    p_st->prev  = p_st->filt;
+    p_st->filt += (target - p_st->filt) / LINE_STEER_FILT_DIV;
+
+    /* |filt - prev| <= 1000, x KD (small constant) fits int32_t */
+    out = p_st->filt + (LINE_STEER_KD * (p_st->filt - p_st->prev));
+    if (out > LINE_STEER_MAX)
+    {
+        out = LINE_STEER_MAX;
+    }
+    else if (out < -LINE_STEER_MAX)
+    {
+        out = -LINE_STEER_MAX;
+    }
+    else
+    {
+        /* within the steering field domain */
+    }
+
+    return out;
+}
+
 /*** end of file ***/

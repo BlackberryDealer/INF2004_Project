@@ -58,6 +58,8 @@ typedef struct
     uint32_t leg_fwd_mm;
     uint32_t rejoin_e_mm;        /* expected rejoin distance */
 
+    int32_t  cal_diff0;          /* pos_l - pos_r when CAL_IR started */
+    uint32_t cal_corr_cnt;       /* heading return turns after the sweep */
     uint32_t cal_start_us;       /* E5 timers (sys_tick_now_us) */
     uint32_t sweep_start_us;
     uint32_t warn_start_us;

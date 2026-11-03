@@ -31,6 +31,7 @@
 static uint64_t         g_line_stack[LINE_STACK_WORDS];
 static line_track_cal_t g_cal             = {0u, 0u, 0u, 0u, 0u, 0u};
 static line_track_jct_t g_jct             = {0u, 0u, false, false, 0u};
+static line_track_steer_t g_steer         = {0, 0, 0};
 static uint32_t         g_cal_min_l       = LINE_ADC_MAX_INIT;
 static uint32_t         g_cal_max_l       = 0u;
 static uint32_t         g_cal_min_r       = LINE_ADC_MAX_INIT;
@@ -38,6 +39,9 @@ static uint32_t         g_cal_max_r       = 0u;
 static uint32_t         g_lost_cnt        = 0u;
 static bool             gb_lost_sent      = false;
 static bool             gb_run_active     = false;
+/* Rejoin: >= LINE_REJOIN_WHITE_MIN white cycles seen since the last black
+   run started. Grey cycles at a line edge do not clear it. */
+static bool             gb_rejoin_white   = false;
 static bool             gb_cal_active     = false;
 static bool             gb_is_calibrated  = false;
 static bool             gb_branch_seen    = false;
@@ -61,8 +65,7 @@ static bool line_handle_modes(uint32_t raw_l, uint32_t raw_r,
 static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
                                        uint32_t path, bool b_inhibit_jct,
                                        uint32_t * p_status);
-static void line_handle_rejoin(bool b_is_black, uint32_t prev_lost_cnt,
-                               uint32_t path);
+static void line_handle_rejoin(bool b_is_black, uint32_t path);
 static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
                                uint32_t path, bool b_inhibit_jct,
                                uint32_t * p_status);
@@ -85,6 +88,7 @@ ER line_init(void)
     g_lost_cnt        = 0u;
     gb_lost_sent      = false;
     gb_run_active     = false;
+    gb_rejoin_white   = false;
     gb_cal_active     = false;
     gb_is_calibrated  = false;
     gb_branch_seen    = false;
@@ -200,6 +204,12 @@ static void line_cycle(void)
                     (int32_t) raw_r, 0);
             app_log("ENC pos L %d R %d\n", status_board_pos_l(&snap),
                     status_board_pos_r(&snap), 0);
+            /* Barcode sensor check: move a barcode under it by hand; the
+               edge count must rise with every bar. cast: level 0..1, the
+               count is shown modulo 2^31                               */
+            app_log("BAR DO %d (1 = black), edges %d\n",
+                    (int32_t) barcode_do_level(),
+                    (int32_t) (barcode_edge_count() & 0x7FFFFFFFu), 0);
         }
     }
     path = status_board_path(&snap);
@@ -222,7 +232,7 @@ static void line_cycle(void)
         bool const b_inhibit_jct =
             mission_mode_is_set(APP_MODE_JUNCTION_INHIBIT);
 
-        steering = line_track_steering(norm_l, norm_r);
+        steering = line_track_steer_step(&g_steer, norm_l, norm_r);
         line_update_loss_and_found(norm_l, norm_r, path,
                                    b_inhibit_jct, &status);
         line_step_junction(norm_l, norm_r, path, b_inhibit_jct, &status);
@@ -245,9 +255,11 @@ static void line_cycle(void)
 static void line_reset_run_state(uint32_t path)
 {
     line_track_jct_reset(&g_jct);
+    line_track_steer_reset(&g_steer);
     g_lost_cnt        = 0u;
     gb_lost_sent      = false;
     gb_run_active     = false;
+    gb_rejoin_white   = false;
     g_run_mark        = 0u;
     g_last_branch_seq = barcode_branch_seq();
     g_branch_path     = path;
@@ -351,7 +363,6 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
         ((norm_l < LINE_WHITE_THRESHOLD) && (norm_r < LINE_WHITE_THRESHOLD));
     bool const b_is_black =
         ((norm_l >= LINE_BLACK_THRESHOLD) || (norm_r >= LINE_BLACK_THRESHOLD));
-    uint32_t const prev_lost_cnt = g_lost_cnt;
 
     if (b_is_white)
     {
@@ -383,11 +394,12 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
 
     if (b_inhibit_jct)
     {
-        line_handle_rejoin(b_is_black, prev_lost_cnt, path);
+        line_handle_rejoin(b_is_black, path);
     }
     else
     {
-        gb_run_active = false;
+        gb_run_active   = false;
+        gb_rejoin_white = false;
         if (b_is_black && gb_lost_sent)
         {
             (void) mission_post_event(APP_EVT_LINE_FOUND, 0u);
@@ -404,21 +416,33 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
  * line_handle_rejoin
  * @brief   Measures every black run after >= 2 white cycles in rejoin mode
  *          and posts APP_EVT_LINE_FOUND when the run ends or reaches 255 mm.
+ *          The white cycles need not come right before the run: at 45 deg
+ *          the sensor passes grey at the line edge first, and a grey cycle
+ *          reset the old "white just before" count, so no run started and
+ *          the car drove over the line (on-car log 2026-11-03, S3-U15).
  * @param   b_is_black     true if either channel >= LINE_BLACK_THRESHOLD.
- * @param   prev_lost_cnt  White cycle count immediately before this cycle.
  * @param   path           Current odometry path counts.
  * @return  none
  * @context line_task
  */
-static void line_handle_rejoin(bool b_is_black, uint32_t prev_lost_cnt,
-                               uint32_t path)
+static void line_handle_rejoin(bool b_is_black, uint32_t path)
 {
+    if (g_lost_cnt >= LINE_REJOIN_WHITE_MIN)  /* updated this cycle */
+    {
+        gb_rejoin_white = true;
+    }
+    else
+    {
+        /* black or grey this cycle, or white too short so far */
+    }
+
     if (b_is_black)
     {
-        if ((!gb_run_active) && (prev_lost_cnt >= LINE_REJOIN_WHITE_MIN))
+        if ((!gb_run_active) && gb_rejoin_white)
         {
-            gb_run_active = true;
-            g_run_mark    = path;
+            gb_run_active   = true;
+            gb_rejoin_white = false;
+            g_run_mark      = path;
         }
         else
         {

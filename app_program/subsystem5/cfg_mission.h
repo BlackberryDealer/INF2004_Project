@@ -15,7 +15,14 @@
 #define MISSION_CAL_TIMEOUT_MS      (10000u)
 #define MISSION_WDT_LOG_MS          (2000u)   /* 0 = no feed-gap log    */
 #define MISSION_CAL_SWEEP_DEG       (30)      /* left 30, right 60, left 30 */
-#define MISSION_CAL_SWEEP_MAX_MS    (3000u)
+#define MISSION_CAL_SWEEP_MAX_MS    (4000u)   /* sweep + heading return */
+/* After the sweep the car turns back to its start heading (encoders):
+   each spin turn overshoots in its own direction, and the three legs
+   left the car about 8 deg left of the line (on-car log 2026-11-03,
+   ENC L -18 R 37).                                                    */
+#define MISSION_CAL_HEADING_TOL_CDEG (200)    /* TUNE: 2 deg */
+#define MISSION_CAL_CORR_MAX        (2u)      /* return turns at most */
+#define MISSION_CDEG_PER_DEG        (100)
 #define MISSION_START_WARN_MS       (1000u)
 #define MISSION_SEARCH_TIMEOUT_MS   (5000u)   /* FR14 */
 #define MISSION_SEARCH_SWEEP_DEG    (60)

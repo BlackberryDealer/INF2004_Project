@@ -401,6 +401,41 @@ int main(void)
                (g_sim_evts[1].value >= 44u) && (g_sim_evts[1].value <= 46u),
                "first LINE_FOUND ~10 mm, second LINE_FOUND ~45 mm");
 
+    /* ---- S3-U15 (Rejoin at 45 deg, on-car log 2026-11-03) ------------ */
+    /* White, then grey at the line edge, then black: the grey cycles must
+       not cancel the white seen before, or the line is never reported. */
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_mode_mask = APP_MODE_JUNCTION_INHIBIT;
+    g_sim_path      = 100u;
+    g_sim_raw_l     = 500u;               /* white */
+    g_sim_raw_r     = 500u;
+    line_cycle();
+    g_sim_path += 5u;
+    line_cycle();
+    g_sim_path += 5u;
+    line_cycle();
+    g_sim_raw_l = 2000u;                  /* grey edge, 2 cycles */
+    g_sim_raw_r = 2000u;
+    g_sim_path += 5u;
+    line_cycle();
+    g_sim_path += 5u;
+    line_cycle();
+    line_counts = odometry_mm_to_counts(25u);
+    g_sim_raw_l = 3500u;                  /* black: 25 mm crossing */
+    g_sim_raw_r = 3500u;
+    g_sim_path += 5u;
+    line_cycle();
+    g_sim_path += line_counts;
+    g_sim_raw_l = 2000u;                  /* grey far edge ends the run */
+    g_sim_raw_r = 2000u;
+    line_cycle();
+    HOST_CHECK("S3-U15",
+               (1u == g_sim_evt_cnt) &&
+               (APP_EVT_LINE_FOUND == g_sim_evts[0].type) &&
+               (g_sim_evts[0].value >= 24u) && (g_sim_evts[0].value <= 26u),
+               "white, grey edge, black: LINE_FOUND ~25 mm is still posted");
+
     /* ---- S3-U14 (Full task barcode-branch + line junction integration) */
     sim_reset();
     sim_calibrate_line();

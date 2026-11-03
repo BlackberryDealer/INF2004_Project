@@ -112,11 +112,28 @@ int main(void) {
     g_motor_en = true; cyc(); cyc();
     CHECK("S5-U31", APP_SCAN_STOPPED == g_state && 0u != (g_safety & SAFETY_ESTOP)
           && 1 == count_ev(APP_EVT_OBSTACLE),
-          "motors enabled (CAL_IR/RUN): same 100 mm -> ESTOP, OBSTACLE, STOPPED");
+          "motors enabled (RUN): same 100 mm -> ESTOP, OBSTACLE, STOPPED");
     g_motor_en = false; cyc();
     CHECK("S5-U31", APP_SCAN_MONITOR == g_state && 90u == g_servo,
           "motors off again (run ended): back to MONITOR, servo centred");
     g_motor_en = true; g_safety = 0; nev = 0; w_dist = 1000; cyc(); cyc(); nev = 0; }
+  /* S5-U34 (on-car logs 2026-11-03): the CAL_IR sweep spins on the spot
+     with MOTOR_EN set. A near echo followed by lost ones (beam swinging
+     past a nearby object) latched ESTOP and stopped the sweep mid-turn.
+     The stop is not armed in CAL_IR; it arms again once CAL_IR clears. */
+  { int ok = 1;
+    g_modes |= APP_MODE_CAL_IR; g_safety = 0; nev = 0; w_mode = 0;
+    w_dist = 100; cyc(); cyc(); cyc();
+    w_mode = 2; cyc(); cyc(); cyc();
+    if (0u != (g_safety & SAFETY_ESTOP)) { ok = 0; }
+    CHECK("S5-U34", ok && APP_SCAN_MONITOR == g_state && 0 == nev,
+          "CAL_IR sweep: near echo then lost echoes -> no ESTOP, no events, MONITOR");
+    g_modes &= ~APP_MODE_CAL_IR; g_fault = 0; g_silent = 0;
+    w_mode = 0; w_dist = 100; cyc(); cyc(); cyc();  /* confirm, AHEAD, STOP */
+    CHECK("S5-U34", APP_SCAN_STOPPED == g_state && 0u != (g_safety & SAFETY_ESTOP),
+          "CAL_IR cleared (RUN): same 100 mm -> ESTOP, STOPPED");
+    g_motor_en = false; cyc(); g_motor_en = true;
+    g_safety = 0; nev = 0; w_dist = 1000; cyc(); cyc(); nev = 0; g_fault = 0; }
   w_mode = 0; w_dist = 1000; cyc(); cyc();
   CHECK("S5-U08", APP_SCAN_MONITOR == g_state && 0 == nev && 1000u == dist(), "far object: MONITOR, 1000 mm measured");
   w_dist = 300; cyc(); CHECK("S5-U08", 300u == dist() && APP_SCAN_MONITOR == g_state, "300 mm, not yet confirmed");

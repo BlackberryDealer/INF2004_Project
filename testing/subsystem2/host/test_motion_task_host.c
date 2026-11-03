@@ -57,6 +57,7 @@ static uint32_t  g_sim_glitch    = 0u;    /* added to the next read only */
 static int32_t   g_sim_duty_l    = 0;     /* applied by drv_motor_*      */
 static int32_t   g_sim_duty_r    = 0;
 static bool      gb_sim_braked   = true;
+static bool      gb_sim_stuck    = false; /* wheels held: no counts     */
 static bool      gb_sim_motor_en = true;
 static bool      gb_sim_safety   = false;
 /* S2-U20: MOTOR_EN value the "other core" writes at the moment motion_task
@@ -190,6 +191,10 @@ static uint32_t sim_wheel(int32_t duty, int32_t * p_acc)
 {
     int32_t step = 0;
 
+    if (gb_sim_stuck)
+    {
+        return 0u;                /* held wheel: duty has no effect */
+    }
     *p_acc += duty;
     step    = *p_acc / SIM_PERMILLE_PER_COUNT;
     *p_acc -= step * SIM_PERMILLE_PER_COUNT;
@@ -274,7 +279,7 @@ static void sim_reset(void)
     g_sim_k5_head = 0u; g_sim_k5_count = 0u; g_sim_evt_count = 0u;
     g_sim_acc_l = 0; g_sim_acc_r = 0; g_sim_glitch = 0u;
     gb_sim_motor_en = true; gb_sim_safety = false; g_sim_faults = 0u;
-    g_sim_en_on_rcv = 0u;
+    g_sim_en_on_rcv = 0u; gb_sim_stuck = false;
     gb_is_pend_valid = false; g_path2 = 0u; g_strk_l = 0u; g_strk_r = 0u;
     g_stall_l = 0u; g_stall_r = 0u;
     motion_cancel_active();
@@ -498,6 +503,70 @@ int main(void)
     HOST_CHECK("S2-U20", (APP_MOT_BRAKE == g_state) && gb_sim_braked
                && (0u == sim_count_events(APP_EVT_MOVE_DONE, 3u)),
                "rejected command is not started when MOTOR_EN returns");
+
+    /* S2-U23 (on-car logs 2026-11-03): creep. Braking from 150 mm/s
+       carried turns ~9 mm past their target. The last
+       MOTION_CREEP_ZONE_MM of a TURN or MOVE run at MOTION_CREEP_MM_S. */
+    sim_reset();
+    sim_send(APP_CMD_LEFT, 90u, 1u);
+    sim_cycles(3u);
+    HOST_CHECK("S2-U23", (APP_MOT_TURN_L == g_state)
+               && (!motion_in_creep_zone())
+               && (g_base_cpw == motion_move_base()),
+               "90 deg turn starts at the full turn speed");
+    for (uint32_t i = 0u; (i < 400u) && (APP_MOT_TURN_L == g_state)
+                          && (!motion_in_creep_zone()); i++)
+    {
+        sim_cycle();
+    }
+    HOST_CHECK("S2-U23", (APP_MOT_TURN_L == g_state) && motion_in_creep_zone()
+               && (g_creep_cpw == motion_move_base())
+               && (g_creep_cpw > 0) && (g_creep_cpw < g_base_cpw),
+               "last 20 mm of the turn: base set-point drops to creep");
+    b_done = sim_run_until_done(400u, &tag);
+    HOST_CHECK("S2-U23", b_done && (1u == tag) && (g_prog2 >= g_target2),
+               "turn still completes on its own count with MOVE_DONE");
+
+    sim_reset();
+    sim_send(APP_CMD_BACK, 100u, 2u);
+    sim_cycles(3u);
+    HOST_CHECK("S2-U23", (APP_MOT_MOVE_BACK == g_state)
+               && (g_creep_cpw < 0) && (g_creep_cpw > g_base_cpw),
+               "MOVE_BACK: creep keeps the negative sign, smaller magnitude");
+
+    /* Wheels stop turning inside the zone (creep duty too low): the
+       command ends there instead of hanging until mission's deadline. */
+    sim_reset();
+    sim_send(APP_CMD_FWD, 100u, 3u);
+    sim_cycles(3u);
+    for (uint32_t i = 0u; (i < 400u) && (APP_MOT_MOVE_FWD == g_state)
+                          && (!motion_in_creep_zone()); i++)
+    {
+        sim_cycle();
+    }
+    gb_sim_stuck = true;
+    sim_cycles(MOTION_CREEP_STUCK_TICKS - 2u);
+    HOST_CHECK("S2-U23", (APP_MOT_MOVE_FWD == g_state) && (g_prog2 > 0u)
+               && motion_in_creep_zone(),
+               "held in the zone: not ended before MOTION_CREEP_STUCK_TICKS");
+    prog2  = g_prog2;                     /* short of the target here */
+    b_done = sim_run_until_done(10u, &tag);
+    HOST_CHECK("S2-U23", b_done && (3u == tag) && (prog2 > 0u)
+               && (g_creep_still >= MOTION_CREEP_STUCK_TICKS),
+               "held in the zone: ends with MOVE_DONE short of the target");
+
+    /* A short move starts inside the zone: standing still before the
+       wheels first move must not end it.                              */
+    sim_reset();
+    gb_sim_stuck = true;
+    sim_send(APP_CMD_FWD, 10u, 1u);
+    sim_cycles(2u * MOTION_CREEP_STUCK_TICKS);
+    HOST_CHECK("S2-U23", (APP_MOT_MOVE_FWD == g_state) && (0u == g_prog2),
+               "short move not yet moving: not ended by the creep rule");
+    gb_sim_stuck = false;
+    b_done = sim_run_until_done(200u, &tag);
+    HOST_CHECK("S2-U23", b_done && (1u == tag) && (g_prog2 >= g_target2),
+               "short move completes on its count once the wheels turn");
 
     return (0 == HOST_SUMMARY("motion_task")) ? 0 : 1;
 }
