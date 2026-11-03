@@ -17,6 +17,9 @@
 #                slots and output ring hold 4 s of telemetry)
 #   S1-U43       tools/telem_cmd.py --self-test (laptop command bytes agree
 #                with app_types.h; a SNAPSHOT reply decodes)
+#   S1-U44       tools/dashboard/test_dashboard.py (the web dashboard's
+#                tables are current and its JS decoder matches
+#                telem_decode.py; JS part skipped without Node.js)
 #   (S1-U41 is in testing/subsystem5/host/sim_mission_host.c: it needs the
 #    mission statechart)
 #
@@ -40,9 +43,9 @@ B       := build/app_program
 SB_MSG_FIELDS := $(shell grep -cE '^\#define (SB|MSG)_[A-Z0-9_]+_POS ' $(LAYOUT))
 
 .PHONY: all app_bits gen_layout_reject gen_layout_reject_mq mqtt_bridge \
-        mqtt_utk lwip_sizing telem_cmd tree telem_bin clean
+        mqtt_utk lwip_sizing telem_cmd dashboard tree telem_bin clean
 all: app_bits gen_layout_reject gen_layout_reject_mq telem_bin mqtt_bridge \
-     mqtt_utk lwip_sizing telem_cmd
+     mqtt_utk lwip_sizing telem_cmd dashboard
 
 test_app_bits_host.out: test_app_bits_host.c $(APP_DIR)/app_bits.c \
                         $(APP_DIR)/app_bits.h $(LAYOUT) ../../host/host_test.h
@@ -137,6 +140,10 @@ lwip_sizing: test_lwip_sizing_host.out
 
 telem_cmd:
 	$(PYTHON) $(TOOLS)/telem_cmd.py --self-test
+
+# S1-U44 uses the golden vectors written by telem_bin.
+dashboard: telem_bin
+	$(PYTHON) $(TOOLS)/dashboard/test_dashboard.py golden
 
 clean:
 	rm -rf *.out build
