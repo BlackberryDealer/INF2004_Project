@@ -646,6 +646,7 @@ static void run_avoid_wait(mission_ctx_t * p_ctx, uint32_t type,
             run_follow_or_armed(p_ctx, p_snap, now_us);
             break;
         case APP_EVT_NO_PATH:
+            run_post_profile(p_snap);   /* width etc. reach MQTT here too */
             p_ctx->no_path_cnt++;
             if (p_ctx->no_path_cnt >= 2u)
             {
