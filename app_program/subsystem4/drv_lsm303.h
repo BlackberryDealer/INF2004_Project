@@ -21,6 +21,10 @@
    drv_lsm303.c. Kept in the header so the host test can lock them. */
 #define DRV_LSM303_ADDR     (0x1Du)
 #define DRV_LSM303_WHO_AM_I (0x49u)
+/* The other LSM303D address: SA0 low selects 0x1E, SA0 high 0x1D (ST
+   datasheet DocID023312, I2C address). On-car 2026-11-04 the module's SA0
+   (no wire on the header) read low and the chip answered only at 0x1E. */
+#define DRV_LSM303_ADDR_ALT (0x1Eu)
 
 typedef struct
 {
@@ -61,7 +65,31 @@ static inline uint32_t drv_lsm303_fifo_plan(uint32_t   fifo_src,
     return ovr;
 }
 
+/* Pure address helpers (host-tested by S4-U15). */
+static inline uint32_t drv_lsm303_other_addr(uint32_t addr)
+{
+    return (DRV_LSM303_ADDR == addr) ? DRV_LSM303_ADDR_ALT : DRV_LSM303_ADDR;
+}
+
+/* id_now / id_other: drv_lsm303_identity_ok() at the current and the other
+   address (1 = WHO_AM_I 0x49, 0 = wrong identity, <0 = I2C error). The
+   other address is taken only when it identifies and the current one
+   does not; otherwise the current one is kept (fault path as before).    */
+static inline uint32_t drv_lsm303_pick_addr(uint32_t addr_now, int32_t id_now,
+                                            int32_t id_other)
+{
+    uint32_t pick = addr_now;
+
+    if ((1 != id_now) && (1 == id_other))
+    {
+        pick = drv_lsm303_other_addr(addr_now);
+    }
+
+    return pick;
+}
+
 extern int32_t drv_lsm303_init(void); /* 0 OK, <0 I2C error */
+extern uint32_t drv_lsm303_addr(void); /* 7-bit address in use */
 extern int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples,
                                    uint32_t max_samples); /* count or <0 */
 extern int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my,

@@ -66,5 +66,23 @@ int main(void)
     HOST_CHECK("S4-U14", (0x49u == DRV_LSM303_WHO_AM_I),
                "LSM303D WHO_AM_I is 0x49, not the DLHC 'H','4','3'");
 
+    /* S4-U15 (on-car 2026-11-04): the LSM303D answered at 0x1E (SA0 read
+       low) instead of 0x1D, so every transfer NACKed and the car faulted
+       in CAL_IMU. The driver now checks WHO_AM_I and takes the other SA0
+       address when only that one identifies.                            */
+    HOST_CHECK("S4-U15", (0x1Eu == drv_lsm303_other_addr(0x1Du))
+               && (0x1Du == drv_lsm303_other_addr(0x1Eu)),
+               "the two SA0 addresses are 0x1D (high) and 0x1E (low)");
+    HOST_CHECK("S4-U15", 0x1Du == drv_lsm303_pick_addr(0x1Du, 1, -2),
+               "answers at the current address: keep it");
+    HOST_CHECK("S4-U15", 0x1Eu == drv_lsm303_pick_addr(0x1Du, -2, 1),
+               "NACK at 0x1D, identity at 0x1E: switch to 0x1E");
+    HOST_CHECK("S4-U15", 0x1Du == drv_lsm303_pick_addr(0x1Eu, -2, 1),
+               "SA0 back high: switch back to 0x1D");
+    HOST_CHECK("S4-U15", 0x1Du == drv_lsm303_pick_addr(0x1Du, -2, -2),
+               "nothing answers: keep the address (fault path as before)");
+    HOST_CHECK("S4-U15", 0x1Du == drv_lsm303_pick_addr(0x1Du, -2, 0),
+               "other address answers with a wrong identity: not taken");
+
     return (0 == HOST_SUMMARY("drv_lsm303")) ? 0 : 1;
 }
