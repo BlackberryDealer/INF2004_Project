@@ -198,6 +198,12 @@ int main(void) {
   idle_ms(90); CHECK("S5-U21", APP_SYS_FINISHED == g_ctx.sys_state, "recovery waits 100 ms (mission keeps looping)");
   idle_ms(20); CHECK("S5-U21", APP_SYS_READY == g_ctx.sys_state, "-> READY");
   mot.motion_state = APP_MOT_BRAKE; to_run(); CHECK("S5-U21", APP_SYS_RUN == g_ctx.sys_state, "the next run starts");
+  /* S5-U37: the scanned profile (object width) reaches telemetry on NO_PATH too */
+  safety_set(SAFETY_ESTOP); EV(APP_EVT_OBSTACLE, 0); NONE(); idle_ms(200);
+  tlog[0] = 0; EV(APP_EVT_NO_PATH, 0);
+  CHECK("S5-U37", strstr(tlog, "PROF") && strstr(mlog, "B") && APP_AVOID_REVERSE == g_ctx.avoid_step, "NO_PATH -> profile (width) posted, then reverse");
+  EV(APP_EVT_STOP, 0); EV(APP_EVT_RESET, 0); idle_ms(110);
+  mot.motion_state = APP_MOT_BRAKE; to_run(); CHECK("S5-U37", APP_SYS_RUN == g_ctx.sys_state, "back to RUN for the next case");
   /* SIDE_TOO_CLOSE on a leg -> FAULT */
   safety_set(SAFETY_ESTOP); EV(APP_EVT_OBSTACLE, 0); NONE(); idle_ms(200);
   EV(APP_EVT_PLAN, APP_SIDE_LEFT); DONE(); safety_set(SAFETY_ESTOP);
