@@ -29,10 +29,21 @@
 /* MEASURE: 1.5 x the largest barcode-to-junction spacing */
 #define MISSION_ARM_EXPIRE_MM       (1000u)
 #define MISSION_JCT_ADVANCE_MM      (60u)     /* MEASURE: sensors to axle */
-#define MISSION_FR9_LIMIT_MS        (5000u)
+/* FR9 bypass limit (end of the pass leg -> line following again)
+   5 s -> 20 s (Dylan, 2026-11-04): more time to find the line again,
+   and the car is slower now. FR9 must be updated to match in the
+   requirements and traceability.                                     */
+#define MISSION_FR9_LIMIT_MS        (20000u)
 #define MISSION_REJOIN_DEG          (45)
-#define MISSION_REJOIN_WIDTH_MM     (25u)     /* 18 mm line at 45 deg */
-#define MISSION_REJOIN_WIDTH_TOL_MM (8u)
+/* Width of the rejoin crossing. line.c measures a black run while EITHER
+   sensor is black, so at 45 deg it is 18 / sin 45 = 25 mm of line plus
+   the sensor spacing x cot 45 (the second sensor reaches the line later):
+   49 mm on the car (2026-11-04 14:16; 25 +- 8 rejected it, S5-U41).
+   45 +- 30 accepts 15..75 mm: crossings from ~30 to ~60 deg; a single
+   barcode bar (< 15 mm at one sensor) or driving along the line
+   (> 75 mm) is still rejected.                                        */
+#define MISSION_REJOIN_WIDTH_MM     (45u)     /* MEASURE: sensor spacing */
+#define MISSION_REJOIN_WIDTH_TOL_MM (30u)
 #define MISSION_REJOIN_WIN_PCT      (30u)
 #define MISSION_HEADING_TOL_CDEG    (500)     /* 5 deg */
 #define MISSION_INHIBIT_CLEAR_MM    (150u)

@@ -54,6 +54,8 @@ static uint32_t  g_sim_raw_r     = 3000000u;
 static int32_t   g_sim_acc_l     = 0;
 static int32_t   g_sim_acc_r     = 0;
 static uint32_t  g_sim_glitch    = 0u;    /* added to the next read only */
+static uint32_t  g_sim_read_stall_us = 0u; /* S2-U26: time lost right after
+                                               the next encoder read     */
 static int32_t   g_sim_duty_l    = 0;     /* applied by drv_motor_*      */
 static int32_t   g_sim_duty_r    = 0;
 static bool      gb_sim_braked   = true;
@@ -98,6 +100,8 @@ void drv_encoder_read(uint32_t * p_raw_l, uint32_t * p_raw_r)
     *p_raw_l = g_sim_raw_l + g_sim_glitch;
     *p_raw_r = g_sim_raw_r + g_sim_glitch;
     g_sim_glitch = 0u;
+    g_sim_us += g_sim_read_stall_us;  /* task held up after the read */
+    g_sim_read_stall_us = 0u;
 }
 bool drv_encoder_location(uint32_t * p_pio_index, uint32_t * p_sm_l,
                           uint32_t * p_sm_r)
@@ -595,6 +599,61 @@ int main(void)
                    && (((sp_l + sp_r) / 2) < g_base_cpw)
                    && (((sp_l + sp_r) / 2) >= ((g_base_cpw * 85) / 100)),
                    "small right error: turn right, only a little slower");
+        g_sim_steer = 0;
+    }
+
+    /* S2-U26 (on-car 2026-11-04 12:57: FAULT ENCODER "9 counts in 2031 us"
+       mid-run, nothing wrong with the wheel; watchdog gaps 24-26 ms at the
+       same time). The task was held up between reading the counts and
+       reading the clock, so that pair was stamped ~8 ms late; the next
+       two cycles (on schedule, then a queued wake-up) then saw ~10 ms of
+       counts in 2-3 ms and faulted. A read whose clock is far from its
+       counts must not be trusted.                                       */
+    sim_reset();
+    sim_send(APP_CMD_FOLLOW, 300u, 1u); /* ~9 counts per tick, as logged */
+    g_sim_steer = 0;
+    sim_cycles(80u);
+    g_sim_faults = 0u;
+    /* A: counts read, then 9 ms lost before the timestamp */
+    g_sim_read_stall_us = 9000u;
+    sim_cycle();
+    /* B: R2 wakes on its fixed schedule, 1 ms after A's late stamp */
+    g_sim_us -= 9000u;
+    sim_cycle();
+    /* C: a queued wake-up runs 1 ms later (no wheel motion added) */
+    g_sim_us += 1000u;
+    motion_cycle();
+    sim_cycles(5u);
+    HOST_CHECK("S2-U26", 0u == (g_sim_faults & APP_FAULT_ENCODER),
+               "task held up between count and clock reads: no ENCODER"
+               " fault");
+    HOST_CHECK("S2-U26", APP_MOT_FOLLOW == g_state,
+               "... and FOLLOW goes on");
+    /* a real impossible jump is still caught (S2-U19 rule unchanged) */
+    g_sim_glitch = 5000u; sim_cycle();
+    g_sim_glitch = 10000u; sim_cycle();
+    HOST_CHECK("S2-U26", 0u != (g_sim_faults & APP_FAULT_ENCODER),
+               "two impossible jumps in a row still fault");
+
+    /* S2-U25 (on-car 2026-11-04, Dylan: corrections too "violent", the
+       car shakes left-right): gentler steering, MOTION_KP_STEER_Q8 3 -> 2.
+       A full error now differs the wheels by at most 2 x 7.8 cpw
+       (was 2 x 11.7).                                                 */
+    {
+        int32_t sp_l = 0;
+        int32_t sp_r = 0;
+
+        sim_reset();
+        sim_send(APP_CMD_FOLLOW, 180u, 1u);
+        sim_cycles(3u);
+        g_sim_steer = 1000;
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U25", ((sp_r - sp_l) > 0) && ((sp_r - sp_l) <= 16),
+                   "full left error: wheel difference <= 16 cpw (was 22)");
+        g_sim_steer = -300;
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U25", ((sp_l - sp_r) > 0) && ((sp_l - sp_r) <= 6),
+                   "small right error: still a correction, <= 6 cpw");
         g_sim_steer = 0;
     }
 
