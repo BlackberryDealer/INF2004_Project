@@ -8,6 +8,9 @@
 
 #include "line.h"              /* own header first (BARR-C 4.3.c) */
 #include "../app.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
+#include "../subsystem2/fault.h"
 #include "../subsystem2/odometry.h"
 #include "../subsystem5/mission.h"
 #include "../subsystem5/status_board.h"
@@ -21,54 +24,54 @@
 /* ---- private constants and types ------------------------------------ */
 
 #define LINE_STACK_WORDS      (APP_STACK_LINE_BYTES / 8u)
-#define LINE_LOST_CNT_MAX     (31u)
 #define LINE_REJOIN_WHITE_MIN (2u)
-#define LINE_ADC_MAX_INIT     (4095u)
-#define LINE_RAW_LOG_CYCLES   (50u)   /* bring-up raw print: every 0.5 s */
+#define LINE_SEQ_MASK         (0xFFu)
+#define LINE_RAW_LOG_CYCLES   (50u)        /* bring-up raw print: every 0.5 s */
+#define LINE_LOG_CNT_MASK     (0x7FFFFFFFu)
 
 /* ---- private data ---------------------------------------------------- */
 
-static uint64_t         g_line_stack[LINE_STACK_WORDS];
-static line_track_cal_t g_cal             = {0u, 0u, 0u, 0u, 0u, 0u};
-static line_track_jct_t g_jct             = {0u, 0u, false, false, 0u};
+static uint64_t           g_line_stack[LINE_STACK_WORDS];
 static line_track_steer_t g_steer         = {0, 0, 0};
-static uint32_t         g_cal_min_l       = LINE_ADC_MAX_INIT;
-static uint32_t         g_cal_max_l       = 0u;
-static uint32_t         g_cal_min_r       = LINE_ADC_MAX_INIT;
-static uint32_t         g_cal_max_r       = 0u;
-static uint32_t         g_lost_cnt        = 0u;
-static bool             gb_lost_sent      = false;
-static bool             gb_run_active     = false;
-/* Rejoin: >= LINE_REJOIN_WHITE_MIN white cycles seen since the last black
-   run started. Grey cycles at a line edge do not clear it. */
-static bool             gb_rejoin_white   = false;
-static bool             gb_cal_active     = false;
-static bool             gb_is_calibrated  = false;
-static bool             gb_branch_seen    = false;
-static uint32_t         g_run_mark        = 0u;
-static uint32_t         g_last_branch_seq = 0u;
-static uint32_t         g_branch_path     = 0u;
-static uint32_t         g_last_jct        = APP_JCT_NONE;
-static uint32_t         g_jct_min_counts  = 0u;
-static uint32_t         g_jct_conf_counts = 0u;
-static uint32_t         g_branch_early_c  = 0u;
-static uint32_t         g_raw_log_cnt     = 0u;   /* raw print divider */
+
+/* Packed private state words (Phase 4, B3.4). */
+static uint32_t           g_prv_cal_l     = 0u; /* PRV_CAL_L: WHITE, BLACK */
+static uint32_t           g_prv_cal_r     = 0u; /* PRV_CAL_R: WHITE, BLACK */
+static uint32_t           g_recip_l_q16   = 0u; /* E_LINE E8 reciprocal left */
+static uint32_t           g_recip_r_q16   = 0u; /* E_LINE E8 reciprocal right */
+static uint32_t           g_line_prv_a    = 0u; /* PRV_LINE_A flags/cnt/JCT */
+static uint32_t           g_line_prv_b    = 0u; /* PRV_LINE_B: JCT_MARK */
+static uint32_t           g_line_prv_c    = 0u; /* PRV_LINE_C: RUN_MARK */
+static uint32_t           g_line_prv_d    = 0u; /* PRV_LINE_D: SEQ, PATH */
+
+/* Per-cycle caches for status board, rejoin latch, and bring-up logging. */
+static bool               gb_rejoin_white = false;
+static bool               gb_branch_seen  = false;
+static uint8_t            g_last_jct      = (uint8_t) APP_JCT_NONE;
+static uint32_t           g_raw_log_cnt   = 0u;
 
 /* ---- private function prototypes ------------------------------------- */
 
-static void line_task(INT stacd, void * p_exinf);
-static void line_init_thresholds(void);
-static void line_cycle(void);
-static void line_reset_run_state(uint32_t path);
-static bool line_handle_modes(uint32_t raw_l, uint32_t raw_r,
-                              uint32_t path, uint32_t * p_status);
-static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
-                                       uint32_t path, bool b_inhibit_jct,
-                                       uint32_t * p_status);
-static void line_handle_rejoin(bool b_is_black, uint32_t path);
-static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
-                               uint32_t path, bool b_inhibit_jct,
-                               uint32_t * p_status);
+static void     line_task(INT stacd, void * p_exinf);
+static void     line_cycle(void);
+static void     line_log_bringup(status_board_t const * p_snap,
+                                 uint32_t raw_l, uint32_t raw_r);
+static void     line_reset_run_state(uint32_t path);
+static bool     line_handle_modes(uint32_t raw_l, uint32_t raw_r,
+                                  uint32_t path, uint32_t * p_status);
+static void     line_cal_sample(uint32_t raw_l, uint32_t raw_r);
+static void     line_cal_complete(void);
+static void     line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
+                                           uint32_t path, bool b_inhibit_jct,
+                                           uint32_t * p_status);
+static void     line_handle_rejoin(bool b_is_black, uint32_t lost_cnt,
+                                   uint32_t path);
+static void     line_step_junction(uint32_t norm_l, uint32_t norm_r,
+                                   uint32_t path, bool b_inhibit_jct,
+                                   uint32_t * p_status);
+static void     line_jct_unpack(line_track_jct_t * p_jct);
+static void     line_jct_pack(line_track_jct_t const * p_jct);
+static uint32_t line_clamp_u(uint32_t val, uint32_t max_val);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -80,23 +83,19 @@ static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
  */
 ER line_init(void)
 {
-    line_track_jct_reset(&g_jct);
-    g_cal_min_l       = LINE_ADC_MAX_INIT;
-    g_cal_max_l       = 0u;
-    g_cal_min_r       = LINE_ADC_MAX_INIT;
-    g_cal_max_r       = 0u;
-    g_lost_cnt        = 0u;
-    gb_lost_sent      = false;
-    gb_run_active     = false;
-    gb_rejoin_white   = false;
-    gb_cal_active     = false;
-    gb_is_calibrated  = false;
-    gb_branch_seen    = false;
-    g_run_mark        = 0u;
-    g_last_branch_seq = 0u;
-    g_branch_path     = 0u;
-    g_last_jct        = APP_JCT_NONE;
-    line_init_thresholds();
+    line_track_steer_reset(&g_steer);
+    g_prv_cal_l     = 0u;
+    g_prv_cal_r     = 0u;
+    g_recip_l_q16   = 0u;
+    g_recip_r_q16   = 0u;
+    g_line_prv_a    = 0u;
+    g_line_prv_b    = 0u;
+    g_line_prv_c    = 0u;
+    g_line_prv_d    = 0u;
+    gb_rejoin_white = false;
+    gb_branch_seen  = false;
+    g_last_jct      = (uint8_t) APP_JCT_NONE;
+    g_raw_log_cnt   = 0u;
 
     return E_OK;
 }
@@ -129,16 +128,79 @@ ER line_start(void)
 /* ---- private functions ------------------------------------------------ */
 
 /**
- * line_init_thresholds
- * @brief   Converts mm junction thresholds to encoder counts once.
- * @return  none
- * @context usermain / line_task startup
+ * line_clamp_u
+ * @brief   Clamps an unsigned value to [0, max_val] and raises
+ *          APP_FAULT_RANGE_CLAMP if clamped.
+ * @param   val      Input unsigned value.
+ * @param   max_val  Maximum representable value for the RNG field.
+ * @return  Clamped unsigned value in 0..max_val.
+ * @context line_task
  */
-static void line_init_thresholds(void)
+static uint32_t line_clamp_u(uint32_t val, uint32_t max_val)
 {
-    g_jct_min_counts  = odometry_mm_to_counts(LINE_JUNCTION_MIN_MM);
-    g_jct_conf_counts = odometry_mm_to_counts(LINE_JUNCTION_CONFIRM_MM);
-    g_branch_early_c  = odometry_mm_to_counts(LINE_BRANCH_EARLY_MM);
+    bool           b_clamped = false;
+    uint32_t const clamped   = app_bits_clamp_u(val, max_val, &b_clamped);
+
+    if (b_clamped)
+    {
+        fault_set(APP_FAULT_RANGE_CLAMP);
+    }
+    else
+    {
+        /* Within representable RNG range. */
+    }
+
+    return clamped;
+}
+
+/**
+ * line_jct_unpack
+ * @brief   Unpacks line_track_jct_t from g_line_prv_a and g_line_prv_b.
+ * @param   p_jct  Output junction state structure.
+ * @return  none
+ * @context line_task
+ */
+static void line_jct_unpack(line_track_jct_t * p_jct)
+{
+    uint32_t const word_a = g_line_prv_a;
+
+    p_jct->state = app_bits_get(word_a, PRV_LINE_A_JCT_STATE_POS,
+                                PRV_LINE_A_JCT_STATE_BITS);
+    p_jct->b_sat_l = (0u != app_bits_get(word_a, PRV_LINE_A_SAT_L_POS,
+                                         PRV_LINE_A_SAT_L_BITS));
+    p_jct->b_sat_r = (0u != app_bits_get(word_a, PRV_LINE_A_SAT_R_POS,
+                                         PRV_LINE_A_SAT_R_BITS));
+    p_jct->seq0 = app_bits_get(word_a, PRV_LINE_A_SEQ0_POS,
+                               PRV_LINE_A_SEQ0_BITS);
+    p_jct->mark_counts = app_bits_get(g_line_prv_b, PRV_LINE_B_JCT_MARK_POS,
+                                      PRV_LINE_B_JCT_MARK_BITS);
+}
+
+/**
+ * line_jct_pack
+ * @brief   Packs line_track_jct_t into g_line_prv_a and g_line_prv_b.
+ * @param   p_jct  Input junction state structure.
+ * @return  none
+ * @context line_task
+ */
+static void line_jct_pack(line_track_jct_t const * p_jct)
+{
+    uint32_t       word_a   = g_line_prv_a;
+    uint32_t const mark_enc = line_clamp_u(
+        p_jct->mark_counts, (uint32_t) PRV_LINE_B_JCT_MARK_MAX);
+
+    word_a = app_bits_put(word_a, PRV_LINE_A_JCT_STATE_POS,
+                          PRV_LINE_A_JCT_STATE_BITS, p_jct->state);
+    word_a = app_bits_put(word_a, PRV_LINE_A_SAT_L_POS,
+                          PRV_LINE_A_SAT_L_BITS, p_jct->b_sat_l ? 1u : 0u);
+    word_a = app_bits_put(word_a, PRV_LINE_A_SAT_R_POS,
+                          PRV_LINE_A_SAT_R_BITS, p_jct->b_sat_r ? 1u : 0u);
+    word_a = app_bits_put(word_a, PRV_LINE_A_SEQ0_POS,
+                          PRV_LINE_A_SEQ0_BITS,
+                          p_jct->seq0 & LINE_SEQ_MASK);
+    g_line_prv_a = word_a;
+    g_line_prv_b = app_bits_put(g_line_prv_b, PRV_LINE_B_JCT_MARK_POS,
+                                PRV_LINE_B_JCT_MARK_BITS, mark_enc);
 }
 
 /**
@@ -155,7 +217,6 @@ static void line_task(INT stacd, void * p_exinf)
     (void) p_exinf; /* unused: no extended info  */
 
     drv_ir_adc_init();
-    line_init_thresholds();
     (void) sys_tick_register(SYS_TICK_SLOT_LINE, tk_get_tid());
 
     for (;;)
@@ -164,6 +225,45 @@ static void line_task(INT stacd, void * p_exinf)
         sys_tick_cycle_start(SYS_TICK_SLOT_LINE);
         sys_health_check_in(SYS_HEALTH_BIT_LINE);
         line_cycle();
+    }
+}
+
+/**
+ * line_log_bringup
+ * @brief   Prints raw IR ADC, wheel positions, and barcode DO diagnostics
+ *          every 0.5 s while the motors are disabled.
+ * @param   p_snap  Current status board snapshot.
+ * @param   raw_l   Raw left ADC reading.
+ * @param   raw_r   Raw right ADC reading.
+ * @return  none
+ * @context line_task
+ */
+static void line_log_bringup(status_board_t const * p_snap,
+                             uint32_t raw_l, uint32_t raw_r)
+{
+    if (!mission_mode_is_set(APP_MODE_MOTOR_EN))
+    {
+        g_raw_log_cnt++;
+        if (g_raw_log_cnt >= LINE_RAW_LOG_CYCLES)
+        {
+            g_raw_log_cnt = 0u;
+            /* casts: ADC codes 0..4095 and level 0..1 fit int32_t */
+            app_log("IR raw L %d R %d\n", (int32_t) raw_l,
+                    (int32_t) raw_r, 0);
+            app_log("ENC pos L %d R %d\n", status_board_pos_l(p_snap),
+                    status_board_pos_r(p_snap), 0);
+            app_log("BAR DO %d (1 = black), edges %d\n",
+                    (int32_t) barcode_do_level(),
+                    (int32_t) (barcode_edge_count() & LINE_LOG_CNT_MASK), 0);
+        }
+        else
+        {
+            /* Wait for 0.5 s divider. */
+        }
+    }
+    else
+    {
+        /* Suppress periodic bring-up log while motors are enabled. */
     }
 }
 
@@ -183,65 +283,57 @@ static void line_cycle(void)
     uint32_t            path     = 0u;
     int32_t             steering = 0;
     uint32_t            status   = APP_LINE_LOST;
+    bool                b_cal_ok = false;
 
     drv_ir_adc_read(&raw_l, &raw_r);
-
     status_board_read(&snap);
-
-    /* Bring-up diagnosis: while the motors are not enabled (BOOT,
-       CAL_IMU, READY, FAULT; never in CAL_IR or RUN), print both raw ADC
-       codes and both wheel positions every 0.5 s, so a dead or saturated
-       sensor, the counts per wheel turn (A4) and each encoder's sign can
-       be read on the console. casts: ADC codes 0..4095 and positions
-       within +-131071 (A23) fit int32_t                               */
-    if (!mission_mode_is_set(APP_MODE_MOTOR_EN))
-    {
-        g_raw_log_cnt++;
-        if (g_raw_log_cnt >= LINE_RAW_LOG_CYCLES)
-        {
-            g_raw_log_cnt = 0u;
-            app_log("IR raw L %d R %d\n", (int32_t) raw_l,
-                    (int32_t) raw_r, 0);
-            app_log("ENC pos L %d R %d\n", status_board_pos_l(&snap),
-                    status_board_pos_r(&snap), 0);
-            /* Barcode sensor check: move a barcode under it by hand; the
-               edge count must rise with every bar. cast: level 0..1, the
-               count is shown modulo 2^31                               */
-            app_log("BAR DO %d (1 = black), edges %d\n",
-                    (int32_t) barcode_do_level(),
-                    (int32_t) (barcode_edge_count() & 0x7FFFFFFFu), 0);
-        }
-    }
+    line_log_bringup(&snap, raw_l, raw_r);
     path = status_board_path(&snap);
 
     if (line_handle_modes(raw_l, raw_r, path, &status))
     {
         /* Mode active (RUN_START or CAL_IR): skip steps 4-6. */
     }
-    else if (!gb_is_calibrated)
-    {
-        steering = 0;
-        status   = APP_LINE_LOST;
-    }
     else
     {
-        uint32_t const norm_l = line_track_normalise(
-            raw_l, g_cal.white_l, g_cal.black_l, g_cal.recip_l_q16);
-        uint32_t const norm_r = line_track_normalise(
-            raw_r, g_cal.white_r, g_cal.black_r, g_cal.recip_r_q16);
-        bool const b_inhibit_jct =
-            mission_mode_is_set(APP_MODE_JUNCTION_INHIBIT);
+        b_cal_ok = (0u != app_bits_get(g_line_prv_a, PRV_LINE_A_CALIBRATED_POS,
+                                       PRV_LINE_A_CALIBRATED_BITS));
+        if (!b_cal_ok)
+        {
+            steering = 0;
+            status   = APP_LINE_LOST;
+        }
+        else
+        {
+            uint32_t const white_l = app_bits_get(
+                g_prv_cal_l, PRV_CAL_L_WHITE_POS, PRV_CAL_L_WHITE_BITS);
+            uint32_t const black_l = app_bits_get(
+                g_prv_cal_l, PRV_CAL_L_BLACK_POS, PRV_CAL_L_BLACK_BITS);
+            uint32_t const white_r = app_bits_get(
+                g_prv_cal_r, PRV_CAL_R_WHITE_POS, PRV_CAL_R_WHITE_BITS);
+            uint32_t const black_r = app_bits_get(
+                g_prv_cal_r, PRV_CAL_R_BLACK_POS, PRV_CAL_R_BLACK_BITS);
+            uint32_t const norm_l = line_track_normalise(
+                raw_l, white_l, black_l, g_recip_l_q16);
+            uint32_t const norm_r = line_track_normalise(
+                raw_r, white_r, black_r, g_recip_r_q16);
+            bool const b_inhibit_jct =
+                mission_mode_is_set(APP_MODE_JUNCTION_INHIBIT);
 
-        steering = line_track_steer_step(&g_steer, norm_l, norm_r);
-        line_update_loss_and_found(norm_l, norm_r, path,
-                                   b_inhibit_jct, &status);
-        line_step_junction(norm_l, norm_r, path, b_inhibit_jct, &status);
+            steering = line_track_steer_step(&g_steer, norm_l, norm_r);
+            line_update_loss_and_found(norm_l, norm_r, path,
+                                       b_inhibit_jct, &status);
+            line_step_junction(norm_l, norm_r, path, b_inhibit_jct, &status);
+        }
     }
 
+    b_cal_ok = (0u != app_bits_get(g_line_prv_a, PRV_LINE_A_CALIBRATED_POS,
+                                   PRV_LINE_A_CALIBRATED_BITS));
     part.steering        = steering;
     part.line_status     = status;
-    part.junction        = g_last_jct;
-    part.b_is_calibrated = gb_is_calibrated;
+    /* cast: widen 8-bit cached junction class to uint32_t */
+    part.junction        = (uint32_t) g_last_jct;
+    part.b_is_calibrated = b_cal_ok;
     status_board_write_line(&part);
 }
 
@@ -254,17 +346,138 @@ static void line_cycle(void)
  */
 static void line_reset_run_state(uint32_t path)
 {
-    line_track_jct_reset(&g_jct);
+    line_track_jct_t jct      = {0u, 0u, false, false, 0u};
+    uint32_t const   cur_seq  = barcode_branch_seq() & LINE_SEQ_MASK;
+    uint32_t const   path_enc = line_clamp_u(
+        path, (uint32_t) PRV_LINE_D_BRANCH_PATH_MAX);
+    uint32_t         word_a   = 0u;
+    uint32_t         word_d   = 0u;
+
+    line_track_jct_reset(&jct);
+    line_jct_pack(&jct);
     line_track_steer_reset(&g_steer);
-    g_lost_cnt        = 0u;
-    gb_lost_sent      = false;
-    gb_run_active     = false;
-    gb_rejoin_white   = false;
-    g_run_mark        = 0u;
-    g_last_branch_seq = barcode_branch_seq();
-    g_branch_path     = path;
-    gb_branch_seen    = false;
-    g_last_jct        = APP_JCT_NONE;
+
+    word_a = g_line_prv_a;
+    word_a = app_bits_put(word_a, PRV_LINE_A_LOST_CNT_POS,
+                          PRV_LINE_A_LOST_CNT_BITS, 0u);
+    word_a = app_bits_put(word_a, PRV_LINE_A_LOST_SENT_POS,
+                          PRV_LINE_A_LOST_SENT_BITS, 0u);
+    word_a = app_bits_put(word_a, PRV_LINE_A_RUN_ACTIVE_POS,
+                          PRV_LINE_A_RUN_ACTIVE_BITS, 0u);
+    g_line_prv_a = word_a;
+    g_line_prv_c = 0u;
+
+    word_d = app_bits_put(word_d, PRV_LINE_D_LAST_SEQ_POS,
+                          PRV_LINE_D_LAST_SEQ_BITS, cur_seq);
+    word_d = app_bits_put(word_d, PRV_LINE_D_BRANCH_PATH_POS,
+                          PRV_LINE_D_BRANCH_PATH_BITS, path_enc);
+    g_line_prv_d    = word_d;
+    gb_rejoin_white = false;
+    gb_branch_seen  = false;
+    g_last_jct      = (uint8_t) APP_JCT_NONE;
+}
+
+/**
+ * line_cal_sample
+ * @brief   Accumulates min/max raw ADC into PRV_CAL_L and PRV_CAL_R.
+ * @param   raw_l  Raw left ADC code.
+ * @param   raw_r  Raw right ADC code.
+ * @return  none
+ * @context line_task
+ */
+static void line_cal_sample(uint32_t raw_l, uint32_t raw_r)
+{
+    uint32_t const cl_l = line_clamp_u(raw_l, (uint32_t) PRV_CAL_L_WHITE_MAX);
+    uint32_t const cl_r = line_clamp_u(raw_r, (uint32_t) PRV_CAL_R_WHITE_MAX);
+    bool const     b_act = (0u != app_bits_get(
+        g_line_prv_a, PRV_LINE_A_CAL_ACTIVE_POS, PRV_LINE_A_CAL_ACTIVE_BITS));
+    uint32_t min_l = cl_l;
+    uint32_t max_l = cl_l;
+    uint32_t min_r = cl_r;
+    uint32_t max_r = cl_r;
+
+    if (b_act)
+    {
+        uint32_t const cur_min_l = app_bits_get(
+            g_prv_cal_l, PRV_CAL_L_WHITE_POS, PRV_CAL_L_WHITE_BITS);
+        uint32_t const cur_max_l = app_bits_get(
+            g_prv_cal_l, PRV_CAL_L_BLACK_POS, PRV_CAL_L_BLACK_BITS);
+        uint32_t const cur_min_r = app_bits_get(
+            g_prv_cal_r, PRV_CAL_R_WHITE_POS, PRV_CAL_R_WHITE_BITS);
+        uint32_t const cur_max_r = app_bits_get(
+            g_prv_cal_r, PRV_CAL_R_BLACK_POS, PRV_CAL_R_BLACK_BITS);
+
+        min_l = (cl_l < cur_min_l) ? cl_l : cur_min_l;
+        max_l = (cl_l > cur_max_l) ? cl_l : cur_max_l;
+        min_r = (cl_r < cur_min_r) ? cl_r : cur_min_r;
+        max_r = (cl_r > cur_max_r) ? cl_r : cur_max_r;
+    }
+    else
+    {
+        g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_CAL_ACTIVE_POS,
+                                    PRV_LINE_A_CAL_ACTIVE_BITS, 1u);
+    }
+
+    g_prv_cal_l = app_bits_put(0u, PRV_CAL_L_WHITE_POS,
+                               PRV_CAL_L_WHITE_BITS, min_l);
+    g_prv_cal_l = app_bits_put(g_prv_cal_l, PRV_CAL_L_BLACK_POS,
+                               PRV_CAL_L_BLACK_BITS, max_l);
+    g_prv_cal_r = app_bits_put(0u, PRV_CAL_R_WHITE_POS,
+                               PRV_CAL_R_WHITE_BITS, min_r);
+    g_prv_cal_r = app_bits_put(g_prv_cal_r, PRV_CAL_R_BLACK_POS,
+                               PRV_CAL_R_BLACK_BITS, max_r);
+}
+
+/**
+ * line_cal_complete
+ * @brief   Finalises calibration when APP_MODE_CAL_IR clears.
+ * @return  none
+ * @context line_task
+ */
+static void line_cal_complete(void)
+{
+    line_track_cal_t cal   = {0u, 0u, 0u, 0u, 0u, 0u};
+    uint32_t const   min_l = app_bits_get(
+        g_prv_cal_l, PRV_CAL_L_WHITE_POS, PRV_CAL_L_WHITE_BITS);
+    uint32_t const   max_l = app_bits_get(
+        g_prv_cal_l, PRV_CAL_L_BLACK_POS, PRV_CAL_L_BLACK_BITS);
+    uint32_t const   min_r = app_bits_get(
+        g_prv_cal_r, PRV_CAL_R_WHITE_POS, PRV_CAL_R_WHITE_BITS);
+    uint32_t const   max_r = app_bits_get(
+        g_prv_cal_r, PRV_CAL_R_BLACK_POS, PRV_CAL_R_BLACK_BITS);
+
+    g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_CAL_ACTIVE_POS,
+                                PRV_LINE_A_CAL_ACTIVE_BITS, 0u);
+
+    if (line_track_cal_finish(&cal, min_l, max_l, min_r, max_r))
+    {
+        g_prv_cal_l = app_bits_put(0u, PRV_CAL_L_WHITE_POS,
+                                   PRV_CAL_L_WHITE_BITS, cal.white_l);
+        g_prv_cal_l = app_bits_put(g_prv_cal_l, PRV_CAL_L_BLACK_POS,
+                                   PRV_CAL_L_BLACK_BITS, cal.black_l);
+        g_prv_cal_r = app_bits_put(0u, PRV_CAL_R_WHITE_POS,
+                                   PRV_CAL_R_WHITE_BITS, cal.white_r);
+        g_prv_cal_r = app_bits_put(g_prv_cal_r, PRV_CAL_R_BLACK_POS,
+                                   PRV_CAL_R_BLACK_BITS, cal.black_r);
+        g_recip_l_q16 = cal.recip_l_q16;
+        g_recip_r_q16 = cal.recip_r_q16;
+        g_line_prv_a  = app_bits_put(g_line_prv_a, PRV_LINE_A_CALIBRATED_POS,
+                                     PRV_LINE_A_CALIBRATED_BITS, 1u);
+        /* casts: ADC codes 0..4095 fit int32_t */
+        app_log("IR cal OK: span L %d R %d\n",
+                (int32_t) (max_l - min_l), (int32_t) (max_r - min_r), 0);
+        (void) mission_post_event(APP_EVT_CAL_DONE, APP_CAL_SRC_IR);
+    }
+    else
+    {
+        g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_CALIBRATED_POS,
+                                    PRV_LINE_A_CALIBRATED_BITS, 0u);
+        /* casts: ADC codes 0..4095 fit int32_t */
+        app_log("IR cal FAILED: span L %d R %d (need %d each);"
+                " ensure both sensors cross black and white\n",
+                (int32_t) (max_l - min_l), (int32_t) (max_r - min_r),
+                (int32_t) LINE_CAL_MIN_SPAN);
+    }
 }
 
 /**
@@ -283,58 +496,28 @@ static bool line_handle_modes(uint32_t raw_l, uint32_t raw_r,
     bool       b_skip     = false;
     bool const b_run_init = mission_mode_is_set(APP_MODE_RUN_START);
     bool const b_cal_mode = mission_mode_is_set(APP_MODE_CAL_IR);
+    bool const b_cal_act  = (0u != app_bits_get(
+        g_line_prv_a, PRV_LINE_A_CAL_ACTIVE_POS, PRV_LINE_A_CAL_ACTIVE_BITS));
 
     if (b_run_init)
     {
+        bool const b_cal_ok = (0u != app_bits_get(
+            g_line_prv_a, PRV_LINE_A_CALIBRATED_POS,
+            PRV_LINE_A_CALIBRATED_BITS));
+
         line_reset_run_state(path);
-        *p_status = gb_is_calibrated ? APP_LINE_ON : APP_LINE_LOST;
+        *p_status = b_cal_ok ? APP_LINE_ON : APP_LINE_LOST;
         b_skip    = true;
     }
     else if (b_cal_mode)
     {
-        if (!gb_cal_active)
-        {
-            gb_cal_active = true;
-            g_cal_min_l   = raw_l;
-            g_cal_max_l   = raw_l;
-            g_cal_min_r   = raw_r;
-            g_cal_max_r   = raw_r;
-        }
-        else
-        {
-            g_cal_min_l = (raw_l < g_cal_min_l) ? raw_l : g_cal_min_l;
-            g_cal_max_l = (raw_l > g_cal_max_l) ? raw_l : g_cal_max_l;
-            g_cal_min_r = (raw_r < g_cal_min_r) ? raw_r : g_cal_min_r;
-            g_cal_max_r = (raw_r > g_cal_max_r) ? raw_r : g_cal_max_r;
-        }
+        line_cal_sample(raw_l, raw_r);
         *p_status = APP_LINE_CALIBRATING;
         b_skip    = true;
     }
-    else if (gb_cal_active)
+    else if (b_cal_act)
     {
-        gb_cal_active = false;
-        if (line_track_cal_finish(&g_cal, g_cal_min_l, g_cal_max_l,
-                                  g_cal_min_r, g_cal_max_r))
-        {
-            gb_is_calibrated = true;
-            /* casts: ADC codes 0..4095 fit int32_t */
-            app_log("IR cal OK: span L %d R %d\n",
-                    (int32_t) (g_cal_max_l - g_cal_min_l),
-                    (int32_t) (g_cal_max_r - g_cal_min_r), 0);
-            (void) mission_post_event(APP_EVT_CAL_DONE, APP_CAL_SRC_IR);
-        }
-        else
-        {
-            gb_is_calibrated = false;
-            /* Bring-up diagnosis: without this line the car just waits
-               in CAL_IR until the 10 s CAL_TIMEOUT fault. casts: ADC
-               codes 0..4095 fit int32_t                                */
-            app_log("IR cal FAILED: span L %d R %d (need %d each);"
-                    " ensure both sensors cross black and white\n",
-                    (int32_t) (g_cal_max_l - g_cal_min_l),
-                    (int32_t) (g_cal_max_r - g_cal_min_r),
-                    (int32_t) LINE_CAL_MIN_SPAN);
-        }
+        line_cal_complete();
     }
     else
     {
@@ -363,22 +546,26 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
         ((norm_l < LINE_WHITE_THRESHOLD) && (norm_r < LINE_WHITE_THRESHOLD));
     bool const b_is_black =
         ((norm_l >= LINE_BLACK_THRESHOLD) || (norm_r >= LINE_BLACK_THRESHOLD));
+    uint32_t lost_cnt   = app_bits_get(
+        g_line_prv_a, PRV_LINE_A_LOST_CNT_POS, PRV_LINE_A_LOST_CNT_BITS);
+    bool     b_lost_snt = (0u != app_bits_get(
+        g_line_prv_a, PRV_LINE_A_LOST_SENT_POS, PRV_LINE_A_LOST_SENT_BITS));
 
     if (b_is_white)
     {
-        if (g_lost_cnt < LINE_LOST_CNT_MAX)
+        if (lost_cnt < (uint32_t) PRV_LINE_A_LOST_CNT_MAX)
         {
-            g_lost_cnt++;
+            lost_cnt++;
         }
         else
         {
             /* Saturate at 31 (5-bit LOST_CNT). */
         }
 
-        if ((g_lost_cnt >= LINE_LOST_CYCLES) && (!gb_lost_sent))
+        if ((lost_cnt >= LINE_LOST_CYCLES) && (!b_lost_snt))
         {
             (void) mission_post_event(APP_EVT_LINE_LOST, 0u);
-            gb_lost_sent = true;
+            b_lost_snt = true;
         }
         else
         {
@@ -388,22 +575,30 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
     }
     else
     {
-        g_lost_cnt = 0u;
-        *p_status  = APP_LINE_ON;
+        lost_cnt  = 0u;
+        *p_status = APP_LINE_ON;
     }
+
+    g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_LOST_CNT_POS,
+                                PRV_LINE_A_LOST_CNT_BITS, lost_cnt);
+    g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_LOST_SENT_POS,
+                                PRV_LINE_A_LOST_SENT_BITS,
+                                b_lost_snt ? 1u : 0u);
 
     if (b_inhibit_jct)
     {
-        line_handle_rejoin(b_is_black, path);
+        line_handle_rejoin(b_is_black, lost_cnt, path);
     }
     else
     {
-        gb_run_active   = false;
         gb_rejoin_white = false;
-        if (b_is_black && gb_lost_sent)
+        g_line_prv_a    = app_bits_put(g_line_prv_a, PRV_LINE_A_RUN_ACTIVE_POS,
+                                       PRV_LINE_A_RUN_ACTIVE_BITS, 0u);
+        if (b_is_black && b_lost_snt)
         {
             (void) mission_post_event(APP_EVT_LINE_FOUND, 0u);
-            gb_lost_sent = false;
+            g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_LOST_SENT_POS,
+                                        PRV_LINE_A_LOST_SENT_BITS, 0u);
         }
         else
         {
@@ -416,54 +611,68 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
  * line_handle_rejoin
  * @brief   Measures every black run after >= 2 white cycles in rejoin mode
  *          and posts APP_EVT_LINE_FOUND when the run ends or reaches 255 mm.
- *          The white cycles need not come right before the run: at 45 deg
- *          the sensor passes grey at the line edge first, and a grey cycle
- *          reset the old "white just before" count, so no run started and
- *          the car drove over the line (on-car log 2026-11-03, S3-U15).
- * @param   b_is_black     true if either channel >= LINE_BLACK_THRESHOLD.
- * @param   path           Current odometry path counts.
+ *          Grey cycles at a 45-deg line edge do not clear gb_rejoin_white
+ *          (on-car log 2026-11-03, S3-U15).
+ * @param   b_is_black  true if either channel >= LINE_BLACK_THRESHOLD.
+ * @param   lost_cnt    White-cycle count updated this cycle.
+ * @param   path        Current odometry path counts.
  * @return  none
  * @context line_task
  */
-static void line_handle_rejoin(bool b_is_black, uint32_t path)
+static void line_handle_rejoin(bool b_is_black, uint32_t lost_cnt,
+                               uint32_t path)
 {
-    if (g_lost_cnt >= LINE_REJOIN_WHITE_MIN)  /* updated this cycle */
+    bool b_run_act = (0u != app_bits_get(
+        g_line_prv_a, PRV_LINE_A_RUN_ACTIVE_POS, PRV_LINE_A_RUN_ACTIVE_BITS));
+    uint32_t run_mark = app_bits_get(
+        g_line_prv_c, PRV_LINE_C_RUN_MARK_POS, PRV_LINE_C_RUN_MARK_BITS);
+
+    if (lost_cnt >= LINE_REJOIN_WHITE_MIN)
     {
         gb_rejoin_white = true;
     }
     else
     {
-        /* black or grey this cycle, or white too short so far */
+        /* Black or grey this cycle, or white too short so far. */
     }
 
     if (b_is_black)
     {
-        if ((!gb_run_active) && gb_rejoin_white)
+        if ((!b_run_act) && gb_rejoin_white)
         {
-            gb_run_active   = true;
+            uint32_t const mark_enc = line_clamp_u(
+                path, (uint32_t) PRV_LINE_C_RUN_MARK_MAX);
+
+            b_run_act       = true;
             gb_rejoin_white = false;
-            g_run_mark      = path;
+            run_mark        = mark_enc;
+            g_line_prv_c = app_bits_put(g_line_prv_c, PRV_LINE_C_RUN_MARK_POS,
+                                        PRV_LINE_C_RUN_MARK_BITS, mark_enc);
+            g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_RUN_ACTIVE_POS,
+                                        PRV_LINE_A_RUN_ACTIVE_BITS, 1u);
         }
         else
         {
             /* Either already in a black run or < 2 prior white cycles. */
         }
 
-        if (gb_run_active &&
-            (odometry_counts_to_mm(path - g_run_mark) >= LINE_FOUND_MAX_MM))
+        if (b_run_act &&
+            (odometry_counts_to_mm(path - run_mark) >= LINE_FOUND_MAX_MM))
         {
             (void) mission_post_event(APP_EVT_LINE_FOUND, LINE_FOUND_MAX_MM);
-            gb_run_active = false;
-            gb_lost_sent  = false;
+            g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_RUN_ACTIVE_POS,
+                                        PRV_LINE_A_RUN_ACTIVE_BITS, 0u);
+            g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_LOST_SENT_POS,
+                                        PRV_LINE_A_LOST_SENT_BITS, 0u);
         }
         else
         {
             /* Continue measuring active black run or waiting for white. */
         }
     }
-    else if (gb_run_active)
+    else if (b_run_act)
     {
-        uint32_t cross_mm = odometry_counts_to_mm(path - g_run_mark);
+        uint32_t cross_mm = odometry_counts_to_mm(path - run_mark);
 
         if (cross_mm > LINE_FOUND_MAX_MM)
         {
@@ -474,8 +683,10 @@ static void line_handle_rejoin(bool b_is_black, uint32_t path)
             /* Within 0..255 mm. */
         }
         (void) mission_post_event(APP_EVT_LINE_FOUND, cross_mm);
-        gb_run_active = false;
-        gb_lost_sent  = false;
+        g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_RUN_ACTIVE_POS,
+                                    PRV_LINE_A_RUN_ACTIVE_BITS, 0u);
+        g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_LOST_SENT_POS,
+                                    PRV_LINE_A_LOST_SENT_BITS, 0u);
     }
     else
     {
@@ -498,42 +709,64 @@ static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
                                uint32_t path, bool b_inhibit_jct,
                                uint32_t * p_status)
 {
-    uint32_t const cur_seq = barcode_branch_seq();
+    uint32_t const cur_seq  = barcode_branch_seq() & LINE_SEQ_MASK;
+    uint32_t const last_seq = app_bits_get(
+        g_line_prv_d, PRV_LINE_D_LAST_SEQ_POS, PRV_LINE_D_LAST_SEQ_BITS);
+    uint32_t branch_path = app_bits_get(
+        g_line_prv_d, PRV_LINE_D_BRANCH_PATH_POS, PRV_LINE_D_BRANCH_PATH_BITS);
+    line_track_jct_t jct = {0u, 0u, false, false, 0u};
 
-    if (cur_seq != g_last_branch_seq)
+    if (cur_seq != last_seq)
     {
-        g_branch_path     = path;
-        gb_branch_seen    = true;
-        g_last_branch_seq = cur_seq;
+        uint32_t const path_enc = line_clamp_u(
+            path, (uint32_t) PRV_LINE_D_BRANCH_PATH_MAX);
+        uint32_t word_d = 0u;
+
+        word_d = app_bits_put(word_d, PRV_LINE_D_LAST_SEQ_POS,
+                              PRV_LINE_D_LAST_SEQ_BITS, cur_seq);
+        word_d = app_bits_put(word_d, PRV_LINE_D_BRANCH_PATH_POS,
+                              PRV_LINE_D_BRANCH_PATH_BITS, path_enc);
+        g_line_prv_d   = word_d;
+        branch_path    = path_enc;
+        gb_branch_seen = true;
     }
     else
     {
         /* Branch counter unchanged this cycle. */
     }
 
+    line_jct_unpack(&jct);
+
     if (b_inhibit_jct)
     {
-        line_track_jct_reset(&g_jct);
+        line_track_jct_reset(&jct);
+        line_jct_pack(&jct);
     }
     else
     {
         line_track_jct_in_t jct_in    = {0};
         uint32_t            jct_class = APP_JCT_NONE;
+        uint32_t const      early_cnt =
+            odometry_mm_to_counts(LINE_BRANCH_EARLY_MM);
 
         jct_in.norm_l          = norm_l;
         jct_in.norm_r          = norm_r;
         jct_in.path_counts     = path;
         jct_in.branch_seq      = cur_seq;
-        jct_in.min_counts      = g_jct_min_counts;
-        jct_in.confirm_counts  = g_jct_conf_counts;
+        jct_in.min_counts      = odometry_mm_to_counts(LINE_JUNCTION_MIN_MM);
+        jct_in.confirm_counts  =
+            odometry_mm_to_counts(LINE_JUNCTION_CONFIRM_MM);
         jct_in.b_branch_recent =
-            (gb_branch_seen && ((path - g_branch_path) <= g_branch_early_c));
+            (gb_branch_seen && ((path - branch_path) <= early_cnt));
 
-        jct_class = line_track_jct_step(&g_jct, &jct_in);
+        jct_class = line_track_jct_step(&jct, &jct_in);
+        line_jct_pack(&jct);
+
         if (APP_JCT_NONE != jct_class)
         {
             (void) mission_post_event(APP_EVT_JUNCTION, jct_class);
-            g_last_jct     = jct_class;
+            /* cast: APP_JCT_* enum 0..4 fits in uint8_t */
+            g_last_jct     = (uint8_t) jct_class;
             gb_branch_seen = false;
         }
         else
@@ -541,7 +774,7 @@ static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
             /* No junction confirmed on this cycle. */
         }
 
-        if (LINE_JCT_STATE_IDLE != g_jct.state)
+        if (LINE_JCT_STATE_IDLE != jct.state)
         {
             *p_status = APP_LINE_JUNCTION;
         }

@@ -20,7 +20,7 @@
    and up to BAR_LEVEL_FIX_MAX edges per capture whose level reads the
    same as the last one (read mid-flicker) take the alternating level.
    Code 39 still validates the result.                                  */
-#define BAR_GLITCH_UM             (600u)  /* < 0.4 x BAR_NARROW_MIN_UM */
+#define BAR_GLITCH_UM             (400u)  /* < 0.4 mm: chatter vs small bar */
 #define BAR_LEVEL_FIX_MAX         (3u)
 #define BAR_NARROW_MIN_UM         (1500u) /* half-scale narrow bar */
 #define BAR_WIDE_MAX_UM           (9000u) /* full-scale wide bar */

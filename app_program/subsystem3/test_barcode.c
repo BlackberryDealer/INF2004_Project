@@ -1,6 +1,7 @@
 /**
  * @file    test_barcode.c
- * @brief   On-target unit tests for code39 and barcode_map_set (S3-U03..U08).
+ * @brief   On-target unit tests for code39, barcode_map_set, and MSG_EDGE
+ *          packing (S3-U03, U05, U08, U10).
  * @owner   Buddy 3 (line, barcode)
  * @kind    test
  * @reqs    FR2, FR3, NFR5
@@ -11,6 +12,8 @@
 
 #if (0 != APP_TEST)
 
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "../test_report.h"
 #include "barcode.h"
 #include "cfg_barcode.h"
@@ -47,13 +50,15 @@ static uint8_t const g_test_star_a_star[BAR_ELEMENTS] =
 
 /* ---- private function prototypes ------------------------------------- */
 
+static bool test_barcode_u10_edge_pack(void);
+
 #endif /* APP_TEST */
 
 /* ---- public functions ------------------------------------------------- */
 
 /**
  * test_barcode_run
- * @brief   Runs on-target barcode decode and map validation checks.
+ * @brief   Runs on-target barcode decode, map, and MSG_EDGE packing checks.
  * @return  none
  * @context usermain (APP_PRI_TEST)
  */
@@ -80,11 +85,61 @@ void test_barcode_run(void)
     barcode_map_set(TEST_CHAR_A, APP_BAR_CMD_LEFT);
     TEST_CHECK("S3-U08", (0u == barcode_branch_seq()),
                "barcode_map_set boundary calls safe");
+    TEST_CHECK("S3-U10", test_barcode_u10_edge_pack(),
+               "MSG_EDGE pack/unpack at 0, 1, 0x7FFE, 0x7FFF and saturation");
 
     TEST_SUMMARY("barcode");
 #endif
 }
 
 /* ---- private functions ------------------------------------------------ */
+
+#if (0 != APP_TEST)
+/**
+ * test_barcode_u10_edge_pack
+ * @brief   Verifies S3-U10 MSG_EDGE 16-bit pack/unpack at gaps 0, 1,
+ *          0x7FFE, 0x7FFF and saturation.
+ * @return  true if all boundary cases round-trip, else false.
+ * @context usermain (APP_PRI_TEST)
+ */
+static bool test_barcode_u10_edge_pack(void)
+{
+    static uint32_t const gaps[5]    = {0u, 1u, 0x7FFEu, 0x7FFFu, 0x9000u};
+    static uint32_t const exp_gap[5] = {0u, 1u, 0x7FFEu, 0x7FFFu, 0x7FFFu};
+    bool                  b_ok       = true;
+    uint32_t              idx        = 0u;
+
+    for (idx = 0u; idx < 5u; idx++)
+    {
+        uint32_t const lvl  = idx & 1u;
+        uint32_t const sat  = (gaps[idx] > (uint32_t) MSG_EDGE_GAP_MAX)
+                                  ? (uint32_t) MSG_EDGE_GAP_MAX
+                                  : gaps[idx];
+        uint32_t       word = app_bits_put(0u, MSG_EDGE_GAP_POS,
+                                           MSG_EDGE_GAP_BITS, sat);
+        uint16_t       ring_val = 0u;
+
+        word     = app_bits_put(word, MSG_EDGE_LEVEL_POS,
+                                MSG_EDGE_LEVEL_BITS, lvl);
+        ring_val = (uint16_t) word; /* cast: MSG_EDGE_USED_BITS <= 16 */
+
+        if ((exp_gap[idx] != app_bits_get((uint32_t) ring_val,
+                                          MSG_EDGE_GAP_POS,
+                                          MSG_EDGE_GAP_BITS)) ||
+            (lvl != app_bits_get((uint32_t) ring_val,
+                                 MSG_EDGE_LEVEL_POS,
+                                 MSG_EDGE_LEVEL_BITS)))
+        {
+            b_ok = false;
+        }
+        else
+        {
+            /* Round-trip matched. */
+        }
+    }
+
+    return b_ok;
+}
+#endif /* APP_TEST */
 
 /*** end of file ***/

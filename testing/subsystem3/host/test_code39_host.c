@@ -5,6 +5,9 @@
  *    S3-U04  Half-scale widths decode all 43 characters both directions
  *    S3-U05  28-element capture rejected; pattern table has 3 set bits per
  *            entry and all 44 entries are unique; invalid ratio/gaps rejected
+ *    S3-U18  Optical bar/space width bias (narrow bars eroded, spaces dilated)
+ *            and speed ramp across characters still decode all 43 characters
+ *            in both directions at half-scale and full-scale
  */
 
 #include "host_test.h"
@@ -73,6 +76,83 @@ static bool check_all_chars(uint8_t narrow_w, uint8_t wide_w, bool b_reverse)
         uint32_t out_idx              = 99u;
 
         build_frame(ch, narrow_w, wide_w, b_reverse, widths);
+        if ((CODE39_OK != code39_decode(widths, BAR_ELEMENTS, &out_idx)) ||
+            (out_idx != ch))
+        {
+            b_all = false;
+        }
+    }
+
+    return b_all;
+}
+
+static void encode_char_biased(uint16_t pattern, uint8_t nar_bar,
+                               uint8_t wid_bar, uint8_t nar_sp,
+                               uint8_t wid_sp, uint8_t * p_out)
+{
+    uint32_t bit = 0u;
+
+    for (bit = 0u; bit < 9u; bit++)
+    {
+        uint16_t const mask   = (uint16_t) (1u << (8u - bit));
+        bool const     b_wide = (0u != (pattern & mask));
+        bool const     b_bar  = (0u == (bit & 1u));
+
+        if (b_bar)
+        {
+            p_out[bit] = b_wide ? wid_bar : nar_bar;
+        }
+        else
+        {
+            p_out[bit] = b_wide ? wid_sp : nar_sp;
+        }
+    }
+}
+
+/* S3-U18: Build a 29-element capture with optical bar/space asymmetry
+   and optional per-character speed scale (scale_x10 / 10). */
+static bool check_all_chars_biased(uint8_t nar_bar, uint8_t wid_bar,
+                                   uint8_t nar_sp, uint8_t wid_sp,
+                                   bool b_speed_ramp, bool b_reverse)
+{
+    uint32_t ch    = 0u;
+    bool     b_all = true;
+
+    for (ch = 0u; ch < APP_C39_CHAR_COUNT; ch++)
+    {
+        uint8_t  fwd[BAR_ELEMENTS]    = {0u};
+        uint8_t  widths[BAR_ELEMENTS] = {0u};
+        uint32_t out_idx              = 99u;
+        uint32_t idx                  = 0u;
+
+        encode_char_biased(g_ref_patterns[CODE39_STAR],
+                           nar_bar, wid_bar, nar_sp, wid_sp, &fwd[0]);
+        fwd[9] = nar_sp;
+        encode_char_biased(g_ref_patterns[ch],
+                           nar_bar, wid_bar, nar_sp, wid_sp, &fwd[10]);
+        fwd[19] = nar_sp;
+        encode_char_biased(g_ref_patterns[CODE39_STAR],
+                           nar_bar, wid_bar, nar_sp, wid_sp, &fwd[20]);
+
+        if (b_speed_ramp)
+        {
+            for (idx = 10u; idx < 19u; idx++)
+            {
+                fwd[idx] = (uint8_t) (((uint32_t) fwd[idx] * 12u) / 10u);
+            }
+            fwd[19] = (uint8_t) (((uint32_t) fwd[19] * 12u) / 10u);
+            for (idx = 20u; idx < BAR_ELEMENTS; idx++)
+            {
+                fwd[idx] = (uint8_t) (((uint32_t) fwd[idx] * 14u) / 10u);
+            }
+        }
+
+        for (idx = 0u; idx < BAR_ELEMENTS; idx++)
+        {
+            widths[idx] = b_reverse ? fwd[(BAR_ELEMENTS - 1u) - idx]
+                                    : fwd[idx];
+        }
+
         if ((CODE39_OK != code39_decode(widths, BAR_ELEMENTS, &out_idx)) ||
             (out_idx != ch))
         {
@@ -178,6 +258,18 @@ int main(void)
     HOST_CHECK("S3-U05",
                CODE39_INVALID == code39_decode(widths, BAR_ELEMENTS, &out_idx),
                "wide inter-character gap is rejected");
+
+    /* S3-U18: Small (half-scale) barcode with optical bar/space bias
+       (bars eroded by -0.8 mm -> 7 & 29; spaces dilated by +0.8 mm -> 23 & 46;
+        pooled ratio 29/23 = 1.26 < 1.8, split ratios 29/7 = 4.1 & 46/23 = 2.0) */
+    HOST_CHECK("S3-U18", check_all_chars_biased(7u, 29u, 23u, 46u, false, false),
+               "small barcode with optical bar/space bias decodes all 43 chars fwd");
+    HOST_CHECK("S3-U18", check_all_chars_biased(7u, 29u, 23u, 46u, false, true),
+               "small barcode with optical bar/space bias decodes all 43 chars rev");
+    HOST_CHECK("S3-U18", check_all_chars_biased(20u, 60u, 40u, 85u, true, false),
+               "large barcode with optical bias + 40% speed change decodes all 43 fwd");
+    HOST_CHECK("S3-U18", check_all_chars_biased(20u, 60u, 40u, 85u, true, true),
+               "large barcode with optical bias + 40% speed change decodes all 43 rev");
 
     return (0 == HOST_SUMMARY("code39")) ? 0 : 1;
 }

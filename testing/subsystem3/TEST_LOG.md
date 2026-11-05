@@ -23,7 +23,18 @@ Define a test here before running it. Test IDs never change.
 | S3-U07 | Immediate decode on the 29th element (`n == 29`) without waiting for the 30 mm post-barcode quiet zone | FR2, R08 | auto | Host (`test_line_barcode_sim_host.c`) | `APP_EVT_BARCODE` posted on first `barcode_cycle()` after 29th edge |
 | S3-U08 | `barcode_map_set`: out-of-range `char_index >= 43` and `cmd >= 4` ignored; valid remap and new slot visible to next decode | FR3 | auto | Host (`test_line_barcode_sim_host.c`) & target (`test_barcode.c`) | Invalid calls ignored; valid mappings applied |
 | S3-U09 | Rejoin mode (`APP_MODE_JUNCTION_INHIBIT` without `LINE_LOST`): reports both a rejected 10 mm stray mark and a subsequent 45 mm real line | FR1, F-02 | auto | Host (`test_line_barcode_sim_host.c`) | Two `APP_EVT_LINE_FOUND` events (~10 mm then ~45 mm) |
+| S3-U10 | Packed `MSG_EDGE` 16-bit ring entry (`g_bar_ring`, 128 B): pack/unpack at gaps `0`, `1`, `0x7FFE`, `0x7FFF`, and saturation (`> 0x7FFF`) | B3.4, T1 | auto | Host (`test_line_barcode_sim_host.c`) & target (`test_barcode.c`) | Exact round-trip and saturation to `0x7FFF` |
+| S3-U11 | Dropped edge detection from the packed `MSG_EDGE_LEVEL` bit: consecutive identical levels beyond `BAR_LEVEL_FIX_MAX` discard capture to `IDLE` | B3.4, FR2 | auto | Host (`test_line_barcode_sim_host.c`) | Capture discarded (`STATE == IDLE`, `N_ELEM == 0`) |
 | S3-U14 | Both barcode-branch arrival orders (`b_branch_recent` early before `CANDIDATE`, and late `branch_seq` change during `CONFIRM`) | FR19, F-03 | auto | Host (`test_line_track_host.c`, `test_line_barcode_sim_host.c`) & target (`test_line.c`) | Both early and late branch arrivals set barcode-side saturation |
+| S3-U15 | Rejoin at 45° (`gb_rejoin_white`): white cycles followed by grey edge cycles then black crossing still post `APP_EVT_LINE_FOUND` | FR1, F-02 | auto | Host (`test_line_barcode_sim_host.c`) | `APP_EVT_LINE_FOUND` (~25 mm) posted |
+| S3-U16 | `line_track_steer_step`: low-pass smoothing, derivative damping, and last-seen-side recovery on white | FR1, NFR4 | auto | Host (`test_line_track_host.c`) | All 8 smoothing, damping, and recovery assertions pass |
+| S3-U17 | LM393 comparator chatter filter in `barcode_task`: `< 0.4 mm` flicker merged into next element and up to 3 mid-flicker level fixes per capture | FR2, NFR5 | auto | Host (`test_line_barcode_sim_host.c`) | Both mid-flicker level and 1.5 ms bounce captures decode `'D'` |
+| S3-U18 | Small & large barcode robustness: per-character separate bar/space thresholding (`code39_decode`) + 29-element sliding window (`barcode.c`) decode all 43 characters under optical bar/space width bias, 40% speed change, and leading stray edges | FR2, NFR5b | auto | Host (`test_code39_host.c`, `test_line_barcode_sim_host.c`) | All 43 characters decode forward & reverse; sliding window recovers after stray edges |
+| S3-I01 | Line sample period 10 ± 1 ms | NFR1 | manual (probe) | Probe GP14 around `line_task` | Period 10 ± 1 ms, WCET ≤ 300 µs |
+| S3-I02 | Barcode accuracy: 20 passes per print scale at 150 and 250 mm/s | FR2, NFR5b | manual (track) | 20 passes full-scale + 20 passes half-scale | ≥ 95 % correct |
+| S3-I03 | Barcode decode latency ≤ 50 ms after final bar | NFR5c | manual (probe) | Probe GP7 final edge to `APP_EVT_BARCODE` | ≤ 50 ms |
+| S3-I04 | Cruise line-following stability with Buddy 2: 3 runs at 250 mm/s | FR1, NFR4 | manual (track) | 3 track runs with `FOLLOW` | No line loss > 200 ms |
+| S3-I10 | R1 GPIO ISR WCET on GP7 while ultrasonic pings (both tags) | B3.3, B3.4 | manual (probe) | Signal generator on GP7 with ultrasonic active | R1 total WCET < 20 µs |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -48,3 +59,13 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S3-U08 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | `barcode_map_set` boundary & remap checks passed |
 | 2026-10-22 | S3-U09 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | Rejoin mode reports both 10 mm stray mark and 45 mm line |
 | 2026-10-22 | S3-U14 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | Early (`b_branch_recent`) and late (`CONFIRM`) branch orders passed |
+| 2026-11-05 | S3-U01..U11, U14..U18 | Phase 4 | Lucas | PASS | `logs/2026-11-05_host_phase4_packed.txt` | 62/62 host assertions pass on packed `line.c` + `barcode.c` (128 B `MSG_EDGE` ring, `PRV_CAL_*`, `PRV_LINE_*`, `PRV_BAR_*`, split bar/space Code 39 decoder, 29-element sliding window) |
+
+## SPEC-QUESTION
+
+**SQ-B3-1: `E_BAR` mixed `group_bits` (8 vs 32) and 32-bit `LAST_US` width in `tools/layout.csv`:**
+Section B3.4 lists the two `E_BAR` documentation rows as:
+- `E_BAR,8,HEAD_TAIL,6,1,index,0,0,0,RAW,E,B3,E6 ring head (ISR) and tail (task): one writer per byte`
+- `E_BAR,32,LAST_US,32,1,us,0,0,0,RAW,E,B3,E5 ISR-private last accepted edge time`
+
+`tools/gen_layout.py` validates that all rows in a group share one `group_bits` value and that `bits` is in `1..31` *before* applying the class-`E` exemption (the same generator rule documented in Buddy 4's resolved `SQ-B4-1`). Accordingly, the second class-`E` documentation row is recorded as `E_BAR_US,32,LAST_US,31,1,us,0,0,0,RAW,E,B3,...`. Class-`E` rows emit no C macros and use `group_bits` (`32`) as their stored width in `docs/data_representation.md`, so generated code and ABI are unaffected.
