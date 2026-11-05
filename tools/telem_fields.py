@@ -284,4 +284,54 @@ GROUPS = {
     'PRV_CMD_T': [
         ('LAST', 16, 0, 10, 'ms'),
     ],
+    'PRV_CAL_L': [
+        ('WHITE', 12, 0, 1, 'code'),
+        ('BLACK', 12, 0, 1, 'code'),
+    ],
+    'PRV_CAL_R': [
+        ('WHITE', 12, 0, 1, 'code'),
+        ('BLACK', 12, 0, 1, 'code'),
+    ],
+    'PRV_LINE_A': [
+        ('LOST_CNT', 5, 0, 1, 'tick'),
+        ('LOST_SENT', 1, 0, 1, 'flag'),
+        ('JCT_STATE', 2, 0, 1, 'code'),
+        ('SAT_L', 1, 0, 1, 'flag'),
+        ('SAT_R', 1, 0, 1, 'flag'),
+        ('SEQ0', 8, 0, 1, 'count'),
+        ('RUN_ACTIVE', 1, 0, 1, 'flag'),
+        ('CAL_ACTIVE', 1, 0, 1, 'flag'),
+        ('CALIBRATED', 1, 0, 1, 'flag'),
+    ],
+    'PRV_LINE_D': [
+        ('LAST_SEQ', 8, 0, 1, 'count'),
+        ('BRANCH_PATH', 17, 0, 1, 'count'),
+    ],
+    'PRV_LINE_B': [
+        ('JCT_MARK', 17, 0, 1, 'count'),
+    ],
+    'PRV_LINE_C': [
+        ('RUN_MARK', 17, 0, 1, 'count'),
+    ],
+    'PRV_BAR_A': [
+        ('STATE', 2, 0, 1, 'code'),
+        ('N_ELEM', 6, 0, 1, 'count'),
+        ('LAST_LEVEL', 1, 0, 1, 'flag'),
+    ],
+    'PRV_BAR_B': [
+        ('MARK', 17, 0, 1, 'count'),
+    ],
+    'PRV_BAR_W': [
+        ('WIDTH', 8, 0, 100, 'um'),
+    ],
+    'PRV_BAR_MAP': [
+        ('CHAR', 6, 0, 1, 'code'),
+        ('CMD', 2, 0, 1, 'code'),
+    ],
+    'SH_BAR': [
+        ('BRANCH_SEQ', 8, 0, 1, 'count'),
+    ],
+    'SH_BAR_OVF': [
+        ('OVERFLOW', 8, 0, 1, 'count'),
+    ],
 }

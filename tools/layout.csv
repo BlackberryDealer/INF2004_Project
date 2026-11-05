@@ -167,3 +167,32 @@ PRV_MQTT,16,PEND_TRIES,2,1,count,0,2,0,RNG,P,B1,Publish tries of the pending pay
 PRV_MQTT,16,PEND_LEN,5,1,byte,0,20,0,RNG,P,B1,Pending payload length (0 = none)
 PRV_MQTT,16,PEND_TYPE,5,1,code,0,31,0,ENUM,P,B1,APP_MQ_TYPE_* of the pending payload
 PRV_CMD_T,16,LAST,16,10,ms,0,65535,0,RAW,P,B1,Last accepted command time x5 (START STOP RESET MAP SNAP); 10 ms units; wraps; radio task only
+PRV_CAL_L,32,WHITE,12,1,code,0,4095,0,RNG,P,B3,Left white level
+PRV_CAL_L,32,BLACK,12,1,code,0,4095,0,RNG,P,B3,Left black level
+PRV_CAL_R,32,WHITE,12,1,code,0,4095,0,RNG,P,B3,Right white level
+PRV_CAL_R,32,BLACK,12,1,code,0,4095,0,RNG,P,B3,Right black level
+PRV_LINE_A,32,LOST_CNT,5,1,tick,0,31,0,SAT,P,B3,White cycles
+PRV_LINE_A,32,LOST_SENT,1,1,flag,0,1,0,FLAG,P,B3,LINE_LOST posted
+PRV_LINE_A,32,JCT_STATE,2,1,code,0,2,0,ENUM,P,B3,IDLE CANDIDATE CONFIRM
+PRV_LINE_A,32,SAT_L,1,1,flag,0,1,0,FLAG,P,B3,Left saturated seen
+PRV_LINE_A,32,SAT_R,1,1,flag,0,1,0,FLAG,P,B3,Right saturated seen
+PRV_LINE_A,32,SEQ0,8,1,count,0,255,0,RAW,P,B3,Branch sequence at start
+PRV_LINE_D,32,LAST_SEQ,8,1,count,0,255,0,RAW,P,B3,Branch sequence seen last cycle
+PRV_LINE_D,32,BRANCH_PATH,17,1,count,0,131071,0,RNG,P,B3,Path when the branch sequence last changed
+PRV_LINE_A,32,RUN_ACTIVE,1,1,flag,0,1,0,FLAG,P,B3,Black run in progress
+PRV_LINE_A,32,CAL_ACTIVE,1,1,flag,0,1,0,FLAG,P,B3,Calibration mode seen
+PRV_LINE_A,32,CALIBRATED,1,1,flag,0,1,0,FLAG,P,B3,Calibration valid
+PRV_LINE_B,32,JCT_MARK,17,1,count,0,131071,0,RNG,P,B3,Path at junction start
+PRV_LINE_C,32,RUN_MARK,17,1,count,0,131071,0,RNG,P,B3,Path at black run start
+PRV_BAR_A,32,STATE,2,1,code,0,3,0,ENUM,P,B3,Decoder state
+PRV_BAR_A,32,N_ELEM,6,1,count,0,63,0,SAT,P,B3,Elements captured
+PRV_BAR_A,32,LAST_LEVEL,1,1,flag,0,1,0,FLAG,P,B3,Level of the last entry
+PRV_BAR_B,32,MARK,17,1,count,0,131071,0,RNG,P,B3,Path at last edge or cooldown start
+PRV_BAR_W,8,WIDTH,8,100,um,0,255,0,SAT,P,B3,Element width x32 bytes
+PRV_BAR_MAP,8,CHAR,6,1,code,0,63,0,ENUM,P,B3,Map character (63 = empty) x8
+PRV_BAR_MAP,8,CMD,2,1,code,0,3,0,ENUM,P,B3,Map command x8
+SH_BAR,8,BRANCH_SEQ,8,1,count,0,255,0,RAW,S,B3,barcode_task -> line_task; wraps
+SH_BAR_OVF,8,OVERFLOW,8,1,count,0,255,0,SAT,S,B3,Ring overflows (ISR writer)
+E_LINE,32,RECIP,18,1,Q16,0,0,0,RAW,E,B3,E8 precomputed reciprocals x2
+E_BAR,8,HEAD_TAIL,6,1,index,0,0,0,RAW,E,B3,E6 ring head (ISR) and tail (task): one writer per byte
+E_BAR_US,32,LAST_US,31,1,us,0,0,0,RAW,E,B3,E5 ISR-private last accepted edge time (own E group and bits=31 for gen_layout.py; SPEC-QUESTION SQ-B3-1)

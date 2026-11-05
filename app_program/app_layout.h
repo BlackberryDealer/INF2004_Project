@@ -1258,6 +1258,234 @@
 #error "Group PRV_CMD_T no longer fits in 16 bits"
 #endif
 
+/* PRV_CAL_L: 32-bit word */
+#define PRV_CAL_L_WHITE_POS             (0u)
+#define PRV_CAL_L_WHITE_BITS            (12u)
+#define PRV_CAL_L_WHITE_MIN             (0)
+#define PRV_CAL_L_WHITE_MAX             (4095)
+#define PRV_CAL_L_WHITE_OFFSET          (0)
+#define PRV_CAL_L_WHITE_KIND            (APP_KIND_RNG)
+#define PRV_CAL_L_BLACK_POS             (PRV_CAL_L_WHITE_POS + PRV_CAL_L_WHITE_BITS)
+#define PRV_CAL_L_BLACK_BITS            (12u)
+#define PRV_CAL_L_BLACK_MIN             (0)
+#define PRV_CAL_L_BLACK_MAX             (4095)
+#define PRV_CAL_L_BLACK_OFFSET          (0)
+#define PRV_CAL_L_BLACK_KIND            (APP_KIND_RNG)
+#define PRV_CAL_L_USED_BITS             (PRV_CAL_L_BLACK_POS + PRV_CAL_L_BLACK_BITS)
+#if (PRV_CAL_L_USED_BITS > 32u)
+#error "Group PRV_CAL_L no longer fits in 32 bits"
+#endif
+
+/* PRV_CAL_R: 32-bit word */
+#define PRV_CAL_R_WHITE_POS             (0u)
+#define PRV_CAL_R_WHITE_BITS            (12u)
+#define PRV_CAL_R_WHITE_MIN             (0)
+#define PRV_CAL_R_WHITE_MAX             (4095)
+#define PRV_CAL_R_WHITE_OFFSET          (0)
+#define PRV_CAL_R_WHITE_KIND            (APP_KIND_RNG)
+#define PRV_CAL_R_BLACK_POS             (PRV_CAL_R_WHITE_POS + PRV_CAL_R_WHITE_BITS)
+#define PRV_CAL_R_BLACK_BITS            (12u)
+#define PRV_CAL_R_BLACK_MIN             (0)
+#define PRV_CAL_R_BLACK_MAX             (4095)
+#define PRV_CAL_R_BLACK_OFFSET          (0)
+#define PRV_CAL_R_BLACK_KIND            (APP_KIND_RNG)
+#define PRV_CAL_R_USED_BITS             (PRV_CAL_R_BLACK_POS + PRV_CAL_R_BLACK_BITS)
+#if (PRV_CAL_R_USED_BITS > 32u)
+#error "Group PRV_CAL_R no longer fits in 32 bits"
+#endif
+
+/* PRV_LINE_A: 32-bit word */
+#define PRV_LINE_A_LOST_CNT_POS         (0u)
+#define PRV_LINE_A_LOST_CNT_BITS        (5u)
+#define PRV_LINE_A_LOST_CNT_MIN         (0)
+#define PRV_LINE_A_LOST_CNT_MAX         (31)
+#define PRV_LINE_A_LOST_CNT_OFFSET      (0)
+#define PRV_LINE_A_LOST_CNT_KIND        (APP_KIND_SAT)
+#define PRV_LINE_A_LOST_SENT_POS        (PRV_LINE_A_LOST_CNT_POS + PRV_LINE_A_LOST_CNT_BITS)
+#define PRV_LINE_A_LOST_SENT_BITS       (1u)
+#define PRV_LINE_A_LOST_SENT_MIN        (0)
+#define PRV_LINE_A_LOST_SENT_MAX        (1)
+#define PRV_LINE_A_LOST_SENT_OFFSET     (0)
+#define PRV_LINE_A_LOST_SENT_KIND       (APP_KIND_FLAG)
+#define PRV_LINE_A_JCT_STATE_POS        (PRV_LINE_A_LOST_SENT_POS + PRV_LINE_A_LOST_SENT_BITS)
+#define PRV_LINE_A_JCT_STATE_BITS       (2u)
+#define PRV_LINE_A_JCT_STATE_MIN        (0)
+#define PRV_LINE_A_JCT_STATE_MAX        (2)
+#define PRV_LINE_A_JCT_STATE_OFFSET     (0)
+#define PRV_LINE_A_JCT_STATE_KIND       (APP_KIND_ENUM)
+#define PRV_LINE_A_SAT_L_POS            (PRV_LINE_A_JCT_STATE_POS + PRV_LINE_A_JCT_STATE_BITS)
+#define PRV_LINE_A_SAT_L_BITS           (1u)
+#define PRV_LINE_A_SAT_L_MIN            (0)
+#define PRV_LINE_A_SAT_L_MAX            (1)
+#define PRV_LINE_A_SAT_L_OFFSET         (0)
+#define PRV_LINE_A_SAT_L_KIND           (APP_KIND_FLAG)
+#define PRV_LINE_A_SAT_R_POS            (PRV_LINE_A_SAT_L_POS + PRV_LINE_A_SAT_L_BITS)
+#define PRV_LINE_A_SAT_R_BITS           (1u)
+#define PRV_LINE_A_SAT_R_MIN            (0)
+#define PRV_LINE_A_SAT_R_MAX            (1)
+#define PRV_LINE_A_SAT_R_OFFSET         (0)
+#define PRV_LINE_A_SAT_R_KIND           (APP_KIND_FLAG)
+#define PRV_LINE_A_SEQ0_POS             (PRV_LINE_A_SAT_R_POS + PRV_LINE_A_SAT_R_BITS)
+#define PRV_LINE_A_SEQ0_BITS            (8u)
+#define PRV_LINE_A_SEQ0_MIN             (0)
+#define PRV_LINE_A_SEQ0_MAX             (255)
+#define PRV_LINE_A_SEQ0_OFFSET          (0)
+#define PRV_LINE_A_SEQ0_KIND            (APP_KIND_RAW)
+#define PRV_LINE_A_RUN_ACTIVE_POS       (PRV_LINE_A_SEQ0_POS + PRV_LINE_A_SEQ0_BITS)
+#define PRV_LINE_A_RUN_ACTIVE_BITS      (1u)
+#define PRV_LINE_A_RUN_ACTIVE_MIN       (0)
+#define PRV_LINE_A_RUN_ACTIVE_MAX       (1)
+#define PRV_LINE_A_RUN_ACTIVE_OFFSET    (0)
+#define PRV_LINE_A_RUN_ACTIVE_KIND      (APP_KIND_FLAG)
+#define PRV_LINE_A_CAL_ACTIVE_POS       (PRV_LINE_A_RUN_ACTIVE_POS + PRV_LINE_A_RUN_ACTIVE_BITS)
+#define PRV_LINE_A_CAL_ACTIVE_BITS      (1u)
+#define PRV_LINE_A_CAL_ACTIVE_MIN       (0)
+#define PRV_LINE_A_CAL_ACTIVE_MAX       (1)
+#define PRV_LINE_A_CAL_ACTIVE_OFFSET    (0)
+#define PRV_LINE_A_CAL_ACTIVE_KIND      (APP_KIND_FLAG)
+#define PRV_LINE_A_CALIBRATED_POS       (PRV_LINE_A_CAL_ACTIVE_POS + PRV_LINE_A_CAL_ACTIVE_BITS)
+#define PRV_LINE_A_CALIBRATED_BITS      (1u)
+#define PRV_LINE_A_CALIBRATED_MIN       (0)
+#define PRV_LINE_A_CALIBRATED_MAX       (1)
+#define PRV_LINE_A_CALIBRATED_OFFSET    (0)
+#define PRV_LINE_A_CALIBRATED_KIND      (APP_KIND_FLAG)
+#define PRV_LINE_A_USED_BITS            (PRV_LINE_A_CALIBRATED_POS + PRV_LINE_A_CALIBRATED_BITS)
+#if (PRV_LINE_A_USED_BITS > 32u)
+#error "Group PRV_LINE_A no longer fits in 32 bits"
+#endif
+
+/* PRV_LINE_D: 32-bit word */
+#define PRV_LINE_D_LAST_SEQ_POS         (0u)
+#define PRV_LINE_D_LAST_SEQ_BITS        (8u)
+#define PRV_LINE_D_LAST_SEQ_MIN         (0)
+#define PRV_LINE_D_LAST_SEQ_MAX         (255)
+#define PRV_LINE_D_LAST_SEQ_OFFSET      (0)
+#define PRV_LINE_D_LAST_SEQ_KIND        (APP_KIND_RAW)
+#define PRV_LINE_D_BRANCH_PATH_POS      (PRV_LINE_D_LAST_SEQ_POS + PRV_LINE_D_LAST_SEQ_BITS)
+#define PRV_LINE_D_BRANCH_PATH_BITS     (17u)
+#define PRV_LINE_D_BRANCH_PATH_MIN      (0)
+#define PRV_LINE_D_BRANCH_PATH_MAX      (131071)
+#define PRV_LINE_D_BRANCH_PATH_OFFSET   (0)
+#define PRV_LINE_D_BRANCH_PATH_KIND     (APP_KIND_RNG)
+#define PRV_LINE_D_USED_BITS            (PRV_LINE_D_BRANCH_PATH_POS + PRV_LINE_D_BRANCH_PATH_BITS)
+#if (PRV_LINE_D_USED_BITS > 32u)
+#error "Group PRV_LINE_D no longer fits in 32 bits"
+#endif
+
+/* PRV_LINE_B: 32-bit word */
+#define PRV_LINE_B_JCT_MARK_POS         (0u)
+#define PRV_LINE_B_JCT_MARK_BITS        (17u)
+#define PRV_LINE_B_JCT_MARK_MIN         (0)
+#define PRV_LINE_B_JCT_MARK_MAX         (131071)
+#define PRV_LINE_B_JCT_MARK_OFFSET      (0)
+#define PRV_LINE_B_JCT_MARK_KIND        (APP_KIND_RNG)
+#define PRV_LINE_B_USED_BITS            (PRV_LINE_B_JCT_MARK_POS + PRV_LINE_B_JCT_MARK_BITS)
+#if (PRV_LINE_B_USED_BITS > 32u)
+#error "Group PRV_LINE_B no longer fits in 32 bits"
+#endif
+
+/* PRV_LINE_C: 32-bit word */
+#define PRV_LINE_C_RUN_MARK_POS         (0u)
+#define PRV_LINE_C_RUN_MARK_BITS        (17u)
+#define PRV_LINE_C_RUN_MARK_MIN         (0)
+#define PRV_LINE_C_RUN_MARK_MAX         (131071)
+#define PRV_LINE_C_RUN_MARK_OFFSET      (0)
+#define PRV_LINE_C_RUN_MARK_KIND        (APP_KIND_RNG)
+#define PRV_LINE_C_USED_BITS            (PRV_LINE_C_RUN_MARK_POS + PRV_LINE_C_RUN_MARK_BITS)
+#if (PRV_LINE_C_USED_BITS > 32u)
+#error "Group PRV_LINE_C no longer fits in 32 bits"
+#endif
+
+/* PRV_BAR_A: 32-bit word */
+#define PRV_BAR_A_STATE_POS             (0u)
+#define PRV_BAR_A_STATE_BITS            (2u)
+#define PRV_BAR_A_STATE_MIN             (0)
+#define PRV_BAR_A_STATE_MAX             (3)
+#define PRV_BAR_A_STATE_OFFSET          (0)
+#define PRV_BAR_A_STATE_KIND            (APP_KIND_ENUM)
+#define PRV_BAR_A_N_ELEM_POS            (PRV_BAR_A_STATE_POS + PRV_BAR_A_STATE_BITS)
+#define PRV_BAR_A_N_ELEM_BITS           (6u)
+#define PRV_BAR_A_N_ELEM_MIN            (0)
+#define PRV_BAR_A_N_ELEM_MAX            (63)
+#define PRV_BAR_A_N_ELEM_OFFSET         (0)
+#define PRV_BAR_A_N_ELEM_KIND           (APP_KIND_SAT)
+#define PRV_BAR_A_LAST_LEVEL_POS        (PRV_BAR_A_N_ELEM_POS + PRV_BAR_A_N_ELEM_BITS)
+#define PRV_BAR_A_LAST_LEVEL_BITS       (1u)
+#define PRV_BAR_A_LAST_LEVEL_MIN        (0)
+#define PRV_BAR_A_LAST_LEVEL_MAX        (1)
+#define PRV_BAR_A_LAST_LEVEL_OFFSET     (0)
+#define PRV_BAR_A_LAST_LEVEL_KIND       (APP_KIND_FLAG)
+#define PRV_BAR_A_USED_BITS             (PRV_BAR_A_LAST_LEVEL_POS + PRV_BAR_A_LAST_LEVEL_BITS)
+#if (PRV_BAR_A_USED_BITS > 32u)
+#error "Group PRV_BAR_A no longer fits in 32 bits"
+#endif
+
+/* PRV_BAR_B: 32-bit word */
+#define PRV_BAR_B_MARK_POS              (0u)
+#define PRV_BAR_B_MARK_BITS             (17u)
+#define PRV_BAR_B_MARK_MIN              (0)
+#define PRV_BAR_B_MARK_MAX              (131071)
+#define PRV_BAR_B_MARK_OFFSET           (0)
+#define PRV_BAR_B_MARK_KIND             (APP_KIND_RNG)
+#define PRV_BAR_B_USED_BITS             (PRV_BAR_B_MARK_POS + PRV_BAR_B_MARK_BITS)
+#if (PRV_BAR_B_USED_BITS > 32u)
+#error "Group PRV_BAR_B no longer fits in 32 bits"
+#endif
+
+/* PRV_BAR_W: 8-bit word */
+#define PRV_BAR_W_WIDTH_POS             (0u)
+#define PRV_BAR_W_WIDTH_BITS            (8u)
+#define PRV_BAR_W_WIDTH_MIN             (0)
+#define PRV_BAR_W_WIDTH_MAX             (255)
+#define PRV_BAR_W_WIDTH_OFFSET          (0)
+#define PRV_BAR_W_WIDTH_KIND            (APP_KIND_SAT)
+#define PRV_BAR_W_USED_BITS             (PRV_BAR_W_WIDTH_POS + PRV_BAR_W_WIDTH_BITS)
+#if (PRV_BAR_W_USED_BITS > 8u)
+#error "Group PRV_BAR_W no longer fits in 8 bits"
+#endif
+
+/* PRV_BAR_MAP: 8-bit word */
+#define PRV_BAR_MAP_CHAR_POS            (0u)
+#define PRV_BAR_MAP_CHAR_BITS           (6u)
+#define PRV_BAR_MAP_CHAR_MIN            (0)
+#define PRV_BAR_MAP_CHAR_MAX            (63)
+#define PRV_BAR_MAP_CHAR_OFFSET         (0)
+#define PRV_BAR_MAP_CHAR_KIND           (APP_KIND_ENUM)
+#define PRV_BAR_MAP_CMD_POS             (PRV_BAR_MAP_CHAR_POS + PRV_BAR_MAP_CHAR_BITS)
+#define PRV_BAR_MAP_CMD_BITS            (2u)
+#define PRV_BAR_MAP_CMD_MIN             (0)
+#define PRV_BAR_MAP_CMD_MAX             (3)
+#define PRV_BAR_MAP_CMD_OFFSET          (0)
+#define PRV_BAR_MAP_CMD_KIND            (APP_KIND_ENUM)
+#define PRV_BAR_MAP_USED_BITS           (PRV_BAR_MAP_CMD_POS + PRV_BAR_MAP_CMD_BITS)
+#if (PRV_BAR_MAP_USED_BITS > 8u)
+#error "Group PRV_BAR_MAP no longer fits in 8 bits"
+#endif
+
+/* SH_BAR: 8-bit word */
+#define SH_BAR_BRANCH_SEQ_POS           (0u)
+#define SH_BAR_BRANCH_SEQ_BITS          (8u)
+#define SH_BAR_BRANCH_SEQ_MIN           (0)
+#define SH_BAR_BRANCH_SEQ_MAX           (255)
+#define SH_BAR_BRANCH_SEQ_OFFSET        (0)
+#define SH_BAR_BRANCH_SEQ_KIND          (APP_KIND_RAW)
+#define SH_BAR_USED_BITS                (SH_BAR_BRANCH_SEQ_POS + SH_BAR_BRANCH_SEQ_BITS)
+#if (SH_BAR_USED_BITS > 8u)
+#error "Group SH_BAR no longer fits in 8 bits"
+#endif
+
+/* SH_BAR_OVF: 8-bit word */
+#define SH_BAR_OVF_OVERFLOW_POS         (0u)
+#define SH_BAR_OVF_OVERFLOW_BITS        (8u)
+#define SH_BAR_OVF_OVERFLOW_MIN         (0)
+#define SH_BAR_OVF_OVERFLOW_MAX         (255)
+#define SH_BAR_OVF_OVERFLOW_OFFSET      (0)
+#define SH_BAR_OVF_OVERFLOW_KIND        (APP_KIND_SAT)
+#define SH_BAR_OVF_USED_BITS            (SH_BAR_OVF_OVERFLOW_POS + SH_BAR_OVF_OVERFLOW_BITS)
+#if (SH_BAR_OVF_USED_BITS > 8u)
+#error "Group SH_BAR_OVF no longer fits in 8 bits"
+#endif
+
 #endif /* APP_LAYOUT_H */
 
 /*** end of file ***/

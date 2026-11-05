@@ -102,6 +102,35 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | CHAR | EVT_BARCODE | 0..42 × 1 code | 1 | 6 | 6 | ENUM | S | Code 39 character index |
 | CMD | EVT_BARCODE | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | APP_BAR_CMD_* |
 | CHAR | EVT_UNMAPPED | 0..42 × 1 code | 1 | 6 | 6 | ENUM | S | Code 39 character index |
+| WHITE | PRV_CAL_L | 0..4095 × 1 code | 1 | 12 | 12 | RNG | P | Left white level |
+| BLACK | PRV_CAL_L | 0..4095 × 1 code | 1 | 12 | 12 | RNG | P | Left black level |
+| WHITE | PRV_CAL_R | 0..4095 × 1 code | 1 | 12 | 12 | RNG | P | Right white level |
+| BLACK | PRV_CAL_R | 0..4095 × 1 code | 1 | 12 | 12 | RNG | P | Right black level |
+| LOST_CNT | PRV_LINE_A | 0..31 × 1 tick | 1 | 5 | 5 | SAT | P | White cycles |
+| LOST_SENT | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | LINE_LOST posted |
+| JCT_STATE | PRV_LINE_A | 0..2 × 1 code | 1 | 2 | 2 | ENUM | P | IDLE CANDIDATE CONFIRM |
+| SAT_L | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Left saturated seen |
+| SAT_R | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Right saturated seen |
+| SEQ0 | PRV_LINE_A | 0..255 × 1 count | 1 | 8 | 8 | RAW | P | Branch sequence at start |
+| LAST_SEQ | PRV_LINE_D | 0..255 × 1 count | 1 | 8 | 8 | RAW | P | Branch sequence seen last cycle |
+| BRANCH_PATH | PRV_LINE_D | 0..131071 × 1 count | 1 | 17 | 17 | RNG | P | Path when the branch sequence last changed |
+| RUN_ACTIVE | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Black run in progress |
+| CAL_ACTIVE | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Calibration mode seen |
+| CALIBRATED | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Calibration valid |
+| JCT_MARK | PRV_LINE_B | 0..131071 × 1 count | 1 | 17 | 17 | RNG | P | Path at junction start |
+| RUN_MARK | PRV_LINE_C | 0..131071 × 1 count | 1 | 17 | 17 | RNG | P | Path at black run start |
+| STATE | PRV_BAR_A | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | Decoder state |
+| N_ELEM | PRV_BAR_A | 0..63 × 1 count | 1 | 6 | 6 | SAT | P | Elements captured |
+| LAST_LEVEL | PRV_BAR_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Level of the last entry |
+| MARK | PRV_BAR_B | 0..131071 × 1 count | 1 | 17 | 17 | RNG | P | Path at last edge or cooldown start |
+| WIDTH | PRV_BAR_W | 0..255 × 100 um | 100 | 8 | 8 | SAT | P | Element width x32 bytes |
+| CHAR | PRV_BAR_MAP | 0..63 × 1 code | 1 | 6 | 6 | ENUM | P | Map character (63 = empty) x8 |
+| CMD | PRV_BAR_MAP | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | Map command x8 |
+| BRANCH_SEQ | SH_BAR | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | barcode_task -> line_task; wraps |
+| OVERFLOW | SH_BAR_OVF | 0..255 × 1 count | 1 | 8 | 8 | SAT | S | Ring overflows (ISR writer) |
+| RECIP | E_LINE | 0..0 × 1 Q16 | 1 | 0 | 32 | RAW | E | E8 precomputed reciprocals x2 |
+| HEAD_TAIL | E_BAR | 0..0 × 1 index | 1 | 0 | 8 | RAW | E | E6 ring head (ISR) and tail (task): one writer per byte |
+| LAST_US | E_BAR_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 ISR-private last accepted edge time (own E group and bits=31 for gen_layout.py; SPEC-QUESTION SQ-B3-1) |
 
 ## B4
 
@@ -261,6 +290,18 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_BRIDGE | 21 | 32 |
 | PRV_MQTT | 14 | 16 |
 | PRV_CMD_T | 16 | 16 |
+| PRV_CAL_L | 24 | 32 |
+| PRV_CAL_R | 24 | 32 |
+| PRV_LINE_A | 21 | 32 |
+| PRV_LINE_D | 25 | 32 |
+| PRV_LINE_B | 17 | 32 |
+| PRV_LINE_C | 17 | 32 |
+| PRV_BAR_A | 9 | 32 |
+| PRV_BAR_B | 17 | 32 |
+| PRV_BAR_W | 8 | 8 |
+| PRV_BAR_MAP | 8 | 8 |
+| SH_BAR | 8 | 8 |
+| SH_BAR_OVF | 8 | 8 |
 
 ## Range assumptions
 
