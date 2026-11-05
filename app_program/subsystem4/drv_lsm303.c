@@ -130,10 +130,12 @@ extern uint32_t sys_tick_now_us(void);
 
 static uint32_t g_lsm303_fifo_ovr = 0u; /* saturating, imu_task context */
 static int32_t  g_lsm303_last_err = 0;  /* last failed transfer's code   */
+static uint32_t g_lsm303_addr = LSM303_ADDR; /* SA0 address in use (S4-U15) */
 
 /* ---- private function prototypes ------------------------------------- */
 
 static int32_t lsm303_hw_write_config(void);
+static void    lsm303_set_tar(uint32_t addr);
 static int32_t lsm303_tx2(uint8_t reg, uint8_t val);
 static int32_t lsm303_rx(uint8_t reg, uint8_t * p_out, uint32_t count);
 static void    lsm303_begin(void);
@@ -156,6 +158,9 @@ static void    lsm303_hw_setup(void);
  */
 int32_t drv_lsm303_init(void)
 {
+    int32_t id_now   = 0;
+    int32_t id_other = 0;
+
     gpio_set_function(PIN_IMU_SDA, GPIO_FUNC_I2C);
     gpio_set_function(PIN_IMU_SCL, GPIO_FUNC_I2C);
     /* The GY-511 module carries its own pull-ups (A18, S4-I07). The
@@ -165,7 +170,38 @@ int32_t drv_lsm303_init(void)
     gpio_pull_up(PIN_IMU_SDA);
     gpio_pull_up(PIN_IMU_SCL);
     lsm303_hw_setup();
+
+    /* S4-U15 (on-car 2026-11-04): the address follows the module's SA0
+       pin. If the chip does not identify at the address in use, try the
+       other one and keep whichever answers WHO_AM_I 0x49. Called again
+       by imu_task after any I2C error, so a change while running is
+       followed too.                                                    */
+    id_now = drv_lsm303_identity_ok();
+    if (1 != id_now)
+    {
+        lsm303_set_tar(drv_lsm303_other_addr(g_lsm303_addr));
+        id_other      = drv_lsm303_identity_ok();
+        g_lsm303_addr = drv_lsm303_pick_addr(g_lsm303_addr, id_now,
+                                             id_other);
+        lsm303_set_tar(g_lsm303_addr);
+    }
+    else
+    {
+        /* identified at the address in use */
+    }
+
     return lsm303_hw_write_config();
+}
+
+/**
+ * drv_lsm303_addr
+ * @brief   The 7-bit I2C address in use (0x1D SA0 high, 0x1E SA0 low).
+ * @return  address
+ * @context imu_task or usermain
+ */
+uint32_t drv_lsm303_addr(void)
+{
+    return g_lsm303_addr;
 }
 
 /**
@@ -401,12 +437,12 @@ static void lsm303_hw_setup(void)
     /* IC_CON, IC_TAR and the SCL counts are only writable while the block
        is disabled (RP2040 datasheet, I2C chapter), so they are all set
        here, once, between disable and enable. One slave address serves
-       both sensors, so IC_TAR never changes afterwards. */
+       both sensors; it changes only in drv_lsm303_init (SA0, S4-U15). */
     lsm303_set_enable(false);
     i2c1_hw->con = I2C_IC_CON_MASTER_MODE_BITS | I2C_IC_CON_SPEED_VALUE_FAST |
                    I2C_IC_CON_IC_RESTART_EN_BITS |
                    I2C_IC_CON_IC_SLAVE_DISABLE_BITS;
-    i2c1_hw->tar         = LSM303_ADDR;
+    i2c1_hw->tar         = g_lsm303_addr;
     i2c1_hw->fs_scl_hcnt = hcnt;
     i2c1_hw->fs_scl_lcnt = lcnt;
     i2c1_hw->fs_spklen   = spklen;
@@ -671,6 +707,22 @@ static void lsm303_recover(void)
     (void)i2c1_hw->clr_tx_abrt; /* read clears; always reads 0 */
 
     lsm303_set_enable(false);
+    lsm303_set_enable(true);
+    lsm303_begin();
+}
+
+/**
+ * lsm303_set_tar
+ * @brief   Changes the slave address (IC_TAR is writable only while the
+ *          block is disabled), then clears the FIFOs for a clean start.
+ * @param   addr  7-bit address
+ * @return  none
+ * @context imu_task or usermain
+ */
+static void lsm303_set_tar(uint32_t addr)
+{
+    lsm303_set_enable(false);
+    i2c1_hw->tar = addr;
     lsm303_set_enable(true);
     lsm303_begin();
 }

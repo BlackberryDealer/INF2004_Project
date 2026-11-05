@@ -209,6 +209,12 @@ ER imu_init(void)
         ercd = drv_lsm303_init();
     }
     imu_need_cfg_set(0 != ercd);
+    if (0 == ercd)
+    {
+        /* Bring-up diagnosis (S4-U15). cast: 0x1D or 0x1E */
+        app_log("IMU answered at I2C address %d (29 = 0x1D SA0 high, 30 ="
+                " 0x1E SA0 low)\n", (int32_t) drv_lsm303_addr(), 0, 0);
+    }
 
     return (ER)ercd; /* cast: driver returns 0 or <0, same sign
                         convention as ER */
@@ -792,7 +798,8 @@ static bool imu_configure_if_needed(void)
     }
     imu_need_cfg_set(false);
     /* Bring-up diagnosis */
-    app_log("IMU registers written again (sensor answered)\n", 0, 0, 0);
+    app_log("IMU registers written again (sensor answered at address %d)\n",
+            (int32_t) drv_lsm303_addr(), 0, 0); /* cast: 0x1D or 0x1E */
     return false; /* read from the next cycle: the FIFO restarts empty */
 }
 

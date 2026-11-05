@@ -16,7 +16,9 @@
 /* ---- ping timing and thresholds (Figure 6.4) ------------------------ */
 #define OBS_PING_PERIOD_MS     (60u)
 #define OBS_ECHO_TIMEOUT_MS    (40u)     /* MEASURE: A8 */
-#define OBS_SLOW_MM            (400u)    /* -> APPROACH */
+/* 400 -> 600 (on-car 2026-11-04, S5-U37): with the stop moved out to
+   ~40 cm the slow-down starts 200 mm before it.                       */
+#define OBS_SLOW_MM            (600u)    /* -> APPROACH */
 
 /* ---- stop threshold (NFR6): computed, never typed in ----------------- */
 #define OBS_V_MAX_MM_S         (300u)    /* NFR6 worst case */
@@ -31,11 +33,16 @@
 #define OBS_BRAKE_DIST_MM      ((OBS_V_MAX_MM_S * OBS_V_MAX_MM_S)           \
                                 / (2u * (uint32_t) MOTION_BRAKE_DECEL_MM_S2))
 #define OBS_MARGIN_MM          (20u)
-/* 251 mm with the placeholder values */
+/* Earlier stop requested on the car (2026-11-04, S5-U37): the computed
+   minimum (251 mm) left the car ~180 mm from the obstacle, too late to
+   plan a clean bypass; stop at about 40 cm instead.                    */
+#define OBS_EARLY_STOP_MM      (150u)    /* TUNE */
+/* 401 mm with the placeholder values (251 computed + 150 requested) */
 #define OBS_STOP_MM            (OBS_CLEARANCE_MIN_MM + OBS_FRONT_OFFSET_MM  \
                                 + OBS_CONFIRM_TRAVEL_MM                     \
                                 + OBS_LATENCY_TRAVEL_MM                     \
-                                + OBS_BRAKE_DIST_MM + OBS_MARGIN_MM)
+                                + OBS_BRAKE_DIST_MM + OBS_MARGIN_MM         \
+                                + OBS_EARLY_STOP_MM)
 
 /* ---- confirmation and fault rules ------------------------------------ */
 #define OBS_AGREE_MM           (30u)     /* two pings agree within        */
@@ -61,7 +68,9 @@
 
 /* ---- scan and bypass geometry ---------------------------------------- */
 #define OBS_LEG_MIN_MM         (20u)     /* shorter legs are rounded up   */
-#define OBS_NEAR_MM            (400u)    /* scan point counts as obstacle */
+/* 400 -> 650 (2026-11-04): the car now stops ~400 mm away, so the
+   obstacle's own scan points (further off-axis) must still count.     */
+#define OBS_NEAR_MM            (650u)    /* scan point counts as obstacle */
 #define OBS_SIDE_TOO_CLOSE_MM  (60u)
 #define OBS_ROBOT_HALF_W_MM    (75u)     /* MEASURE */
 #define OBS_ROBOT_LEN_MM       (180u)    /* MEASURE */
@@ -79,6 +88,8 @@
 
 /* C.4b: sentinels stay outside the valid range and fit their fields
    (DIST 9 bits x 4 mm, profile fields 8 bits x 4 mm, A27).          */
+/* stop < slow-down <= scan near threshold: checked by S5-U37 (OBS_STOP_MM
+   holds a cast, which #if cannot evaluate) */
 #if (OBS_NEAR_MM >= APP_PROFILE_CLEAR_MM)
 #error "Near threshold must stay below the profile 'clear' sentinel"
 #endif

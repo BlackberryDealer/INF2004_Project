@@ -81,7 +81,8 @@ static void run_request(mission_ctx_t * p_ctx, uint32_t sys_state,
                         uint32_t end_reason);
 static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
                      uint32_t now_us);
-static void run_post_profile(status_board_t const * p_snap);
+static void run_post_profile(mission_ctx_t const * p_ctx,
+                             status_board_t const * p_snap);
 static void run_log_event(mission_ctx_t const * p_ctx,
                           char const * p_format, uint32_t value);
 
@@ -547,12 +548,12 @@ static void run_avoid(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
     {
         if (!p_ctx->b_is_quiet)
         {
-            /* casts: step 0..6, substep 0..3 */
-            app_log("REJOIN FAIL: FR9 5 s limit, avoid step %d substep %d\n",
-                    (int32_t) p_ctx->avoid_step, (int32_t) p_ctx->substep,
-                    0);
+            /* casts: limit 20000 ms, step 0..6, substep 0..3 */
+            app_log("REJOIN FAIL: FR9 %d ms limit, avoid step %d substep"
+                    " %d\n", (int32_t) MISSION_FR9_LIMIT_MS,
+                    (int32_t) p_ctx->avoid_step, (int32_t) p_ctx->substep);
         }
-        fault_set(APP_FAULT_REACQUIRE_FAIL);       /* FR9: > 5 s */
+        fault_set(APP_FAULT_REACQUIRE_FAIL);       /* FR9: over the limit */
         run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
     }
 }
@@ -634,18 +635,19 @@ static void run_avoid_wait(mission_ctx_t * p_ctx, uint32_t type,
             p_ctx->side       = status_board_plan_side(p_snap);
             p_ctx->leg_lat_mm = status_board_leg_lateral(p_snap);
             p_ctx->leg_fwd_mm = status_board_leg_forward(p_snap);
-            run_post_profile(p_snap);
+            run_post_profile(p_ctx, p_snap);
             run_turn(p_ctx, p_ctx->side, RUN_TURN_RIGHT_ANGLE_DEG, now_us);
             p_ctx->avoid_step = APP_AVOID_TURN_OUT;
             break;
         case APP_EVT_CONTINUE:
             safety_clear(SAFETY_ESTOP);
             mission_mode_clear(APP_MODE_RESCAN | APP_MODE_STOPPED);
-            run_post_profile(p_snap);
+            run_post_profile(p_ctx, p_snap);
             mission_mode_clear(RUN_INHIBITS);
             run_follow_or_armed(p_ctx, p_snap, now_us);
             break;
         case APP_EVT_NO_PATH:
+            run_post_profile(p_ctx, p_snap);   /* width also when blocked */
             p_ctx->no_path_cnt++;
             if (p_ctx->no_path_cnt >= 2u)
             {
@@ -969,10 +971,15 @@ static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
 
 /**
  * run_post_profile
- * @brief   Sends the obstacle profile from the board to telemetry.
+ * @brief   Sends the obstacle profile from the board to telemetry (MQTT
+ *          PROFILE message: width, nearest, free gaps, pass side) and
+ *          prints the same values on the console, after every scan.
+ * @param   p_ctx  mission context (quiet flag)
+ * @param   p_snap status board snapshot of this pass
  * @context mission_task
  */
-static void run_post_profile(status_board_t const * p_snap)
+static void run_post_profile(mission_ctx_t const * p_ctx,
+                             status_board_t const * p_snap)
 {
     telem_bin_profile_t prof = {0u, 0u, 0u, 0u, 0u, 0u};
 
@@ -983,6 +990,18 @@ static void run_post_profile(status_board_t const * p_snap)
     prof.clear_right_mm = status_board_clear_right(p_snap);
     prof.side           = status_board_plan_side(p_snap);
     (void) telem_post_profile(&prof);   /* a full K7 is counted there */
+
+    if (!p_ctx->b_is_quiet)
+    {
+        /* casts: distances 0..1020 mm, side 0..1 fit int32_t */
+        app_log("OBSTACLE width %d mm, nearest %d mm ahead, pass side %d"
+                " (0 = left, 1 = right; 1020 = clear)\n",
+                (int32_t) prof.width_mm, (int32_t) prof.nearest_mm,
+                (int32_t) prof.side);
+        app_log("OBSTACLE free gap left %d mm, right %d mm\n",
+                (int32_t) prof.clear_left_mm, (int32_t) prof.clear_right_mm,
+                0);
+    }
 }
 
 /**

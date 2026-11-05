@@ -50,6 +50,10 @@
 #define MOTION_DELTA_ABS_MAX   (0xFFFFu)    /* |delta| cap in checks       */
 #define MOTION_RATE_SCALE_US   (10000u)     /* one 10 ms tick, in us       */
 #define MOTION_RATE_DT_MAX_US  (1000000u)   /* plausibility dt cap         */
+/* S2-U26: the encoder read takes a few us; a longer gap between the clock
+   reads around it means the task was held up, so counts and time do not
+   belong together and the read is skipped (not trusted, not counted). */
+#define MOTION_READ_SKEW_US    (500u)
 #define MOTION_PATH2_MAX       (262142u)    /* 2 x 131071 (A23, PATH2 row) */
 #define MOTION_STREAK_MAX      (3u)         /* 2-bit streak counter        */
 #define MOTION_HALF_SHIFT      (1u)         /* path = path2 / 2            */
@@ -138,7 +142,7 @@ static void motion_sense(void);
 static void motion_sense_wheel(motion_wheel_t * p_wheel, uint32_t raw,
                                uint32_t now_us, uint32_t * p_prev,
                                uint32_t * p_prev_us, uint32_t * p_raw0,
-                               uint32_t * p_streak);
+                               uint32_t * p_streak, bool b_is_skewed);
 static bool motion_check_safety(void);
 static void motion_commands(void);
 static void motion_handle_cmd(uint32_t type, uint32_t param, uint32_t tag);
@@ -302,22 +306,27 @@ static void motion_cycle(void)
  */
 static void motion_sense(void)
 {
-    uint32_t raw_l  = 0u;
-    uint32_t raw_r  = 0u;
-    uint32_t now_us = 0u;
-    uint32_t dt_us  = 0u;
-    uint32_t dt_ms  = 0u;
-    uint32_t step2  = 0u;
+    uint32_t raw_l       = 0u;
+    uint32_t raw_r       = 0u;
+    uint32_t before_us   = 0u;
+    uint32_t now_us      = 0u;
+    uint32_t dt_us       = 0u;
+    uint32_t dt_ms       = 0u;
+    uint32_t step2       = 0u;
+    bool     b_is_skewed = false;
 
+    /* S2-U26: clock read on both sides of the encoder read */
+    before_us   = sys_tick_now_us();
     drv_encoder_read(&raw_l, &raw_r);
-    now_us    = sys_tick_now_us();
-    dt_us     = now_us - g_prev_us;      /* unsigned: wraps correctly */
-    g_prev_us = now_us;
+    now_us      = sys_tick_now_us();
+    b_is_skewed = ((now_us - before_us) > MOTION_READ_SKEW_US);
+    dt_us       = now_us - g_prev_us;    /* unsigned: wraps correctly */
+    g_prev_us   = now_us;
 
     motion_sense_wheel(&g_left, raw_l, now_us, &g_prev_l, &g_prev_l_us,
-                       &g_raw0_l, &g_strk_l);
+                       &g_raw0_l, &g_strk_l, b_is_skewed);
     motion_sense_wheel(&g_right, raw_r, now_us, &g_prev_r, &g_prev_r_us,
-                       &g_raw0_r, &g_strk_r);
+                       &g_raw0_r, &g_strk_r, b_is_skewed);
 
     /* (us x 1049) >> 20 = ms, no division; <= 63000 x 1049 < 2^32 */
     dt_ms = (((dt_us > MOTION_DT_US_MAX) ? MOTION_DT_US_MAX : dt_us)
@@ -375,13 +384,15 @@ static void motion_sense(void)
  * @param   p_prev_us  time of the last trusted raw image (updated)
  * @param   p_raw0     raw image at the last ZERO (moved on a resync)
  * @param   p_streak   impossible-read streak (updated)
+ * @param   b_is_skewed  the task was held up during the read (S2-U26):
+ *                     count and time do not match, skip this read
  * @return  none
  * @context motion_task
  */
 static void motion_sense_wheel(motion_wheel_t * p_wheel, uint32_t raw,
                                uint32_t now_us, uint32_t * p_prev,
                                uint32_t * p_prev_us, uint32_t * p_raw0,
-                               uint32_t * p_streak)
+                               uint32_t * p_streak, bool b_is_skewed)
 {
     uint32_t const dt_us  = now_us - *p_prev_us;  /* since trusted read */
     uint32_t const dt_cap = (dt_us > MOTION_RATE_DT_MAX_US)
@@ -395,7 +406,14 @@ static void motion_sense_wheel(motion_wheel_t * p_wheel, uint32_t raw,
         ((motion_abs_capped(delta) * MOTION_RATE_SCALE_US)
          > ((2u * APP_TICK_COUNTS_MAX) * dt_cap));
 
-    if (!b_is_impossible)
+    if (b_is_skewed)
+    {
+        /* S2-U26: count and timestamp may be up to the hold-up apart.
+           Neither trusted nor counted as impossible; the next good read
+           measures the movement against the last trusted pair.       */
+        p_wheel->delta = 0;
+    }
+    else if (!b_is_impossible)
     {
         *p_streak  = 0u;
         *p_prev    = raw;               /* trusted: accept the movement */

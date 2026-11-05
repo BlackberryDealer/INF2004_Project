@@ -40,7 +40,9 @@ ER tk_loc_mtx(ID id, TMO t) { (void) id; (void) t; return E_OK; }
 ER tk_unl_mtx(ID id) { (void) id; return E_OK; }
 ID app_start_task(FP e, PRI p, uint64_t *s, uint32_t b, char const *n) { (void)e;(void)p;(void)s;(void)b;(void)n; return 1; }
 void app_check(ER e, char const *w) { (void) e; (void) w; }
-void app_log(char const *f, int32_t a, int32_t b, int32_t c) { printf("   log: "); printf(f, a, b, c); }
+static char clog[4096];   /* console capture */
+void app_log(char const *f, int32_t a, int32_t b, int32_t c) { char line[256]; snprintf(line, sizeof(line), f, a, b, c); printf("   log: %s", line);
+  if (strlen(clog) + strlen(line) < sizeof(clog)) strcat(clog, line); }
 /* ---------------- neighbour mocks ---------------- */
 static uint32_t g_safety, g_fault, g_now, g_tag; static int g_refuse;
 void safety_set(uint32_t b) { g_safety |= b; }
@@ -150,33 +152,35 @@ int main(void) {
   idle_ms(990); CHECK("S5-U07", APP_SYS_READY == g_ctx.sys_state && !MODE(APP_MODE_RUN_START), "still warning");
   alog[0] = 0; idle_ms(20); CHECK("S5-U20", MODE(APP_MODE_RUN_START) && strstr(alog, "ZERO0") && g_ctx.b_move_pending, "run start: RUN_START set, ZERO sent");
   DONE(); CHECK("S5-U20", APP_SYS_READY == g_ctx.sys_state, "ZERO acked, RUN_START held for 30 ms");
-  alog[0] = 0; idle_ms(30); CHECK("S5-U20", APP_SYS_RUN == g_ctx.sys_state && !MODE(APP_MODE_RUN_START) && MODE(APP_MODE_MOTOR_EN) && 0u == g_ctx.run_start_path && !strcmp(alog, "FOL180 "), "-> RUN: RUN_START cleared, MOTOR_EN set, path 0, FOLLOW cruise");
+  alog[0] = 0; idle_ms(30); CHECK("S5-U20", APP_SYS_RUN == g_ctx.sys_state && !MODE(APP_MODE_RUN_START) && MODE(APP_MODE_MOTOR_EN) && 0u == g_ctx.run_start_path && !strcmp(alog, "FOL120 "), "-> RUN: RUN_START cleared, MOTOR_EN set, path 0, FOLLOW cruise");
   /* barcode turn */
-  EV(APP_EVT_BARCODE, (1u << 6) | 11u); CHECK("S5-U07", APP_RUN_ARMED == g_ctx.run_state && !strcmp(mlog, "FOL150 "), "BARCODE(RIGHT) -> ARMED slow");
+  EV(APP_EVT_BARCODE, (1u << 6) | 11u); CHECK("S5-U07", APP_RUN_ARMED == g_ctx.run_state && !strcmp(mlog, "FOL100 "), "BARCODE(RIGHT) -> ARMED slow");
   EV(APP_EVT_JUNCTION, 1); CHECK("S5-U07", !strcmp(mlog, "STOP0 F60 "), "JUNCTION -> stop, advance 60 (tracked)");
   DONE(); CHECK("S5-U07", !strcmp(mlog, "R90 "), "turn right 90");
-  DONE(); CHECK("S5-U07", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL180 ") && !g_ctx.b_move_pending, "turn done -> FOLLOW cruise; FOLLOW is never tracked");
+  DONE(); CHECK("S5-U07", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL120 ") && !g_ctx.b_move_pending, "turn done -> FOLLOW cruise; FOLLOW is never tracked");
   /* S5-U35 (on-car 2026-11-03): a U-turn barcode before a dead end; the line end is its junction */
-  EV(APP_EVT_BARCODE, (3u << 6) | 13u); CHECK("S5-U35", APP_RUN_ARMED == g_ctx.run_state && !strcmp(mlog, "FOL150 "), "BARCODE(UTURN, 'D') -> ARMED slow");
+  EV(APP_EVT_BARCODE, (3u << 6) | 13u); CHECK("S5-U35", APP_RUN_ARMED == g_ctx.run_state && !strcmp(mlog, "FOL100 "), "BARCODE(UTURN, 'D') -> ARMED slow");
   EV(APP_EVT_LINE_LOST, 0); CHECK("S5-U35", APP_RUN_EXECUTE_TURN == g_ctx.run_state && !strcmp(mlog, "STOP0 F60 "), "line end with a U-turn armed -> stop, advance 60 (no search)");
   DONE(); CHECK("S5-U35", !strcmp(mlog, "L180 "), "turn 180");
-  DONE(); CHECK("S5-U35", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL180 ") && !g_ctx.b_is_armed, "U-turn done -> FOLLOW cruise, disarmed");
+  DONE(); CHECK("S5-U35", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL120 ") && !g_ctx.b_is_armed, "U-turn done -> FOLLOW cruise, disarmed");
   /* S5-U15: search sends STOP first */
   EV(APP_EVT_LINE_LOST, 0); CHECK("S5-U15", APP_RUN_SEARCH_LINE == g_ctx.run_state && !strcmp(mlog, "STOP0 L60 "), "LINE_LOST -> STOP first, then turn left 60");
   DONE(); CHECK("S5-U15", !strcmp(mlog, "R120 "), "next leg on the tagged MOVE_DONE: right 120");
-  EV(APP_EVT_LINE_FOUND, 0); CHECK("S5-U15", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "STOP0 FOL180 ") && !g_ctx.b_move_pending, "LINE_FOUND during a leg -> FOLLOW, pending cleared");
+  EV(APP_EVT_LINE_FOUND, 0); CHECK("S5-U15", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "STOP0 FOL120 ") && !g_ctx.b_move_pending, "LINE_FOUND during a leg -> FOLLOW, pending cleared");
   /* S5-U36 (on-car 2026-11-03): the search sweeps first toward the side the line was last seen (steering < 0 = right) */
   { status_board_line_t ln; memset(&ln, 0, sizeof(ln)); ln.steering = -350; ln.line_status = APP_LINE_LOST; ln.b_is_calibrated = true; status_board_write_line(&ln);
     EV(APP_EVT_LINE_LOST, 0); CHECK("S5-U36", APP_RUN_SEARCH_LINE == g_ctx.run_state && !strcmp(mlog, "STOP0 R60 "), "line last seen right -> STOP, turn right 60 first");
     DONE(); CHECK("S5-U36", !strcmp(mlog, "L120 "), "then left 120");
     DONE(); CHECK("S5-U36", !strcmp(mlog, "R60 "), "then right 60");
     ln.steering = 0; ln.line_status = APP_LINE_ON; status_board_write_line(&ln);
-    EV(APP_EVT_LINE_FOUND, 0); CHECK("S5-U36", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "STOP0 FOL180 "), "found -> FOLLOW"); }
+    EV(APP_EVT_LINE_FOUND, 0); CHECK("S5-U36", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "STOP0 FOL120 "), "found -> FOLLOW"); }
   /* obstacle + bypass */
   safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP; mot.pos_l_counts = 1000; mot.pos_r_counts = 900;
   EV(APP_EVT_OBSTACLE, 0); NONE(); CHECK("S5-U07", APP_RUN_AVOID == g_ctx.run_state && MODE(APP_MODE_STOPPED | APP_MODE_RESCAN), "OBSTACLE -> AVOID, standstill -> scan request");
   idle_ms(200); obs.plan_side = APP_SIDE_LEFT; obs.leg_lateral_mm = 176u; obs.leg_forward_mm = 632u;
+  obs.width_mm = 140u; obs.nearest_mm = 380u; clog[0] = 0;
   EV(APP_EVT_PLAN, APP_SIDE_LEFT); CHECK("S5-U07", !(g_safety & SAFETY_ESTOP) && !strcmp(mlog, "L90 ") && strstr(tlog, "PROF0"), "PLAN -> ESTOP off, profile, turn left 90");
+  CHECK("S5-U40", NULL != strstr(clog, "OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 0"), "scanned width printed on the console with the MQTT profile");
   DONE(); CHECK("S5-U07", !strcmp(mlog, "F176 "), "lateral leg 176");
   DONE(); CHECK("S5-U07", !strcmp(mlog, "R90 "), "turn parallel");
   DONE(); CHECK("S5-U27", !strcmp(mlog, "F632 ") && g_ctx.move_limit_ms >= 7000u, "pass leg 632 mm; deadline long enough for it");
@@ -187,9 +191,9 @@ int main(void) {
   EV(APP_EVT_LINE_FOUND, 24u); CHECK("S5-U07", !strcmp(mlog, "STOP0 F60 "), "LINE_FOUND in the window -> advance 60");
   mot.pos_l_counts = 1050;
   DONE(); CHECK("S5-U07", !strcmp(mlog, "L8 "), "heading +8 deg -> turn left 8");
-  DONE(); CHECK("S5-U07", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL150 ") && MODE(APP_MODE_RESUME), "bypass done -> FOLLOW slow, RESUME");
+  DONE(); CHECK("S5-U07", APP_RUN_FOLLOW == g_ctx.run_state && !strcmp(mlog, "FOL100 ") && MODE(APP_MODE_RESUME), "bypass done -> FOLLOW slow, RESUME");
   idle_ms(160); CHECK("S5-U07", !MODE(APP_MODE_RESUME), "RESUME cleared after 150 ms");
-  mot.path_counts += odometry_mm_to_counts(151u); NONE(); CHECK("S5-U07", !MODE(APP_MODE_JUNCTION_INHIBIT) && !strcmp(mlog, "FOL180 "), "inhibits cleared 150 mm later, cruise");
+  mot.path_counts += odometry_mm_to_counts(151u); NONE(); CHECK("S5-U07", !MODE(APP_MODE_JUNCTION_INHIBIT) && !strcmp(mlog, "FOL120 "), "inhibits cleared 150 mm later, cruise");
   /* S5-U21: STOP during WAIT_PLAN leaves ESTOP set; recovery clears it */
   safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP;
   EV(APP_EVT_OBSTACLE, 0); NONE(); EV(APP_EVT_STOP, 0);
@@ -305,6 +309,37 @@ int main(void) {
   CHECK("S1-U41", 3 == g_snapshots && APP_SYS_FINISHED == g_snapshot.sys_state && 500u == g_snapshot.odometry_mm && 2u == g_snapshot.run_time_s, "FINISHED: distance and time frozen at the end of the run");
   fault_set(APP_FAULT_RANGE_CLAMP); EV(APP_EVT_SNAPSHOT, 0);
   CHECK("S1-U41", 4 == g_snapshots && 0u != (g_snapshot.faults & APP_FAULT_RANGE_CLAMP) && APP_SYS_FINISHED == g_ctx.sys_state, "faults reported; FINISHED kept");
+  /* S5-U39 (Dylan 2026-11-04): FR9 bypass limit 5 s -> 20 s. A rejoin
+     that takes ~6.3 s from the end of the pass leg (slower car) must
+     finish and resume following, not fault REACQUIRE_FAIL at 5 s.     */
+  to_ready(); mot.motion_state = APP_MOT_BRAKE; to_run(); g_fault = 0; tlog[0] = 0;
+  safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP;
+  EV(APP_EVT_OBSTACLE, 0); NONE(); idle_ms(200);
+  obs.plan_side = APP_SIDE_LEFT; obs.leg_lateral_mm = 176u; obs.leg_forward_mm = 632u;
+  EV(APP_EVT_PLAN, APP_SIDE_LEFT); DONE(); DONE(); DONE(); idle_ms(4000);
+  DONE(); CHECK("S5-U39", !strcmp(mlog, "R45 ") && g_ctx.b_fr9_running, "pass leg done: FR9 timer starts, turn 45");
+  idle_ms(1200); DONE(); CHECK("S5-U39", !strcmp(mlog, "F322 "), "turn took 1.2 s, rejoin drive");
+  idle_ms(3000); mot.path_counts += odometry_mm_to_counts(250u);
+  EV(APP_EVT_LINE_FOUND, 24u); CHECK("S5-U39", !strcmp(mlog, "STOP0 F60 ") && APP_SYS_RUN == g_ctx.sys_state, "line found after 3 s more (4.2 s): still RUN");
+  idle_ms(1200); mot.pos_l_counts = 1050; DONE(); CHECK("S5-U39", APP_SYS_RUN == g_ctx.sys_state && 0u == (g_fault & APP_FAULT_REACQUIRE_FAIL), "5.4 s after the pass leg: no REACQUIRE_FAIL");
+  idle_ms(900); DONE(); CHECK("S5-U39", APP_RUN_FOLLOW == g_ctx.run_state && APP_SYS_RUN == g_ctx.sys_state && 0u == (g_fault & APP_FAULT_REACQUIRE_FAIL), "rejoin finished at ~6.3 s -> FOLLOW (no fault)");
+  CHECK("S5-U39", 20000u == MISSION_FR9_LIMIT_MS, "FR9 limit is 20 s");
+  /* S5-U41 (on-car 2026-11-04 14:16): the rejoin crossing measured 49 mm
+     (both sensors OR-ed at 45 deg) and was rejected (want 25 +- 8), so
+     the car drove over its line and faulted REACQUIRE_FAIL.           */
+  to_ready(); mot.motion_state = APP_MOT_BRAKE; to_run(); g_fault = 0;
+  safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP;
+  EV(APP_EVT_OBSTACLE, 0); NONE(); idle_ms(200);
+  obs.plan_side = APP_SIDE_LEFT; obs.leg_lateral_mm = 176u; obs.leg_forward_mm = 632u;
+  EV(APP_EVT_PLAN, APP_SIDE_LEFT); DONE(); DONE(); DONE(); DONE(); DONE();
+  CHECK("S5-U41", !strcmp(mlog, "F322 "), "rejoin drive started");
+  mot.path_counts += odometry_mm_to_counts(250u);
+  EV(APP_EVT_LINE_FOUND, 10u); CHECK("S5-U41", !strcmp(mlog, ""), "10 mm (barcode bar) in the window: rejected, keeps driving");
+  EV(APP_EVT_LINE_FOUND, 90u); CHECK("S5-U41", !strcmp(mlog, ""), "90 mm (along the line): rejected");
+  EV(APP_EVT_LINE_FOUND, 49u); CHECK("S5-U41", !strcmp(mlog, "STOP0 F60 ") && APP_SYS_RUN == g_ctx.sys_state, "49 mm (the car's real crossing): accepted, advance 60");
+  DONE(); DONE(); CHECK("S5-U41", APP_RUN_FOLLOW == g_ctx.run_state && 0u == (g_fault & APP_FAULT_REACQUIRE_FAIL), "back to FOLLOW, no REACQUIRE_FAIL");
+  /* S5-U40: slower cruise (professor feedback) */
+  CHECK("S5-U40", (120 == MOTION_CRUISE_MM_S) && (MOTION_SLOW_MM_S < MOTION_CRUISE_MM_S), "cruise 120 mm/s, 'slow' stays below cruise");
   printf("[TEST] S5-U07 mission simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
   { int p0 = pass_n, f0 = fail_n;
     /* S5-U04 (moved from target, Fix 3): flood K4 from one task */

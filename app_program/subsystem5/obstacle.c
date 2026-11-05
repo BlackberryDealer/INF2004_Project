@@ -98,6 +98,10 @@ static volatile uint8_t         g_echo_window_open = 0u;
 static uint32_t           g_state         = APP_SCAN_MONITOR;
 static uint32_t           g_prev_mm       = APP_DIST_NONE_MM;
 static uint32_t           g_lost          = 0u;
+/* Last real echo distance in APPROACH (S5-U38): lost pings mean "too
+   close to measure" only when that echo was already inside the stop
+   distance; after a farther echo they mean nothing is in range.      */
+static uint32_t           g_echo_mm       = APP_DIST_NONE_MM;
 static uint32_t           g_silent        = 0u;
 static uint32_t           g_warmup_left   = OBS_WARMUP_PINGS; /* S5-U30 */
 static uint32_t           g_far           = 0u;
@@ -128,6 +132,7 @@ static void     obstacle_echo_isr(uint32_t events, uint32_t now_us);
 static void     obstacle_ping(obstacle_reading_t * p_rd);
 static bool     obstacle_wait_echo(uint8_t done0);
 static void     obstacle_read_record(obstacle_echo_t * p_rec);
+static void     obstacle_scan_log(void);
 static uint32_t obstacle_width_to_mm(uint32_t width_4us);
 static uint32_t obstacle_round_mm(uint32_t distance_mm);
 static void     obstacle_modes(uint32_t * p_rising);
@@ -615,8 +620,9 @@ static void obstacle_modes(uint32_t * p_rising)
 static void obstacle_enter(uint32_t state)
 {
     g_state = state;
-    g_far   = 0u;
-    g_lost  = 0u;
+    g_far     = 0u;
+    g_lost    = 0u;
+    g_echo_mm = APP_DIST_NONE_MM;
 
     if ((APP_SCAN_MONITOR == state) || (APP_SCAN_PASSING == state))
     {
@@ -652,22 +658,49 @@ static void obstacle_step_monitor(obstacle_reading_t const * p_rd)
     {
         (void) mission_post_event(APP_EVT_OBSTACLE_AHEAD, 0u); /* counted */
         obstacle_enter(APP_SCAN_APPROACH);
+        g_echo_mm = p_rd->distance_mm;
+        /* Bring-up diagnosis: what started the slow-down.
+           cast: distance 0..2047 mm fits int32_t                       */
+        app_log("OBSTACLE AHEAD: distance %d mm, slowing down\n",
+                (int32_t) p_rd->distance_mm, 0, 0);
     }
 }
 
 /**
  * obstacle_step_approach
  * @brief   APPROACH: confirmed under OBS_STOP_MM, or two lost echoes in a
- *          row -> ESTOP first, then OBSTACLE. Two far readings -> CONTINUE.
+ *          row after an echo already under OBS_STOP_MM (too close to
+ *          measure) -> ESTOP first, then OBSTACLE. Two far readings ->
+ *          CONTINUE; a lost echo after a farther echo counts as far.
+ * @note    On an open track every ping is lost (the echo pulse outlasts
+ *          the 40 ms window), so treating every lost ping as "too close"
+ *          stopped the car on a clear track after one stray echo under
+ *          OBS_SLOW_MM (on-car 2026-11-04, S5-U38). In 2 pings the car
+ *          moves <= 36 mm, so from an echo >= OBS_STOP_MM it cannot have
+ *          reached the sensor's blind zone.
  * @param   p_rd this cycle's reading
  * @context obstacle_task
  */
 static void obstacle_step_approach(obstacle_reading_t const * p_rd)
 {
-    g_lost = p_rd->b_is_lost ? (g_lost + 1u) : 0u;
-    g_far  = ((!p_rd->b_is_lost)
-              && (p_rd->distance_mm > (OBS_SLOW_MM + OBS_CLEAR_HYST_MM)))
-             ? (g_far + 1u) : 0u;
+    bool b_is_far = false;
+
+    if (!p_rd->b_is_lost)
+    {
+        g_echo_mm = p_rd->distance_mm;
+        g_lost    = 0u;
+        b_is_far  = (p_rd->distance_mm > (OBS_SLOW_MM + OBS_CLEAR_HYST_MM));
+    }
+    else if (g_echo_mm < OBS_STOP_MM)
+    {
+        g_lost++;                         /* too close to measure */
+    }
+    else
+    {
+        g_lost   = 0u;
+        b_is_far = true;                  /* nothing in range */
+    }
+    g_far = b_is_far ? (g_far + 1u) : 0u;
 
     if ((p_rd->b_is_confirmed && (p_rd->distance_mm < OBS_STOP_MM))
         || (g_lost >= OBS_LOST_PINGS))
@@ -900,6 +933,7 @@ static void obstacle_scan_finish(void)
     app_log("SCAN %d ms out %d inferred 0x%x\n",
             (int32_t) ((sys_tick_now_us() - g_scan_start_us) / OBS_US_PER_MS),
             (int32_t) plan.outcome, (int32_t) g_inferred);
+    obstacle_scan_log();
 
     if (OBS_OUT_PLAN == plan.outcome)
     {
@@ -916,6 +950,45 @@ static void obstacle_scan_finish(void)
         drv_servo_set_deg(OBS_CENTRE_DEG);
         obstacle_enter(APP_SCAN_STOPPED);
     }
+}
+
+/**
+ * obstacle_scan_log
+ * @brief   Bring-up diagnosis: the nearest measured scan point, its servo
+ *          angle and which steps counted as near. A constant short echo
+ *          at 30 or 150 deg on a clear track means the sensor sees part
+ *          of the car there.
+ * @context obstacle_task (once per scan)
+ */
+static void obstacle_scan_log(void)
+{
+    uint32_t nearest = APP_PROFILE_CLEAR_MM;
+    uint32_t at_step = 0u;
+    uint32_t near_mask = 0u;
+
+    for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)
+    {
+        if (0u != (g_measured & (1u << idx)))
+        {
+            if (g_obs_scan[idx] < nearest)
+            {
+                nearest = g_obs_scan[idx];
+                at_step = idx;
+            }
+            if (g_obs_scan[idx] < OBS_NEAR_MM)
+            {
+                near_mask |= (1u << idx);
+            }
+        }
+    }
+
+    /* casts: <= 1020 mm, 30..150 deg and a 25-bit mask fit int32_t */
+    app_log("SCAN nearest %d mm at %d deg, near steps 0x%x (step n = "
+            "30 + 5n deg)\n",
+            (int32_t) nearest,
+            (int32_t) (APP_SCAN_ANGLE_MIN_DEG
+                       + (APP_SCAN_ANGLE_STEP_DEG * at_step)),
+            (int32_t) near_mask);
 }
 
 /**

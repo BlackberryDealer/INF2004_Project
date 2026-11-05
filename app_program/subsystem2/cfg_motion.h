@@ -31,13 +31,19 @@
 
 /* ---- Speeds and command limits (NFR15, NFR16) ------------------------ */
 /* Cruise 250 -> 180 mm/s (team decision 2026-11-03): at 250 the car ran
-   off the line on curves. NFR15 (cruise >= 250) must be updated to match
-   in the requirements and traceability.                               */
-#define MOTION_CRUISE_MM_S            (180)    /* NFR15 (revised), TUNE */
-#define MOTION_SLOW_MM_S              (150)    /* NFR15 turns/search  */
+   off the line on curves. 180 -> 120 mm/s (2026-11-04): the professor's
+   feedback was that the car still moves too fast. The "slow" speed (armed
+   barcode, after a bypass) moves 150 -> 100 so it stays below cruise.
+   NFR15 (cruise >= 250) must be updated to match in the requirements and
+   traceability.                                                        */
+#define MOTION_CRUISE_MM_S            (120)    /* NFR15 (revised), TUNE */
+#define MOTION_SLOW_MM_S              (100)    /* armed / after bypass  */
 #define MOTION_FOLLOW_MAX_MM_S        (300)
 #define MOTION_MOVE_SPEED_MM_S        (150)    /* NFR16 bypass legs   */
 #define MOTION_TURN_SPEED_MM_S        (150)
+#if (MOTION_SLOW_MM_S >= MOTION_CRUISE_MM_S)
+#error "The slow follow speed must stay below cruise"
+#endif
 #define MOTION_REVERSE_SPEED_MM_S     (100)    /* NFR16               */
 #define MOTION_REVERSE_MAX_MM         (150)    /* NFR16               */
 #define MOTION_MOVE_MAX_MM            (2047)
@@ -57,7 +63,9 @@
 /* ---- Control gains (Q8 = value x 256) -------------------------------- */
 /* 5 -> 3 (on-car 2026-11-03): at 5 a full error turned the car at about
    115 deg/s and it swayed on straights; the damping is in line_track.c. */
-#define MOTION_KP_STEER_Q8            (3)    /* TUNE: cpw/steer unit x256 */
+/* 3 -> 2 (on-car 2026-11-04, S2-U25): corrections too violent, the car
+   shook left and right on the line. A full error now gives +-7.8 cpw. */
+#define MOTION_KP_STEER_Q8            (2)    /* TUNE: cpw/steer unit x256 */
 /* Curve slow-down (on-car 2026-11-03: with KP 3 the car swung and jerked
    on curves; a higher KP swayed on straights). In FOLLOW the base speed
    drops in proportion to |steering|, by MOTION_CURVE_SLOW_PCT at full

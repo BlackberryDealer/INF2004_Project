@@ -30,7 +30,10 @@ ER tk_loc_mtx(ID id, TMO t) { (void) id; (void) t; return E_OK; }
 ER tk_unl_mtx(ID id) { (void) id; return E_OK; }
 ID app_start_task(FP e, PRI p, uint64_t *s, uint32_t b, char const *n) { (void)e;(void)p;(void)s;(void)b;(void)n; return 1; }
 void app_check(ER e, char const *w) { (void) e; (void) w; }
-void app_log(char const *f, int32_t a, int32_t b, int32_t c) { printf("   log: "); printf(f, a, b, c); }
+static char g_logbuf[8192]; static size_t g_loglen;   /* console capture */
+void app_log(char const *f, int32_t a, int32_t b, int32_t c) { char line[256]; int n = snprintf(line, sizeof(line), f, a, b, c);
+  printf("   log: %s", line); if ((n > 0) && (g_loglen + (size_t) n < sizeof(g_logbuf))) { memcpy(g_logbuf + g_loglen, line, (size_t) n + 1u); g_loglen += (size_t) n; } }
+static void log_clear(void) { g_loglen = 0; g_logbuf[0] = 0; }
 ER sys_tick_register(uint32_t s, ID t) { (void) s; (void) t; return E_OK; }
 void sys_tick_cycle_start(uint32_t s) { (void) s; }
 uint32_t sys_tick_now_us(void) { return g_now; }
@@ -52,7 +55,9 @@ bool mission_mode_is_set(uint32_t b) {
 bool gpio_get(uint32_t pin) { (void) pin; return g_echo_high; }
 uint32_t in_w(uint32_t port) { (void) port; return g_echo_high ? (1u << PIN_US_ECHO) : 0u; }
 /* world */
-static int w_mode;                 /* 0 = fixed distance, 1 = face, 2 = silent */
+static int w_mode;                 /* 0 = fixed distance, 1 = face, 2 = silent,
+                                      3 = open track: echo rises, still high
+                                      at the 40 ms timeout (car: "lost 1") */
 static uint32_t w_dist = 1000;
 static int32_t w_y = 240, w_xl = -60, w_xr = 80;
 static uint32_t world_mm(void) {
@@ -64,6 +69,7 @@ static uint32_t world_mm(void) {
 void drv_ultrasonic_trigger(void) {
   uint32_t d, w;
   if (2 == w_mode) return;
+  if (3 == w_mode) { obstacle_echo_isr(DRV_GPIO_IRQ_RISE, g_now + 500u); return; }
   d = world_mm(); w = (uint32_t) ((double) d * 5.8);
   if (w > 38000u) w = 38000u;
   obstacle_echo_isr(DRV_GPIO_IRQ_RISE, g_now + 500u);
@@ -134,17 +140,42 @@ int main(void) {
           "CAL_IR cleared (RUN): same 100 mm -> ESTOP, STOPPED");
     g_motor_en = false; cyc(); g_motor_en = true;
     g_safety = 0; nev = 0; w_dist = 1000; cyc(); cyc(); nev = 0; g_fault = 0; }
+  /* S5-U37 (on-car 2026-11-04, Dylan): the car stopped only ~180 mm from
+     the obstacle; detect it earlier and stop at about 40 cm. Approaching
+     from 420 mm at ~10 mm per ping must end STOPPED by ~390 mm.        */
+  { int stopped = 0;
+    w_mode = 0; w_dist = 1000; cyc(); cyc(); nev = 0; g_safety = 0;
+    for (uint32_t d = 420u; (d >= 380u) && (0 == stopped); d -= 10u)
+    {
+        w_dist = d; cyc();
+        if (APP_SCAN_STOPPED == g_state) { stopped = (int) d; }
+    }
+    printf("   S5-U37: stopped at %d mm (0 = not stopped by 380)\n", stopped);
+    CHECK("S5-U37", (stopped >= 380) && (1 == count_ev(APP_EVT_OBSTACLE))
+          && (0u != (g_safety & SAFETY_ESTOP)),
+          "obstacle approached from 420 mm: ESTOP + OBSTACLE by ~390 mm");
+    CHECK("S5-U37", (OBS_STOP_MM >= 380u) && (OBS_STOP_MM <= 420u)
+          && (OBS_SLOW_MM >= (OBS_STOP_MM + 150u))
+          && (OBS_NEAR_MM >= OBS_SLOW_MM),
+          "stop ~400 mm, slow-down starts >= 150 mm earlier, scan 'near' covers it");
+    g_motor_en = false; cyc(); g_motor_en = true;
+    g_safety = 0; nev = 0; w_dist = 1000; cyc(); cyc(); nev = 0; g_fault = 0; }
   w_mode = 0; w_dist = 1000; cyc(); cyc();
   CHECK("S5-U08", APP_SCAN_MONITOR == g_state && 0 == nev && 1000u == dist(), "far object: MONITOR, 1000 mm measured");
-  w_dist = 300; cyc(); CHECK("S5-U08", 300u == dist() && APP_SCAN_MONITOR == g_state, "300 mm, not yet confirmed");
-  w_dist = 290; cyc(); CHECK("S5-U08", APP_SCAN_APPROACH == g_state && 1 == count_ev(APP_EVT_OBSTACLE_AHEAD), "two agreeing readings < 400 -> OBSTACLE_AHEAD");
-  w_dist = 300; cyc(); w_dist = 245; cyc(); CHECK("S5-U08", APP_SCAN_APPROACH == g_state, "245 right after 300 is not confirmed");
-  w_dist = 240; cyc();
-  CHECK("S5-U08", APP_SCAN_STOPPED == g_state && 1 == count_ev(APP_EVT_OBSTACLE), "confirmed < 251 -> OBSTACLE, STOPPED");
+  /* distances moved up with the 2026-11-04 thresholds (S5-U37):
+     slow-down below OBS_SLOW_MM 600, stop below OBS_STOP_MM ~401      */
+  w_dist = 452; cyc(); CHECK("S5-U08", 452u == dist() && APP_SCAN_MONITOR == g_state, "452 mm, not yet confirmed");
+  w_dist = 440; cyc(); CHECK("S5-U08", APP_SCAN_APPROACH == g_state && 1 == count_ev(APP_EVT_OBSTACLE_AHEAD), "two agreeing readings < 600 -> OBSTACLE_AHEAD");
+  w_dist = 452; cyc(); w_dist = 395; cyc(); CHECK("S5-U08", APP_SCAN_APPROACH == g_state, "395 right after 452 is not confirmed");
+  w_dist = 390; cyc();
+  CHECK("S5-U08", APP_SCAN_STOPPED == g_state && 1 == count_ev(APP_EVT_OBSTACLE), "confirmed < ~401 -> OBSTACLE, STOPPED");
   CHECK("S5-U08", (evsafety[nev - 1] & SAFETY_ESTOP) != 0u, "ESTOP set before OBSTACLE was posted");
   g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN; w_mode = 1;
   cyc(); CHECK("S5-U08", APP_SCAN_COARSE == g_state && 30u == g_servo, "RESCAN rise -> COARSE at 30 deg");
+  log_clear();
   for (int i = 0; i < 120 && (APP_SCAN_COARSE == g_state || APP_SCAN_FINE == g_state); i++) cyc();
+  /* S5-U38: the scan prints its nearest point (face 240 mm straight ahead) */
+  CHECK("S5-U38", NULL != strstr(g_logbuf, "SCAN nearest 240 mm at 90 deg"), "scan log names the nearest point and its angle");
   CHECK("S5-U25", APP_SCAN_WATCH_SETTLE == g_state && 0 == count_ev(APP_EVT_PLAN) && 30u == g_servo, "scan done -> WATCH_SETTLE, servo at watch angle, PLAN not posted yet");
   cyc(); cyc(); cyc(); CHECK("S5-U25", 0 == count_ev(APP_EVT_PLAN), "no PLAN before OBS_WATCH_SETTLE_PINGS cycles");
   cyc(); CHECK("S5-U25", 1 == count_ev(APP_EVT_PLAN) && APP_SIDE_LEFT == evv[nev - 1] && APP_SCAN_BYPASS_WATCH == g_state, "PLAN(left) after exactly 4 cycles -> BYPASS_WATCH");
@@ -172,7 +203,7 @@ int main(void) {
   { int ok = 1; for (int i = 0; i < 5; i++) { cyc(); if (APP_DIST_NONE_MM != dist()) ok = 0; } CHECK("S5-U26", ok, "5 silent pings all read APP_DIST_NONE_MM, never the cached 600 mm"); }
   CHECK("S5-U26", 0u != (g_fault & APP_FAULT_NO_ECHO), "silent sensor -> FAULT_NO_ECHO");
   /* S5-U24: echo line stuck high: no trigger, silent */
-  w_mode = 0; w_dist = 500; cyc(); cyc(); g_fault = 0; g_echo_high = true;
+  w_mode = 0; w_dist = 800; cyc(); cyc(); g_fault = 0; g_echo_high = true; /* 800: above OBS_SLOW_MM (600 since 2026-11-04) */
   { int ok = 1; for (int i = 0; i < 5; i++) { cyc(); if (APP_DIST_NONE_MM != dist()) ok = 0; } CHECK("S5-U24", ok, "ECHO held high: no measurement accepted"); }
   CHECK("S5-U24", 0u != (g_fault & APP_FAULT_NO_ECHO), "stuck sensor reported silent -> NO_ECHO");
   g_echo_high = false;
@@ -198,9 +229,26 @@ int main(void) {
       obstacle_echo_isr(DRV_GPIO_IRQ_FALL, g_now + 3000u + 580u);
       CHECK("S5-U17", (uint8_t) (done_before + 1u) == g_echo_done_cnt && g_echo.b_is_valid && 100u == obstacle_width_to_mm(g_echo.width_4us), "... and its real fall then measures normally (100 mm)");
       g_echo_window_open = 0u; gb_is_rise_armed = false; } }
-  /* lost echoes in APPROACH stop the robot */
-  w_mode = 0; w_dist = 350; g_safety = 0; cyc(); cyc(); CHECK("S5-U08", APP_SCAN_APPROACH == g_state, "approach again");
-  w_mode = 2; cyc(); cyc(); CHECK("S5-U08", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP), "2 lost echoes in APPROACH -> ESTOP");
+  /* S5-U38 (on-car 2026-11-04 13:09, clear track): a stray echo under
+     600 mm started APPROACH, then the open track's normal lost pings
+     ("US dist 2044 mm, lost 1") were read as "too close to measure":
+     OBSTACLE STOP (ESTOP), distance 2044 mm, lost echoes 2.           */
+  g_motor_en = false; cyc(); g_motor_en = true; g_fault = 0; g_silent = 0;
+  w_mode = 3; g_safety = 0; nev = 0; cyc(); cyc();
+  CHECK("S5-U38", APP_SCAN_MONITOR == g_state && 0 == nev && APP_DIST_NONE_MM == dist() && 0u == g_fault, "open track: lost pings in MONITOR, no event, no fault");
+  w_mode = 0; w_dist = 500; log_clear(); cyc(); cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state && NULL != strstr(g_logbuf, "OBSTACLE AHEAD: distance 500 mm"), "stray echo 500 mm -> APPROACH, logged");
+  { int ok = 1; w_mode = 3;
+    for (int i = 0; i < 2; i++) { cyc(); if (0u != (g_safety & SAFETY_ESTOP)) ok = 0; }
+    CHECK("S5-U38", ok && 0 == count_ev(APP_EVT_OBSTACLE) && 1 == count_ev(APP_EVT_CONTINUE) && APP_SCAN_MONITOR == g_state, "then 2 open-track lost pings: no ESTOP, CONTINUE, MONITOR"); }
+  w_mode = 0; w_dist = 500; cyc(); cyc(); nev = 0;
+  w_mode = 2; cyc(); cyc(); CHECK("S5-U38", 0u == (g_safety & SAFETY_ESTOP) && APP_SCAN_MONITOR == g_state, "approach at 500 then 2 silent pings: no ESTOP");
+  /* lost echoes right after an echo inside the stop distance still stop
+     (too close to measure). 395 after 452 is not confirmed, so it does
+     not stop by itself.                                                */
+  g_fault = 0; g_silent = 0; w_mode = 0; w_dist = 452; cyc(); w_dist = 440; cyc(); nev = 0;
+  w_dist = 452; cyc(); w_dist = 395; cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state && 0u == (g_safety & SAFETY_ESTOP), "395 unconfirmed after 452: still approaching");
+  w_mode = 3; cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state, "1 lost ping after 395: keep approaching");
+  cyc(); CHECK("S5-U38", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP) && 1 == count_ev(APP_EVT_OBSTACLE), "2 lost pings after an echo under the stop distance -> ESTOP, OBSTACLE");
   printf("[TEST] S5-U08 obstacle simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
   return fail_n;
 }
