@@ -113,6 +113,9 @@ static uint32_t           g_scan_start_us = 0u;
 static uint32_t           g_measured      = 0u;   /* bit n: step measured */
 static uint32_t           g_inferred      = 0u;   /* bit n: step filled   */
 static uint32_t           g_dist_log_cnt  = 0u;   /* bring-up print divider */
+static bool               gb_on_ramp      = false; /* S5-U39 ramp state    */
+static uint32_t           g_ramp_hold     = 0u;   /* pings after ramp     */
+static uint32_t           g_ramp_mark     = 0u;   /* path at last pitch   */
 static uint16_t           g_obs_scan[APP_SCAN_STEPS];
 static status_board_obs_t g_part =
 {
@@ -136,6 +139,7 @@ static void     obstacle_scan_log(void);
 static uint32_t obstacle_width_to_mm(uint32_t width_4us);
 static uint32_t obstacle_round_mm(uint32_t distance_mm);
 static void     obstacle_modes(uint32_t * p_rising);
+static void     obstacle_update_ramp(bool b_is_armed);
 static void     obstacle_enter(uint32_t state);
 static void     obstacle_step_monitor(obstacle_reading_t const * p_rd);
 static void     obstacle_step_approach(obstacle_reading_t const * p_rd);
@@ -263,6 +267,7 @@ static void obstacle_cycle(void)
        stay live while unarmed.                                          */
     b_is_armed = mission_mode_is_set(APP_MODE_MOTOR_EN)
                  && (!mission_mode_is_set(APP_MODE_CAL_IR));
+    obstacle_update_ramp(b_is_armed);
 
     if (0u != (rising & OBS_SEEN_RESUME))
     {
@@ -612,6 +617,67 @@ static void obstacle_modes(uint32_t * p_rising)
 }
 
 /**
+ * obstacle_update_ramp
+ * @brief   Tracks whether the car is climbing, descending, or exiting a
+ *          ramp/hump (S5-U39). Holds gb_on_ramp for OBS_RAMP_HOLD_PINGS
+ *          (and OBS_RAMP_CLEAR_MM when odometry moves) after levelling off
+ *          so the ramp crest and bottom exit do not trigger a false stop.
+ * @param   b_is_armed true while obstacle detection is armed
+ * @context obstacle_task
+ */
+static void obstacle_update_ramp(bool b_is_armed)
+{
+    status_board_t snap      = {0};
+    uint32_t       mclass    = 0u;
+    int32_t        pitch     = 0;
+    uint32_t       path_now  = 0u;
+    uint32_t       done_mm   = 0u;
+    bool           b_pitched = false;
+
+    if (!b_is_armed)
+    {
+        gb_on_ramp  = false;
+        g_ramp_hold = 0u;
+        return;
+    }
+
+    status_board_read(&snap);
+    mclass   = status_board_motion_class(&snap);
+    pitch    = status_board_pitch(&snap);
+    path_now = status_board_path(&snap);
+
+    b_pitched = (APP_MCLASS_CLIMBING == mclass)
+                || (APP_MCLASS_DESCENDING == mclass)
+                || (pitch >= OBS_RAMP_PITCH_DDEG)
+                || (pitch <= -OBS_RAMP_PITCH_DDEG)
+                || (status_board_hump_now(&snap) > 0u);
+
+    if (b_pitched)
+    {
+        gb_on_ramp  = true;
+        g_ramp_hold = OBS_RAMP_HOLD_PINGS;
+        g_ramp_mark = path_now;
+    }
+    else if (gb_on_ramp)
+    {
+        if (g_ramp_hold > 0u)
+        {
+            g_ramp_hold--;
+        }
+        done_mm = odometry_counts_to_mm(path_now - g_ramp_mark);
+        if ((0u == g_ramp_hold)
+            && ((done_mm >= OBS_RAMP_CLEAR_MM) || (path_now == g_ramp_mark)))
+        {
+            gb_on_ramp = false;
+        }
+    }
+    else
+    {
+        /* flat ground */
+    }
+}
+
+/**
  * obstacle_enter
  * @brief   Changes scanner state and does its entry action.
  * @param   state APP_SCAN_*
@@ -654,7 +720,8 @@ static void obstacle_enter(uint32_t state)
  */
 static void obstacle_step_monitor(obstacle_reading_t const * p_rd)
 {
-    if (p_rd->b_is_confirmed && (p_rd->distance_mm < OBS_SLOW_MM))
+    if ((!gb_on_ramp) && p_rd->b_is_confirmed
+        && (p_rd->distance_mm < OBS_SLOW_MM))
     {
         (void) mission_post_event(APP_EVT_OBSTACLE_AHEAD, 0u); /* counted */
         obstacle_enter(APP_SCAN_APPROACH);
@@ -684,6 +751,18 @@ static void obstacle_step_monitor(obstacle_reading_t const * p_rd)
 static void obstacle_step_approach(obstacle_reading_t const * p_rd)
 {
     bool b_is_far = false;
+
+    if (gb_on_ramp)
+    {
+        /* Front wheels pitched onto a ramp during approach (S5-U39):
+           restore cruise speed and return to MONITOR.                  */
+        /* cast: distance 0..2047 mm fits int32_t */
+        app_log("RAMP detected in APPROACH: distance %d mm, continuing\n",
+                (int32_t) p_rd->distance_mm, 0, 0);
+        (void) mission_post_event(APP_EVT_CONTINUE, 0u);   /* counted */
+        obstacle_enter(APP_SCAN_MONITOR);
+        return;
+    }
 
     if (!p_rd->b_is_lost)
     {
@@ -908,6 +987,20 @@ static void obstacle_scan_finish(void)
     obstacle_fill_gaps();
     obs_profile_build(g_obs_scan, &prof);
     obs_profile_plan(&prof, &plan);
+    /* S5-U39: if the car pitched onto a ramp while braking, or the scan
+       saw only a narrow normal-incidence glint (< OBS_MIN_WIDTH_MM) off
+       the sloped ramp face, treat it as a ramp and drive on (PASSING)
+       instead of turning off the track or faulting.                    */
+    if ((OBS_OUT_CONTINUE != plan.outcome)
+        && (gb_on_ramp
+            || (prof.b_is_valid && (prof.width_mm < OBS_MIN_WIDTH_MM))))
+    {
+        /* casts: width 0..1020 mm, flag 0..1 fit int32_t */
+        app_log("RAMP/GLINT in scan (width %d mm, on_ramp %d): continuing\n",
+                (int32_t) prof.width_mm, gb_on_ramp ? 1 : 0, 0);
+        plan.outcome       = OBS_OUT_CONTINUE;
+        plan.b_was_clamped = false;
+    }
     if (plan.b_was_clamped)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);

@@ -79,6 +79,18 @@
 #define OBS_LEG_LAT_MAX_MM     (300u)    /* NFR16 plan limit */
 #define OBS_LEG_FWD_MAX_MM     (800u)    /* NFR16 plan limit */
 
+/* ---- ramp vs. obstacle discrimination (S5-U39) ----------------------- */
+/* While climbing or descending a ramp/hump (or within OBS_RAMP_CLEAR_MM /
+   OBS_RAMP_HOLD_PINGS after levelling off), the ultrasonic beam hits the
+   inclined ramp face or the floor at the foot of the down-slope. A sloped
+   ramp scanned from flat ground before the wheels touch it also returns
+   only a narrow normal-incidence glint (< OBS_MIN_WIDTH_MM, whereas real
+   obstacles are >= 80 mm wide per A29).                                  */
+#define OBS_RAMP_PITCH_DDEG    (20)      /* 2.0 deg (above 1.5 deg level) */
+#define OBS_RAMP_HOLD_PINGS    (8u)      /* ~480 ms hold across crest/exit */
+#define OBS_RAMP_CLEAR_MM      (150u)    /* flat travel to re-arm after   */
+#define OBS_MIN_WIDTH_MM       (28u)     /* < 28 mm scan glint = ramp     */
+
 /* ---- servo (SG90, A9) ------------------------------------------------- */
 #define OBS_SERVO_MIN_US       (500u)
 #define OBS_SERVO_MAX_US       (2500u)

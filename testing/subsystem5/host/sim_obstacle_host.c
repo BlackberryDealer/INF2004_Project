@@ -249,6 +249,34 @@ int main(void) {
   w_dist = 452; cyc(); w_dist = 395; cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state && 0u == (g_safety & SAFETY_ESTOP), "395 unconfirmed after 452: still approaching");
   w_mode = 3; cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state, "1 lost ping after 395: keep approaching");
   cyc(); CHECK("S5-U38", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP) && 1 == count_ev(APP_EVT_OBSTACLE), "2 lost pings after an echo under the stop distance -> ESTOP, OBSTACLE");
+  /* S5-U39 (ramp vs. obstacle):
+     1. Approaching a ramp where the IMU pitches up during APPROACH ->
+        posts CONTINUE, returns to MONITOR, and ignores < 401 mm echoes
+        while climbing, descending, and during the hold window.
+     2. Stopping in front of a sloped ramp before the wheels touch it,
+        where the scan sees only a narrow normal-incidence glint at 90 deg
+        (width < OBS_MIN_WIDTH_MM) -> posts CONTINUE, enters PASSING.     */
+  { status_board_imu_t imu_part = {0};
+    g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; g_fault = 0; nev = 0;
+    w_mode = 0; w_dist = 500; cyc(); cyc();
+    CHECK("S5-U39", APP_SCAN_APPROACH == g_state && 1 == count_ev(APP_EVT_OBSTACLE_AHEAD), "ramp at 500 mm on flat -> APPROACH");
+    imu_part.pitch_ddeg = 35; imu_part.motion_class = APP_MCLASS_CLIMBING;
+    status_board_write_imu(&imu_part);
+    w_dist = 350; cyc();
+    CHECK("S5-U39", APP_SCAN_MONITOR == g_state && 1 == count_ev(APP_EVT_CONTINUE) && 0u == (g_safety & SAFETY_ESTOP), "front wheels pitch onto ramp -> CONTINUE, back to MONITOR, no ESTOP");
+    imu_part.pitch_ddeg = -35; imu_part.motion_class = APP_MCLASS_DESCENDING;
+    status_board_write_imu(&imu_part);
+    w_dist = 300; cyc(); cyc();
+    CHECK("S5-U39", APP_SCAN_MONITOR == g_state && 0 == count_ev(APP_EVT_OBSTACLE) && 0u == (g_safety & SAFETY_ESTOP), "descending ramp (nose down at floor 300 mm ahead) -> ignored");
+    imu_part.pitch_ddeg = 0; imu_part.motion_class = APP_MCLASS_CRUISING;
+    status_board_write_imu(&imu_part);
+    for (uint32_t i = 0; i < OBS_RAMP_HOLD_PINGS; i++) { cyc(); }
+    w_dist = 380; cyc(); cyc();
+    CHECK("S5-U39", APP_SCAN_STOPPED == g_state && 1 == count_ev(APP_EVT_OBSTACLE), "after ramp hold expires on flat ground, 380 mm obstacle stops normally");
+    nev = 0; g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN;
+    w_mode = 1; w_y = 350; w_xl = -5; w_xr = 5;   /* narrow 90 deg ramp glint */
+    for (int i = 0; i < 120 && (APP_SCAN_COARSE == g_state || APP_SCAN_FINE == g_state || APP_SCAN_STOPPED == g_state); i++) cyc();
+    CHECK("S5-U39", APP_SCAN_PASSING == g_state && 1 == count_ev(APP_EVT_CONTINUE) && 0 == count_ev(APP_EVT_PLAN), "narrow 90 deg ramp glint (< OBS_MIN_WIDTH_MM) -> CONTINUE, PASSING"); }
   printf("[TEST] S5-U08 obstacle simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
   return fail_n;
 }
