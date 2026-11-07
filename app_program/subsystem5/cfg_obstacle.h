@@ -71,6 +71,11 @@
 /* 400 -> 650 (2026-11-04): the car now stops ~400 mm away, so the
    obstacle's own scan points (further off-axis) must still count.     */
 #define OBS_NEAR_MM            (650u)    /* scan point counts as obstacle */
+/* Neighbouring scan steps whose ranges differ by more than this are two
+   objects (on-car 2026-11-06: a box at 240 mm merged with objects at
+   ~600 mm beside it into one 840 mm "obstacle" -> NO_PATH, S5-U44). A
+   flat face changes < 80 mm per 15 deg coarse step at <= 300 mm.      */
+#define OBS_RUN_JUMP_MM        (150u)
 #define OBS_SIDE_TOO_CLOSE_MM  (60u)
 #define OBS_ROBOT_HALF_W_MM    (75u)     /* MEASURE */
 #define OBS_ROBOT_LEN_MM       (180u)    /* MEASURE */
@@ -79,7 +84,7 @@
 #define OBS_LEG_LAT_MAX_MM     (300u)    /* NFR16 plan limit */
 #define OBS_LEG_FWD_MAX_MM     (800u)    /* NFR16 plan limit */
 
-/* ---- ramp vs. obstacle discrimination (S5-U39) ----------------------- */
+/* ---- ramp vs. obstacle discrimination (S5-U42) ----------------------- */
 /* While climbing or descending a ramp/hump (or within OBS_RAMP_CLEAR_MM /
    OBS_RAMP_HOLD_PINGS after levelling off), the ultrasonic beam hits the
    inclined ramp face or the floor at the foot of the down-slope. A sloped
@@ -90,6 +95,12 @@
 #define OBS_RAMP_HOLD_PINGS    (8u)      /* ~480 ms hold across crest/exit */
 #define OBS_RAMP_CLEAR_MM      (150u)    /* flat travel to re-arm after   */
 #define OBS_MIN_WIDTH_MM       (28u)     /* < 28 mm scan glint = ramp     */
+/* While pitched (gb_on_ramp) the early-stop margin is dropped, but the
+   computed NFR6 minimum still stops the car, so a real obstacle on or
+   right after the ramp is never driven into (S5-U42). The pitch alone
+   never overrides a scan: only a narrow glint does, so a real box still
+   gets the normal reverse / bypass (on-car log 2026-11-05).            */
+#define OBS_RAMP_STOP_MM       (OBS_STOP_MM - OBS_EARLY_STOP_MM) /* 251 */
 
 /* ---- servo (SG90, A9) ------------------------------------------------- */
 #define OBS_SERVO_MIN_US       (500u)
