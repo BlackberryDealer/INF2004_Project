@@ -2,7 +2,9 @@
 
 A web page for testing the car: live state, wheel speeds, line error, pitch,
 faults, link health and the event log, plus START / STOP / RESET / SUMMARY
-buttons that follow the mission statechart. It decodes exactly like
+buttons that follow the mission statechart. Since 2026-11-06 it also shows
+the car's **raw sensors** and its **console lines** over Wi-Fi, so the car
+can be debugged without the USB cable (see "Debugging over Wi-Fi"). It decodes exactly like
 `tools/telem_decode.py` and sends exactly the bytes of `tools/telem_cmd.py`
 (host test S1-U44 checks both).
 
@@ -25,6 +27,7 @@ install: just open `index.html`.
 | `mqtt_ws.js` | MQTT 3.1.1 over WebSocket: connect, subscribe, QoS 0/1, keep-alive |
 | `telem_tables.js` | **generated** by `gen_tables.py`; do not edit |
 | `gen_tables.py` | writes `telem_tables.js` from `telem_fields.py`, `telem_decode.py`, `telem_cmd.py`, `app_types.h`, `cfg_telem.h` |
+| `car_link.py` | run on the laptop: UDP beacon that tells the car the broker's address, serves this page on :8000, checks Mosquitto |
 | `fake_car.py` | pretend car on the broker, for trying the page without hardware |
 | `test_dashboard.py`, `test_decode.js` | host test S1-U44 |
 
@@ -70,12 +73,42 @@ install: just open `index.html`.
 
    The page on the laptop itself (`localhost`) does not need this.
 
+   **The car needs inbound TCP 1883.** Windows treats a newly joined
+   hotspot as a *Public* network, where a rule made for *Private* does not
+   apply. Allow it on every profile once (administrator PowerShell):
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Mosquitto MQTT 1883" -Direction Inbound -Protocol TCP -LocalPort 1883 -Action Allow -Profile Any
+   ```
+
+   (or set the hotspot to *Private* in Settings > Network). Symptom when
+   blocked: the car prints `mqtt: connection status 256` / `retry in ...`
+   although `car_link.py` runs.
+
+4. **(Once)** allow the beacon and the page through the firewall if
+   Windows asks the first time `car_link.py` runs (Python, private
+   network). The beacon is outgoing UDP 18830; the page is TCP 8000.
+
 ## Every session
 
-1. Start Mosquitto (step 2 above) and power the car (built with
-   `NET=lwip MQTT=1`, as for `telem_decode.py`).
-2. Double-click `tools\dashboard\index.html` (Chrome or Edge).
-3. Broker address `localhost`, port `9001`, press **Connect**. The page
+1. Connect the laptop to the hotspot the car joins (`WIFI_SSID` in
+   `config/wifi_secrets.h`).
+2. Start Mosquitto (step 2 above).
+3. Start the link helper and leave it running:
+
+   ```powershell
+   py tools\dashboard\car_link.py
+   ```
+
+   It prints the laptop's address, broadcasts the broker beacon every
+   second and serves the page. **The car takes the broker address from this
+   beacon**, so a new hotspot or a new laptop IP needs no rebuild; without
+   it the car falls back to `MQTT_BROKER_IP` in `wifi_secrets.h`.
+4. Power the car (image built with `NET=lwip MQTT=1`). Its console shows
+   `wifi: link up, ip=...`, `mqtt: broker beacon from <laptop IP>` and
+   `mqtt: connected to <laptop IP> port 1883`.
+5. Open `http://localhost:8000` (or double-click `index.html`). Broker
+   address `localhost`, port `9001`, press **Connect**. The page
    remembers them and reconnects by itself if the broker restarts.
 4. The three pills show where a problem is: **Broker** (page to Mosquitto),
    **Car** (ONLINE / OFFLINE on `c28/a`, OFFLINE is the car's last will) and
@@ -86,12 +119,10 @@ install: just open `index.html`.
 Serve the folder from the laptop and open it by the laptop's IP. The page
 then uses that IP as the broker address automatically:
 
-```powershell
-py -m http.server 8000 --directory tools\dashboard
-```
-
-On the phone (same hotspot): `http://10.14.95.64:8000`. Allow TCP 8000
-through the firewall as in step 3, plus 9001.
+`car_link.py` already serves the folder on port 8000 (without it:
+`py -m http.server 8000 --directory tools\dashboard`). On the phone (same
+hotspot) open `http://<laptop IP>:8000`, the address `car_link.py` prints.
+Allow TCP 8000 through the firewall as in step 3, plus 9001.
 
 ## Using it
 
@@ -140,11 +171,49 @@ time, average speed, end reason, highest hump, faults) and the latest
 SNAPSHOT reply. **Obstacle profile** draws the last PROFILE (bearing,
 width, nearest point, gaps, chosen side).
 
+**Sensors (raw)** is the SENSORS message on `c28/d` (5 Hz, 12 bytes): raw
+IR ADC left / right (with a rough white / edge / black hint), ultrasonic
+distance (slow and stop zones marked; "none" = 2044 mm, nothing in range),
+obstacle scanner state, barcode DO level and edge count, the calibrated
+accelerometer (X / Y / Z in mg) and the watchdog's longest feed gap (limit
+30 ms, warning above 15 ms). **Export sensors CSV** saves every sample of
+the session (up to about an hour) with the car state, for a test record.
+Four more trend charts plot IR raw, ultrasonic distance, accelerometer and
+feed gap.
+
+**Car console** shows every console line of the car (`app_log()`: the same
+text as the USB serial, e.g. `OBSTACLE STOP`, `SCAN nearest`, `LINE LOST`,
+`REJOIN`), sent as LOG messages on `c28/l`. Faults are red, obstacle / line /
+barcode lines amber, state changes blue. "hide periodic status lines" hides
+the `US dist` / `IR raw` / `ENC pos` / `BAR` / `WDT` prints; **Export .txt**
+saves the whole console. If the car's queue overflowed it says so (`(N
+console lines dropped: queue full)`).
+
 **Message log** lists every event, command and result with its time;
 hovering a row shows the exact `telem_decode.py` line. Tick "include STATE
 / HEARTBEAT" for everything, "show bytes" for the raw payloads, and
 **Export CSV** to save the whole session (up to 5000 messages) for a test
 record.
+
+## Debugging over Wi-Fi (2026-11-06)
+
+| Topic | Payload | Rate | What |
+|---|---|---|---|
+| `c28/d` | SENSORS, 12 B binary (`MQ_SENS` in `tools/layout.csv`) | 5 Hz, QoS 0 | raw IR, ultrasonic, scanner, barcode, accelerometer, feed gap |
+| `c28/l` | LOG: header byte `0x49` + one console line (ASCII) | as printed, QoS 0 | every `app_log()` line |
+
+- Both are bring-up diagnostics like the console prints. They are on in
+  images built with `MQTT=1` while `TELEM_DEBUG_MQTT` is 1
+  (`app_program/subsystem1/cfg_telem.h`); set it to 0 for the Week 13
+  message-size evidence, which then shows only the original payloads.
+- Console lines never block the code that prints them: `app_log()` queues
+  the format and arguments (K12, 48 lines) and the radio task formats and
+  publishes them, at most 2 per 50 ms, and only while the MQTT output
+  buffer is at most a quarter full, so telemetry always goes first.
+- `py tools/telem_decode.py` prints both (SENSORS fields, LOG text).
+- The broker beacon is the UDP datagram `C28B 1883` to port 18830
+  (broadcast). The car connects to its sender; while it is connected a new
+  beacon is only noted, and it is used at the next reconnect.
 
 ## Without the car
 
@@ -154,7 +223,8 @@ py tools\dashboard\fake_car.py     # broker on this laptop
 ```
 
 The pretend car boots, calibrates, waits in READY and obeys the page's
-commands like the statechart does; a run passes a hump, a barcode and an
+commands like the statechart does (it also sends SENSORS and console
+lines); a run passes a hump, a barcode and an
 obstacle and ends at the marker after 30 s. `--fault-at 5` raises a
 NO_ECHO fault 5 s into a run to try the FAULT → RESET path. Its numbers are
 plausible, not measured. Do not run it while the real car is on the same

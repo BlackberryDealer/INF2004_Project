@@ -177,6 +177,9 @@ void app_log(char const * p_format, int32_t arg_a, int32_t arg_b,
        character count, so it is ignored.                                */
     (void) tm_printf((UB const *) p_format, (INT) arg_a, (INT) arg_b,
                      (INT) arg_c);
+    /* Wi-Fi console mirror (MQTT images, TELEM_DEBUG_MQTT): queues the
+       format and arguments without waiting; the radio task formats it. */
+    telem_log_post(p_format, arg_a, arg_b, arg_c);
 }
 
 /**

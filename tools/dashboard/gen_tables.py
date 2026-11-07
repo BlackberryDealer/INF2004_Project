@@ -144,6 +144,8 @@ def build():
             "HB": topics["TELEM_TOPIC_HB"],
             "AVAIL": topics["TELEM_TOPIC_AVAIL"],
             "CMD": topics["TELEM_TOPIC_CMD"],
+            "SENS": topics["TELEM_TOPIC_SENS"],
+            "LOG": topics["TELEM_TOPIC_LOG"],
         },
     }
 

@@ -479,6 +479,85 @@
         "-"
        ]
       ],
+      "MQ_SENS": [
+       [
+        "IR_L",
+        12,
+        0,
+        1,
+        "adc"
+       ],
+       [
+        "IR_R",
+        12,
+        0,
+        1,
+        "adc"
+       ],
+       [
+        "US_MM",
+        9,
+        0,
+        4,
+        "mm"
+       ],
+       [
+        "BAR_DO",
+        1,
+        0,
+        1,
+        "flag"
+       ],
+       [
+        "BAR_EDGES",
+        8,
+        0,
+        1,
+        "count"
+       ],
+       [
+        "AX",
+        10,
+        512,
+        4,
+        "mg"
+       ],
+       [
+        "AY",
+        10,
+        512,
+        4,
+        "mg"
+       ],
+       [
+        "AZ",
+        10,
+        512,
+        4,
+        "mg"
+       ],
+       [
+        "WDT_GAP",
+        8,
+        0,
+        250,
+        "us"
+       ],
+       [
+        "SCAN",
+        3,
+        0,
+        1,
+        "code"
+       ],
+       [
+        "PAD",
+        5,
+        0,
+        1,
+        "-"
+       ]
+      ],
       "MQ_MAP": [
        [
         "CHAR",
@@ -528,6 +607,14 @@
       "7": [
        "SNAPSHOT",
        "MQ_SNAP"
+      ],
+      "8": [
+       "SENSORS",
+       "MQ_SENS"
+      ],
+      "9": [
+       "LOG",
+       "TEXT"
       ],
       "16": [
        "CMD_START",
@@ -712,7 +799,9 @@
       "EVENT": "c28/e",
       "HB": "c28/h",
       "AVAIL": "c28/a",
-      "CMD": "c28/c"
+      "CMD": "c28/c",
+      "SENS": "c28/d",
+      "LOG": "c28/l"
      }
     };
     if (typeof module !== "undefined" && module.exports) {

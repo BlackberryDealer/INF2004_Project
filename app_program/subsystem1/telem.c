@@ -20,6 +20,10 @@
 #include "../subsystem2/fault.h"
 #include "../subsystem5/status_board.h"
 #include "../subsystem5/sys_tick.h"
+#include "../subsystem5/sys_health.h"
+#include "../subsystem3/line.h"
+#include "../subsystem3/barcode.h"
+#include "../subsystem4/imu.h"
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -50,6 +54,19 @@
 #define TELEM_TIME_HALF_RANGE (0x80000000u)  /* wrap-safe "has reached" */
 #define TELEM_MM_STEP_SHIFT   (2u)           /* 4 mm fields             */
 
+/* K12: mirrored console lines (format pointer + 3 arguments). Only in
+   images with MQTT and TELEM_DEBUG_MQTT = 1.                          */
+#if defined(TM_MQTT) && (TELEM_DEBUG_MQTT != 0u)
+#define TELEM_LOG_MIRROR      (1u)
+#else
+#define TELEM_LOG_MIRROR      (0u)
+#endif
+#define TELEM_K12_MSG_BYTES   (sizeof(telem_log_rec_t))
+#define TELEM_K12_MBF_WORDS   ((TELEM_K12_ENTRIES \
+                                * (TELEM_MBF_HDR_BYTES + TELEM_K12_MSG_BYTES)) \
+                               / 4u)
+#define TELEM_ACC_MG_STEP     (4)      /* SH_IMU_ACC lsb, mg */
+
 #if ((TELEM_K7_MBF_BYTES % 4u) != 0u) || ((TELEM_K11_MBF_BYTES % 4u) != 0u)
 #error "Telemetry message buffers must be a multiple of 4 bytes"
 #endif
@@ -61,8 +78,9 @@
     ((TELEM_HB_EVERY_N_STATE - 1u) > PRV_TEL_HB_DIV_MAX)
 #error "TELEM_HB_EVERY_N_STATE no longer fits PRV_TEL.HB_DIV: widen it"
 #endif
-#if ((MQ_STATE_BYTES + 1u) > APP_MQ_PAYLOAD_MAX)
-#error "The state payload no longer fits one K11 message"
+#if ((MQ_STATE_BYTES + 1u) > APP_MQ_PAYLOAD_MAX) \
+    || ((MQ_SENS_BYTES + 1u) > APP_MQ_PAYLOAD_MAX)
+#error "The state or sensors payload no longer fits one K11 message"
 #endif
 
 /* ---- private data ---------------------------------------------------- */
@@ -73,6 +91,16 @@ static uint32_t g_telem_k11_mbf_buf[TELEM_K11_MBF_BYTES / 4u];
 
 static ID gh_telem_k7  = 0;
 static ID gh_telem_k11 = 0;
+static ID gh_telem_k12 = 0;   /* 0 = no console mirror in this image */
+
+#if (TELEM_LOG_MIRROR != 0u)
+/* sizeof() of a 16 B (RP2040) record: a multiple of 4 on every target */
+static uint32_t g_telem_k12_mbf_buf[TELEM_K12_MBF_WORDS];
+#endif
+/* K12 drops: every app_log() caller may write it, so it is only an
+   indication (a lost increment under contention is harmless); the
+   radio task reads it to say "N console lines dropped".              */
+static volatile uint8_t g_tel_log_drops = 0u;
 
 /* Rule 1: one writer each. PRV_TEL_K7: mission_task (telem_post_*);
    PRV_TEL (K11 drops, heartbeat divider, uptime): telem_task. Readers
@@ -89,6 +117,8 @@ static TMO      telem_wait_ms(uint32_t next_us, uint32_t now_us);
 static void     telem_forward(uint8_t const * p_msg, uint32_t len);
 static void     telem_send_state(void);
 static void     telem_send_heartbeat(void);
+static void     telem_send_sensors(void);
+static int32_t  telem_acc_mg(uint32_t word, uint32_t pos, uint32_t bits);
 static uint32_t telem_evt_word(uint32_t type, uint32_t value);
 static uint32_t telem_evt_value_max(uint32_t type);
 static void     telem_k7_put_u(app_bits_writer_t * p_wr, uint32_t value,
@@ -134,6 +164,20 @@ ER telem_init(void)
             ercd = (ER) gh_telem_k11;  /* cast: negative ID is an error */
         }
     }
+#if (TELEM_LOG_MIRROR != 0u)
+    if (E_OK == ercd)
+    {
+        cmbf.bufsz   = (SZ) sizeof(g_telem_k12_mbf_buf); /* cast: kernel */
+        cmbf.maxmsz  = (INT) TELEM_K12_MSG_BYTES;        /* cast: kernel */
+        cmbf.bufptr  = g_telem_k12_mbf_buf;
+        gh_telem_k12 = tk_cre_mbf(&cmbf);
+        if (gh_telem_k12 < E_OK)
+        {
+            ercd         = (ER) gh_telem_k12;  /* cast: error code */
+            gh_telem_k12 = 0;
+        }
+    }
+#endif
 
     return ercd;
 }
@@ -323,6 +367,63 @@ ID telem_k11_id(void)
     return gh_telem_k11;
 }
 
+/**
+ * telem_log_post
+ * @brief   Queues one console line for the MQTT mirror without waiting
+ *          (only the format pointer and the arguments; the radio task
+ *          formats it). A full K12 drops the line and counts it.
+ * @param   p_format  app_log() format (string literal / constant table)
+ * @param   arg_a     first argument
+ * @param   arg_b     second argument
+ * @param   arg_c     third argument
+ * @return  none
+ * @context any task (never an ISR); called by app_log()
+ */
+void telem_log_post(char const * p_format, int32_t arg_a, int32_t arg_b,
+                    int32_t arg_c)
+{
+    telem_log_rec_t rec = {NULL, 0, 0, 0};
+
+    if ((0 < gh_telem_k12) && (NULL != p_format))
+    {
+        rec.p_format = p_format;
+        rec.arg_a    = arg_a;
+        rec.arg_b    = arg_b;
+        rec.arg_c    = arg_c;
+        if (E_OK != tk_snd_mbf(gh_telem_k12, &rec,
+                               (INT) sizeof(rec),  /* cast: 16 or 24 */
+                               TMO_POL))
+        {
+            if (g_tel_log_drops < UINT8_MAX)
+            {
+                g_tel_log_drops++;   /* indication only, see the data */
+            }
+        }
+    }
+}
+
+/**
+ * telem_k12_id
+ * @brief   ID of K12 (mirrored console lines) for mqtt_bridge.c.
+ * @return  K12 ID, 0 when the image has no console mirror
+ * @context radio task
+ */
+ID telem_k12_id(void)
+{
+    return gh_telem_k12;
+}
+
+/**
+ * telem_log_drops
+ * @brief   Console lines dropped because K12 was full (saturates at 255).
+ * @return  0..255
+ * @context any task
+ */
+uint32_t telem_log_drops(void)
+{
+    return g_tel_log_drops;
+}
+
 /* ---- private functions ------------------------------------------------ */
 
 /**
@@ -360,6 +461,9 @@ static void telem_task(INT stacd, void * p_exinf)
         {
             next_us += TELEM_STATE_PERIOD_US;
             telem_send_state();
+#if (TELEM_DEBUG_MQTT != 0u)
+            telem_send_sensors();
+#endif
             hb_div = telem_tel_get(PRV_TEL_HB_DIV_POS, PRV_TEL_HB_DIV_BITS)
                      + 1u;
             if (hb_div >= TELEM_HB_EVERY_N_STATE)
@@ -574,6 +678,59 @@ static void telem_send_state(void)
         fault_set(APP_FAULT_RANGE_CLAMP);
     }
     telem_k11_put(out, len);
+}
+
+/**
+ * telem_send_sensors
+ * @brief   Raw sensor readings for debugging without the USB cable: the
+ *          IR pair (line_task's SH_IR_RAW word), the ultrasonic distance
+ *          and scanner state (status board), the barcode DO level and
+ *          edge count, the calibrated accelerometer (imu_task's
+ *          SH_IMU_ACC word) and the watchdog's longest feed gap.
+ * @context telem_task
+ */
+static void telem_send_sensors(void)
+{
+    status_board_t      snap = {0};
+    telem_bin_sensors_t sens = {0};
+    uint8_t             out[TELEM_K11_MSG_BYTES] = {0u};
+    uint32_t const      ir   = line_raw_word();     /* one load each */
+    uint32_t const      acc  = imu_acc_word();
+
+    status_board_read(&snap);
+    sens.ir_raw_l    = app_bits_get(ir, SH_IR_RAW_L_POS, SH_IR_RAW_L_BITS);
+    sens.ir_raw_r    = app_bits_get(ir, SH_IR_RAW_R_POS, SH_IR_RAW_R_BITS);
+    sens.distance_mm = status_board_distance(&snap);
+    sens.scan_state  = status_board_scanner_state(&snap);
+    sens.bar_do      = barcode_do_level();
+    sens.bar_edges   = barcode_edge_count();
+    sens.ax_mg       = telem_acc_mg(acc, SH_IMU_ACC_AX_POS,
+                                    SH_IMU_ACC_AX_BITS);
+    sens.ay_mg       = telem_acc_mg(acc, SH_IMU_ACC_AY_POS,
+                                    SH_IMU_ACC_AY_BITS);
+    sens.az_mg       = telem_acc_mg(acc, SH_IMU_ACC_AZ_POS,
+                                    SH_IMU_ACC_AZ_BITS);
+    sens.wdt_gap_us  = sys_health_feed_gap_max_us(false);  /* no reset */
+
+    telem_k11_put(out, telem_bin_sensors(&sens, out, sizeof(out)));
+}
+
+/**
+ * telem_acc_mg
+ * @brief   One SH_IMU_ACC axis back to mg (the three axes share one
+ *          range and offset).
+ * @param   word  SH_IMU_ACC word
+ * @param   pos   axis _POS
+ * @param   bits  axis _BITS
+ * @return  acceleration, mg (4 mg steps)
+ * @context telem_task
+ */
+static int32_t telem_acc_mg(uint32_t word, uint32_t pos, uint32_t bits)
+{
+    /* cast: a 10-bit code (0..1023) fits int32_t */
+    int32_t const code = (int32_t) app_bits_get(word, pos, bits);
+
+    return (code - SH_IMU_ACC_AX_OFFSET) * TELEM_ACC_MG_STEP;
 }
 
 /**

@@ -46,6 +46,7 @@ from telem_fields import GROUPS  # noqa: E402
 
 T_STATE, T_EVENT, T_HB, T_AVAIL, T_CMD = "c28/s", "c28/e", "c28/h", \
     "c28/a", "c28/c"
+T_SENS, T_LOG = "c28/d", "c28/l"        # debug: raw sensors, console lines
 
 SYS = {n: i for i, n in enumerate(telem_cmd.SYS_NAMES)}
 RUN = {n: i for i, n in enumerate(telem_cmd.RUN_NAMES)}
@@ -134,11 +135,17 @@ class FakeCar:
     def evt(self, name, fields=None):
         self.pub(T_EVENT, event_payload(name, fields))
 
+    def log(self, text):
+        """One console line on c28/l, as the car's mirror sends it."""
+        self.pub(T_LOG, bytes([telem_cmd.header(TYPE["LOG"])])
+                 + text.encode("ascii", "replace")[:120], qos=0)
+
     def enter(self, sys_name, run_name="FOLLOW"):
         self.sys = SYS[sys_name]
         self.run = RUN[run_name]
         self.entered = time.monotonic()
         self.evt("STATE_CHANGE", {"SYS": self.sys, "RUN": self.run})
+        self.log("STATE %s" % sys_name)
         print("fake_car: %s%s" % (sys_name, (" / " + run_name)
                                   if sys_name == "RUN" else ""), flush=True)
 
@@ -223,6 +230,37 @@ class FakeCar:
                 / UM_PER_COUNT
         self.odo_mm += (self.speed[0] + self.speed[1]) / 2.0 * period
         self.publish_state(now)
+        self.publish_sensors(now)
+
+    def publish_sensors(self, now):
+        """Raw sensors on c28/d (stored values: 4 mm / 4 mg / 250 us)."""
+        moving = self.sys == SYS["RUN"]
+        steer = getattr(self, "steer", 0.0) if moving else 0.0
+        ir_l = int(1500 + 1.6 * steer + random.uniform(-60, 60))
+        ir_r = int(1500 - 1.6 * steer + random.uniform(-60, 60))
+        dist = 2044
+        t = now - self.run_start if (moving and self.run_start) else 0.0
+        if moving and 15.0 < t < 18.0:
+            dist = int(600 - (t - 15.0) * 130)
+        self.edges = getattr(self, "edges", 0) + \
+            (random.randint(2, 5) if moving and 10.8 < t < 11.4 else 0)
+        gap_us = random.randint(10300, 12400)
+        self.pub(T_SENS, pack("MQ_SENS", {
+            "IR_L": max(0, min(ir_l, 4095)), "IR_R": max(0, min(ir_r, 4095)),
+            "US_MM": dist // 4, "BAR_DO": 1 if 10.8 < t < 11.4 else 0,
+            "BAR_EDGES": self.edges & 0xFF,
+            "AX": int((random.uniform(-15, 15) + self.pitch * 1.7) / 4),
+            "AY": int(random.uniform(-15, 15) / 4),
+            "AZ": int((1000 + random.uniform(-20, 20)) / 4),
+            "WDT_GAP": gap_us // 250, "SCAN": 1 if dist < 600 else 0},
+            TYPE["SENSORS"]), qos=0)
+        if not moving and self.n_state % 3 == 0:
+            self.log("IR raw L %d R %d" % (ir_l, ir_r))
+            self.log("US dist %d mm, lost %d" % (dist, 1 if dist >= 2044
+                                                 else 0))
+        if self.n_state % 10 == 0:
+            self.log("WDT longest feed gap %d us in the last 2 s (watchdog "
+                     "fires at 30000)" % gap_us)
 
     def drive(self, now, t):
         base = 180.0
@@ -238,6 +276,7 @@ class FakeCar:
         if 11.0 < t < 11.3 and not self.barcode_done:
             self.barcode_done = True
             self.evt("BARCODE", {"CHAR": 32, "CMD": 0})     # W -> LEFT
+            self.log("BARCODE value 32: armed, slow until the next junction")
         if 12.0 < t < 14.0:
             self.run = RUN["EXECUTE_TURN"]
             steer = -700.0
@@ -246,6 +285,9 @@ class FakeCar:
             if not self.avoided:
                 self.avoided = True
                 self.evt("OBSTACLE_AHEAD")
+                self.log("OBSTACLE AHEAD: distance 560 mm, slowing down")
+                self.log("OBSTACLE width 160 mm, nearest 220 mm ahead, "
+                         "pass side 0 (0 = left, 1 = right; 1020 = clear)")
                 self.pub(T_EVENT, pack("MQ_PROF", {
                     "ANGLE_STEP": 12, "WIDTH": 40, "NEAREST": 55,
                     "CLEAR_L": 120, "CLEAR_R": 70, "SIDE": 0},

@@ -307,6 +307,83 @@ int main(void)
     golden_add(&gold, "LAT_MAX_US", 4095);
     b_ok = golden_write("heartbeat_max", out, len, &gold) && b_ok;
 
+    /* S1-U47 / S1-U10: SENSORS payload (debug telemetry, 2026-11-06) */
+    {
+        telem_bin_sensors_t sens = {0u, 0u, 0u, 0u, 0u, 0, 0, 0, 0u, 0u};
+
+        len  = telem_bin_sensors(&sens, out, OUT_BYTES);
+        HOST_CHECK("S1-U47", (MQ_SENS_BYTES + 1u) == len,
+                   "SENSORS is 12 bytes (header + 11)");
+        HOST_CHECK("S1-U47", 0x41u == out[0],
+                   "header: version 1, type 8 = SENSORS");
+        gold.count = 0u;
+        golden_add(&gold, "IR_L", 0);
+        golden_add(&gold, "IR_R", 0);
+        golden_add(&gold, "US_MM", 0);
+        golden_add(&gold, "BAR_DO", 0);
+        golden_add(&gold, "BAR_EDGES", 0);
+        golden_add(&gold, "AX", 0);
+        golden_add(&gold, "AY", 0);
+        golden_add(&gold, "AZ", 0);
+        golden_add(&gold, "WDT_GAP", 0);
+        golden_add(&gold, "SCAN", 0);
+        b_ok = golden_write("sensors_zero", out, len, &gold) && b_ok;
+
+        /* the on-car READY values of 2026-11-05: IR L 194 R 3405, US 536,
+           IMU at rest -175 / 61 / -836 mg, gap 11120 us, edges 11 */
+        sens.ir_raw_l    = 194u;
+        sens.ir_raw_r    = 3405u;
+        sens.distance_mm = 536u;
+        sens.bar_do      = 1u;
+        sens.bar_edges   = 11u;
+        sens.ax_mg       = -175;
+        sens.ay_mg       = 61;
+        sens.az_mg       = -836;
+        sens.wdt_gap_us  = 11120u;
+        sens.scan_state  = 2u;
+        len  = telem_bin_sensors(&sens, out, OUT_BYTES);
+        gold.count = 0u;
+        golden_add(&gold, "IR_L", 194);
+        golden_add(&gold, "IR_R", 3405);
+        golden_add(&gold, "US_MM", 134);      /* 536 / 4 */
+        golden_add(&gold, "BAR_DO", 1);
+        golden_add(&gold, "BAR_EDGES", 11);
+        golden_add(&gold, "AX", -43);         /* -175 / 4, toward 0 */
+        golden_add(&gold, "AY", 15);
+        golden_add(&gold, "AZ", -209);
+        golden_add(&gold, "WDT_GAP", 44);     /* 11120 / 250 */
+        golden_add(&gold, "SCAN", 2);
+        b_ok = golden_write("sensors_car", out, len, &gold) && b_ok;
+
+        /* everything past its range: clamped, edge count wraps */
+        sens.ir_raw_l    = 5000u;
+        sens.ir_raw_r    = 4095u;
+        sens.distance_mm = 9999u;
+        sens.bar_edges   = 300u;
+        sens.ax_mg       = 3000;
+        sens.ay_mg       = -3000;
+        sens.az_mg       = 2044;
+        sens.wdt_gap_us  = 90000u;
+        sens.scan_state  = 9u;
+        len  = telem_bin_sensors(&sens, out, OUT_BYTES);
+        gold.count = 0u;
+        golden_add(&gold, "IR_L", 4095);
+        golden_add(&gold, "IR_R", 4095);
+        golden_add(&gold, "US_MM", 511);
+        golden_add(&gold, "BAR_DO", 1);
+        golden_add(&gold, "BAR_EDGES", 44);   /* 300 mod 256 */
+        golden_add(&gold, "AX", 511);
+        golden_add(&gold, "AY", -511);
+        golden_add(&gold, "AZ", 511);
+        golden_add(&gold, "WDT_GAP", 255);
+        golden_add(&gold, "SCAN", 7);
+        b_ok = golden_write("sensors_clamp", out, len, &gold) && b_ok;
+        HOST_CHECK("S1-U47", (MQ_SENS_BYTES + 1u) == len,
+                   "out-of-range values are clamped, never widen the payload");
+        HOST_CHECK("S1-U47", 0u == telem_bin_sensors(&sens, out, 11u),
+                   "an 11-byte buffer is too small: 0, nothing written");
+    }
+
     HOST_CHECK("S1-U10", b_ok, "golden vectors written to " GOLDEN_DIR "/");
 
     return (0 == HOST_SUMMARY("telem_bin")) ? 0 : 1;

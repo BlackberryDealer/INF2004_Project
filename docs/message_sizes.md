@@ -14,6 +14,19 @@ Step 4.1 (short topics, still JSON) is commit `32ec397`; it gives the
 separate "topic shortening" rows below, so the two savings can be told
 apart.
 
+## Debug payloads added 2026-11-06 (not part of the comparison)
+
+The MQTT image now also sends two bring-up diagnostics, switched by
+`TELEM_DEBUG_MQTT` in `app_program/subsystem1/cfg_telem.h` (1 = on):
+SENSORS on `c28/d` (12 B, `MQ_SENS`, 5 Hz, packed like every other
+payload) and LOG on `c28/l` (header byte + one console line of up to 120
+ASCII characters). They have no baseline counterpart, so build the Week 13
+evidence with `TELEM_DEBUG_MQTT 0` (or leave both topics out of the
+capture); the tables below cover only the original payloads. With the
+diagnostics on, K11 has 12 entries instead of 8 and K12 (console lines,
+48 x 20 B = 960 B) exists; the lwIP output ring is 2048 B and 64 request
+slots (S1-U38).
+
 ## How the numbers were obtained
 
 | Column | Source | Status |
