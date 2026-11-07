@@ -45,9 +45,15 @@ def fuzz_cases():
     rng = random.Random(SEED)
     cases = []
     for mq_type, (_name, group) in sorted(telem_decode.TYPE_GROUP.items()):
-        size = 1 if group is None else 1 + telem_decode.payload_bytes(group)
+        if group == "TEXT":                      # LOG: any length
+            size = 1 + rng.randrange(0, 60)
+        else:
+            size = (1 if group is None
+                    else 1 + telem_decode.payload_bytes(group))
         head = telem_decode.MQ_VERSION | (mq_type << 3)
         for _ in range(RANDOM_PER_TYPE):
+            if group == "TEXT":
+                size = 1 + rng.randrange(0, 60)
             body = bytes(rng.randrange(256) for _ in range(size - 1))
             cases.append(("c28/s", bytes([head]) + body))
         cases.append(("c28/e", bytes([head]) + b"\xff" * (size - 1)))

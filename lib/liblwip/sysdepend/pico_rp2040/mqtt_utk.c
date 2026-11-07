@@ -22,6 +22,13 @@
  *	50 ms drain that publishes queued telemetry with one pending payload.
  *	Packed build (B1.4): back-off and pending-payload state live in the
  *	16-bit PRV_MQTT word (tools/layout.csv), radio task only.
+ *
+ *	2026-11-06 (debug over Wi-Fi): the drain also publishes mirrored
+ *	console lines (LOG payloads on c28/l, QoS 0, best effort), and a UDP
+ *	beacon from the laptop (tools/dashboard/car_link.py, port 18830,
+ *	payload starting "C28B") gives the broker address, so a new hotspot
+ *	or a new laptop IP needs no rebuild. Without a beacon the car uses
+ *	MQTT_BROKER_IP from wifi_secrets.h as before.
  */
 
 #include "lwip/apps/mqtt.h"
@@ -29,12 +36,15 @@
 #include "lwip/altcp.h"
 #include "lwip/ip_addr.h"
 #include "lwip/timeouts.h"
+#include "lwip/udp.h"
+#include "lwip/pbuf.h"
 #include "wifi_secrets.h"
 #include "mqtt_utk.h"
 #include "../../../../app_program/subsystem1/mqtt_bridge.h"
 #include "../../../../app_program/app_types.h"
 #include "../../../../app_program/app_layout.h"
 #include "../../../../app_program/app_bits.h"
+#include "../../../../app_program/subsystem1/cfg_telem.h"
 #include <tm/tmonitor.h>
 
 #define MQTT_UTK_KEEPALIVE_S    4	/* loss detected <= 7 s, lwipopts.h */
@@ -44,6 +54,13 @@
 #define MQTT_UTK_DRAIN_BURST    2	/* publishes per drain call */
 #define MQTT_UTK_PEND_TRIES_MAX 2	/* then the payload is dropped */
 #define MQTT_UTK_AVAIL_MAX      16
+#define MQTT_UTK_LOG_BURST      2	/* console lines per drain call */
+#define MQTT_UTK_LOG_MAX        (1 + TELEM_LOG_TEXT_MAX)	/* hdr + text */
+/* Console lines only while the output ring is at most this full, so a
+ * slow link fills it with telemetry first (S1-U38 sizes it for that). */
+#define MQTT_UTK_LOG_RING_MAX   (MQTT_OUTPUT_RINGBUF_SIZE / 4)
+#define MQTT_UTK_BEACON_PORT    18830	/* car_link.py broadcasts here */
+#define MQTT_UTK_BEACON_MAGIC_LEN 4	/* "C28B" */
 
 #if (MQTT_UTK_BACKOFF_MAX > PRV_MQTT_BACKOFF_MAX) || \
     (MQTT_UTK_PEND_TRIES_MAX > PRV_MQTT_PEND_TRIES_MAX) || \
@@ -71,6 +88,16 @@ static u8_t		pend_buf[APP_MQ_PAYLOAD_MAX];
 
 /* Last-will payload; must outlive mqtt_client_connect(). */
 static u8_t		will_buf[MQTT_UTK_AVAIL_MAX];
+
+static u8_t		log_buf[MQTT_UTK_LOG_MAX];
+
+/* Broker beacon: the last address heard, and whether it is new (set by
+ * the UDP callback, handled by mqtt_utk_start() in the poll loop, which
+ * may print). All on the radio task. */
+static struct udp_pcb	*beacon_pcb;
+static ip_addr_t	beacon_addr;
+static u8_t		beacon_heard;
+static u8_t		beacon_new;
 
 static char		rx_topic[MQTT_UTK_RX_TOPIC_MAX];
 static UB		rx_data[MQTT_UTK_RX_DATA_MAX];
@@ -159,6 +186,19 @@ static void publish_done_cb(void *arg, err_t result)
 	}
 }
 
+/* Bytes waiting in the client's output ring: lwIP keeps put and get
+ * within 0..MQTT_OUTPUT_RINGBUF_SIZE-1 (same sum as mqtt_ringbuf_len()). */
+static u32_t ring_used(void)
+{
+	u16_t	put = client->output.put;
+	u16_t	get = client->output.get;
+
+	if(put >= get) {
+		return (u32_t)(put - get);
+	}
+	return (u32_t)MQTT_OUTPUT_RINGBUF_SIZE - get + put;
+}
+
 static void pend_clear(void)
 {
 	mq_put(PRV_MQTT_PEND_LEN_POS, PRV_MQTT_PEND_LEN_BITS, 0);
@@ -178,6 +218,7 @@ static void drain_timeout(void *arg)
 	u32_t		tries;
 	err_t		err;
 	int		n;
+	u8_t		k11_blocked = 0;
 
 	(void)arg;
 
@@ -214,6 +255,25 @@ static void drain_timeout(void *arg)
 				mqtt_bridge_count_publish_drop();
 				pend_clear();
 			}
+			k11_blocked = 1;
+			break;
+		}
+	}
+
+	/* Mirrored console lines after the binary telemetry, and only when
+	 * the output buffer took it: telemetry always goes first. A line the
+	 * buffer refuses is lost (debug only; not counted in DROPS). */
+	for(n = 0; n < MQTT_UTK_LOG_BURST && !k11_blocked
+		   && mqtt_client_is_connected(client)
+		   && ring_used() <= MQTT_UTK_LOG_RING_MAX; n++) {
+		len = mqtt_bridge_take_log(log_buf, sizeof(log_buf));
+		if(len == 0) {
+			break;
+		}
+		mqtt_bridge_route(APP_MQ_TYPE_LOG, &topic, &qos, &retain);
+		err = mqtt_publish(client, topic, log_buf, (u16_t)len, qos,
+				   retain? 1: 0, NULL, NULL);
+		if(err != ERR_OK) {
 			break;
 		}
 	}
@@ -286,7 +346,8 @@ static void connection_cb(mqtt_client_t *c, void *arg, mqtt_connection_status_t 
 			altcp_nagle_disable(client->conn);
 		}
 
-		tm_printf((UB*)"mqtt: connected to " MQTT_BROKER_IP "\n");
+		tm_printf((UB*)"mqtt: connected to %s port %d\n",
+			  ipaddr_ntoa(&broker_addr), (int)MQTT_BROKER_PORT);
 		mqtt_bridge_link_changed(true);
 		publish_online();
 
@@ -314,10 +375,86 @@ static void connection_cb(mqtt_client_t *c, void *arg, mqtt_connection_status_t 
 	}
 }
 
+/* A datagram on the beacon port: if it starts with "C28B", its sender is
+ * the laptop running the broker. Only records it; mqtt_utk_start() acts. */
+static void beacon_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p,
+			   const ip_addr_t *addr, u16_t port)
+{
+	char	magic[MQTT_UTK_BEACON_MAGIC_LEN];
+
+	(void)arg;
+	(void)pcb;
+	(void)port;
+
+	if(p == NULL) {
+		return;
+	}
+	if(addr != NULL && IP_IS_V4(addr)
+	   && pbuf_copy_partial(p, magic, sizeof(magic), 0) == sizeof(magic)
+	   && magic[0] == 'C' && magic[1] == '2' && magic[2] == '8'
+	   && magic[3] == 'B') {
+		if(!beacon_heard || !ip_addr_cmp(&beacon_addr, addr)) {
+			ip_addr_copy(beacon_addr, *addr);
+			beacon_heard = 1;
+			beacon_new = 1;
+		}
+	}
+	pbuf_free(p);
+}
+
+static void beacon_listen(void)
+{
+	if(beacon_pcb != NULL) {
+		return;
+	}
+	beacon_pcb = udp_new_ip_type(IPADDR_TYPE_V4);
+	if(beacon_pcb == NULL) {
+		tm_printf((UB*)"mqtt: no UDP pcb for the broker beacon\n");
+		return;
+	}
+	if(udp_bind(beacon_pcb, IP4_ADDR_ANY, MQTT_UTK_BEACON_PORT) != ERR_OK) {
+		udp_remove(beacon_pcb);
+		beacon_pcb = NULL;
+		tm_printf((UB*)"mqtt: beacon port bind failed\n");
+		return;
+	}
+	udp_recv(beacon_pcb, beacon_recv_cb, NULL);
+	tm_printf((UB*)"mqtt: listening for the broker beacon on UDP %d\n",
+		  (int)MQTT_UTK_BEACON_PORT);
+}
+
+/* A new beacon address while not connected: abort a connect still trying
+ * the old address (mqtt_disconnect() does not call connection_cb) and
+ * skip the back-off, so the next mqtt_utk_start() tries the new one. */
+static void beacon_service(void)
+{
+	if(!beacon_new) {
+		return;
+	}
+	beacon_new = 0;
+	tm_printf((UB*)"mqtt: broker beacon from %s\n",
+		  ipaddr_ntoa(&beacon_addr));
+	if(client != NULL && mqtt_client_is_connected(client)) {
+		return;			/* keep a working connection */
+	}
+	if(ip_addr_cmp(&beacon_addr, &broker_addr)) {
+		return;			/* already trying that address */
+	}
+	if(client != NULL) {
+		mqtt_disconnect(client);
+	}
+	sys_untimeout(retry_timeout, NULL);
+	mq_put(PRV_MQTT_BACKOFF_POS, PRV_MQTT_BACKOFF_BITS, 0);
+	connecting = 0;
+}
+
 void mqtt_utk_start(void)
 {
 	struct mqtt_connect_client_info_t	client_info = {0};
 	err_t					err;
+
+	beacon_listen();
+	beacon_service();
 
 	if(connecting || (client != NULL && mqtt_client_is_connected(client))) {
 		return;
@@ -331,11 +468,17 @@ void mqtt_utk_start(void)
 		}
 	}
 
-	if(!ip4addr_aton(MQTT_BROKER_IP, ip_2_ip4(&broker_addr))) {
-		tm_printf((UB*)"mqtt: bad MQTT_BROKER_IP\n");
-		return;
+	if(beacon_heard) {
+		ip_addr_copy(broker_addr, beacon_addr);
+	} else {
+		if(!ip4addr_aton(MQTT_BROKER_IP, ip_2_ip4(&broker_addr))) {
+			tm_printf((UB*)"mqtt: bad MQTT_BROKER_IP\n");
+			return;
+		}
+		IP_SET_TYPE(&broker_addr, IPADDR_TYPE_V4);
 	}
-	IP_SET_TYPE(&broker_addr, IPADDR_TYPE_V4);
+	tm_printf((UB*)"mqtt: connecting to %s%s\n", ipaddr_ntoa(&broker_addr),
+		  beacon_heard? " (beacon)": " (wifi_secrets.h)");
 
 	client_info.client_id = MQTT_CLIENT_ID;
 	client_info.keep_alive = MQTT_UTK_KEEPALIVE_S;

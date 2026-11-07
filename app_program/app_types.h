@@ -252,6 +252,8 @@
 #define APP_MQ_TYPE_ONLINE    (5u)
 #define APP_MQ_TYPE_OFFLINE   (6u)
 #define APP_MQ_TYPE_SNAPSHOT  (7u)    /* reply to CMD_SNAP */
+#define APP_MQ_TYPE_SENSORS   (8u)    /* raw sensor readings (debug)  */
+#define APP_MQ_TYPE_LOG       (9u)    /* header + one console line    */
 #define APP_MQ_TYPE_CMD_START (16u)
 #define APP_MQ_TYPE_CMD_STOP  (17u)
 #define APP_MQ_TYPE_CMD_RESET (18u)

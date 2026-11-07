@@ -105,6 +105,9 @@ static int16_t  g_avg_raw_z         = 0;
 static int32_t  g_avg_ax_mg         = 0; /* calibrated averages */
 static int32_t  g_avg_ay_mg         = 0;
 static int32_t  g_avg_az_mg         = 1000; /* flat rest: az = +1000 mg */
+/* SH_IMU_ACC: the three calibrated averages in 4 mg steps for debug
+   telemetry; imu_task stores the whole word at once (single writer). */
+static volatile uint32_t g_sh_imu_acc = 0u;
 static int32_t  g_a_fwd_mg          = 0;
 static volatile uint32_t g_imu_isr_us = 0u; /* last INT1 edge, R1 time;
                                                ISR is the only writer   */
@@ -163,6 +166,8 @@ static int32_t  imu_encoder_rate(int32_t pos_l, int32_t pos_r);
 static void     imu_i2c_result(bool b_ok, bool b_is_acc);
 static bool     imu_configure_if_needed(void);
 static void     imu_need_cfg_set(bool b_need);
+static void     imu_acc_publish(void);
+static uint32_t imu_acc_code(int32_t mg);
 #if (IMU_DIAG_IMPACT != 0)
 static void     imu_dbg_peak(int32_t * p_peak, int32_t value);
 static void     imu_dbg_after_read(void);
@@ -325,6 +330,19 @@ void imu_diag_service(void)
             break;
     }
 #endif
+}
+
+/**
+ * imu_acc_word
+ * @brief   Last calibrated accelerometer averages (SH_IMU_ACC layout) for
+ *          debug telemetry.
+ * @return  SH_IMU_ACC word: AX, AY, AZ, 10 bits each, 4 mg steps, offset
+ *          512
+ * @context any task (one aligned load of a word written by imu_task)
+ */
+uint32_t imu_acc_word(void)
+{
+    return g_sh_imu_acc;
 }
 
 /* ---- private functions ------------------------------------------------ */
@@ -654,6 +672,7 @@ static bool imu_read_acc(uint32_t * p_n_samples)
                 (((int32_t)g_avg_raw_y * IMU_MG_NUM) / IMU_MG_DEN) - ofs_ay;
             g_avg_az_mg =
                 (((int32_t)g_avg_raw_z * IMU_MG_NUM) / IMU_MG_DEN) - ofs_az;
+            imu_acc_publish();
         }
     }
 
@@ -1374,6 +1393,42 @@ static void imu_clamp_fault(bool b_was_clamped)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
     }
+}
+
+/**
+ * imu_acc_publish
+ * @brief   Packs the three calibrated averages into SH_IMU_ACC and stores
+ *          the whole word at once.
+ * @context imu_task
+ */
+static void imu_acc_publish(void)
+{
+    uint32_t word = 0u;
+
+    word = app_bits_put(word, SH_IMU_ACC_AX_POS, SH_IMU_ACC_AX_BITS,
+                        imu_acc_code(g_avg_ax_mg));
+    word = app_bits_put(word, SH_IMU_ACC_AY_POS, SH_IMU_ACC_AY_BITS,
+                        imu_acc_code(g_avg_ay_mg));
+    word = app_bits_put(word, SH_IMU_ACC_AZ_POS, SH_IMU_ACC_AZ_BITS,
+                        imu_acc_code(g_avg_az_mg));
+    g_sh_imu_acc = word;
+}
+
+/**
+ * imu_acc_code
+ * @brief   One axis in mg as its SH_IMU_ACC code (4 mg steps, clamped to
+ *          +/-2044 mg, offset 512). The three axes share one range.
+ * @param   mg  calibrated acceleration, mg
+ * @return  0..1023
+ * @context imu_task
+ */
+static uint32_t imu_acc_code(int32_t mg)
+{
+    bool b_clamped = false;
+
+    /* integer division truncates toward zero; never >> on a signed value */
+    return app_bits_encode(mg / 4, SH_IMU_ACC_AX_MIN, SH_IMU_ACC_AX_MAX,
+                           SH_IMU_ACC_AX_OFFSET, &b_clamped);
 }
 
 /*** end of file ***/

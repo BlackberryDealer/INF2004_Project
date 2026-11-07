@@ -54,6 +54,8 @@ TYPE_GROUP = {
     5: ("ONLINE", None),
     6: ("OFFLINE", None),
     7: ("SNAPSHOT", "MQ_SNAP"),
+    8: ("SENSORS", "MQ_SENS"),
+    9: ("LOG", "TEXT"),           # header byte + one console line (text)
     16: ("CMD_START", None),
     17: ("CMD_STOP", None),
     18: ("CMD_RESET", None),
@@ -119,12 +121,19 @@ def decode_header(data):
     return version, mq_type, reader
 
 
+def log_text(body):
+    """LOG text: printable ASCII kept, any other byte shown as '?'."""
+    return "".join(chr(b) if 32 <= b < 127 else "?" for b in body)
+
+
 def decode(data):
     """Return (type_name, group, [(field, stored value)]) for one payload."""
     _version, mq_type, reader = decode_header(data)
     if mq_type not in TYPE_GROUP:
         raise ValueError("unknown type %d" % mq_type)
     type_name, group = TYPE_GROUP[mq_type]
+    if group == "TEXT":
+        return type_name, group, [("TEXT", log_text(data[1:]))]
     if group is None:
         if len(data) != 1:
             raise ValueError("%s is %d bytes, expected 1"
@@ -169,7 +178,7 @@ def unit_value(group, name, stored, um_per_count):
             return "%.0fmm/s" % (stored * um_per_count / SPEED_WINDOW_MS)
         if unit == "0.1 deg":
             return "%.1fdeg" % (stored / 10.0)
-        if unit in ("mm", "s", "us", "deg/s", "permille") or lsb != 1:
+        if unit in ("mm", "s", "us", "mg", "deg/s", "permille") or lsb != 1:
             return "%d%s" % (stored * lsb, "" if unit == "permille"
                              else unit.replace("permille", ""))
         return "%d" % stored
@@ -198,6 +207,8 @@ def line_for(topic, data, evt_names, um_per_count):
         return "%s REJECT %s (%d B)" % (topic, err, len(data))
     if group == "MQ_EVT":
         body = event_text(fields[0][1], evt_names)
+    elif group == "TEXT":
+        body = fields[0][1]
     elif group is None:
         body = ""
     else:

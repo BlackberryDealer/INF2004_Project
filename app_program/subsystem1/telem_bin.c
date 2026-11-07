@@ -21,6 +21,7 @@
 /* ---- private constants and types ------------------------------------ */
 
 #define TELEM_BIN_MM_STEP_SHIFT  (2u)   /* 4 mm fields: mm >> 2 (unsigned) */
+#define TELEM_BIN_WDT_LSB_US     (250u) /* MQ_SENS.WDT_GAP step (layout lsb) */
 
 /* ---- private function prototypes ------------------------------------- */
 
@@ -238,6 +239,49 @@ uint32_t telem_bin_heartbeat(uint32_t uptime_s, uint32_t drops,
     telem_bin_put_u(&wr, lat_max_us, MQ_HB_LAT_MAX_US_MAX,
                     MQ_HB_LAT_MAX_US_BITS, NULL);
     app_bits_write(&wr, 0u, MQ_HB_PAD_BITS);
+
+    return telem_bin_end(&wr);
+}
+
+/**
+ * telem_bin_sensors
+ * @brief   MQ_SENS payload: raw IR pair, ultrasonic distance, barcode DO
+ *          and edge count, calibrated accelerometer, watchdog feed gap
+ *          and scanner state (debug telemetry, 2026-11-06).
+ * @param   p_sens  sensor sample (natural units)
+ * @param   p_buf   output bytes
+ * @param   size    bytes available at p_buf
+ * @return  payload length (MQ_SENS_BYTES + 1), or 0 if it did not fit
+ * @context telem_task (5 Hz: division allowed)
+ */
+uint32_t telem_bin_sensors(telem_bin_sensors_t const * p_sens,
+                           uint8_t * p_buf, uint32_t size)
+{
+    app_bits_writer_t wr = {NULL, 0u, 0u, false};
+
+    telem_bin_begin(&wr, p_buf, size, APP_MQ_TYPE_SENSORS);
+    telem_bin_put_u(&wr, p_sens->ir_raw_l, MQ_SENS_IR_L_MAX,
+                    MQ_SENS_IR_L_BITS, NULL);
+    telem_bin_put_u(&wr, p_sens->ir_raw_r, MQ_SENS_IR_R_MAX,
+                    MQ_SENS_IR_R_BITS, NULL);
+    telem_bin_put_u(&wr, p_sens->distance_mm >> TELEM_BIN_MM_STEP_SHIFT,
+                    MQ_SENS_US_MM_MAX, MQ_SENS_US_MM_BITS, NULL);
+    telem_bin_put_u(&wr, p_sens->bar_do, MQ_SENS_BAR_DO_MAX,
+                    MQ_SENS_BAR_DO_BITS, NULL);
+    /* RAW counter: only its low 8 bits are sent (wraps by design) */
+    app_bits_write(&wr, p_sens->bar_edges, MQ_SENS_BAR_EDGES_BITS);
+    /* accelerations in 4 mg steps; integer division truncates toward 0 */
+    telem_bin_put_s(&wr, p_sens->ax_mg / 4, MQ_SENS_AX_MIN, MQ_SENS_AX_MAX,
+                    MQ_SENS_AX_OFFSET, MQ_SENS_AX_BITS, NULL);
+    telem_bin_put_s(&wr, p_sens->ay_mg / 4, MQ_SENS_AY_MIN, MQ_SENS_AY_MAX,
+                    MQ_SENS_AY_OFFSET, MQ_SENS_AY_BITS, NULL);
+    telem_bin_put_s(&wr, p_sens->az_mg / 4, MQ_SENS_AZ_MIN, MQ_SENS_AZ_MAX,
+                    MQ_SENS_AZ_OFFSET, MQ_SENS_AZ_BITS, NULL);
+    telem_bin_put_u(&wr, p_sens->wdt_gap_us / TELEM_BIN_WDT_LSB_US,
+                    MQ_SENS_WDT_GAP_MAX, MQ_SENS_WDT_GAP_BITS, NULL);
+    telem_bin_put_u(&wr, p_sens->scan_state, MQ_SENS_SCAN_MAX,
+                    MQ_SENS_SCAN_BITS, NULL);
+    app_bits_write(&wr, 0u, MQ_SENS_PAD_BITS);
 
     return telem_bin_end(&wr);
 }

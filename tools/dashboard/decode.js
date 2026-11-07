@@ -107,6 +107,11 @@
         if (entry === undefined) {
             throw new Error("unknown type " + hdr.type);
         }
+        if (entry[1] === "TEXT") {
+            values.TEXT = logText(bytes.subarray(1));
+            return { typeName: entry[0], group: "TEXT",
+                     fields: [["TEXT", values.TEXT]], values: values };
+        }
         if (entry[1] === null) {
             if (bytes.length !== 1) {
                 throw new Error(entry[0] + " is " + bytes.length +
@@ -124,6 +129,18 @@
         fields.forEach(function (f) { values[f[0]] = f[1]; });
         return { typeName: entry[0], group: entry[1], fields: fields,
                  values: values };
+    }
+
+    /* LOG text exactly as telem_decode.log_text(): printable ASCII kept,
+       any other byte shown as "?". */
+    function logText(body) {
+        var out = "";
+        var i;
+        for (i = 0; i < body.length; i += 1) {
+            out += (body[i] >= 32 && body[i] < 127)
+                ? String.fromCharCode(body[i]) : "?";
+        }
+        return out;
     }
 
     function fieldInfo(group, name) {
@@ -175,7 +192,7 @@
         if (unit === "0.1 deg") {
             return fmt1(stored / 10.0) + "deg";
         }
-        if (["mm", "s", "us", "deg/s", "permille"].indexOf(unit) >= 0 ||
+        if (["mm", "s", "us", "mg", "deg/s", "permille"].indexOf(unit) >= 0 ||
                 lsb !== 1) {
             return String(stored * lsb) +
                    (unit === "permille" ? "" : unit.split("permille").join(""));
@@ -248,6 +265,8 @@
         }
         if (d.group === "MQ_EVT") {
             body = eventText(d.fields[0][1]);
+        } else if (d.group === "TEXT") {
+            body = d.values.TEXT;
         } else if (d.group === null) {
             body = "";
         } else {

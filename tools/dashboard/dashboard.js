@@ -3,6 +3,10 @@
  *
  * Owner:  Buddy 1 (communications)
  *
+ * Since 2026-11-06 it also shows the car's raw sensors (SENSORS on c28/d)
+ * and its console lines (LOG on c28/l), so the car can be debugged
+ * without the USB cable.
+ *
  * Subscribes to c28/# through Mosquitto's WebSocket listener, decodes every
  * payload with decode.js (a tested port of tools/telem_decode.py) and
  * shows it; the command buttons publish the same bytes as
@@ -23,6 +27,18 @@
     var LOG_MAX = 5000;           /* kept for export */
     var LOG_SHOWN = 400;          /* rows in the table */
     var HIST_MAX_S = 130;
+    var CON_MAX = 5000;           /* console lines kept for export */
+    var CON_SHOWN = 600;          /* console lines drawn */
+    var SENS_ROWS_MAX = 20000;    /* sensor samples kept for CSV (~66 min) */
+    var SENS_STALE_MS = 1500;
+    var US_NONE_MM = 2044;        /* APP_DIST_NONE_MM: nothing in range */
+    var US_SLOW_MM = 600;         /* OBS_SLOW_MM */
+    var US_STOP_MM = 401;         /* OBS_STOP_MM (placeholder geometry) */
+    var GAP_LIMIT_MS = 30;        /* watchdog window */
+    var GAP_WARN_MS = 15;
+    var QUIET_RE = /^(US dist|IR raw|ENC pos|BAR DO|BAR edges|WDT longest)/;
+    var BAD_RE = /FAULT|ERROR|FAIL|ESTOP|TOO CLOSE|impossible/;
+    var WARN_RE = /OBSTACLE|LINE LOST|LINE END|RAMP|REJOIN|SCAN|AVOID|BARCODE|BAR capture|JUNCTION|IMPACT|MOVE FAILED|dropped/;
 
     /* What each state looks like (car LED) and what to do next. */
     var STATE_UI = {
@@ -105,6 +121,11 @@
         lastSend: {}
     };
     var hist = [];                   /* {t, sl, sr, steer, pitch, turn} */
+    var shist = [];                  /* {t, irl, irr, us, ax, ay, azd, gap, edges} */
+    var sensRows = [];               /* every SENSORS sample, for CSV */
+    var conLines = [];               /* {t, text} from c28/l */
+    var sensLast = null;             /* {t, v: engineering values} */
+    var sensTimes = [];
     var logRows = [];
     var winS = parseInt(load("win", "30"), 10) || 30;
 
@@ -269,6 +290,8 @@
         case "SUMMARY": onSummary(d.values, t, bytes, topic); break;
         case "SNAPSHOT": onSnapshot(d.values, t, bytes, topic); break;
         case "PROFILE": onProfile(d.values, t, bytes, topic); break;
+        case "SENSORS": onSensors(d.values, t); return;   /* no render storm */
+        case "LOG": onConsole(d.values.TEXT, t); return;
         default:
             if (d.typeName.indexOf("CMD_") === 0) {
                 onCommandEcho(topic, d, bytes, t);
@@ -277,6 +300,155 @@
             }
         }
         render();
+    }
+
+    /* ---- raw sensors (c28/d) and console (c28/l) ------------------------ */
+    function onSensors(v, t) {
+        var e = {
+            irl: v.IR_L,
+            irr: v.IR_R,
+            us: D.engValue("MQ_SENS", "US_MM", v.US_MM),
+            scan: v.SCAN,
+            bar: v.BAR_DO,
+            edges: v.BAR_EDGES,
+            ax: D.engValue("MQ_SENS", "AX", v.AX),
+            ay: D.engValue("MQ_SENS", "AY", v.AY),
+            az: D.engValue("MQ_SENS", "AZ", v.AZ),
+            gap: D.engValue("MQ_SENS", "WDT_GAP", v.WDT_GAP) / 1000
+        };
+        sensLast = { t: t, v: e };
+        sensTimes.push(t);
+        while (sensTimes.length && sensTimes[0] < t - 5000) { sensTimes.shift(); }
+        shist.push({ t: t, irl: e.irl, irr: e.irr, us: e.us, ax: e.ax, ay: e.ay,
+                     azd: e.az - 1000, gap: e.gap, edges: e.edges });
+        while (shist.length && shist[0].t < t - HIST_MAX_S * 1000) { shist.shift(); }
+        sensRows.push([t, S.sysName || "", e.irl, e.irr, e.us, D.enumName("SCAN", e.scan),
+                       e.bar, e.edges, e.ax, e.ay, e.az, e.gap.toFixed(2)]);
+        if (sensRows.length > SENS_ROWS_MAX) { sensRows.splice(0, sensRows.length - SENS_ROWS_MAX); }
+    }
+
+    /* DO edges in the last ~2 s (the car sends the low 8 bits: wraps) */
+    function recentEdges(t) {
+        var old = null;
+        for (var i = shist.length - 1; i >= 0; i -= 1) {
+            if (shist[i].t <= t - 2000) { old = shist[i]; break; }
+        }
+        if (!old || !sensLast) { return null; }
+        return (sensLast.v.edges - old.edges + 256) % 256;
+    }
+
+    function irTag(raw) {
+        /* rough reading of the raw ADC (the car normalises with its own
+           CAL_IR spans): white ~200, black ~3200 on the 2026-11 track */
+        if (raw < 600) { return "white"; }
+        if (raw > 2600) { return "black"; }
+        return "edge";
+    }
+
+    function renderSensors() {
+        var t = nowMs();
+        if (!sensLast) {
+            $("sensAge").textContent = "c28/d: waiting (needs the MQTT image)";
+            return;
+        }
+        var e = sensLast.v;
+        var age = t - sensLast.t;
+        var hz = sensTimes.filter(function (x) { return x >= t - 5000; }).length / 5;
+        $("sensAge").textContent = "c28/d · " + hz.toFixed(1) + " Hz" + (age > SENS_STALE_MS ? " · stale " + (age / 1000).toFixed(1) + " s" : "");
+        $("sensAge").style.color = age > SENS_STALE_MS ? "var(--serious)" : "";
+        $("sIrL").textContent = e.irl;
+        $("sIrR").textContent = e.irr;
+        $("sIrLTag").textContent = irTag(e.irl);
+        $("sIrRTag").textContent = irTag(e.irr);
+        setBar("bIrL", e.irl / 4095);
+        setBar("bIrR", e.irr / 4095);
+        if (e.us >= US_NONE_MM) {
+            $("sUs").innerHTML = "none<small>in range</small>";
+            $("sUsTag").textContent = "";
+            setBar("bUs", 0);
+        } else {
+            $("sUs").innerHTML = e.us + "<small>mm</small>";
+            $("sUsTag").textContent = e.us < US_STOP_MM ? "stop zone" : (e.us < US_SLOW_MM ? "slow zone" : "");
+            $("sUsTag").style.color = e.us < US_STOP_MM ? "var(--critical)" : "var(--serious)";
+            setBar("bUs", 1 - Math.min(e.us, 1000) / 1000);
+        }
+        $("bUs").style.background = e.us < US_STOP_MM ? "var(--critical)" : (e.us < US_SLOW_MM ? "var(--warning)" : "");
+        $("sScan").textContent = D.enumName("SCAN", e.scan).replace(/_/g, " ");
+        $("sBar").textContent = e.bar ? "BLACK" : "white";
+        var rec = recentEdges(t);
+        $("sEdges").textContent = "edges " + e.edges + " (mod 256)" + (rec === null ? "" : ", +" + rec + " in 2 s");
+        $("sAxy").textContent = e.ax + " / " + e.ay;
+        $("sAz").innerHTML = e.az + "<small>mg</small>";
+        $("sGap").innerHTML = e.gap.toFixed(1) + "<small>ms</small>";
+        $("sGapTag").textContent = e.gap > GAP_WARN_MS ? "CPU starved?" : "";
+        $("sGapTag").style.color = "var(--critical)";
+        setBar("bGap", e.gap / GAP_LIMIT_MS);
+        $("bGap").style.background = e.gap > GAP_WARN_MS ? "var(--critical)" : "";
+        $("sensCount").textContent = sensRows.length + " samples kept";
+    }
+
+    function exportSensors() {
+        var lines = ["time,state,ir_l,ir_r,us_mm,scanner,bar_do,bar_edges,ax_mg,ay_mg,az_mg,wdt_gap_ms"];
+        sensRows.forEach(function (r) {
+            lines.push([new Date(r[0]).toISOString()].concat(r.slice(1)).join(","));
+        });
+        download(lines.join("\r\n") + "\r\n", "text/csv", "c28_sensors_", ".csv");
+    }
+
+    function onConsole(text, t) {
+        conLines.push({ t: t, text: text });
+        if (conLines.length > CON_MAX) { conLines.splice(0, conLines.length - CON_MAX); }
+        if (!$("conPause").checked) { scheduleConsole(); }
+    }
+
+    var conQueued = false;
+    function scheduleConsole() {
+        if (conQueued) { return; }
+        conQueued = true;
+        setTimeout(function () { conQueued = false; renderConsole(); }, 150);
+    }
+
+    function lineClass(text) {
+        if (BAD_RE.test(text)) { return "bad"; }
+        if (/^STATE /.test(text)) { return "st"; }
+        if (WARN_RE.test(text)) { return "warn"; }
+        if (QUIET_RE.test(text) || /^(wifi|mqtt):/.test(text)) { return "dim"; }
+        return "";
+    }
+
+    function renderConsole() {
+        var box = $("conBox");
+        var q = $("conFilter").value.trim().toLowerCase();
+        var quiet = $("conQuiet").checked;
+        var atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 30;
+        var out = [];
+        for (var i = conLines.length - 1; i >= 0 && out.length < CON_SHOWN; i -= 1) {
+            var l = conLines[i];
+            if (quiet && QUIET_RE.test(l.text)) { continue; }
+            if (q && l.text.toLowerCase().indexOf(q) < 0) { continue; }
+            out.push("<div class=\"ln " + lineClass(l.text) + "\"><span class=\"ts\">" + clock(l.t) + "</span>" + esc(l.text) + "</div>");
+        }
+        if (!conLines.length) { return; }
+        box.innerHTML = out.reverse().join("") || "<div class=\"empty\">No line matches the filter.</div>";
+        if (atEnd) { box.scrollTop = box.scrollHeight; }
+        $("conCount").textContent = "c28/l · " + conLines.length + " lines kept";
+    }
+
+    function exportConsole() {
+        var text = conLines.map(function (l) {
+            return new Date(l.t).toISOString() + "  " + l.text;
+        }).join("\r\n") + "\r\n";
+        download(text, "text/plain", "c28_console_", ".txt");
+    }
+
+    function download(content, type, prefix, ext) {
+        var blob = new Blob([content], { type: type });
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = prefix + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ext;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     }
 
     function onState(v, t) {
@@ -544,6 +716,7 @@
         renderButtons();
         renderTiles();
         renderHealth();
+        renderSensors();
     }
 
     function renderStatus() {
@@ -801,12 +974,13 @@
         return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     }
 
-    function makeChart(el, series, fixed) {
+    function makeChart(el, series, fixed, src) {
         var canvas = el.querySelector("canvas");
         var tip = document.createElement("div");
         tip.className = "tip";
         el.appendChild(tip);
-        var ch = { el: el, canvas: canvas, tip: tip, series: series, fixed: fixed, hoverX: null };
+        var ch = { el: el, canvas: canvas, tip: tip, series: series, fixed: fixed, hoverX: null,
+                   src: src || function () { return hist; } };
         canvas.addEventListener("mousemove", function (e) {
             var r = canvas.getBoundingClientRect();
             ch.hoverX = e.clientX - r.left;
@@ -843,7 +1017,7 @@
         g.clearRect(0, 0, w, h);
         var now = nowMs();
         var t0 = now - winS * 1000;
-        var pts = hist.filter(function (p) { return p.t >= t0 - 1000; });
+        var pts = ch.src().filter(function (p) { return p.t >= t0 - 1000; });
         var padL = 40;
         var padR = 8;
         var padT = 6;
@@ -1004,6 +1178,23 @@
         makeChart(document.querySelector("[data-chart=steer]"), [{ key: "steer", color: "--series-1" }], [-200, 200]);
         makeChart(document.querySelector("[data-chart=pitch]"), [{ key: "pitch", color: "--series-1" }], [-5, 5]);
         makeChart(document.querySelector("[data-chart=turn]"), [{ key: "turn", color: "--series-1" }], [-30, 30]);
+        var sh = function () { return shist; };
+        makeChart(document.querySelector("[data-chart=ir]"),
+                  [{ key: "irl", color: "--series-1" }, { key: "irr", color: "--series-2" }], [0, 4095], sh);
+        makeChart(document.querySelector("[data-chart=us]"), [{ key: "us", color: "--series-1" }], [0, 1000], sh);
+        makeChart(document.querySelector("[data-chart=acc]"),
+                  [{ key: "ax", color: "--series-1" }, { key: "ay", color: "--series-2" }, { key: "azd", color: "--good" }], [-100, 100], sh);
+        makeChart(document.querySelector("[data-chart=gap]"), [{ key: "gap", color: "--series-1" }], [0, 30], sh);
+        ["conFilter", "conQuiet", "conPause"].forEach(function (id) {
+            $(id).addEventListener("input", renderConsole);
+        });
+        $("conClear").addEventListener("click", function () {
+            conLines = [];
+            $("conBox").innerHTML = "<div class=\"empty\">Cleared.</div>";
+            $("conCount").textContent = "c28/l";
+        });
+        $("conExport").addEventListener("click", exportConsole);
+        $("sensExport").addEventListener("click", exportSensors);
         document.querySelectorAll("#win button").forEach(function (b) {
             b.classList.toggle("on", parseInt(b.getAttribute("data-s"), 10) === winS);
             b.addEventListener("click", function () {

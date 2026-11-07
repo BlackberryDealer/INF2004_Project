@@ -14,7 +14,10 @@ typedef int8_t   err_t;
 #define ERR_TIMEOUT (-3)
 #define ERR_RTE  (-4)
 struct altcp_pcb;   /* opaque, as in lwIP */
-typedef struct mqtt_client_s { int dummy; struct altcp_pcb * conn; } mqtt_client_t;
+#define MQTT_OUTPUT_RINGBUF_SIZE 2048
+struct mqtt_ringbuf_t { u16_t put; u16_t get; };
+typedef struct mqtt_client_s { int dummy; struct altcp_pcb * conn;
+                               struct mqtt_ringbuf_t output; } mqtt_client_t;
 typedef enum
 {
     MQTT_CONNECT_ACCEPTED = 0,
@@ -52,6 +55,7 @@ err_t mqtt_subscribe(mqtt_client_t * client, const char * topic, u8_t qos,
 err_t mqtt_publish(mqtt_client_t * client, const char * topic,
                    const void * payload, u16_t payload_length, u8_t qos,
                    u8_t retain, mqtt_request_cb_t cb, void * arg);
+void  mqtt_disconnect(mqtt_client_t * client);
 err_t mqtt_client_connect(mqtt_client_t * client, const void * ipaddr,
                           u16_t port, mqtt_connection_cb_t cb, void * arg,
                           const struct mqtt_connect_client_info_t * info);

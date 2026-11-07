@@ -65,6 +65,20 @@ typedef struct
     uint32_t faults;           /* APP_FAULT_* mask, 10 bits */
 } telem_bin_state_t;
 
+typedef struct
+{
+    uint32_t ir_raw_l;         /* 0..4095 raw ADC */
+    uint32_t ir_raw_r;         /* 0..4095 raw ADC */
+    uint32_t distance_mm;      /* 0..2044 (2044 = nothing in range) */
+    uint32_t bar_do;           /* 1 = black */
+    uint32_t bar_edges;        /* accepted DO edges; low 8 bits sent */
+    int32_t  ax_mg;            /* calibrated, -2044..+2044 */
+    int32_t  ay_mg;
+    int32_t  az_mg;
+    uint32_t wdt_gap_us;       /* longest feed gap, 0..63750 */
+    uint32_t scan_state;       /* APP_SCAN_* */
+} telem_bin_sensors_t;
+
 /* Every builder returns the payload length in bytes, or 0 if p_buf is
    too small. Values are clamped to their layout range, never wrapped. */
 
@@ -89,6 +103,10 @@ extern uint32_t telem_bin_summary(telem_bin_summary_t const * p_summ,
 /* MQ_SNAP (7 B). */
 extern uint32_t telem_bin_snapshot(telem_bin_snapshot_t const * p_snap,
                                    uint8_t * p_buf, uint32_t size);
+
+/* MQ_SENS (12 B): raw sensor readings for debugging over Wi-Fi. */
+extern uint32_t telem_bin_sensors(telem_bin_sensors_t const * p_sens,
+                                  uint8_t * p_buf, uint32_t size);
 
 /* MQ_HB (6 B). */
 extern uint32_t telem_bin_heartbeat(uint32_t uptime_s, uint32_t drops,

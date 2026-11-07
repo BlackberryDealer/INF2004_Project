@@ -55,6 +55,17 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | DROPS | MQ_HB | 0..255 × 1 count | 1 | 8 | 8 | SAT | S | telem_drops() |
 | LAT_MAX_US | MQ_HB | 0..4095 × 1 us | 1 | 12 | 12 | SAT | S | sys_tick_latency_max_us() |
 | PAD | MQ_HB | 0..0 × 1 - | 1 | 0 | 4 | PAD | S | Zero |
+| IR_L | MQ_SENS | 0..4095 × 1 adc | 1 | 12 | 12 | RNG | S | Raw left IR ADC (SH_IR_RAW); debug telemetry |
+| IR_R | MQ_SENS | 0..4095 × 1 adc | 1 | 12 | 12 | RNG | S | Raw right IR ADC (SH_IR_RAW) |
+| US_MM | MQ_SENS | 0..511 × 4 mm | 4 | 9 | 9 | SAT | S | Ultrasonic distance; 511 x 4 = 2044 mm = nothing in range |
+| BAR_DO | MQ_SENS | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | Barcode DO now (1 = black) |
+| BAR_EDGES | MQ_SENS | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | Accepted barcode DO edges; low 8 bits; wraps |
+| AX | MQ_SENS | -511..511 × 4 mg | 4 | 10 | 10 | SAT | S | Accelerometer X after the CAL_IMU offsets (SH_IMU_ACC) |
+| AY | MQ_SENS | -511..511 × 4 mg | 4 | 10 | 10 | SAT | S | Accelerometer Y after the offsets |
+| AZ | MQ_SENS | -511..511 × 4 mg | 4 | 10 | 10 | SAT | S | Accelerometer Z after the offsets (flat = +1000) |
+| WDT_GAP | MQ_SENS | 0..255 × 250 us | 250 | 8 | 8 | SAT | S | Longest watchdog feed gap in the current 2 s window |
+| SCAN | MQ_SENS | 0..7 × 1 code | 1 | 3 | 3 | ENUM | S | APP_SCAN_* obstacle scanner state |
+| PAD | MQ_SENS | 0..0 × 1 - | 1 | 0 | 5 | PAD | S | Zero |
 | CHAR | MQ_MAP | 0..42 × 1 code | 1 | 6 | 6 | ENUM | S | Byte 1 of a MAP command |
 | CMD | MQ_MAP | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | Byte 1 of a MAP command |
 | DROPS | PRV_TEL | 0..255 × 1 count | 1 | 8 | 8 | SAT | P | K11 drops; telem_task only |
@@ -131,6 +142,8 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | RECIP | E_LINE | 0..0 × 1 Q16 | 1 | 0 | 32 | RAW | E | E8 precomputed reciprocals x2 |
 | HEAD_TAIL | E_BAR | 0..0 × 1 index | 1 | 0 | 8 | RAW | E | E6 ring head (ISR) and tail (task): one writer per byte |
 | LAST_US | E_BAR_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 ISR-private last accepted edge time (own E group and bits=31 for gen_layout.py; SPEC-QUESTION SQ-B3-1) |
+| L | SH_IR_RAW | 0..4095 × 1 adc | 1 | 12 | 12 | RNG | S | Raw left IR ADC; line_task writes the whole word each cycle; readers load it once |
+| R | SH_IR_RAW | 0..4095 × 1 adc | 1 | 12 | 12 | RNG | S | Raw right IR ADC |
 
 ## B4
 
@@ -178,6 +191,9 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | CAL_SUM | E_IMU | 0..0 × 1 code | 1 | 0 | 32 | RAW | E | E2 calibration sums x3 (live 2 s only) |
 | RAW_SAMPLE | E_IMU_SAMPLE | 0..0 × 1 code | 1 | 0 | 16 | RAW | E | E4 accelerometer register image (own E group; SPEC-QUESTION in TEST_LOG) |
 | IMPACT_SEQ | SH_IMU | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | R1 callback -> imu_task; wraps |
+| AX | SH_IMU_ACC | -511..511 × 4 mg | 4 | 10 | 10 | SAT | S | Accel X after offsets; imu_task writes the whole word each cycle |
+| AY | SH_IMU_ACC | -511..511 × 4 mg | 4 | 10 | 10 | SAT | S | Accel Y after offsets |
+| AZ | SH_IMU_ACC | -511..511 × 4 mg | 4 | 10 | 10 | SAT | S | Accel Z after offsets |
 
 ## B5
 
@@ -273,6 +289,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | MQ_SUMM | 48 | 48 |
 | MQ_SNAP | 48 | 48 |
 | MQ_HB | 40 | 40 |
+| MQ_SENS | 88 | 88 |
 | MQ_MAP | 8 | 8 |
 | PRV_IMU_A | 32 | 32 |
 | PRV_IMU_B | 29 | 32 |
@@ -302,6 +319,8 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_BAR_MAP | 8 | 8 |
 | SH_BAR | 8 | 8 |
 | SH_BAR_OVF | 8 | 8 |
+| SH_IR_RAW | 24 | 32 |
+| SH_IMU_ACC | 30 | 32 |
 
 ## Range assumptions
 

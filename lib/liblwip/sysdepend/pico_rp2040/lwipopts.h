@@ -39,7 +39,10 @@
 
 #define MEM_LIBC_MALLOC             0
 #define MEM_ALIGNMENT               4
-#define MEM_SIZE                    (16 * 1024)
+/* 20 KB since 2026-11-06: the MQTT client (mem_calloc'd here) grew to
+ * ~3.3 KB with the 2048 B output ring and 64 request slots, next to up to
+ * TCP_SND_BUF (11.7 KB) of unsent TCP data in a stall (S1-U38). */
+#define MEM_SIZE                    (20 * 1024)
 
 #define MEMP_NUM_TCP_SEG            32
 #define MEMP_NUM_ARP_QUEUE          10
@@ -70,10 +73,13 @@
  * slow phone hotspot (2026-11-03 on-car capture: pings up to 510 ms, STATE
  * gaps up to 1.7 s, heartbeat DROPS 71 -> 255 in 160 s): mqtt_publish()
  * then returns ERR_MEM and mqtt_utk.c drops the payload after two tries.
- * Sized for 4 s (the keepalive) of state + heartbeat, 6 messages/s:
- * 24 slots and 24 x 31 B = 744 B of ring. Checked by host test S1-U38. */
-#define MQTT_REQ_MAX_IN_FLIGHT      24
-#define MQTT_OUTPUT_RINGBUF_SIZE    1024
+ * Sized for 4 s (the keepalive) of state + sensors + heartbeat,
+ * 11 messages/s since the debug SENSORS payload (2026-11-06): 44 slots and
+ * 44 x 31 B = 1364 B of ring; 64 slots and 2048 B leave room for the
+ * mirrored console lines, which mqtt_utk.c only sends while the ring is
+ * at most a quarter full. Checked by host test S1-U38. */
+#define MQTT_REQ_MAX_IN_FLIGHT      64
+#define MQTT_OUTPUT_RINGBUF_SIZE    2048
 
 #define LWIP_ARP                    1
 #define LWIP_ETHERNET               1

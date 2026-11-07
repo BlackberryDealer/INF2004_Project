@@ -37,6 +37,12 @@
 #define BRIDGE_CMD_GAP_10MS   (TELEM_CMD_MIN_GAP_MS / 10u)
 #define BRIDGE_CMD_LEN        (1u)     /* START STOP RESET SNAP: header  */
 #define BRIDGE_MAP_LEN        (2u)     /* MAP: header + MQ_MAP byte       */
+#define BRIDGE_LOG_ARGS       (3u)     /* app_log() takes three arguments */
+#define BRIDGE_DEC_DIGITS     (10u)    /* 4294967295                      */
+#define BRIDGE_HEX_DIGITS     (8u)
+#define BRIDGE_DEC_BASE       (10u)
+#define BRIDGE_HEX_SHIFT      (4u)
+#define BRIDGE_HEX_MASK       (0xFu)
 
 #if (BRIDGE_CMD_GAP_10MS < 1u) || (BRIDGE_CMD_GAP_10MS > PRV_CMD_T_LAST_MAX)
 #error "TELEM_CMD_MIN_GAP_MS no longer fits the 16-bit 10 ms time stamps"
@@ -55,6 +61,8 @@ static uint16_t          g_cmd_last_10ms[BRIDGE_CMD_COUNT] =
     0u, 0u, 0u, 0u, 0u
 };
 static volatile uint32_t g_bridge_word = 0u;
+/* K12 drops already reported in a LOG line; radio task only. */
+static uint32_t          g_log_drops_told = 0u;
 
 /* ---- private function prototypes ------------------------------------- */
 
@@ -63,6 +71,14 @@ static uint32_t bridge_parse_command(uint8_t const * p_payload,
 static bool     bridge_rate_ok(uint32_t cmd_idx);
 static void     bridge_count_cmd_drop(void);
 static void     bridge_count(uint32_t pos, uint32_t bits, int32_t max);
+static uint32_t bridge_format(char * p_out, uint32_t size,
+                              telem_log_rec_t const * p_rec);
+static uint32_t bridge_put_char(char * p_out, uint32_t size, uint32_t len,
+                                char ch);
+static uint32_t bridge_put_dec(char * p_out, uint32_t size, uint32_t len,
+                               int32_t value);
+static uint32_t bridge_put_hex(char * p_out, uint32_t size, uint32_t len,
+                               uint32_t value);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -148,6 +164,14 @@ void mqtt_bridge_route(uint8_t mq_type, char const ** pp_topic, uint8_t * p_qos,
 
         case APP_MQ_TYPE_HEARTBEAT:
             p_topic = TELEM_TOPIC_HB;
+            break;
+
+        case APP_MQ_TYPE_SENSORS:
+            p_topic = TELEM_TOPIC_SENS;   /* debug: QoS 0 like STATE */
+            break;
+
+        case APP_MQ_TYPE_LOG:
+            p_topic = TELEM_TOPIC_LOG;    /* debug: QoS 0, best effort */
             break;
 
         case APP_MQ_TYPE_ONLINE:
@@ -307,6 +331,59 @@ uint32_t mqtt_bridge_publish_drops(void)
 }
 
 /**
+ * mqtt_bridge_take_log
+ * @brief   Takes the next mirrored console line from K12 and formats it
+ *          as a LOG payload: the MQ_HDR byte, then the text (newlines
+ *          removed, no NUL). When K12 overflowed since the last call, a
+ *          line "N console lines dropped" is returned first.
+ * @param   p_buf  output buffer
+ * @param   size   size of p_buf (at least 2 bytes to carry any text)
+ * @return  payload length, 0 if nothing is queued
+ * @context radio task
+ */
+uint32_t mqtt_bridge_take_log(uint8_t * p_buf, uint32_t size)
+{
+    telem_log_rec_t rec   = {NULL, 0, 0, 0};
+    uint32_t        len   = 0u;
+    uint32_t const  drops = telem_log_drops();
+    INT             rcv   = 0;
+
+    if ((NULL == p_buf) || (size < 2u))
+    {
+        return 0u;
+    }
+
+    if (drops != g_log_drops_told)
+    {
+        rec.p_format     = "(%d console lines dropped: queue full)";
+        /* cast: 8-bit counter difference, 0..255 */
+        rec.arg_a        = (int32_t) ((drops - g_log_drops_told) & 0xFFu);
+        g_log_drops_told = drops;
+    }
+    else if (0 < telem_k12_id())
+    {
+        rcv = tk_rcv_mbf(telem_k12_id(), &rec, TMO_POL);
+        if (rcv != (INT) sizeof(rec))   /* cast: 16 or 24 */
+        {
+            rec.p_format = NULL;        /* nothing queued (or corrupt) */
+        }
+    }
+    else
+    {
+        /* no console mirror in this image */
+    }
+
+    if (NULL != rec.p_format)
+    {
+        p_buf[0] = (uint8_t) telem_bin_header(APP_MQ_TYPE_LOG); /* 1 B */
+        /* cast: the text goes after the header, as bytes */
+        len = 1u + bridge_format((char *) &p_buf[1], size - 1u, &rec);
+    }
+
+    return len;
+}
+
+/**
  * mqtt_bridge_cmd_topic
  * @brief   The command topic to subscribe to.
  * @return  NUL-terminated topic string
@@ -442,6 +519,185 @@ static void bridge_count_cmd_drop(void)
 {
     bridge_count(PRV_BRIDGE_CMD_DROPS_POS, PRV_BRIDGE_CMD_DROPS_BITS,
                  PRV_BRIDGE_CMD_DROPS_MAX);
+}
+
+/**
+ * bridge_format
+ * @brief   Formats one console line like app_log() does (%d signed
+ *          decimal, %x hexadecimal, %% a percent sign; at most three
+ *          arguments) into p_out without a NUL. A newline or carriage
+ *          return becomes nothing at the end and a space elsewhere.
+ *          Stops at size bytes: never writes past the buffer.
+ * @param   p_out  output text
+ * @param   size   bytes available
+ * @param   p_rec  format and arguments
+ * @return  bytes written
+ * @context radio task
+ */
+static uint32_t bridge_format(char * p_out, uint32_t size,
+                              telem_log_rec_t const * p_rec)
+{
+    int32_t const args[BRIDGE_LOG_ARGS] =
+    {
+        p_rec->arg_a, p_rec->arg_b, p_rec->arg_c
+    };
+    char const * p_fmt   = p_rec->p_format;
+    uint32_t     len     = 0u;
+    uint32_t     arg_idx = 0u;
+    int32_t      arg     = 0;
+    char         ch      = '\0';
+
+    while (('\0' != *p_fmt) && (len < size))
+    {
+        ch = *p_fmt;
+        p_fmt++;
+        if (('%' == ch) && ('\0' != *p_fmt))
+        {
+            ch = *p_fmt;
+            p_fmt++;
+            arg = 0;
+            if (('d' == ch) || ('x' == ch))
+            {
+                if (arg_idx < BRIDGE_LOG_ARGS)
+                {
+                    arg = args[arg_idx];
+                }
+                arg_idx++;
+            }
+            if ('d' == ch)
+            {
+                len = bridge_put_dec(p_out, size, len, arg);
+            }
+            else if ('x' == ch)
+            {
+                /* cast: %x prints the 32-bit pattern, as tm_printf does */
+                len = bridge_put_hex(p_out, size, len, (uint32_t) arg);
+            }
+            else
+            {
+                len = bridge_put_char(p_out, size, len, ch); /* %% etc. */
+            }
+        }
+        else if (('\n' == ch) || ('\r' == ch))
+        {
+            if ('\0' != *p_fmt)
+            {
+                len = bridge_put_char(p_out, size, len, ' ');
+            }
+        }
+        else
+        {
+            len = bridge_put_char(p_out, size, len, ch);
+        }
+    }
+
+    return len;
+}
+
+/**
+ * bridge_put_char
+ * @brief   Appends one character if it fits.
+ * @param   p_out  output text
+ * @param   size   bytes available
+ * @param   len    bytes used so far
+ * @param   ch     character
+ * @return  new length
+ * @context radio task
+ */
+static uint32_t bridge_put_char(char * p_out, uint32_t size, uint32_t len,
+                                char ch)
+{
+    uint32_t used = len;
+
+    if (used < size)
+    {
+        p_out[used] = ch;
+        used++;
+    }
+
+    return used;
+}
+
+/**
+ * bridge_put_dec
+ * @brief   Appends a signed decimal number (digits that do not fit are
+ *          cut off at the end of the buffer).
+ * @param   p_out  output text
+ * @param   size   bytes available
+ * @param   len    bytes used so far
+ * @param   value  number
+ * @return  new length
+ * @context radio task (division allowed: a few lines per second)
+ */
+static uint32_t bridge_put_dec(char * p_out, uint32_t size, uint32_t len,
+                               int32_t value)
+{
+    char     digits[BRIDGE_DEC_DIGITS] = {'\0'};
+    uint32_t mag   = 0u;
+    uint32_t count = 0u;
+    uint32_t used  = len;
+
+    if (value < 0)
+    {
+        used = bridge_put_char(p_out, size, used, '-');
+        /* cast: two's complement magnitude, also right for INT32_MIN */
+        mag  = 0u - (uint32_t) value;
+    }
+    else
+    {
+        mag = (uint32_t) value;   /* cast: value >= 0 */
+    }
+
+    do
+    {
+        /* cast: one decimal digit, 0..9 */
+        digits[count] = (char) ('0' + (char) (mag % BRIDGE_DEC_BASE));
+        mag /= BRIDGE_DEC_BASE;
+        count++;
+    } while ((0u != mag) && (count < BRIDGE_DEC_DIGITS));
+
+    while (count > 0u)
+    {
+        count--;
+        used = bridge_put_char(p_out, size, used, digits[count]);
+    }
+
+    return used;
+}
+
+/**
+ * bridge_put_hex
+ * @brief   Appends a number in lower-case hexadecimal, no leading zeros.
+ * @param   p_out  output text
+ * @param   size   bytes available
+ * @param   len    bytes used so far
+ * @param   value  number
+ * @return  new length
+ * @context radio task
+ */
+static uint32_t bridge_put_hex(char * p_out, uint32_t size, uint32_t len,
+                               uint32_t value)
+{
+    static char const hex[] = "0123456789abcdef";
+    char              digits[BRIDGE_HEX_DIGITS] = {'\0'};
+    uint32_t          mag   = value;
+    uint32_t          count = 0u;
+    uint32_t          used  = len;
+
+    do
+    {
+        digits[count] = hex[mag & BRIDGE_HEX_MASK];
+        mag >>= BRIDGE_HEX_SHIFT;
+        count++;
+    } while ((0u != mag) && (count < BRIDGE_HEX_DIGITS));
+
+    while (count > 0u)
+    {
+        count--;
+        used = bridge_put_char(p_out, size, used, digits[count]);
+    }
+
+    return used;
 }
 
 /**

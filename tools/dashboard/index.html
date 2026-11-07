@@ -301,6 +301,17 @@ details.map summary { cursor: pointer; color: var(--text-2); }
 .log td.time { color: var(--text-3); white-space: nowrap; }
 .log td.kind { white-space: nowrap; }
 .log td.hex { color: var(--text-3); white-space: nowrap; }
+.console { height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); padding: 6px 10px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; line-height: 1.5; }
+.console .ln { white-space: pre-wrap; word-break: break-word; }
+.console .ts { color: var(--text-3); margin-right: 10px; }
+.console .bad { color: var(--critical); font-weight: 650; }
+.console .warn { color: var(--serious); font-weight: 600; }
+.console .st { color: var(--run); font-weight: 650; }
+.console .dim { color: var(--text-3); }
+.console .empty { color: var(--text-3); font-family: inherit; }
+.tile .sub { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
+.sens-note .spacer { margin-left: auto; }
+.sens-note { margin-top: 10px; font-size: 12.5px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 600; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
 .tag.cmd { border-color: var(--series-1); color: var(--series-1); }
 .tag.state { border-color: var(--good); color: var(--good); }
@@ -415,6 +426,27 @@ details.map summary { cursor: pointer; color: var(--text-2); }
         <button class="btn" id="resetStats" type="button" style="margin-top:12px;font-size:12px">Reset session counters</button>
     </section>
 
+    <!-- raw sensors (debug, c28/d) -->
+    <section class="card span-12" id="sensCard">
+        <h2>Sensors (raw) <span class="spacer"></span><span class="muted num" id="sensAge" style="text-transform:none;letter-spacing:0">c28/d, 5 Hz</span></h2>
+        <div class="tiles">
+            <div class="tile"><div class="l"><span><span class="swatch" style="background:var(--series-1)"></span>IR left (ADC)</span><span id="sIrLTag"></span></div><div class="v num" id="sIrL">–</div><div class="bar"><i id="bIrL"></i></div></div>
+            <div class="tile"><div class="l"><span><span class="swatch" style="background:var(--series-2)"></span>IR right (ADC)</span><span id="sIrRTag"></span></div><div class="v num" id="sIrR">–</div><div class="bar"><i id="bIrR" style="background:var(--series-2)"></i></div></div>
+            <div class="tile"><div class="l"><span>Ultrasonic</span><span id="sUsTag"></span></div><div class="v num" id="sUs">–</div><div class="bar"><i id="bUs"></i></div></div>
+            <div class="tile"><div class="l">Scanner</div><div class="v txt" id="sScan">–</div></div>
+            <div class="tile"><div class="l">Barcode DO</div><div class="v txt" id="sBar">–</div><div class="sub" id="sEdges"></div></div>
+            <div class="tile"><div class="l">Accel X / Y</div><div class="v num" id="sAxy" style="font-size:17px">–</div><div class="sub">mg, after CAL_IMU offsets</div></div>
+            <div class="tile"><div class="l">Accel Z</div><div class="v num" id="sAz">–</div><div class="sub">flat ≈ +1000 mg</div></div>
+            <div class="tile"><div class="l"><span>Watchdog gap</span><span id="sGapTag"></span></div><div class="v num" id="sGap">–</div><div class="bar"><i id="bGap"></i></div></div>
+        </div>
+        <div class="sens-note">
+            <span>Start a run with <strong>both IR readings between 1000 and 2000</strong> (sensors on the line edges). Ultrasonic: slow below 600 mm, stop below ~401 mm. Watchdog fires at 30 ms; above 15 ms something starves the CPU.</span>
+            <span class="spacer"></span>
+            <span class="muted num" id="sensCount"></span>
+            <button class="btn" id="sensExport" type="button">Export sensors CSV</button>
+        </div>
+    </section>
+
     <!-- charts -->
     <section class="card span-12">
         <h2>Trends <span class="spacer"></span>
@@ -425,7 +457,24 @@ details.map summary { cursor: pointer; color: var(--text-2); }
             <div class="chart" data-chart="steer"><div class="head"><span class="t">Line error (‰, + = line to the left)</span><span class="lg"></span></div><canvas></canvas></div>
             <div class="chart" data-chart="pitch"><div class="head"><span class="t">Pitch (deg)</span><span class="lg"></span></div><canvas></canvas></div>
             <div class="chart" data-chart="turn"><div class="head"><span class="t">Turn rate (deg/s)</span><span class="lg"></span></div><canvas></canvas></div>
+            <div class="chart" data-chart="ir"><div class="head"><span class="t">IR raw (ADC, 0 white … 4095 black)</span><span class="lg"><span><span class="swatch" style="background:var(--series-1)"></span>Left</span><span><span class="swatch" style="background:var(--series-2)"></span>Right</span></span></div><canvas></canvas></div>
+            <div class="chart" data-chart="us"><div class="head"><span class="t">Ultrasonic distance (mm, 2044 = nothing)</span><span class="lg"></span></div><canvas></canvas></div>
+            <div class="chart" data-chart="acc"><div class="head"><span class="t">Accelerometer (mg)</span><span class="lg"><span><span class="swatch" style="background:var(--series-1)"></span>X</span><span><span class="swatch" style="background:var(--series-2)"></span>Y</span><span><span class="swatch" style="background:var(--good)"></span>Z − 1000</span></span></div><canvas></canvas></div>
+            <div class="chart" data-chart="gap"><div class="head"><span class="t">Watchdog feed gap (ms, limit 30)</span><span class="lg"></span></div><canvas></canvas></div>
         </div>
+    </section>
+
+    <!-- car console (debug, c28/l) -->
+    <section class="card span-12">
+        <h2>Car console <span class="spacer"></span><span class="muted num" id="conCount" style="text-transform:none;letter-spacing:0">c28/l</span></h2>
+        <div class="log-tools">
+            <input type="search" id="conFilter" placeholder="Filter (e.g. OBSTACLE, LINE LOST, SCAN, REJOIN)" aria-label="Filter console">
+            <label title="US dist, IR raw, ENC pos, BAR DO/edges and WDT lines (the Sensors card shows the same values)"><input type="checkbox" id="conQuiet"> hide periodic status lines</label>
+            <label><input type="checkbox" id="conPause"> pause</label>
+            <button class="btn" id="conClear" type="button">Clear</button>
+            <button class="btn" id="conExport" type="button">Export .txt</button>
+        </div>
+        <div class="console" id="conBox"><div class="empty">Every console line of the car (the same text as the USB serial) appears here over Wi-Fi. It needs the MQTT image (NET=lwip MQTT=1).</div></div>
     </section>
 
     <!-- run summary -->
@@ -458,7 +507,7 @@ details.map summary { cursor: pointer; color: var(--text-2); }
 
     <section class="card span-12 help">
         <h2>Setup</h2>
-        Run Mosquitto with a WebSocket listener (add <code>listener 9001</code> and <code>protocol websockets</code> to <code>C:\mosq\car.conf</code>), then connect to the laptop's IP and port 9001.
+        Run Mosquitto with a WebSocket listener (add <code>listener 9001</code> and <code>protocol websockets</code> to <code>C:\mosq\car.conf</code>), then run <code>py tools\dashboard\car_link.py</code>: it tells the car the laptop's address (UDP beacon, so a new hotspot needs no rebuild) and serves this page at <code>http://localhost:8000</code>. Connect to <code>localhost</code> (or the laptop's IP) and port 9001.
         No car? Run <code>py tools\dashboard\fake_car.py</code> for a pretend one. Full steps: <code>tools/dashboard/README.md</code>.
         Decoding matches <code>tools/telem_decode.py</code> byte for byte (host test S1-U44).
     </section>

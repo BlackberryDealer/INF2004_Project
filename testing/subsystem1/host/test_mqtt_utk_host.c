@@ -4,7 +4,8 @@
  *          B1.2.5) against mock lwIP and mock bridge functions: pending
  *          payload and publish refusals (S1-U13, S1-U15), reconnect
  *          back-off (S1-U36), last will, availability and command
- *          forwarding (S1-U37), Nagle off on connect (S1-U39). The
+ *          forwarding (S1-U37), Nagle off on connect (S1-U39), broker
+ *          beacon (S1-U48) and console-line drain (S1-U49). The
  *          real source is included so its
  *          private state can be checked.
  * @owner   Buddy 1 (communications)
@@ -112,12 +113,15 @@ err_t mqtt_publish(mqtt_client_t * p_client, const char * topic,
     return err;
 }
 
+static unsigned           g_conn_addr;     /* broker address of the last connect */
+static uint32_t           g_disconnects;
+
 err_t mqtt_client_connect(mqtt_client_t * p_client, const void * ipaddr,
                           u16_t port, mqtt_connection_cb_t cb, void * arg,
                           const struct mqtt_connect_client_info_t * info)
 {
     (void) p_client;
-    (void) ipaddr;
+    g_conn_addr = ((const ip_addr_t *) ipaddr)->addr;
     (void) port;
     (void) arg;
     g_conn_cb = cb;
@@ -155,6 +159,86 @@ void sys_untimeout(sys_timeout_handler handler, void * arg)
 {
     (void) handler;
     (void) arg;
+}
+
+void mqtt_disconnect(mqtt_client_t * p_client)
+{
+    (void) p_client;
+    g_disconnects++;
+}
+
+/* mock UDP / pbuf for the broker beacon */
+const ip_addr_t       mock_ip_any = {0u, IPADDR_TYPE_V4};
+static struct udp_pcb g_udp_obj;
+static udp_recv_fn    g_udp_cb;
+static u16_t          g_udp_port;
+static uint32_t       g_pbuf_frees;
+
+struct udp_pcb * udp_new_ip_type(u8_t type)
+{
+    (void) type;
+    return &g_udp_obj;
+}
+
+err_t udp_bind(struct udp_pcb * pcb, const ip_addr_t * ipaddr, u16_t port)
+{
+    (void) pcb;
+    (void) ipaddr;
+    g_udp_port = port;
+    return ERR_OK;
+}
+
+void udp_recv(struct udp_pcb * pcb, udp_recv_fn recv, void * recv_arg)
+{
+    (void) pcb;
+    (void) recv_arg;
+    g_udp_cb = recv;
+}
+
+void udp_remove(struct udp_pcb * pcb)
+{
+    (void) pcb;
+}
+
+u16_t pbuf_copy_partial(const struct pbuf * p, void * dataptr, u16_t len,
+                        u16_t offset)
+{
+    u16_t n = 0u;
+
+    if (offset < p->len)
+    {
+        n = (u16_t) (p->len - offset);
+        if (n > len)
+        {
+            n = len;
+        }
+        (void) memcpy(dataptr, (const uint8_t *) p->payload + offset, n);
+    }
+    return n;
+}
+
+u8_t pbuf_free(struct pbuf * p)
+{
+    (void) p;
+    g_pbuf_frees++;
+    return 1u;
+}
+
+char * ipaddr_ntoa(const ip_addr_t * addr)
+{
+    static char text[16];
+
+    (void) snprintf(text, sizeof(text), "%u", addr->addr);
+    return text;
+}
+
+/* one datagram on the beacon port from address a */
+static void beacon_send(char const * p_text, unsigned addr)
+{
+    struct pbuf     pb   = {p_text, (u16_t) strlen(p_text)};
+    ip_addr_t const from = {addr, IPADDR_TYPE_V4};
+
+    g_udp_cb(NULL, &g_udp_obj, &pb, &from, 50000u);
 }
 
 int tm_printf(UB * format, ...)
@@ -236,6 +320,24 @@ uint32_t mqtt_bridge_publish_drops(void)
 char const * mqtt_bridge_cmd_topic(void)
 {
     return "c28/c";
+}
+
+/* mirrored console lines: g_log_count lines of 5 bytes, header 0x49 */
+static uint32_t g_log_count;
+static uint32_t g_log_next;
+
+uint32_t mqtt_bridge_take_log(uint8_t * p_buf, uint32_t size)
+{
+    uint32_t len = 0u;
+
+    if ((g_log_next < g_log_count) && (size >= 5u))
+    {
+        p_buf[0] = 0x49u;    /* version 1, type 9 = LOG */
+        (void) memcpy(&p_buf[1], "line", 4u);
+        g_log_next++;
+        len = 5u;
+    }
+    return len;
 }
 
 /* ---- helpers ---------------------------------------------------------- */
@@ -387,6 +489,95 @@ int main(void)
     publish_done_cb(NULL, ERR_OK);
     HOST_CHECK("S1-U13", 1u == g_pub_drops,
                "late publish failure (publish_done_cb) counted");
+
+    /* S1-U49: console lines go out after the binary telemetry, at most 2
+       per drain call, not while a telemetry payload is refused, never
+       counted as telemetry drops                                      */
+    reset_publish();
+    g_is_connected = 1u;
+    g_take_count   = 0u;
+    g_take_next    = 0u;
+    g_log_count    = 3u;
+    g_log_next     = 0u;
+    drain_timeout(NULL);
+    HOST_CHECK("S1-U49", (2u == g_pub_calls) && (0x49u == g_pub_first[0])
+                         && (0x49u == g_pub_first[1]),
+               "2 console lines per drain call");
+    drain_timeout(NULL);
+    HOST_CHECK("S1-U49", (3u == g_pub_calls) && (3u == g_log_next),
+               "the third line goes out on the next call");
+    reset_publish();
+    queue_payloads(0xA1u, 0xB2u);
+    g_log_count = 4u;
+    g_log_next  = 3u;            /* one more line waiting */
+    g_pub_script[0] = ERR_MEM;   /* telemetry A refused */
+    drain_timeout(NULL);
+    HOST_CHECK("S1-U49", (1u == g_pub_calls) && (3u == g_log_next),
+               "no console line while a telemetry payload is refused");
+    reset_publish();
+    g_take_count    = 0u;
+    g_pub_script[0] = ERR_MEM;   /* the line itself refused */
+    drain_timeout(NULL);
+    HOST_CHECK("S1-U49", (1u == g_pub_calls) && (0u == g_pub_drops),
+               "a refused console line is not a telemetry drop");
+    reset_publish();
+    g_log_count = 5u;
+    g_log_next  = 4u;
+    g_client_obj.output.put = 100u;      /* 2000 - 100 wrapped: 148 B */
+    g_client_obj.output.get = 2000u;
+    drain_timeout(NULL);
+    HOST_CHECK("S1-U49", (1u == g_pub_calls) && (5u == g_log_next),
+               "ring 148 B used (wrapped): the line goes out");
+    reset_publish();
+    g_log_count = 6u;
+    g_client_obj.output.put = 1000u;     /* 1000 B used > 512 */
+    g_client_obj.output.get = 0u;
+    drain_timeout(NULL);
+    HOST_CHECK("S1-U49", (0u == g_pub_calls) && (5u == g_log_next),
+               "ring more than a quarter full: console lines wait");
+    g_client_obj.output.put = 0u;
+    g_log_count = 0u;
+    g_log_next  = 0u;
+
+    /* S1-U48: the laptop's UDP beacon gives the broker address */
+    HOST_CHECK("S1-U48", (NULL != g_udp_cb) && (18830u == g_udp_port),
+               "listens for the broker beacon on UDP 18830");
+    g_is_connected = 0u;
+    g_conn_cb(&g_client_obj, NULL, MQTT_CONNECT_TIMEOUT); /* back-off on */
+    idx = g_connects;
+    beacon_send("C28B 1883", 0x0A00002Au);
+    mqtt_utk_start();
+    HOST_CHECK("S1-U48", (1u == g_disconnects) && ((idx + 1u) == g_connects)
+                         && (0x0A00002Au == g_conn_addr)
+                         && (0u == mq_get(PRV_MQTT_BACKOFF_POS,
+                                          PRV_MQTT_BACKOFF_BITS)),
+               "beacon while not connected: old attempt aborted, back-off "
+               "skipped, connects to the beacon's sender");
+    HOST_CHECK("S1-U48", 1u == g_pbuf_frees, "beacon pbuf freed");
+    beacon_send("XXXX", 0x0A000063u);
+    beacon_send("C2", 0x0A000064u);
+    g_conn_cb(&g_client_obj, NULL, MQTT_CONNECT_TIMEOUT);
+    retry_timeout(NULL);
+    HOST_CHECK("S1-U48", (0x0A00002Au == g_conn_addr) && (3u == g_pbuf_frees)
+                         && (1u == g_disconnects),
+               "other datagrams ignored (and freed): retry keeps the "
+               "beacon address");
+    beacon_send("C28B", 0x0A00002Au);
+    mqtt_utk_start();
+    HOST_CHECK("S1-U48", 1u == g_disconnects,
+               "same address again: the attempt is not restarted");
+    g_is_connected = 1u;
+    g_conn_cb(&g_client_obj, NULL, MQTT_CONNECT_ACCEPTED);
+    idx = g_connects;
+    beacon_send("C28B", 0x0A00002Bu);
+    mqtt_utk_start();
+    HOST_CHECK("S1-U48", (1u == g_disconnects) && (idx == g_connects),
+               "new address while connected: the working link is kept");
+    g_is_connected = 0u;
+    g_conn_cb(&g_client_obj, NULL, MQTT_CONNECT_DISCONNECTED);
+    retry_timeout(NULL);
+    HOST_CHECK("S1-U48", 0x0A00002Bu == g_conn_addr,
+               "after that link drops, the newest beacon address is used");
 
     return (0 == HOST_SUMMARY("mqtt_utk")) ? 0 : 1;
 }

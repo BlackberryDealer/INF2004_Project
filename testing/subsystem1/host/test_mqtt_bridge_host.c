@@ -2,7 +2,8 @@
  * @file    test_mqtt_bridge_host.c
  * @brief   Laptop tests of mqtt_bridge.c against a mock kernel: binary
  *          command validation (S1-U11), rate limit (S1-U12), MAP
- *          (S1-U35), K11 take, routing,
+ *          (S1-U35), K11 take, routing (debug topics S1-U45), console
+ *          line formatting (S1-U46),
  *          availability, link changes and drop counters. The real source
  *          is included so its private counters can be checked.
  * @owner   Buddy 1 (communications)
@@ -30,12 +31,29 @@ static uint32_t g_posts;
 static uint32_t g_post_type[16];
 static uint32_t g_post_value[16];
 
+#define MOCK_K12_ID     (9)
+#define MOCK_LOG_MAX    (4u)
+static telem_log_rec_t g_log_q[MOCK_LOG_MAX];
+static uint32_t        g_log_n;
+static uint32_t        g_log_drops;
+static ID              g_k12_id = MOCK_K12_ID;
+
 INT tk_rcv_mbf(ID id, void * p_msg, TMO tmout)
 {
     INT      len = E_TMOUT;
     uint32_t idx = 0u;
 
     (void) tmout;
+    if ((MOCK_K12_ID == id) && (g_log_n > 0u))
+    {
+        (void) memcpy(p_msg, &g_log_q[0], sizeof(telem_log_rec_t));
+        for (idx = 1u; idx < g_log_n; idx++)
+        {
+            g_log_q[idx - 1u] = g_log_q[idx];
+        }
+        g_log_n--;
+        return (INT) sizeof(telem_log_rec_t);
+    }
     if ((MOCK_K11_ID == id) && (g_q_count > 0u))
     {
         (void) memcpy(p_msg, g_q_msg[0], g_q_len[0]);
@@ -71,6 +89,43 @@ void app_log(char const * p_format, int32_t arg_a, int32_t arg_b,
 ID telem_k11_id(void)
 {
     return MOCK_K11_ID;
+}
+
+ID telem_k12_id(void)
+{
+    return g_k12_id;
+}
+
+uint32_t telem_log_drops(void)
+{
+    return g_log_drops;
+}
+
+static void log_push(char const * p_fmt, int32_t a, int32_t b, int32_t c)
+{
+    if (g_log_n < MOCK_LOG_MAX)
+    {
+        g_log_q[g_log_n].p_format = p_fmt;
+        g_log_q[g_log_n].arg_a    = a;
+        g_log_q[g_log_n].arg_b    = b;
+        g_log_q[g_log_n].arg_c    = c;
+        g_log_n++;
+    }
+}
+
+/* LOG payload as text (after the header byte), for comparisons */
+static char g_text[200];
+static uint32_t take_log_text(uint32_t size)
+{
+    uint8_t  out[200];
+    uint32_t len = mqtt_bridge_take_log(out, size);
+
+    (void) memset(g_text, 0, sizeof(g_text));
+    if (len > 1u)
+    {
+        (void) memcpy(g_text, &out[1], len - 1u);
+    }
+    return len;
 }
 
 uint32_t sys_tick_now_us(void)
@@ -309,6 +364,64 @@ int main(void)
                "publish drops saturate at 255");
     HOST_CHECK("S1-U34", 0 == strcmp(mqtt_bridge_cmd_topic(),
                                      TELEM_TOPIC_CMD), "command topic");
+
+    /* S1-U45: the debug payloads go to their own QoS 0 topics */
+    mqtt_bridge_route(APP_MQ_TYPE_SENSORS, &p_top, &qos, &b_ret);
+    HOST_CHECK("S1-U45", (0 == strcmp(p_top, TELEM_TOPIC_SENS))
+                         && (0u == qos) && (!b_ret),
+               "SENSORS -> c28/d, QoS 0, not retained");
+    mqtt_bridge_route(APP_MQ_TYPE_LOG, &p_top, &qos, &b_ret);
+    HOST_CHECK("S1-U45", (0 == strcmp(p_top, TELEM_TOPIC_LOG))
+                         && (0u == qos) && (!b_ret),
+               "LOG -> c28/l, QoS 0, not retained");
+    HOST_CHECK("S1-U45", (0 == strcmp(TELEM_TOPIC_SENS, "c28/d"))
+                         && (0 == strcmp(TELEM_TOPIC_LOG, "c28/l")),
+               "topic names as documented for the dashboard");
+
+    /* S1-U46: console lines formatted like app_log(), safely */
+    HOST_CHECK("S1-U46", 0u == take_log_text(sizeof(buf)),
+               "nothing queued: no payload");
+    log_push("US dist %d mm, lost %d\n", 536, 0, 0);
+    len = take_log_text(sizeof(buf));
+    HOST_CHECK("S1-U46", (0 == strcmp(g_text, "US dist 536 mm, lost 0"))
+                         && ((1u + strlen(g_text)) == len),
+               "%d arguments, trailing newline removed, header + text");
+    {
+        uint8_t hdr[4];
+        log_push("x", 0, 0, 0);
+        (void) mqtt_bridge_take_log(hdr, sizeof(hdr));
+        HOST_CHECK("S1-U46", (0x49u == hdr[0]) && ('x' == (char) hdr[1]),
+                   "byte 0 is the LOG header (version 1, type 9)");
+    }
+    log_push("CAL_IR heading %d cdeg, inferred 0x%x, 100%% %d\n",
+             -207, 0xdb6c06, INT32_MIN);
+    (void) take_log_text(sizeof(buf));
+    HOST_CHECK("S1-U46", 0 == strcmp(g_text, "CAL_IR heading -207 cdeg, "
+                                     "inferred 0xdb6c06, 100% -2147483648"),
+               "negative, hexadecimal, %%, INT32_MIN");
+    log_push("a\nb %d %d %d %d\n", 1, 2, 3);
+    (void) take_log_text(sizeof(buf));
+    HOST_CHECK("S1-U46", 0 == strcmp(g_text, "a b 1 2 3 0"),
+               "inner newline -> space; a 4th %d prints 0");
+    log_push("ENC pos L %d R %d\n", 123456, -7, 0);
+    len = take_log_text(12u);  /* header + 11 text bytes */
+    HOST_CHECK("S1-U46", (12u == len) && (0 == strcmp(g_text, "ENC pos L 1")),
+               "never writes past the buffer (cut at the end)");
+    HOST_CHECK("S1-U46", 0u == mqtt_bridge_take_log(buf, 1u),
+               "a 1-byte buffer takes nothing");
+    g_log_drops = 5u;
+    log_push("next\n", 0, 0, 0);
+    (void) take_log_text(sizeof(buf));
+    HOST_CHECK("S1-U46", 0 == strcmp(g_text,
+                                     "(5 console lines dropped: queue full)"),
+               "K12 overflow reported first");
+    (void) take_log_text(sizeof(buf));
+    HOST_CHECK("S1-U46", 0 == strcmp(g_text, "next"),
+               "then the queued line; the drop count is told once");
+    g_k12_id = 0;
+    log_push("hidden\n", 0, 0, 0);
+    HOST_CHECK("S1-U46", 0u == take_log_text(sizeof(buf)),
+               "no K12 (image without the mirror): nothing");
 
     return (0 == HOST_SUMMARY("mqtt_bridge")) ? 0 : 1;
 }
