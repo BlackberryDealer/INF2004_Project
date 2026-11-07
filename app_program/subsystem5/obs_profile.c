@@ -25,6 +25,7 @@ typedef struct
     bool     b_is_near;
     int32_t  x_mm;       /* + = right of the robot's centre line */
     uint32_t y_mm;       /* forward distance                     */
+    uint32_t r_mm;       /* measured range (S5-U44)              */
 } obs_point_t;
 
 /* ---- private data ---------------------------------------------------- */
@@ -49,6 +50,7 @@ static void     obs_find_run(obs_point_t const * p_pts, uint32_t best,
 static void     obs_clearances(obs_point_t const * p_pts, uint32_t lo,
                                uint32_t hi, obs_profile_t * p_prof);
 static uint32_t obs_min_u(uint32_t value_a, uint32_t value_b);
+static bool     obs_is_joined(obs_point_t const * p_pts, uint32_t step);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -205,6 +207,7 @@ static void obs_make_points(uint16_t const * p_scan_mm, obs_point_t * p_pts)
         p_pts[step].b_is_near = (p_scan_mm[step] < OBS_NEAR_MM);
         p_pts[step].x_mm      = 0;
         p_pts[step].y_mm      = APP_PROFILE_CLEAR_MM;
+        p_pts[step].r_mm      = (uint32_t) p_scan_mm[step]; /* cast: widen */
 
         if (p_pts[step].b_is_near)
         {
@@ -228,7 +231,9 @@ static void obs_make_points(uint16_t const * p_scan_mm, obs_point_t * p_pts)
 
 /**
  * obs_pick_blocking
- * @brief   Splits the near points into runs (one object each) and picks
+ * @brief   Splits the near points into runs (one object each; a range
+ *          jump > OBS_RUN_JUMP_MM between neighbours ends a run, S5-U44)
+ *          and picks
  *          the nearest point of the runs that block the corridor
  *          (-c <= x <= c for at least one point of the run).
  * @param   p_pts points
@@ -258,7 +263,7 @@ static uint32_t obs_pick_blocking(obs_point_t const * p_pts)
                                     && (p_pts[step].x_mm <= corridor));
         }
         if ((APP_SCAN_STEPS != run_best)
-            && ((OBS_STEP_LAST == step) || (!p_pts[step + 1u].b_is_near)))
+            && ((OBS_STEP_LAST == step) || (!obs_is_joined(p_pts, step))))
         {
             if (b_blocks && (p_pts[run_best].y_mm < best_y))
             {
@@ -275,7 +280,8 @@ static uint32_t obs_pick_blocking(obs_point_t const * p_pts)
 
 /**
  * obs_find_run
- * @brief   Widens [best, best] while the neighbouring steps are near.
+ * @brief   Widens [best, best] while the neighbouring steps belong to the
+ *          same object (near, no range jump; S5-U44).
  * @param   p_pts points
  * @param   best  step of the nearest point
  * @param   p_lo  first step of the run
@@ -288,11 +294,11 @@ static void obs_find_run(obs_point_t const * p_pts, uint32_t best,
     uint32_t lo = best;
     uint32_t hi = best;
 
-    while ((lo > 0u) && p_pts[lo - 1u].b_is_near)
+    while ((lo > 0u) && obs_is_joined(p_pts, lo - 1u))
     {
         lo--;
     }
-    while ((hi < OBS_STEP_LAST) && p_pts[hi + 1u].b_is_near)
+    while ((hi < OBS_STEP_LAST) && obs_is_joined(p_pts, hi))
     {
         hi++;
     }
@@ -303,7 +309,10 @@ static void obs_find_run(obs_point_t const * p_pts, uint32_t best,
 /**
  * obs_clearances
  * @brief   Smallest lateral gap from the obstacle to any other near point
- *          on each side (APP_PROFILE_CLEAR_MM if there is none).
+ *          on each side (APP_PROFILE_CLEAR_MM if there is none). Only
+ *          points the bypass drives past count: forward distance <=
+ *          nearest + OBS_DEPTH_ASSUMED_MM + OBS_ROBOT_LEN_MM, the pass
+ *          leg (S5-U44); objects further behind do not block it.
  * @param   p_pts  points
  * @param   lo     first step of the obstacle run
  * @param   hi     last step of the obstacle run
@@ -313,11 +322,14 @@ static void obs_find_run(obs_point_t const * p_pts, uint32_t best,
 static void obs_clearances(obs_point_t const * p_pts, uint32_t lo,
                            uint32_t hi, obs_profile_t * p_prof)
 {
-    uint32_t gap_mm = 0u;
+    uint32_t const reach_mm = p_prof->nearest_mm + OBS_DEPTH_ASSUMED_MM
+                              + OBS_ROBOT_LEN_MM;
+    uint32_t       gap_mm   = 0u;
 
     for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)
     {
-        if (p_pts[idx].b_is_near && ((idx < lo) || (idx > hi)))
+        if (p_pts[idx].b_is_near && ((idx < lo) || (idx > hi))
+            && (p_pts[idx].y_mm <= reach_mm))
         {
             if (p_pts[idx].x_mm < p_prof->x_left_mm)
             {
@@ -352,6 +364,27 @@ static void obs_clearances(obs_point_t const * p_pts, uint32_t lo,
 static uint32_t obs_min_u(uint32_t value_a, uint32_t value_b)
 {
     return ((value_a < value_b) ? value_a : value_b);
+}
+
+/**
+ * obs_is_joined
+ * @brief   True if step and step + 1 are both near and their ranges differ
+ *          by at most OBS_RUN_JUMP_MM: the same object. A box 240 mm
+ *          ahead and a wall 640 mm away beside it are two objects
+ *          (on-car 2026-11-06, S5-U44).
+ * @param   p_pts points
+ * @param   step  0 .. OBS_STEP_LAST - 1
+ * @return  true = same run
+ * @context any
+ */
+static bool obs_is_joined(obs_point_t const * p_pts, uint32_t step)
+{
+    uint32_t const r_a = p_pts[step].r_mm;
+    uint32_t const r_b = p_pts[step + 1u].r_mm;
+    uint32_t const gap = (r_a > r_b) ? (r_a - r_b) : (r_b - r_a);
+
+    return (p_pts[step].b_is_near && p_pts[step + 1u].b_is_near
+            && (gap <= OBS_RUN_JUMP_MM));
 }
 
 /*** end of file ***/

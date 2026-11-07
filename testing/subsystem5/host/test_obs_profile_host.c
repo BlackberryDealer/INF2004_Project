@@ -166,5 +166,53 @@ int main(void)
                && (OBS_LEG_MIN_MM == plan.leg_lateral_mm),
                "lateral leg = OBS_LEG_MIN_MM, never 0");
 
+    /* S5-U44 (on-car 2026-11-06 14:19): box ~240 mm ahead at 65..90 deg,
+       other objects behind it at 640 mm on both sides (30..60 and
+       95..125 deg). Every step was < 650 mm, so the whole 30..125 deg
+       arc was one "obstacle" 840 mm wide: lateral leg > 300 mm, NO_PATH
+       twice, FAULT. A range jump > OBS_RUN_JUMP_MM now ends a run, and
+       only points the bypass drives past (forward <= nearest + depth +
+       robot length) limit the free gaps.                               */
+    scan_clear(scan);
+    scan_face(scan, 7u, 12u, 240);              /* box: 65..90 deg */
+    for (uint32_t step = 0u; step <= 6u; step++)
+    {
+        scan[step] = 640u;                       /* right, behind it */
+    }
+    for (uint32_t step = 13u; step <= 19u; step++)
+    {
+        scan[step] = 640u;                       /* left, behind it */
+    }
+    obs_profile_build(scan, &prof);
+    obs_profile_plan(&prof, &plan);
+    HOST_CHECK("S5-U44", prof.b_is_valid && in_range(prof.width_mm, 100, 130),
+               "box width ~112 mm, not the whole 30..125 deg arc");
+    HOST_CHECK("S5-U44", in_range((int32_t) prof.nearest_mm, 235, 245)
+               && in_range(prof.x_left_mm, -2, 2)
+               && in_range(prof.x_right_mm, 105, 120),
+               "box edges x 0..+112 mm, nearest ~240 mm");
+    HOST_CHECK("S5-U44", (OBS_OUT_PLAN == plan.outcome) && !plan.b_was_clamped
+               && (plan.leg_lateral_mm <= OBS_LEG_LAT_MAX_MM),
+               "objects behind the box do not block: PLAN, leg not clamped");
+    HOST_CHECK("S5-U44", in_range((int32_t) prof.clear_left_mm, 300, 340)
+               && in_range((int32_t) prof.clear_right_mm, 190, 230)
+               && (APP_SIDE_LEFT == plan.side),
+               "gaps only from points beside the pass leg (left 320, right"
+               " 209 from the 60 deg point at 554 mm): pass left");
+    /* separate objects (range jump) close beside the box, within the
+       pass leg, must still block both sides                          */
+    for (uint32_t step = 0u; step <= 6u; step++)
+    {
+        scan[step] = 450u;
+    }
+    for (uint32_t step = 13u; step <= 19u; step++)
+    {
+        scan[step] = 450u;
+    }
+    obs_profile_build(scan, &prof);
+    obs_profile_plan(&prof, &plan);
+    HOST_CHECK("S5-U44", OBS_OUT_NO_PATH == plan.outcome,
+               "real objects beside the box: still NO_PATH");
+
     return (0 == HOST_SUMMARY("subsystem5 host")) ? 0 : 1;
 }

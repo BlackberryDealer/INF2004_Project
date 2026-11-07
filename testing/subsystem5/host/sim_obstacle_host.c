@@ -249,34 +249,63 @@ int main(void) {
   w_dist = 452; cyc(); w_dist = 395; cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state && 0u == (g_safety & SAFETY_ESTOP), "395 unconfirmed after 452: still approaching");
   w_mode = 3; cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state, "1 lost ping after 395: keep approaching");
   cyc(); CHECK("S5-U38", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP) && 1 == count_ev(APP_EVT_OBSTACLE), "2 lost pings after an echo under the stop distance -> ESTOP, OBSTACLE");
-  /* S5-U39 (ramp vs. obstacle):
-     1. Approaching a ramp where the IMU pitches up during APPROACH ->
-        posts CONTINUE, returns to MONITOR, and ignores < 401 mm echoes
-        while climbing, descending, and during the hold window.
-     2. Stopping in front of a sloped ramp before the wheels touch it,
-        where the scan sees only a narrow normal-incidence glint at 90 deg
-        (width < OBS_MIN_WIDTH_MM) -> posts CONTINUE, enters PASSING.     */
+  /* S5-U42 (ramp vs. obstacle; was Lucas's S5-U39, an ID already used by
+     the FR9 test). On-car log 2026-11-05: with the pitch flag set the car
+     ignored a real box (scan width 84 mm, nearest 24 mm ahead), skipped
+     the reverse / bypass and drove on. Now the pitch flag only drops the
+     early-stop margin (stop below OBS_RAMP_STOP_MM instead of
+     OBS_STOP_MM); only a narrow glint overrides a scan.
+     1. Ramp face at 500 mm on flat -> APPROACH; pitching onto the ramp
+        keeps APPROACH (no CONTINUE), echoes 350 / 300 mm do not stop.
+     2. Box at 240 mm while still pitched -> ESTOP + OBSTACLE.
+     3. Pitched from the start: a 500 mm echo still starts APPROACH.
+     4. After the hold on flat ground, 380 mm stops at the normal distance.
+     5. Narrow 90 deg glint (< OBS_MIN_WIDTH_MM) -> CONTINUE, PASSING.
+     6. Real box (140 mm wide) scanned while pitched -> not CONTINUE
+        (PLAN or NO_PATH: bypass, or reverse and rescan).                */
   { status_board_imu_t imu_part = {0};
-    g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; g_fault = 0; nev = 0;
+    status_board_imu_t flat_part = {0};
+    flat_part.motion_class = APP_MCLASS_CRUISING;
+    g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; g_fault = 0; nev = 0; g_modes = 0;
+    status_board_write_imu(&flat_part);
     w_mode = 0; w_dist = 500; cyc(); cyc();
-    CHECK("S5-U39", APP_SCAN_APPROACH == g_state && 1 == count_ev(APP_EVT_OBSTACLE_AHEAD), "ramp at 500 mm on flat -> APPROACH");
+    CHECK("S5-U42", APP_SCAN_APPROACH == g_state && 1 == count_ev(APP_EVT_OBSTACLE_AHEAD), "ramp at 500 mm on flat -> APPROACH");
     imu_part.pitch_ddeg = 35; imu_part.motion_class = APP_MCLASS_CLIMBING;
     status_board_write_imu(&imu_part);
-    w_dist = 350; cyc();
-    CHECK("S5-U39", APP_SCAN_MONITOR == g_state && 1 == count_ev(APP_EVT_CONTINUE) && 0u == (g_safety & SAFETY_ESTOP), "front wheels pitch onto ramp -> CONTINUE, back to MONITOR, no ESTOP");
+    log_clear(); w_dist = 350; cyc(); cyc();
+    CHECK("S5-U42", APP_SCAN_APPROACH == g_state && 0 == count_ev(APP_EVT_CONTINUE) && 0u == (g_safety & SAFETY_ESTOP), "pitched onto the ramp, 350 mm: keep approaching (slow), no CONTINUE, no ESTOP");
+    CHECK("S5-U42", NULL != strstr(g_logbuf, "RAMP: pitched, echo 352 mm ignored, stop below 251 mm"), "console says the ramp relaxed the stop distance");
     imu_part.pitch_ddeg = -35; imu_part.motion_class = APP_MCLASS_DESCENDING;
     status_board_write_imu(&imu_part);
     w_dist = 300; cyc(); cyc();
-    CHECK("S5-U39", APP_SCAN_MONITOR == g_state && 0 == count_ev(APP_EVT_OBSTACLE) && 0u == (g_safety & SAFETY_ESTOP), "descending ramp (nose down at floor 300 mm ahead) -> ignored");
-    imu_part.pitch_ddeg = 0; imu_part.motion_class = APP_MCLASS_CRUISING;
+    CHECK("S5-U42", APP_SCAN_APPROACH == g_state && 0 == count_ev(APP_EVT_OBSTACLE) && 0u == (g_safety & SAFETY_ESTOP), "descending ramp (floor 300 mm ahead) -> no stop");
+    log_clear(); w_dist = 240; cyc(); cyc();
+    CHECK("S5-U42", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP) && 1 == count_ev(APP_EVT_OBSTACLE) && NULL == strstr(g_logbuf, "RAMP: pitched"), "box at 240 mm while still pitched -> ESTOP, OBSTACLE (NFR6 minimum kept)");
+    /* 3: pitched before the echo appears */
+    g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; nev = 0;
     status_board_write_imu(&imu_part);
+    w_dist = 1000; cyc(); cyc(); w_dist = 500; cyc(); cyc();
+    CHECK("S5-U42", APP_SCAN_APPROACH == g_state && 1 == count_ev(APP_EVT_OBSTACLE_AHEAD), "pitched, echo 500 mm -> APPROACH still entered (slow-down kept)");
+    /* 4: hold expires on flat ground */
+    status_board_write_imu(&flat_part);
     for (uint32_t i = 0; i < OBS_RAMP_HOLD_PINGS; i++) { cyc(); }
     w_dist = 380; cyc(); cyc();
-    CHECK("S5-U39", APP_SCAN_STOPPED == g_state && 1 == count_ev(APP_EVT_OBSTACLE), "after ramp hold expires on flat ground, 380 mm obstacle stops normally");
+    CHECK("S5-U42", APP_SCAN_STOPPED == g_state && 1 == count_ev(APP_EVT_OBSTACLE), "after the ramp hold on flat ground, 380 mm stops at the normal distance");
+    /* 5: narrow glint on flat ground */
     nev = 0; g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN;
-    w_mode = 1; w_y = 350; w_xl = -5; w_xr = 5;   /* narrow 90 deg ramp glint */
+    w_mode = 1; w_y = 350; w_xl = -5; w_xr = 5;
     for (int i = 0; i < 120 && (APP_SCAN_COARSE == g_state || APP_SCAN_FINE == g_state || APP_SCAN_STOPPED == g_state); i++) cyc();
-    CHECK("S5-U39", APP_SCAN_PASSING == g_state && 1 == count_ev(APP_EVT_CONTINUE) && 0 == count_ev(APP_EVT_PLAN), "narrow 90 deg ramp glint (< OBS_MIN_WIDTH_MM) -> CONTINUE, PASSING"); }
+    CHECK("S5-U42", APP_SCAN_PASSING == g_state && 1 == count_ev(APP_EVT_CONTINUE) && 0 == count_ev(APP_EVT_PLAN), "narrow 90 deg ramp glint (< OBS_MIN_WIDTH_MM) -> CONTINUE, PASSING");
+    /* 6: real box scanned while pitched */
+    g_modes = 0; g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; nev = 0;
+    status_board_write_imu(&imu_part);
+    w_mode = 0; w_dist = 240; cyc(); cyc(); cyc();  /* confirm, AHEAD, STOP */
+    CHECK("S5-U42", APP_SCAN_STOPPED == g_state, "pitched, box at 240 mm -> STOPPED");
+    g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN;
+    w_mode = 1; w_y = 240; w_xl = -60; w_xr = 80;
+    for (int i = 0; i < 200 && APP_SCAN_PASSING != g_state && APP_SCAN_BYPASS_WATCH != g_state && 0 == count_ev(APP_EVT_PLAN) && 0 == count_ev(APP_EVT_NO_PATH); i++) cyc();
+    CHECK("S5-U42", 0 == count_ev(APP_EVT_CONTINUE) && (1 == count_ev(APP_EVT_PLAN) || 1 == count_ev(APP_EVT_NO_PATH)), "real 140 mm box scanned while pitched -> PLAN or NO_PATH, never CONTINUE");
+    status_board_write_imu(&flat_part); g_modes = 0; w_mode = 0; }
   printf("[TEST] S5-U08 obstacle simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
   return fail_n;
 }

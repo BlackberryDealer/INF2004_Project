@@ -113,9 +113,10 @@ static uint32_t           g_scan_start_us = 0u;
 static uint32_t           g_measured      = 0u;   /* bit n: step measured */
 static uint32_t           g_inferred      = 0u;   /* bit n: step filled   */
 static uint32_t           g_dist_log_cnt  = 0u;   /* bring-up print divider */
-static bool               gb_on_ramp      = false; /* S5-U39 ramp state    */
+static bool               gb_on_ramp      = false; /* S5-U42 ramp state    */
 static uint32_t           g_ramp_hold     = 0u;   /* pings after ramp     */
 static uint32_t           g_ramp_mark     = 0u;   /* path at last pitch   */
+static bool               gb_ramp_logged  = false; /* one RAMP line/approach */
 static uint16_t           g_obs_scan[APP_SCAN_STEPS];
 static status_board_obs_t g_part =
 {
@@ -619,7 +620,7 @@ static void obstacle_modes(uint32_t * p_rising)
 /**
  * obstacle_update_ramp
  * @brief   Tracks whether the car is climbing, descending, or exiting a
- *          ramp/hump (S5-U39). Holds gb_on_ramp for OBS_RAMP_HOLD_PINGS
+ *          ramp/hump (S5-U42). Holds gb_on_ramp for OBS_RAMP_HOLD_PINGS
  *          (and OBS_RAMP_CLEAR_MM when odometry moves) after levelling off
  *          so the ramp crest and bottom exit do not trigger a false stop.
  * @param   b_is_armed true while obstacle detection is armed
@@ -689,6 +690,7 @@ static void obstacle_enter(uint32_t state)
     g_far     = 0u;
     g_lost    = 0u;
     g_echo_mm = APP_DIST_NONE_MM;
+    gb_ramp_logged = false;
 
     if ((APP_SCAN_MONITOR == state) || (APP_SCAN_PASSING == state))
     {
@@ -720,8 +722,7 @@ static void obstacle_enter(uint32_t state)
  */
 static void obstacle_step_monitor(obstacle_reading_t const * p_rd)
 {
-    if ((!gb_on_ramp) && p_rd->b_is_confirmed
-        && (p_rd->distance_mm < OBS_SLOW_MM))
+    if (p_rd->b_is_confirmed && (p_rd->distance_mm < OBS_SLOW_MM))
     {
         (void) mission_post_event(APP_EVT_OBSTACLE_AHEAD, 0u); /* counted */
         obstacle_enter(APP_SCAN_APPROACH);
@@ -750,18 +751,25 @@ static void obstacle_step_monitor(obstacle_reading_t const * p_rd)
  */
 static void obstacle_step_approach(obstacle_reading_t const * p_rd)
 {
-    bool b_is_far = false;
+    bool     b_is_far = false;
+    uint32_t stop_mm  = OBS_STOP_MM;
 
+    /* Pitched on a ramp (S5-U42): the beam sees the ramp face or the
+       floor, so only the early-stop margin is dropped. The computed NFR6
+       minimum still stops the car for a real obstacle.                 */
     if (gb_on_ramp)
     {
-        /* Front wheels pitched onto a ramp during approach (S5-U39):
-           restore cruise speed and return to MONITOR.                  */
-        /* cast: distance 0..2047 mm fits int32_t */
-        app_log("RAMP detected in APPROACH: distance %d mm, continuing\n",
-                (int32_t) p_rd->distance_mm, 0, 0);
-        (void) mission_post_event(APP_EVT_CONTINUE, 0u);   /* counted */
-        obstacle_enter(APP_SCAN_MONITOR);
-        return;
+        stop_mm = OBS_RAMP_STOP_MM;
+        if ((!gb_ramp_logged) && p_rd->b_is_confirmed
+            && (p_rd->distance_mm >= OBS_RAMP_STOP_MM)
+            && (p_rd->distance_mm < OBS_STOP_MM))
+        {
+            gb_ramp_logged = true;
+            /* casts: distances 0..2047 mm fit int32_t */
+            app_log("RAMP: pitched, echo %d mm ignored, stop below %d mm\n",
+                    (int32_t) p_rd->distance_mm,
+                    (int32_t) OBS_RAMP_STOP_MM, 0);
+        }
     }
 
     if (!p_rd->b_is_lost)
@@ -770,7 +778,7 @@ static void obstacle_step_approach(obstacle_reading_t const * p_rd)
         g_lost    = 0u;
         b_is_far  = (p_rd->distance_mm > (OBS_SLOW_MM + OBS_CLEAR_HYST_MM));
     }
-    else if (g_echo_mm < OBS_STOP_MM)
+    else if (g_echo_mm < stop_mm)
     {
         g_lost++;                         /* too close to measure */
     }
@@ -781,7 +789,7 @@ static void obstacle_step_approach(obstacle_reading_t const * p_rd)
     }
     g_far = b_is_far ? (g_far + 1u) : 0u;
 
-    if ((p_rd->b_is_confirmed && (p_rd->distance_mm < OBS_STOP_MM))
+    if ((p_rd->b_is_confirmed && (p_rd->distance_mm < stop_mm))
         || (g_lost >= OBS_LOST_PINGS))
     {
         safety_set(SAFETY_ESTOP);                 /* brake first (NFR6) */
@@ -987,13 +995,13 @@ static void obstacle_scan_finish(void)
     obstacle_fill_gaps();
     obs_profile_build(g_obs_scan, &prof);
     obs_profile_plan(&prof, &plan);
-    /* S5-U39: if the car pitched onto a ramp while braking, or the scan
-       saw only a narrow normal-incidence glint (< OBS_MIN_WIDTH_MM) off
-       the sloped ramp face, treat it as a ramp and drive on (PASSING)
-       instead of turning off the track or faulting.                    */
+    /* S5-U42: a scan that saw only a narrow normal-incidence glint
+       (< OBS_MIN_WIDTH_MM) off a sloped ramp face is a ramp: drive on
+       (PASSING). The pitch flag alone never overrides the plan, so a
+       real obstacle (>= 80 mm, A29) still gets PLAN or NO_PATH (reverse
+       and rescan), also when the car stopped on the ramp.              */
     if ((OBS_OUT_CONTINUE != plan.outcome)
-        && (gb_on_ramp
-            || (prof.b_is_valid && (prof.width_mm < OBS_MIN_WIDTH_MM))))
+        && prof.b_is_valid && (prof.width_mm < OBS_MIN_WIDTH_MM))
     {
         /* casts: width 0..1020 mm, flag 0..1 fit int32_t */
         app_log("RAMP/GLINT in scan (width %d mm, on_ramp %d): continuing\n",
