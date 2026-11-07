@@ -36,12 +36,19 @@ typedef struct
     uint32_t seq0;
 } line_track_jct_t;
 
-/* Smoothed steering with a memory of the side the line was last seen. */
+/* Smoothed steering with a memory of the side the line was last seen.
+   exit_side (S3-U19): +1/-1 once the line went black under the left /
+   right sensor in the current excursion from "both white"; it may have
+   left on that side. 0: the line only grazed a sensor edge and is back
+   between the sensors (the car is centred).                         */
 typedef struct
 {
-    int32_t filt;       /* smoothed error, permille                  */
-    int32_t prev;       /* smoothed error of the previous cycle      */
-    int32_t last_side;  /* +1 = line last left, -1 = right, 0 = none */
+    int32_t filt;        /* smoothed error, permille                  */
+    int32_t prev;        /* smoothed error of the previous cycle      */
+    int32_t last_side;   /* +1 = line last left, -1 = right, 0 = none */
+    int32_t exit_side;   /* +1 left, -1 right, 0 = between (S3-U19)   */
+    bool    b_was_white; /* previous cycle both white                 */
+    int32_t recover;     /* current recovery steer, ramps (S3-U21)    */
 } line_track_steer_t;
 
 typedef struct
@@ -64,6 +71,8 @@ extern int32_t  line_track_steering(uint32_t norm_l, uint32_t norm_r);
 extern void     line_track_steer_reset(line_track_steer_t * p_st);
 extern int32_t  line_track_steer_step(line_track_steer_t * p_st,
                                       uint32_t norm_l, uint32_t norm_r);
+extern bool     line_track_steer_line_between(
+                    line_track_steer_t const * p_st);
 extern void     line_track_jct_reset(line_track_jct_t * p_jct);
 extern uint32_t line_track_jct_step(line_track_jct_t * p_jct,
                                     line_track_jct_in_t const * p_in);

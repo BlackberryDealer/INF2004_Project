@@ -280,7 +280,7 @@ int main(void)
             out = line_track_steer_step(&st, 0u, 0u);
         }
         HOST_CHECK("S3-U16", (out >= LINE_RECOVER_STEER)
-                   && (out <= (LINE_RECOVER_STEER + 10)),
+                   && (out <= LINE_RECOVER_MAX),
                    "line lost to the left: keep steering left (recover)");
         for (uint32_t i = 0u; i < 20u; i++)
         {
@@ -291,7 +291,7 @@ int main(void)
             out = line_track_steer_step(&st, 0u, 0u);
         }
         HOST_CHECK("S3-U16", (out <= -LINE_RECOVER_STEER)
-                   && (out >= -(LINE_RECOVER_STEER + 10)),
+                   && (out >= -LINE_RECOVER_MAX),
                    "line lost to the right: recover to the right");
         for (uint32_t i = 0u; i < 20u; i++)
         {
@@ -299,6 +299,123 @@ int main(void)
         }
         HOST_CHECK("S3-U16", (out > -10) && (out < 10),
                    "centred on the line: steering settles to 0");
+    }
+
+    /* S3-U19 (on-car 2026-11-06 14:17): centred on the line, both sensors
+       read white (raw ~210-240: the 18 mm line lies between them). A
+       small drift lets one sensor graze the line edge (grey), then both
+       are white again with the line back between them. That must give 0
+       steering, not the 350 recovery toward the grazed side: the
+       recovery pushed the car across, the other sensor grazed, and the
+       car shook left and right (5 LINE LOSTs in 200 mm). Recovery is
+       only for a line that went black under a sensor (it may have left
+       on that side).                                                   */
+    {
+        line_track_steer_t st;
+        int32_t            out = 0;
+
+        line_track_steer_reset(&st);
+        HOST_CHECK("S3-U19", line_track_steer_line_between(&st),
+                   "after reset the line counts as between the sensors");
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 450u, 0u);   /* graze left */
+        }
+        HOST_CHECK("S3-U19", out > 0, "grazing the left edge steers left");
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U19", (out > -10) && (out < 10),
+                   "grey graze then both white: line between, steering 0");
+        HOST_CHECK("S3-U19", line_track_steer_line_between(&st),
+                   "grey graze: still between the sensors (not lost)");
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 600u);   /* graze right */
+        }
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U19", (out > -10) && (out < 10),
+                   "grey graze on the right: steering back to 0");
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 800u, 0u);   /* black left */
+        }
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U19", (out >= LINE_RECOVER_STEER)
+                   && !line_track_steer_line_between(&st),
+                   "line went black under the left sensor: recover left");
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 400u);   /* grey right */
+        }
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U19", (out > -10) && (out < 10)
+                   && line_track_steer_line_between(&st),
+                   "a later grey-only graze clears the old exit side");
+    }
+
+    /* S3-U21 (on-car 2026-11-06 14:49): the remaining jerks were LINE
+       LOSTs every 0.4-1.3 m whose search pivot found the line again in
+       70-140 ms toward the exit side: the line was just outside and the
+       fixed 350 recovery did not bring it back within 60 mm. The
+       recovery now grows from LINE_RECOVER_STEER by LINE_RECOVER_RAMP
+       per 10 ms to LINE_RECOVER_MAX, a smooth arc instead of a stop and
+       pivot, and starts again from LINE_RECOVER_STEER next time.     */
+    {
+        line_track_steer_t st;
+        int32_t            out   = 0;
+        int32_t            first = 0;
+        bool               b_up  = true;
+        int32_t            prev  = 0;
+
+        line_track_steer_reset(&st);
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 800u, 0u);   /* black left */
+        }
+        for (uint32_t i = 0u; i < 60u; i++)               /* 600 ms */
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+            if (5u == i)
+            {
+                first = out;
+            }
+            if ((i > 5u) && (out < prev))
+            {
+                b_up = false;
+            }
+            prev = out;
+        }
+        HOST_CHECK("S3-U21", (first >= LINE_RECOVER_STEER)
+                   && (first < (LINE_RECOVER_STEER + 300)),
+                   "recovery starts near LINE_RECOVER_STEER");
+        HOST_CHECK("S3-U21", b_up && (out >= (LINE_RECOVER_MAX - 20)),
+                   "then grows smoothly to ~LINE_RECOVER_MAX in 600 ms");
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 450u);   /* found (grey) */
+        }
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 800u);   /* black right */
+        }
+        for (uint32_t i = 0u; i < 12u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U21", (out <= -LINE_RECOVER_STEER)
+                   && (out > -(LINE_RECOVER_STEER + 300)),
+                   "next exit (right) starts again from LINE_RECOVER_STEER");
     }
 
     return (0 == HOST_SUMMARY("line_track")) ? 0 : 1;

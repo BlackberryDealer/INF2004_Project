@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 /* Include the real task implementations to drive single cycles directly. */
 #include "line.c"
@@ -91,13 +92,22 @@ UW in_w(UW port)
     return gb_sim_bar_pin ? (1u << PIN_BAR_DO) : 0u;
 }
 
+static char   g_sim_log[4096];        /* console capture (S3-U22) */
+static size_t g_sim_log_len = 0u;
+
 void app_log(char const * p_format, int32_t arg_a, int32_t arg_b,
              int32_t arg_c)
 {
-    (void) p_format;
-    (void) arg_a;
-    (void) arg_b;
-    (void) arg_c;
+    if (g_sim_log_len < (sizeof(g_sim_log) - 200u))
+    {
+        int const n = snprintf(&g_sim_log[g_sim_log_len],
+                               sizeof(g_sim_log) - g_sim_log_len,
+                               p_format, arg_a, arg_b, arg_c);
+        if (n > 0)
+        {
+            g_sim_log_len += (size_t) n;
+        }
+    }
 }
 
 ID app_start_task(FP p_entry, PRI priority, uint64_t * p_stack,
@@ -301,6 +311,42 @@ static uint32_t sim_feed_barcode_edges(uint32_t char_idx, uint32_t start_us)
     }
 
     return now_us;
+}
+
+static bool in_rng(int value, int lo, int hi)
+{
+    return (value >= lo) && (value <= hi);
+}
+
+/* S3-U22: the first n_elem elements of '*<char>*' only (edges missed by
+   the sensor), then nothing: the 30 mm quiet zone ends the capture.   */
+static void sim_feed_truncated(uint32_t char_idx, uint32_t n_elem)
+{
+    uint32_t chars[3] = { CODE39_STAR, char_idx, CODE39_STAR };
+    uint32_t now_us   = 50000u;
+    uint32_t elem     = 0u;
+
+    gb_sim_bar_pin = true;
+    barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+    for (uint32_t c_idx = 0u; (c_idx < 3u) && (elem < n_elem); c_idx++)
+    {
+        uint16_t const pat = g_sim_patterns[chars[c_idx]];
+
+        for (uint32_t bit = 0u; (bit < 10u) && (elem < n_elem); bit++)
+        {
+            bool const b_wide = (bit < 9u)
+                && (0u != (pat & (uint16_t) (1u << (8u - bit))));
+
+            if ((9u == bit) && (2u == c_idx))
+            {
+                break;                       /* no gap after the last char */
+            }
+            now_us        += b_wide ? 30000u : 12000u;
+            gb_sim_bar_pin = !gb_sim_bar_pin;
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+            elem++;
+        }
+    }
 }
 
 /* Same barcode as sim_feed_barcode_edges, but with LM393-style chatter
@@ -720,6 +766,166 @@ int main(void)
                (APP_EVT_LINE_FOUND == g_sim_evts[0].type) &&
                (g_sim_evts[0].value >= 24u) && (g_sim_evts[0].value <= 26u),
                "white, grey edge, black: LINE_FOUND ~25 mm is still posted");
+
+    /* ---- S3-U19 (on-car 2026-11-06: both white while centred) -------- */
+    /* The line lies between the sensors when the car is centred: 200 ms
+       of both white must not post LINE_LOST (each one made mission stop
+       and turn 60 deg: the shaking). A line that went black under a
+       sensor and then vanished is still lost after 200 ms, and a car
+       that sees no line at all for LINE_CENTRE_LOST_MM is lost too
+       (line end, U-turn).                                             */
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path  = 1000u;
+    g_sim_raw_l = 500u;                   /* both white, centred */
+    g_sim_raw_r = 500u;
+    for (uint32_t i = 0u; i < 40u; i++)   /* 400 ms, 40 mm */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U19", (0u == g_sim_evt_cnt)
+               && (APP_LINE_ON == g_sim_line_out.line_status),
+               "centred, both white 400 ms / 40 mm: no LINE_LOST, line ON");
+    g_sim_raw_l = 2000u;                  /* graze the left edge (grey) */
+    for (uint32_t i = 0u; i < 3u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    g_sim_raw_l = 500u;
+    for (uint32_t i = 0u; i < 40u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U19", 0u == g_sim_evt_cnt,
+               "grey graze, then 400 ms both white: still no LINE_LOST");
+    for (uint32_t i = 0u; i < LINE_CENTRE_LOST_MM; i++)  /* no line */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U19", (1u == g_sim_evt_cnt)
+               && (APP_EVT_LINE_LOST == g_sim_evts[0].type),
+               "no line for LINE_CENTRE_LOST_MM: LINE_LOST (line end)");
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path  = 1000u;
+    g_sim_raw_l = 3500u;                  /* black under the left sensor */
+    g_sim_raw_r = 500u;
+    for (uint32_t i = 0u; i < 5u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    g_sim_raw_l = 500u;
+    for (uint32_t i = 0u; i < (LINE_EXIT_LOST_MM + 5u); i++)
+    {
+        g_sim_path += odometry_mm_to_counts(4u);   /* >= 200 ms too */
+        line_cycle();
+    }
+    HOST_CHECK("S3-U19", (1u == g_sim_evt_cnt)
+               && (APP_EVT_LINE_LOST == g_sim_evts[0].type)
+               && (APP_LINE_LOST == g_sim_line_out.line_status),
+               "line black under a sensor, then gone: LINE_LOST");
+
+    /* ---- S3-U20 (on-car 2026-11-06 14:38: shaking after the rejoin) -- */
+    /* After the bypass: LINE LOST every 30-50 mm, LINE FOUND 90-190 ms
+       later, each time a mission STOP + 60 deg pivot. The line had gone
+       black under a sensor and on to the inside (the car was turning
+       toward it), so 200 ms later it was still right there. A black
+       exit is now lost only after LINE_EXIT_LOST_MM of travel (and 200
+       ms), giving the recovery steer time to bring the line back; a
+       centred car (no line seen) after LINE_CENTRE_LOST_MM 300 mm (the
+       150 mm fallback fired on a straight before the box, path 151).  */
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path  = 1000u;
+    g_sim_raw_l = 3500u;                  /* black under the left sensor */
+    g_sim_raw_r = 500u;
+    for (uint32_t i = 0u; i < 5u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    g_sim_raw_l = 500u;
+    for (uint32_t i = 0u; i < 30u; i++)   /* 300 ms, 30 mm both white */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U20", 0u == g_sim_evt_cnt,
+               "black exit, 300 ms but only 30 mm both white: no LINE_LOST");
+    g_sim_raw_r = 2000u;                  /* recovery brings it back */
+    g_sim_path += odometry_mm_to_counts(1u);
+    line_cycle();
+    g_sim_raw_r = 500u;
+    for (uint32_t i = 0u; i < 100u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U20", 0u == g_sim_evt_cnt,
+               "line back under the other sensor: no LINE_LOST at all");
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path  = 1000u;
+    g_sim_raw_l = 500u;                   /* centred straight, no graze */
+    g_sim_raw_r = 500u;
+    for (uint32_t i = 0u; i < 200u; i++)  /* 200 mm */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U20", 0u == g_sim_evt_cnt,
+               "centred 200 mm without touching the line: no LINE_LOST");
+    HOST_CHECK("S3-U20", (LINE_CENTRE_LOST_MM >= 300u)
+               && (LINE_EXIT_LOST_MM >= 50u),
+               "loss distances: centred >= 300 mm, black exit >= 50 mm");
+
+    /* ---- S3-U22 (on-car 2026-11-06 14:49: barcodes never decoded) --- */
+    /* Captures ended with 26 / 15 elements and nothing said which bars
+       or spaces were missing. A dropped or invalid capture now prints
+       its element widths (0.1 mm, bar first, 2 per line) so the sensor
+       height / LM393 trimmer can be judged from one run.              */
+    sim_reset();
+    g_sim_path    = 100u;
+    g_sim_log_len = 0u;
+    g_sim_log[0]  = '\0';
+    sim_feed_truncated(10u, 26u);         /* 'A' with 3 elements missed */
+    barcode_cycle();
+    g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM + 5u);
+    barcode_cycle();
+    HOST_CHECK("S3-U22", NULL != strstr(g_sim_log, "BAR capture dropped: 26"),
+               "26-element capture dropped at the quiet zone (as on the car)");
+    HOST_CHECK("S3-U22",
+               (NULL != strstr(g_sim_log, "BAR widths 1+ (0.1 mm, bar first):"))
+               && (NULL != strstr(g_sim_log, "BAR widths 25+ (0.1 mm, bar first):"))
+               && (NULL == strstr(g_sim_log, "BAR widths 27+")),
+               "its widths are printed, 2 per line, up to element 26");
+    {
+        char const * p_one  = strstr(g_sim_log, "BAR widths 1+");
+        char const * p_two  = strstr(g_sim_log, "BAR widths 3+");
+        int          w_a    = 0;
+        int          w_b    = 0;
+        int          w_c    = 0;
+        int          w_d    = 0;
+        bool         b_ok   = false;
+
+        if ((NULL != p_one) && (NULL != p_two))
+        {
+            b_ok = (2 == sscanf(p_one, "BAR widths 1+ (0.1 mm, bar first):"
+                                " %d %d", &w_a, &w_b))
+                   && (2 == sscanf(p_two, "BAR widths 3+ (0.1 mm, bar"
+                                   " first): %d %d", &w_c, &w_d));
+        }
+        /* '*' starts narrow bar, wide space, narrow bar, narrow space:
+           12 ms / 30 ms at cpw 36 -> 2.7 mm / 6.9 mm                  */
+        HOST_CHECK("S3-U22", b_ok && in_rng(w_a, 25, 29) && in_rng(w_b, 67, 71)
+                   && in_rng(w_c, 25, 29) && in_rng(w_d, 25, 29),
+                   "widths are the measured element widths (narrow, wide, narrow)");
+    }
 
     /* ---- S3-U14 (Full task barcode-branch + line junction integration) */
     sim_reset();

@@ -44,7 +44,14 @@
    (> 75 mm) is still rejected.                                        */
 #define MISSION_REJOIN_WIDTH_MM     (45u)     /* MEASURE: sensor spacing */
 #define MISSION_REJOIN_WIDTH_TOL_MM (30u)
-#define MISSION_REJOIN_WIN_PCT      (30u)
+/* Rejoin distance window around e = lateral leg x sqrt 2. The far end is
+   e + 30 %. The near end is 25 % of e (was e - 30 %): on the car
+   (2026-11-06 12:56) the line came at 221 mm of 407 (sensors ahead of
+   the axle, heading drift on the pass leg), was rejected as too early
+   and the car drove over it (S5-U43). The width check above still
+   rejects barcode bars and driving along the line.                    */
+#define MISSION_REJOIN_WIN_PCT      (30u)     /* far end: e + 30 %     */
+#define MISSION_REJOIN_LO_PCT       (25u)     /* near end: 25 % of e   */
 #define MISSION_HEADING_TOL_CDEG    (500)     /* 5 deg */
 #define MISSION_INHIBIT_CLEAR_MM    (150u)
 #define MISSION_RESUME_PULSE_MS     (150u)    /* > 2 obstacle periods */

@@ -717,7 +717,8 @@ static void run_avoid_legs(mission_ctx_t * p_ctx, uint32_t type,
 /**
  * run_avoid_rejoin
  * @brief   REJOIN: drive at 45 deg toward the line; accept the first
- *          LINE_FOUND inside the distance window with the expected width,
+ *          LINE_FOUND inside the distance window (25 % .. 130 % of e)
+ *          with the expected width,
  *          advance over it, then turn back to the original heading.
  * @context mission_task
  */
@@ -726,8 +727,8 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
                              status_board_t const * p_snap, uint32_t now_us)
 {
     uint32_t const type = p_evt->b_has_event ? p_evt->type : APP_EVT_COUNT;
-    uint32_t const lo   = (p_ctx->rejoin_e_mm
-                           * (RUN_PCT - MISSION_REJOIN_WIN_PCT)) / RUN_PCT;
+    uint32_t const lo   = (p_ctx->rejoin_e_mm * MISSION_REJOIN_LO_PCT)
+                          / RUN_PCT;                  /* S5-U43 */
     uint32_t const hi   = (p_ctx->rejoin_e_mm
                            * (RUN_PCT + MISSION_REJOIN_WIN_PCT)) / RUN_PCT;
     uint32_t       done = 0u;
@@ -743,8 +744,7 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
             app_log("REJOIN: line expected at %d mm (accept %d..%d mm)\n",
                     (int32_t) p_ctx->rejoin_e_mm,
                     (int32_t) ((p_ctx->rejoin_e_mm
-                                * (RUN_PCT - MISSION_REJOIN_WIN_PCT))
-                               / RUN_PCT),
+                                * MISSION_REJOIN_LO_PCT) / RUN_PCT),
                     (int32_t) ((p_ctx->rejoin_e_mm
                                 * (RUN_PCT + MISSION_REJOIN_WIN_PCT))
                                / RUN_PCT));

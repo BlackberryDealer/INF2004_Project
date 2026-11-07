@@ -338,6 +338,23 @@ int main(void) {
   EV(APP_EVT_LINE_FOUND, 90u); CHECK("S5-U41", !strcmp(mlog, ""), "90 mm (along the line): rejected");
   EV(APP_EVT_LINE_FOUND, 49u); CHECK("S5-U41", !strcmp(mlog, "STOP0 F60 ") && APP_SYS_RUN == g_ctx.sys_state, "49 mm (the car's real crossing): accepted, advance 60");
   DONE(); DONE(); CHECK("S5-U41", APP_RUN_FOLLOW == g_ctx.run_state && 0u == (g_fault & APP_FAULT_REACQUIRE_FAIL), "back to FOLLOW, no REACQUIRE_FAIL");
+  /* S5-U43 (on-car 2026-11-06 12:56): leg 288 mm -> line expected at
+     407 mm (accept 284..529); the line came at 221 mm, width 38 mm, and
+     was rejected as too early, so the car drove over it and on until
+     OBSTACLE SIDE TOO CLOSE. A crossing of the right width now counts
+     from 25 % of the expected distance; the far end stays at +30 %.  */
+  to_ready(); mot.motion_state = APP_MOT_BRAKE; to_run(); g_fault = 0;
+  safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP;
+  EV(APP_EVT_OBSTACLE, 0); NONE(); idle_ms(200);
+  obs.plan_side = APP_SIDE_LEFT; obs.leg_lateral_mm = 288u; obs.leg_forward_mm = 632u;
+  EV(APP_EVT_PLAN, APP_SIDE_LEFT); DONE(); DONE(); DONE(); DONE(); clog[0] = 0; DONE();
+  CHECK("S5-U43", !strcmp(mlog, "F529 "), "rejoin drive e x 1.3 = 529 mm (far end unchanged)");
+  CHECK("S5-U43", NULL != strstr(clog, "REJOIN: line expected at 407 mm (accept 101..529 mm)"), "console shows the new early limit (25 % of 407)");
+  mot.path_counts += odometry_mm_to_counts(90u);
+  EV(APP_EVT_LINE_FOUND, 38u); CHECK("S5-U43", !strcmp(mlog, ""), "38 mm wide at 90 mm (< 101): still rejected");
+  mot.path_counts += odometry_mm_to_counts(131u);
+  EV(APP_EVT_LINE_FOUND, 38u); CHECK("S5-U43", !strcmp(mlog, "STOP0 F60 ") && APP_SYS_RUN == g_ctx.sys_state, "38 mm wide at 221 mm (the car's crossing): accepted, advance 60");
+  DONE(); DONE(); CHECK("S5-U43", APP_RUN_FOLLOW == g_ctx.run_state && 0u == (g_fault & APP_FAULT_REACQUIRE_FAIL), "back to FOLLOW, no REACQUIRE_FAIL");
   /* S5-U40: slower cruise (professor feedback) */
   CHECK("S5-U40", (120 == MOTION_CRUISE_MM_S) && (MOTION_SLOW_MM_S < MOTION_CRUISE_MM_S), "cruise 120 mm/s, 'slow' stays below cruise");
   printf("[TEST] S5-U07 mission simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);

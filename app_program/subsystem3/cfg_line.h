@@ -30,7 +30,28 @@
    output adds LINE_STEER_KD x the change of the smoothed error since the
    last cycle, so a fast swing toward the line is braked before it
    overshoots. 0 = plain smoothed error. Output clamped to +-1000.      */
+/* Both white while centred (on-car 2026-11-06 14:17: raw ~210-240 on
+   both with the car on the line, i.e. the 18 mm line lies between the
+   sensors). The recovery and LINE_LOST after LINE_LOST_CYCLES apply only
+   once the line went black under one sensor (it may have left there);
+   after a grey graze both white means centred: steer 0, line ON. With
+   no line under either sensor for LINE_CENTRE_LOST_MM it is lost anyway
+   (line end). S3-U19.                                                 */
 #define LINE_RECOVER_STEER       (350)   /* TUNE: both white, permille  */
+/* S3-U21 (on-car 2026-11-06 14:49): a fixed 350 often did not bring the
+   line back within LINE_EXIT_LOST_MM; the mission search pivot then
+   found it in 70-140 ms (a jerk). The recovery grows from 350 by 20 per
+   10 ms to 1000 (~330 ms): a smooth, tightening arc toward the line. */
+#define LINE_RECOVER_RAMP        (20)    /* TUNE: permille per 10 ms    */
+#define LINE_RECOVER_MAX         (1000)  /* TUNE: <= LINE_STEER_MAX     */
+/* S3-U20 (on-car 2026-11-06 14:38): after the bypass a black exit
+   posted LINE_LOST every 30-50 mm (line found again 90-190 ms later,
+   i.e. it had passed to the inside), each a mission STOP + 60 deg pivot:
+   violent shaking. A black exit now needs LINE_EXIT_LOST_MM of travel
+   as well as 200 ms, so the recovery steer can bring the line back;
+   the centred fallback 150 -> 300 mm (it fired at 151 mm on a straight). */
+#define LINE_CENTRE_LOST_MM      (300u)  /* TUNE: centred white -> lost */
+#define LINE_EXIT_LOST_MM        (60u)   /* TUNE: black exit -> lost    */
 #define LINE_SIDE_MIN            (150)   /* TUNE: |error| that sets side */
 #define LINE_STEER_FILT_DIV      (2)     /* TUNE: 1 = no smoothing      */
 /* On-car 2026-11-03: of KP/KD 3/0, 3/4 and 2/6, 3/0 was the smoothest

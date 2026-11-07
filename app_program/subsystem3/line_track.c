@@ -27,6 +27,8 @@ static void line_track_jct_candidate(line_track_jct_t * p_jct,
                                      line_track_jct_in_t const * p_in);
 static uint32_t line_track_jct_confirm(line_track_jct_t * p_jct,
                                        line_track_jct_in_t const * p_in);
+static void line_track_steer_exit(line_track_steer_t * p_st,
+                                  uint32_t norm_l, uint32_t norm_r);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -406,23 +408,45 @@ static uint32_t line_track_jct_confirm(line_track_jct_t * p_jct,
 /**
  * line_track_steer_reset
  * @brief   Forgets the smoothed error and the last side (new run or new
- *          calibration).
+ *          calibration); the line counts as between the sensors.
  * @param   p_st  Steering state.
  * @return  none
  * @context line_task
  */
 void line_track_steer_reset(line_track_steer_t * p_st)
 {
-    p_st->filt      = 0;
-    p_st->prev      = 0;
-    p_st->last_side = 0;
+    p_st->filt        = 0;
+    p_st->prev        = 0;
+    p_st->last_side   = 0;
+    p_st->exit_side   = 0;
+    p_st->b_was_white = true;
+    p_st->recover     = LINE_RECOVER_STEER;
+}
+
+/**
+ * line_track_steer_line_between
+ * @brief   True while "both white" means the car is centred: since the
+ *          sensors were last both white the line only grazed a sensor
+ *          edge (grey), it never went black under one (S3-U19).
+ * @param   p_st  Steering state.
+ * @return  true = line between the sensors, false = it may have left
+ * @context line_task
+ */
+bool line_track_steer_line_between(line_track_steer_t const * p_st)
+{
+    return (0 == p_st->exit_side);
 }
 
 /**
  * line_track_steer_step
- * @brief   One 10 ms steering step. Both sensors white: target is
- *          LINE_RECOVER_STEER toward the side the line was last seen on
- *          (0 if never seen). Otherwise the target is norm_l - norm_r,
+ * @brief   One 10 ms steering step. Both sensors white: the 18 mm line
+ *          lies between them when the car is centred (on-car 2026-11-06),
+ *          so the target is 0, unless the line went black under one
+ *          sensor since they were last both white: then it may have left
+ *          on that side and the target is the recovery steer toward it
+ *          (S3-U19), which starts at LINE_RECOVER_STEER and grows by
+ *          LINE_RECOVER_RAMP per cycle to LINE_RECOVER_MAX (S3-U21).
+ *          Otherwise the target is norm_l - norm_r,
  *          and an error of at least LINE_SIDE_MIN records its side. The
  *          smoothed error moves 1/LINE_STEER_FILT_DIV of the way to the
  *          target; the output adds LINE_STEER_KD x its change since the
@@ -444,19 +468,41 @@ int32_t line_track_steer_step(line_track_steer_t * p_st,
 
     if (b_white)
     {
-        target = p_st->last_side * LINE_RECOVER_STEER;
-    }
-    else if (raw >= LINE_SIDE_MIN)
-    {
-        p_st->last_side = 1;
-    }
-    else if (raw <= -LINE_SIDE_MIN)
-    {
-        p_st->last_side = -1;
+        /* recovery grows each cycle the line stays away (S3-U21) */
+        target            = p_st->exit_side * p_st->recover;
+        p_st->b_was_white = true;
+        if (0 != p_st->exit_side)
+        {
+            p_st->recover += LINE_RECOVER_RAMP;
+            if (p_st->recover > LINE_RECOVER_MAX)
+            {
+                p_st->recover = LINE_RECOVER_MAX;
+            }
+            else
+            {
+                /* still ramping */
+            }
+        }
+        else
+        {
+            /* centred: no recovery */
+        }
     }
     else
     {
-        /* near centre: keep the last side */
+        line_track_steer_exit(p_st, norm_l, norm_r);
+        if (raw >= LINE_SIDE_MIN)
+        {
+            p_st->last_side = 1;
+        }
+        else if (raw <= -LINE_SIDE_MIN)
+        {
+            p_st->last_side = -1;
+        }
+        else
+        {
+            /* near centre: keep the last side */
+        }
     }
 
     /* |target - filt| <= 2000: no overflow; C99 division truncates */
@@ -479,6 +525,44 @@ int32_t line_track_steer_step(line_track_steer_t * p_st,
     }
 
     return out;
+}
+
+/**
+ * line_track_steer_exit
+ * @brief   Not both white: a new excursion from "both white" starts with
+ *          the line between the sensors; once it goes black under
+ *          exactly one sensor, it may leave on that side (S3-U19).
+ * @param   p_st    Steering state.
+ * @param   norm_l  Left normalised reading (0..1000).
+ * @param   norm_r  Right normalised reading (0..1000).
+ * @return  none
+ * @context line_task (10 ms hot path)
+ */
+static void line_track_steer_exit(line_track_steer_t * p_st,
+                                  uint32_t norm_l, uint32_t norm_r)
+{
+    bool const b_black_l = (norm_l >= LINE_BLACK_THRESHOLD);
+    bool const b_black_r = (norm_r >= LINE_BLACK_THRESHOLD);
+
+    if (p_st->b_was_white)
+    {
+        p_st->exit_side   = 0;          /* new excursion */
+        p_st->b_was_white = false;
+        p_st->recover     = LINE_RECOVER_STEER;  /* line seen again */
+    }
+
+    if (b_black_l && (!b_black_r))
+    {
+        p_st->exit_side = 1;
+    }
+    else if (b_black_r && (!b_black_l))
+    {
+        p_st->exit_side = -1;
+    }
+    else
+    {
+        /* grey only, or both black (junction): keep */
+    }
 }
 
 /*** end of file ***/
