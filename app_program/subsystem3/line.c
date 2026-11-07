@@ -32,7 +32,8 @@
 /* ---- private data ---------------------------------------------------- */
 
 static uint64_t           g_line_stack[LINE_STACK_WORDS];
-static line_track_steer_t g_steer         = {0, 0, 0};
+static line_track_steer_t g_steer         = {0, 0, 0, 0, true,
+                                              LINE_RECOVER_STEER};
 
 /* Packed private state words (Phase 4, B3.4). */
 static uint32_t           g_prv_cal_l     = 0u; /* PRV_CAL_L: WHITE, BLACK */
@@ -43,9 +44,14 @@ static uint32_t           g_line_prv_a    = 0u; /* PRV_LINE_A flags/cnt/JCT */
 static uint32_t           g_line_prv_b    = 0u; /* PRV_LINE_B: JCT_MARK */
 static uint32_t           g_line_prv_c    = 0u; /* PRV_LINE_C: RUN_MARK */
 static uint32_t           g_line_prv_d    = 0u; /* PRV_LINE_D: SEQ, PATH */
+/* SH_IR_RAW: last raw ADC pair for telemetry; line_task only writes. */
+static volatile uint32_t  g_sh_ir_raw     = 0u;
 
 /* Per-cycle caches for status board, rejoin latch, and bring-up logging. */
 static bool               gb_rejoin_white = false;
+/* Path where the current both-white stretch began (S3-U19, plain:
+   add to the Week 13 packing list).                                 */
+static uint32_t           g_white_mark    = 0u;
 static bool               gb_branch_seen  = false;
 static uint8_t            g_last_jct      = (uint8_t) APP_JCT_NONE;
 static uint32_t           g_raw_log_cnt   = 0u;
@@ -54,6 +60,7 @@ static uint32_t           g_raw_log_cnt   = 0u;
 
 static void     line_task(INT stacd, void * p_exinf);
 static void     line_cycle(void);
+static void     line_raw_publish(uint32_t raw_l, uint32_t raw_r);
 static void     line_log_bringup(status_board_t const * p_snap,
                                  uint32_t raw_l, uint32_t raw_r);
 static void     line_reset_run_state(uint32_t path);
@@ -123,6 +130,17 @@ ER line_start(void)
     }
 
     return ercd;
+}
+
+/**
+ * line_raw_word
+ * @brief   Last raw IR ADC pair (SH_IR_RAW layout) for debug telemetry.
+ * @return  SH_IR_RAW word: L in bits 0-11, R in bits 12-23
+ * @context any task (one aligned load of a word written by line_task)
+ */
+uint32_t line_raw_word(void)
+{
+    return g_sh_ir_raw;
 }
 
 /* ---- private functions ------------------------------------------------ */
@@ -286,6 +304,7 @@ static void line_cycle(void)
     bool                b_cal_ok = false;
 
     drv_ir_adc_read(&raw_l, &raw_r);
+    line_raw_publish(raw_l, raw_r);
     status_board_read(&snap);
     line_log_bringup(&snap, raw_l, raw_r);
     path = status_board_path(&snap);
@@ -550,9 +569,16 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
         g_line_prv_a, PRV_LINE_A_LOST_CNT_POS, PRV_LINE_A_LOST_CNT_BITS);
     bool     b_lost_snt = (0u != app_bits_get(
         g_line_prv_a, PRV_LINE_A_LOST_SENT_POS, PRV_LINE_A_LOST_SENT_BITS));
+    bool     b_is_between = false;
+    bool     b_is_waiting = false;
+    uint32_t white_mm     = 0u;
 
     if (b_is_white)
     {
+        if (0u == lost_cnt)
+        {
+            g_white_mark = path;          /* both white from here */
+        }
         if (lost_cnt < (uint32_t) PRV_LINE_A_LOST_CNT_MAX)
         {
             lost_cnt++;
@@ -562,16 +588,27 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
             /* Saturate at 31 (5-bit LOST_CNT). */
         }
 
-        if ((lost_cnt >= LINE_LOST_CYCLES) && (!b_lost_snt))
+        /* Centred (line between the sensors, S3-U19): not lost until no
+           line was seen for LINE_CENTRE_LOST_MM (line end). After a
+           black exit: not before LINE_EXIT_LOST_MM (S3-U20).          */
+        white_mm     = odometry_counts_to_mm(path - g_white_mark);
+        b_is_between = line_track_steer_line_between(&g_steer)
+                       && (white_mm < LINE_CENTRE_LOST_MM);
+        b_is_waiting = (!line_track_steer_line_between(&g_steer))
+                       && (white_mm < LINE_EXIT_LOST_MM);
+
+        if ((lost_cnt >= LINE_LOST_CYCLES) && (!b_lost_snt)
+            && (!b_is_between) && (!b_is_waiting))
         {
             (void) mission_post_event(APP_EVT_LINE_LOST, 0u);
             b_lost_snt = true;
         }
         else
         {
-            /* Not yet at loss threshold or already reported. */
+            /* Not yet at loss threshold, centred, or already reported. */
         }
-        *p_status = APP_LINE_LOST;
+        *p_status = (b_is_between && (!b_lost_snt)) ? APP_LINE_ON
+                                                    : APP_LINE_LOST;
     }
     else
     {
@@ -783,6 +820,27 @@ static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
             /* Keep ON / LOST status. */
         }
     }
+}
+
+/**
+ * line_raw_publish
+ * @brief   Packs this cycle's raw ADC pair into SH_IR_RAW and stores the
+ *          whole word at once (single writer, so readers never see half
+ *          an update).
+ * @param   raw_l  left ADC reading, 0..4095
+ * @param   raw_r  right ADC reading, 0..4095
+ * @context line_task
+ */
+static void line_raw_publish(uint32_t raw_l, uint32_t raw_r)
+{
+    uint32_t word = 0u;
+
+    word = app_bits_put(word, SH_IR_RAW_L_POS, SH_IR_RAW_L_BITS,
+                        line_clamp_u(raw_l, (uint32_t) SH_IR_RAW_L_MAX));
+    word = app_bits_put(word, SH_IR_RAW_R_POS, SH_IR_RAW_R_BITS,
+                        line_clamp_u(raw_r, (uint32_t) SH_IR_RAW_R_MAX));
+    /* casts above: the layout maxima are the positive constant 4095 */
+    g_sh_ir_raw = word;
 }
 
 /*** end of file ***/

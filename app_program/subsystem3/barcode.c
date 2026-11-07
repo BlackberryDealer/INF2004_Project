@@ -92,6 +92,7 @@ static bool     barcode_lookup_cmd(uint32_t char_index, uint32_t * p_cmd);
 static void     barcode_mark_set(uint32_t path);
 static uint32_t barcode_mark_get(void);
 static void     barcode_state_set(uint32_t state, uint32_t n_elem);
+static void     barcode_log_widths(uint32_t n_elem);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -649,6 +650,7 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
                 /* Bring-up diagnosis. cast: count <= 63 */
                 app_log("BAR capture dropped: edge missed after %d elements\n",
                         (int32_t) n_elem, 0, 0);
+                barcode_log_widths(n_elem);
             }
             else
             {
@@ -768,6 +770,7 @@ static void barcode_check_timeouts(uint32_t path)
                 /* Bring-up diagnosis: a barcode needs 29. cast: <= 63 */
                 app_log("BAR capture dropped: %d elements (a barcode has"
                         " 29)\n", (int32_t) n_elem, 0, 0);
+                barcode_log_widths(n_elem);
             }
             else
             {
@@ -778,6 +781,7 @@ static void barcode_check_timeouts(uint32_t path)
         else
         {
             (void) mission_post_event(APP_EVT_INVALID, 0u);
+            barcode_log_widths(n_elem);
             barcode_mark_set(path);
             barcode_state_set(BAR_STATE_COOLDOWN, n_elem);
         }
@@ -825,6 +829,41 @@ static bool barcode_lookup_cmd(uint32_t char_index, uint32_t * p_cmd)
     }
 
     return b_is_mapped;
+}
+
+/**
+ * barcode_log_widths
+ * @brief   Bring-up diagnosis (S3-U22): prints the captured element
+ *          widths of a dropped or invalid capture, 0.1 mm, bar first,
+ *          two per line, so missing narrow spaces (merged bars) or a bad
+ *          wide/narrow ratio can be seen. A full '*X*' is 15 bars and 14
+ *          spaces, narrow ~30, wide ~90.
+ * @param   n_elem  Elements captured (only the first BAR_ELEMENTS are
+ *                  kept and printed).
+ * @return  none
+ * @context barcode_task (event time, once per failed capture)
+ */
+static void barcode_log_widths(uint32_t n_elem)
+{
+    uint32_t const count = (n_elem < BAR_ELEMENTS) ? n_elem : BAR_ELEMENTS;
+    uint32_t       idx   = 0u;
+
+    for (idx = 0u; (idx + 1u) < count; idx += 2u)
+    {
+        /* casts: element number <= 29, widths <= 255 fit int32_t */
+        app_log("BAR widths %d+ (0.1 mm, bar first): %d %d\n",
+                (int32_t) (idx + 1u), (int32_t) g_bar_widths[idx],
+                (int32_t) g_bar_widths[idx + 1u]);
+    }
+    if (idx < count)
+    {
+        app_log("BAR widths %d+ (0.1 mm, bar first): %d\n",
+                (int32_t) (idx + 1u), (int32_t) g_bar_widths[idx], 0);
+    }
+    else
+    {
+        /* even count: all printed */
+    }
 }
 
 /*** end of file ***/
