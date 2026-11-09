@@ -800,7 +800,8 @@ static void motion_state_step(int32_t * p_sp_l, int32_t * p_sp_r)
  * @brief   FOLLOW: base speed, cut by up to MOTION_CURVE_SLOW_PCT in
  *          proportion to |steering|, corrected by the steering error.
  *          + steering = line left of centre = slow the left wheel
- *          (app_types.h).
+ *          (app_types.h). Limit the split to retain at least one third
+ *          of the slowed base speed on the inside wheel.
  * @param   p_sp_l  receives the left set-point, cpw
  * @param   p_sp_r  receives the right set-point, cpw
  * @return  none
@@ -808,11 +809,12 @@ static void motion_state_step(int32_t * p_sp_l, int32_t * p_sp_r)
  */
 static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r)
 {
-    status_board_t snap  = {0};
-    int32_t        steer = 0;
-    int32_t        cut   = 0;
-    int32_t        base  = 0;
-    int32_t        diff  = 0;
+    status_board_t snap     = {0};
+    int32_t        steer    = 0;
+    int32_t        cut      = 0;
+    int32_t        base     = 0;
+    int32_t        diff     = 0;
+    int32_t        diff_max = 0;
 
     status_board_read(&snap);
     steer = status_board_steering(&snap);
@@ -824,6 +826,19 @@ static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r)
     /* Signed division by 256: shift with sign fix-up, no library call. */
     base = (g_base_cpw * (MOTION_Q8_ONE - cut)) / MOTION_Q8_ONE;
     diff = (steer * MOTION_KP_STEER_Q8) / MOTION_Q8_ONE;
+    diff_max = (2 * base) / 3;
+    if (diff > diff_max)
+    {
+        diff = diff_max;
+    }
+    else if (diff < -diff_max)
+    {
+        diff = -diff_max;
+    }
+    else
+    {
+        /* The requested split leaves enough inside speed. */
+    }
     *p_sp_l = base - diff;
     *p_sp_r = base + diff;
 }

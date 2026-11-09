@@ -657,6 +657,44 @@ int main(void)
         g_sim_steer = 0;
     }
 
+    /* S2-U27: at slow FOLLOW speed, full correction used to command
+       zero inside speed. Keep a forward target on both wheels in
+       either direction and retain the ordinary curve response. */
+    {
+        int32_t sp_l = 0;
+        int32_t sp_r = 0;
+        int32_t peak_l = 0;
+        int32_t peak_r = 0;
+        int32_t const curve_diff = (750 * MOTION_KP_STEER_Q8) / MOTION_Q8_ONE;
+
+        sim_reset();
+        sim_send(APP_CMD_FOLLOW, MOTION_SLOW_MM_S, 1u);
+        sim_cycles(3u);
+        g_sim_steer = 750;
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U27", (sp_r - sp_l) == (2 * curve_diff),
+                   "ordinary curve keeps its wheel-speed difference");
+
+        g_sim_steer = 1000;
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U27", (sp_r > sp_l) && (sp_l > 0)
+                   && ((3 * sp_l) >= ((sp_l + sp_r) / 2)),
+                   "full correction keeps one third of base inside");
+        peak_l = sp_l;
+        peak_r = sp_r;
+        g_sim_steer = -1000;
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U27", (sp_l == peak_r) && (sp_r == peak_l),
+                   "full correction is symmetric on the other side");
+
+        sim_send(APP_CMD_FOLLOW, 0u, 2u);
+        sim_cycles(3u);
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U27", (sp_l == 0) && (sp_r == 0),
+                   "zero-speed FOLLOW stays still with a steering error");
+        g_sim_steer = 0;
+    }
+
     return (0 == HOST_SUMMARY("motion_task")) ? 0 : 1;
 }
 
