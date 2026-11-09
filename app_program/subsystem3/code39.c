@@ -31,6 +31,9 @@
 #define CODE39_NARROW_MAX_IDX  (19u)
 #define CODE39_WIDE_MIN_IDX    (20u)
 #define CODE39_RATIO_SCALE     (10u)
+/* Uneven black widths on the 14:34 run compressed the bar ratio to 1.42.
+   Allow that ratio for a retry trigger. Decoding uses the standard ratio. */
+#define CODE39_GUARD_BAR_RATIO_X10 (14u)
 #define CODE39_NOT_FOUND       (0xFFu)
 #define CODE39_ASCII_UNKNOWN   ((uint32_t) '?')
 
@@ -89,6 +92,9 @@ static uint32_t code39_try_split_dir(uint8_t const * p_widths,
                                      uint32_t * p_char_index);
 static uint32_t code39_try_split_both(uint8_t const * p_widths,
                                       uint32_t * p_char_index);
+
+static bool     code39_guard_matches(uint8_t const * p_widths,
+                                       uint32_t first, bool b_reverse);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -149,6 +155,33 @@ uint32_t code39_decode(uint8_t const * p_widths, uint32_t count,
     }
 
     return result;
+}
+
+/**
+ * code39_has_start_guard
+ * @brief   Check a Code 39 start guard and narrow inter-character gap.
+ *          A nine-width input is a candidate whose first narrow bar
+ *          was missed. This can request a reread, never a decode.
+ * @param   p_widths  Observed widths in travel order.
+ * @param   count     Guard and gap count, with or without first bar.
+ * @return  true if the measured widths match either guard orientation.
+ * @context barcode_task
+ */
+bool code39_has_start_guard(uint8_t const * p_widths, uint32_t count)
+{
+    bool b_matches = false;
+
+    if ((CODE39_WIDTHS_NULL != p_widths)
+        && ((CODE39_START_ELEMENTS == count)
+            || ((CODE39_START_ELEMENTS - 1u) == count)))
+    {
+        uint32_t const first = CODE39_START_ELEMENTS - count;
+
+        b_matches = code39_guard_matches(p_widths, first, false)
+                    || code39_guard_matches(p_widths, first, true);
+    }
+
+    return b_matches;
 }
 
 /**
@@ -534,6 +567,53 @@ static uint32_t code39_try_split_both(uint8_t const * p_widths,
     }
 
     return result;
+}
+
+/**
+ * code39_guard_matches
+ * @brief   Compare the widest narrow and narrowest wide element in each
+ *          of the bar and space groups against the expected guard mask.
+ * @context barcode_task
+ */
+static bool code39_guard_matches(uint8_t const * p_widths,
+                                  uint32_t first, bool b_reverse)
+{
+    uint32_t const star = (uint32_t) g_code39_patterns[CODE39_STAR];
+    uint32_t const pattern = b_reverse ? star : (star << 1u);
+    uint32_t narrow_max[2] = {0u, 0u};
+    uint32_t wide_min[2] = {UINT8_MAX, UINT8_MAX};
+    bool b_valid = true;
+
+    for (uint32_t idx = first; idx < CODE39_START_ELEMENTS; idx++)
+    {
+        uint32_t const width = (uint32_t) p_widths[idx - first];
+        uint32_t const group = idx & 1u;
+        /* Forward uses a trailing zero for the gap. In reverse the gap
+           is one bit past the high end of the guard. */
+        uint32_t const bit = b_reverse ? idx
+                                     : (CODE39_START_ELEMENTS - 1u) - idx;
+
+        if (0u == width)
+        {
+            b_valid = false;
+        }
+        if (0u != (pattern & (1u << bit)))
+        {
+            wide_min[group] = (width < wide_min[group]) ? width
+                                                       : wide_min[group];
+        }
+        else
+        {
+            narrow_max[group] = (width > narrow_max[group]) ? width
+                                                           : narrow_max[group];
+        }
+    }
+
+    return b_valid
+        && ((wide_min[0] * CODE39_RATIO_SCALE)
+            >= (narrow_max[0] * CODE39_GUARD_BAR_RATIO_X10))
+        && ((wide_min[1] * CODE39_RATIO_SCALE)
+            >= (narrow_max[1] * BAR_WIDE_RATIO_X10_MIN));
 }
 
 /*** end of file ***/

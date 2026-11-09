@@ -130,11 +130,11 @@ int main(void)
     };
 
     /* 7. S3-U14 early order: barcode sensor ahead of line sensors sets
-       b_branch_recent = true before CANDIDATE starts; left sensor saturates */
+       b_branch_recent = true before CANDIDATE starts; right sensor saturates */
     static jct_sample_t const trace_branch_early[] =
     {
-        { 950u, 500u,  20u, 1u, true  }, /* sat_l + b_branch_recent (sat_r) */
-        { 950u, 500u,  45u, 1u, false },
+        { 500u, 950u,  20u, 1u, true  }, /* sat_r + b_branch_recent (sat_l) */
+        { 500u, 950u,  45u, 1u, false },
         { 500u, 500u,  55u, 1u, false }, /* -> CONFIRM */
         { 500u, 500u, 145u, 1u, false }  /* both sat + present -> CROSS */
     };
@@ -143,10 +143,10 @@ int main(void)
        during CONFIRM window (after seq0 was captured) */
     static jct_sample_t const trace_branch_late[] =
     {
-        { 950u, 500u,  20u, 3u, false }, /* seq0 = 3, only sat_l */
-        { 950u, 500u,  45u, 3u, false },
+        { 500u, 950u,  20u, 3u, false }, /* seq0 = 3, only sat_r */
+        { 500u, 950u,  45u, 3u, false },
         { 100u, 100u,  55u, 3u, false }, /* -> CONFIRM */
-        { 100u, 100u, 100u, 4u, false }, /* branch_seq (4) != seq0 (3) -> sat_r */
+        { 100u, 100u, 100u, 4u, false }, /* branch_seq (4) != seq0 (3) -> sat_l */
         { 100u, 100u, 145u, 4u, false }  /* both sat + white -> T */
     };
 
@@ -386,11 +386,11 @@ int main(void)
         for (uint32_t i = 0u; i < 60u; i++)               /* 600 ms */
         {
             out = line_track_steer_step(&st, 0u, 0u);
-            if (5u == i)
+            if ((LINE_RECOVER_COAST_CYCLES + 8u) == i)
             {
                 first = out;
             }
-            if ((i > 5u) && (out < prev))
+            if ((i > LINE_RECOVER_COAST_CYCLES) && (out < prev))
             {
                 b_up = false;
             }
@@ -409,13 +409,36 @@ int main(void)
         {
             out = line_track_steer_step(&st, 0u, 800u);   /* black right */
         }
-        for (uint32_t i = 0u; i < 12u; i++)
+        for (uint32_t i = 0u; i < (LINE_RECOVER_COAST_CYCLES + 12u); i++)
         {
             out = line_track_steer_step(&st, 0u, 0u);
         }
         HOST_CHECK("S3-U21", (out <= -LINE_RECOVER_STEER)
                    && (out > -(LINE_RECOVER_STEER + 300)),
                    "next exit (right) starts again from LINE_RECOVER_STEER");
+    }
+
+    /* S3-U26: let the steering settle before assuming a black exit. */
+    {
+        line_track_steer_t st = {0};
+        int32_t out = 0;
+        line_track_steer_reset(&st);
+        for (uint32_t i = 0u; i < 24u; i++)
+        {
+            out = line_track_steer_step(&st, 1000u, 0u);
+        }
+        HOST_CHECK("S3-U26", out >= 990,
+                   "visible curve keeps full steering authority");
+        for (uint32_t i = 0u; i < LINE_RECOVER_COAST_CYCLES; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U26", (out >= 0) && (out < 50)
+                   && !line_track_steer_line_between(&st),
+                   "coast near straight while keeping the possible exit");
+        out = line_track_steer_step(&st, 0u, 900u);
+        HOST_CHECK("S3-U26", out < 0,
+                   "visible tape overrides the coast in either direction");
     }
 
     return (0 == HOST_SUMMARY("line_track")) ? 0 : 1;

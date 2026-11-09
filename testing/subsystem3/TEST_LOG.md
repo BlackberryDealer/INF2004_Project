@@ -35,6 +35,14 @@ Define a test here before running it. Test IDs never change.
 | S3-I03 | Barcode decode latency ≤ 50 ms after final bar | NFR5c | manual (probe) | Probe GP7 final edge to `APP_EVT_BARCODE` | ≤ 50 ms |
 | S3-I04 | Cruise line-following stability with Buddy 2: 3 runs at 250 mm/s | FR1, NFR4 | manual (track) | 3 track runs with `FOLLOW` | No line loss > 200 ms |
 | S3-I10 | R1 GPIO ISR WCET on GP7 while ultrasonic pings (both tags) | B3.3, B3.4 | manual (probe) | Signal generator on GP7 with ultrasonic active | R1 total WCET < 20 µs |
+| S3-U23 | Barcode prefix and bounded reread handshake | FR2, FR3 | auto (host) | Replay the 11:41 widths in the IRQ and task at cruise and reread speeds | A guarded prefix requests one rewind, reverse edges are ignored, complete slow reverse F decodes with its runtime map, and 28 elements are rejected |
+| S3-U24 | Reject short barcode noise with no width contrast | FR2 | auto (host) | Send four similar 1.1–1.3 mm elements at cruise | No rewind request |
+| S3-U25 | Preserve barcode IRQ direction and the first reread edge | FR2 | auto (host) | Inject a pin bounce after a latched edge. Replay the full F widths starting low after a verified rewind. | Capture starts fresh and the decoder receives all 29 elements. |
+| S3-U26 | Gentler recovery when both sensors go white after a curve | FR1 | auto (host) | Hold one channel black, then give 120 ms of white samples and a visible edge | Full steering on visible tape and a short coast while line-loss tracking remains active. |
+| S3-U27 | Require a Code 39 guard for an automatic rewind | FR2, FR3 | auto (host) | Replay the 14:09 tape capture, mixed-width noise, and a forward guard plus gap | Only the guard triggers a rewind. |
+| S3-U28 | Clear steering recovery at the cross stripe | FR1, FR19 | auto (host) | Drive over a cross stripe with a staggered trailing edge, then resume following tape | Straight over the stripe, no white-floor recovery from its edge, CROSS classification and normal steering afterwards. |
+| S3-U29 | Retry on an optically compressed start guard | FR2, FR3 | auto (host) | Replay the measured 14:34 F guard at cruise and its 28-element capture at reread speed | The guard can request a rewind within the distance limit. The incomplete frame is rejected. |
+| S3-U30 | Filter short comparator pulses before parsing the barcode | FR2 | auto (host) | Insert six short pulses ahead of real transitions in a complete F frame and replay a short leading pulse across task wakes | The full frame decodes and the short leading pulse cannot start a capture. |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -60,6 +68,14 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S3-U09 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | Rejoin mode reports both 10 mm stray mark and 45 mm line |
 | 2026-10-22 | S3-U14 | Phase 2 | Lucas | PASS | `logs/2026-10-22_host_phase2.txt` | Early (`b_branch_recent`) and late (`CONFIRM`) branch orders passed |
 | 2026-11-05 | S3-U01..U11, U14..U18 | Phase 4 | Lucas | PASS | `logs/2026-11-05_host_phase4_packed.txt` | 62/62 host assertions pass on packed `line.c` + `barcode.c` (128 B `MSG_EDGE` ring, `PRV_CAL_*`, `PRV_LINE_*`, `PRV_BAR_*`, split bar/space Code 39 decoder, 29-element sliding window) |
+| 2026-11-09 | S3-U23 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Line and barcode host simulation | Logged prefix prompts one rewind. A complete simulated F frame uses the runtime map and incomplete or invalid frames are rejected. |
+| 2026-11-09 | S3-U24 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Barcode host simulation | Four similarly narrow elements never requested a rewind. |
+| 2026-11-09 | S3-U25 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Line and barcode host simulation | Latched edge direction preserved and the 29 measured elements of F decode after a falling first edge. |
+| 2026-11-09 | S3-U26 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Line tracking host simulation | Full visible-curve response and gentler recovery after both channels go white. |
+| 2026-11-09 | S3-U27 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Barcode host simulation | The tape capture and mixed-width noise produced no rewind. Both guard orientations and the mapped F reread passed. |
+| 2026-11-09 | S3-U28 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Line task host simulation | Staggered stripe edges kept the car straight, CROSS still fired, and normal steering resumed. Track verification pending. |
+| 2026-11-09 | S3-U29 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Barcode host simulation | The recorded weak F guard requests a retry. The 28-element frame remains invalid. |
+| 2026-11-09 | S3-U30 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Barcode host simulation | Six simulated false pulses did not corrupt the full F frame. Short leading pulses were rejected across task wakes. |
 
 ## SPEC-QUESTION
 

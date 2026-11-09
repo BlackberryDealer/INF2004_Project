@@ -33,7 +33,7 @@
 
 static uint64_t           g_line_stack[LINE_STACK_WORDS];
 static line_track_steer_t g_steer         = {0, 0, 0, 0, true,
-                                              LINE_RECOVER_STEER};
+                                              LINE_RECOVER_STEER, 0u};
 
 /* Packed private state words (Phase 4, B3.4). */
 static uint32_t           g_prv_cal_l     = 0u; /* PRV_CAL_L: WHITE, BLACK */
@@ -73,7 +73,7 @@ static void     line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
                                            uint32_t * p_status);
 static void     line_handle_rejoin(bool b_is_black, uint32_t lost_cnt,
                                    uint32_t path);
-static void     line_step_junction(uint32_t norm_l, uint32_t norm_r,
+static bool     line_step_junction(uint32_t norm_l, uint32_t norm_r,
                                    uint32_t path, bool b_inhibit_jct,
                                    uint32_t * p_status);
 static void     line_jct_unpack(line_track_jct_t * p_jct);
@@ -342,7 +342,12 @@ static void line_cycle(void)
             steering = line_track_steer_step(&g_steer, norm_l, norm_r);
             line_update_loss_and_found(norm_l, norm_r, path,
                                        b_inhibit_jct, &status);
-            line_step_junction(norm_l, norm_r, path, b_inhibit_jct, &status);
+            if (line_step_junction(norm_l, norm_r, path, b_inhibit_jct,
+                                    &status))
+            {
+                line_track_steer_reset(&g_steer);
+                steering = 0;
+            }
         }
     }
 
@@ -739,10 +744,10 @@ static void line_handle_rejoin(bool b_is_black, uint32_t lost_cnt,
  * @param   path           Current odometry path counts.
  * @param   b_inhibit_jct  true when APP_MODE_JUNCTION_INHIBIT is set.
  * @param   p_status       Updated to APP_LINE_JUNCTION while active.
- * @return  none
+ * @return  true when the cross stripe should clear the steering bias.
  * @context line_task
  */
-static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
+static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
                                uint32_t path, bool b_inhibit_jct,
                                uint32_t * p_status)
 {
@@ -752,6 +757,7 @@ static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
     uint32_t branch_path = app_bits_get(
         g_line_prv_d, PRV_LINE_D_BRANCH_PATH_POS, PRV_LINE_D_BRANCH_PATH_BITS);
     line_track_jct_t jct = {0u, 0u, false, false, 0u};
+    bool b_reset_steer = false;
 
     if (cur_seq != last_seq)
     {
@@ -785,6 +791,9 @@ static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
         uint32_t            jct_class = APP_JCT_NONE;
         uint32_t const      early_cnt =
             odometry_mm_to_counts(LINE_BRANCH_EARLY_MM);
+        bool const          b_was_on_band =
+            ((LINE_JCT_STATE_CANDIDATE == jct.state)
+             && jct.b_sat_l && jct.b_sat_r);
 
         jct_in.norm_l          = norm_l;
         jct_in.norm_r          = norm_r;
@@ -798,6 +807,12 @@ static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
 
         jct_class = line_track_jct_step(&jct, &jct_in);
         line_jct_pack(&jct);
+
+        /* The cross stripe can darken one sensor as it enters or leaves.
+           Keep that edge out of the white-floor recovery memory. */
+        b_reset_steer = b_was_on_band || (APP_JCT_CROSS == jct_class)
+            || ((LINE_JCT_STATE_CANDIDATE == jct.state) && jct.b_sat_l
+                && jct.b_sat_r);
 
         if (APP_JCT_NONE != jct_class)
         {
@@ -820,6 +835,8 @@ static void line_step_junction(uint32_t norm_l, uint32_t norm_r,
             /* Keep ON / LOST status. */
         }
     }
+
+    return b_reset_steer;
 }
 
 /**

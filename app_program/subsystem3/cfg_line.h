@@ -37,11 +37,12 @@
    after a grey graze both white means centred: steer 0, line ON. With
    no line under either sensor for LINE_CENTRE_LOST_MM it is lost anyway
    (line end). S3-U19.                                                 */
-#define LINE_RECOVER_STEER       (350)   /* TUNE: both white, permille  */
-/* S3-U21 (on-car 2026-11-06 14:49): a fixed 350 often did not bring the
-   line back within LINE_EXIT_LOST_MM; the mission search pivot then
-   found it in 70-140 ms (a jerk). The recovery grows from 350 by 20 per
-   10 ms to 1000 (~330 ms): a smooth, tightening arc toward the line. */
+/* A black-to-white transition may mean the tape is between the sensors
+   again. Let steering decay for 120 ms before starting the search arc. */
+#define LINE_RECOVER_COAST_CYCLES (12u)  /* 10 ms cycles */
+#define LINE_RECOVER_STEER       (200)   /* initial recovery, permille */
+/* S3-U21: a fixed recovery often failed to find the line within 60 mm.
+   If both sensors stay white, the recovery grows into a tightening arc. */
 #define LINE_RECOVER_RAMP        (20)    /* TUNE: permille per 10 ms    */
 #define LINE_RECOVER_MAX         (1000)  /* TUNE: <= LINE_STEER_MAX     */
 /* S3-U20 (on-car 2026-11-06 14:38): after the bypass a black exit
@@ -53,7 +54,7 @@
 #define LINE_CENTRE_LOST_MM      (300u)  /* TUNE: centred white -> lost */
 #define LINE_EXIT_LOST_MM        (60u)   /* TUNE: black exit -> lost    */
 #define LINE_SIDE_MIN            (150)   /* TUNE: |error| that sets side */
-#define LINE_STEER_FILT_DIV      (2)     /* TUNE: 1 = no smoothing      */
+#define LINE_STEER_FILT_DIV      (4)     /* TUNE: 1 = no smoothing      */
 /* On-car 2026-11-03: of KP/KD 3/0, 3/4 and 2/6, 3/0 was the smoothest
    and the only one that never lost the line; damping is kept switchable. */
 #define LINE_STEER_KD            (0)     /* TUNE: 0 = no damping        */
@@ -64,7 +65,7 @@
    B3.2.1) for a barcode-side branch reported ahead of the line sensors. */
 #define LINE_BRANCH_EARLY_MM     (40u)   /* MEASURE: barcode sensor lead */
 #define LINE_FOUND_MAX_MM        (255u)
-#define LINE_BARCODE_SIDE        (APP_SIDE_RIGHT) /* MEASURE: A2 */
+#define LINE_BARCODE_SIDE        (APP_SIDE_LEFT)  /* mounted on the left */
 
 /* Part C.4b: tie configuration constants to their stored field domains. */
 #if (LINE_LOST_CYCLES > 31u)
