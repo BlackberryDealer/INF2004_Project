@@ -48,7 +48,10 @@
 #define OBS_CLEAR_READINGS     (2u)
 #define OBS_COARSE_STRIDE      (3u)          /* 15 deg between points */
 #define OBS_CENTRE_DEG         (90u)
+#define OBS_STEP_CENTRE        (12u)         /* step of 90 deg */
 #define OBS_STEP_NONE          (0xFFu)
+#define OBS_RANGE_LINES        (9u)          /* 25 steps, 3 per line */
+#define OBS_RANGE_PER_LINE     (3u)
 #define OBS_MASK_ALL           ((1u << APP_SCAN_STEPS) - 1u)  /* 25 bits */
 
 /* Mode bits remembered for edge detection */
@@ -117,7 +120,10 @@ static bool               gb_on_ramp      = false; /* S5-U42 ramp state    */
 static uint32_t           g_ramp_hold     = 0u;   /* pings after ramp     */
 static uint32_t           g_ramp_mark     = 0u;   /* path at last pitch   */
 static bool               gb_ramp_logged  = false; /* one RAMP line/approach */
+static bool               gb_creep_logged = false; /* one CREEP line/stop   */
 static uint16_t           g_obs_scan[APP_SCAN_STEPS];
+static uint16_t           g_samples[OBS_SCAN_SAMPLES]; /* S5-U47 */
+static uint32_t           g_sample_cnt    = 0u;   /* pings taken at step */
 static status_board_obs_t g_part =
 {
     .distance_mm    = APP_DIST_NONE_MM,
@@ -137,6 +143,10 @@ static void     obstacle_ping(obstacle_reading_t * p_rd);
 static bool     obstacle_wait_echo(uint8_t done0);
 static void     obstacle_read_record(obstacle_echo_t * p_rec);
 static void     obstacle_scan_log(void);
+static void     obstacle_ranges_log(void);
+static void     obstacle_block_log(bool b_is_left, uint32_t step,
+                                   uint32_t gap_mm);
+static uint32_t obstacle_median3(uint16_t const * p_val);
 static uint32_t obstacle_width_to_mm(uint32_t width_4us);
 static uint32_t obstacle_round_mm(uint32_t distance_mm);
 static void     obstacle_modes(uint32_t * p_rising);
@@ -145,6 +155,7 @@ static void     obstacle_enter(uint32_t state);
 static void     obstacle_step_monitor(obstacle_reading_t const * p_rd);
 static void     obstacle_step_approach(obstacle_reading_t const * p_rd);
 static void     obstacle_step_scan(obstacle_reading_t const * p_rd);
+static void     obstacle_step_creep(obstacle_reading_t const * p_rd);
 static void     obstacle_step_settle(void);
 static void     obstacle_step_passing(void);
 static void     obstacle_step_watch(obstacle_reading_t const * p_rd);
@@ -307,6 +318,10 @@ static void obstacle_cycle(void)
                     && mission_mode_is_set(APP_MODE_STOPPED))
                 {
                     obstacle_scan_begin();
+                }
+                else
+                {
+                    obstacle_step_creep(&reading);          /* S5-U55 */
                 }
                 break;
             case APP_SCAN_COARSE:
@@ -691,6 +706,7 @@ static void obstacle_enter(uint32_t state)
     g_lost    = 0u;
     g_echo_mm = APP_DIST_NONE_MM;
     gb_ramp_logged = false;
+    gb_creep_logged = false;
 
     if ((APP_SCAN_MONITOR == state) || (APP_SCAN_PASSING == state))
     {
@@ -814,8 +830,9 @@ static void obstacle_step_approach(obstacle_reading_t const * p_rd)
 /**
  * obstacle_step_scan
  * @brief   COARSE / FINE: settle the servo for OBS_SETTLE_PINGS cycles,
- *          then store this cycle's reading for the current step (4 mm
- *          steps, >= 1020 = clear) and mark it measured.
+ *          then take OBS_SCAN_SAMPLES readings and store their median
+ *          for the current step (4 mm steps, >= 1020 = clear; S5-U47)
+ *          and mark it measured.
  * @param   p_rd this cycle's reading
  * @context obstacle_task
  */
@@ -827,13 +844,24 @@ static void obstacle_step_scan(obstacle_reading_t const * p_rd)
     {
         g_settle--;                               /* servo still moving */
     }
+    else if (g_sample_cnt < (OBS_SCAN_SAMPLES - 1u))
+    {
+        /* cast: <= 1020 after the clamp */
+        g_samples[g_sample_cnt] = (uint16_t) ((p_rd->distance_mm
+                                               < APP_PROFILE_CLEAR_MM)
+                                              ? p_rd->distance_mm
+                                              : APP_PROFILE_CLEAR_MM);
+        g_sample_cnt++;                           /* more pings at step */
+    }
     else
     {
         /* cast: <= 1020 after the clamp */
-        g_obs_scan[g_step] = (uint16_t) ((p_rd->distance_mm
-                                          < APP_PROFILE_CLEAR_MM)
-                                         ? p_rd->distance_mm
-                                         : APP_PROFILE_CLEAR_MM);
+        g_samples[g_sample_cnt] = (uint16_t) ((p_rd->distance_mm
+                                               < APP_PROFILE_CLEAR_MM)
+                                              ? p_rd->distance_mm
+                                              : APP_PROFILE_CLEAR_MM);
+        /* cast: median of values <= 1020 */
+        g_obs_scan[g_step] = (uint16_t) obstacle_median3(g_samples);
         g_measured |= (1u << g_step);
         if (APP_SCAN_COARSE == g_state)
         {
@@ -856,6 +884,36 @@ static void obstacle_step_scan(obstacle_reading_t const * p_rd)
     if (!b_is_more)
     {
         obstacle_scan_finish();
+    }
+}
+
+/**
+ * obstacle_step_creep
+ * @brief   STOPPED, not scanning (S5-U55): while the mission creeps the car
+ *          forward to OBS_SCAN_MM, brake (ESTOP) on a confirmed reading at
+ *          or below OBS_SCAN_MM, a lost echo, or a reading that disagrees
+ *          with the previous one. Standing still or reversing: nothing.
+ * @param   p_rd this cycle's reading
+ * @context obstacle_task
+ */
+static void obstacle_step_creep(obstacle_reading_t const * p_rd)
+{
+    status_board_t snap = {0};
+
+    status_board_read(&snap);
+    if ((status_board_speed_l(&snap) > 0) && (status_board_speed_r(&snap) > 0)
+        && (p_rd->b_is_lost || (!p_rd->b_is_confirmed)
+            || (p_rd->distance_mm <= OBS_SCAN_MM)))
+    {
+        safety_set(SAFETY_ESTOP);
+        if (!gb_creep_logged)
+        {
+            gb_creep_logged = true;
+            /* casts: 0..2047 mm and flags fit int32_t */
+            app_log("CREEP stop at %d mm (lost %d, agrees %d)\n",
+                    (int32_t) p_rd->distance_mm, p_rd->b_is_lost ? 1 : 0,
+                    p_rd->b_is_confirmed ? 1 : 0);
+        }
     }
 }
 
@@ -937,13 +995,16 @@ static void obstacle_scan_begin(void)
     g_part.b_is_profile_valid = false;
     g_scan_start_us           = sys_tick_now_us();
     g_state                   = APP_SCAN_COARSE;
+    g_step                    = OBS_STEP_CENTRE;   /* servo at 90 deg */
     obstacle_set_step(0u);
 }
 
 /**
  * obstacle_next_fine
  * @brief   Moves to the next unmeasured 5-degree step between two coarse
- *          points whose near/far class differs.
+ *          points of which at least one is near (S5-U50: every step
+ *          beside an object is measured, none inferred; was: only where
+ *          the near/far class differs).
  * @return  true if a fine step was started, false if the scan is done
  * @context obstacle_task
  */
@@ -964,7 +1025,7 @@ static bool obstacle_next_fine(void)
         {
             b_near  = (g_obs_scan[coarse] < OBS_NEAR_MM);
             b_near2 = (g_obs_scan[coarse + OBS_COARSE_STRIDE] < OBS_NEAR_MM);
-            if (b_near != b_near2)
+            if (b_near || b_near2)
             {
                 next = idx;
             }
@@ -989,11 +1050,11 @@ static bool obstacle_next_fine(void)
  */
 static void obstacle_scan_finish(void)
 {
-    obs_profile_t prof = {false, 0u, 0u, 0, 0, 0u, 0u, 0u};
+    obs_profile_t prof = {0};
     obs_plan_t    plan = {OBS_OUT_NO_PATH, APP_SIDE_LEFT, 0u, 0u, false};
 
     obstacle_fill_gaps();
-    obs_profile_build(g_obs_scan, &prof);
+    obs_profile_build(g_obs_scan, g_inferred, &prof);
     obs_profile_plan(&prof, &plan);
     /* S5-U42: a scan that saw only a narrow normal-incidence glint
        (< OBS_MIN_WIDTH_MM) off a sloped ramp face is a ramp: drive on
@@ -1001,11 +1062,11 @@ static void obstacle_scan_finish(void)
        real obstacle (>= 80 mm, A29) still gets PLAN or NO_PATH (reverse
        and rescan), also when the car stopped on the ramp.              */
     if ((OBS_OUT_CONTINUE != plan.outcome)
-        && prof.b_is_valid && (prof.width_mm < OBS_MIN_WIDTH_MM))
+        && prof.b_is_valid && (prof.raw_width_mm < OBS_MIN_WIDTH_MM))
     {
         /* casts: width 0..1020 mm, flag 0..1 fit int32_t */
         app_log("RAMP/GLINT in scan (width %d mm, on_ramp %d): continuing\n",
-                (int32_t) prof.width_mm, gb_on_ramp ? 1 : 0, 0);
+                (int32_t) prof.raw_width_mm, gb_on_ramp ? 1 : 0, 0);
         plan.outcome       = OBS_OUT_CONTINUE;
         plan.b_was_clamped = false;
     }
@@ -1035,6 +1096,19 @@ static void obstacle_scan_finish(void)
             (int32_t) ((sys_tick_now_us() - g_scan_start_us) / OBS_US_PER_MS),
             (int32_t) plan.outcome, (int32_t) g_inferred);
     obstacle_scan_log();
+    obstacle_ranges_log();
+    if (prof.b_is_valid)
+    {
+        /* S5-U45: estimate and the measured span (its uncertainty).
+           casts: <= 1020 mm fit int32_t                               */
+        app_log("SCAN width estimate %d mm (measured span %d mm, kept "
+                "within %d..200 mm)\n",
+                (int32_t) prof.width_mm, (int32_t) prof.raw_width_mm,
+                (int32_t) OBS_WIDTH_MIN_MM);
+        obstacle_block_log(true, prof.block_step_left, prof.clear_left_mm);
+        obstacle_block_log(false, prof.block_step_right,
+                           prof.clear_right_mm);
+    }
 
     if (OBS_OUT_PLAN == plan.outcome)
     {
@@ -1093,6 +1167,111 @@ static void obstacle_scan_log(void)
 }
 
 /**
+ * obstacle_ranges_log
+ * @brief   Bring-up diagnosis (S5-U47): every step's stored range, three
+ *          steps per line (inferred steps show their filled value).
+ * @context obstacle_task (once per scan)
+ */
+static void obstacle_ranges_log(void)
+{
+    static char const * const p_fmt[OBS_RANGE_LINES] =
+    {
+        "SCAN mm 30/35/40 deg: %d %d %d\n",
+        "SCAN mm 45/50/55 deg: %d %d %d\n",
+        "SCAN mm 60/65/70 deg: %d %d %d\n",
+        "SCAN mm 75/80/85 deg: %d %d %d\n",
+        "SCAN mm 90/95/100 deg: %d %d %d\n",
+        "SCAN mm 105/110/115 deg: %d %d %d\n",
+        "SCAN mm 120/125/130 deg: %d %d %d\n",
+        "SCAN mm 135/140/145 deg: %d %d %d\n",
+        "SCAN mm 150 deg: %d\n"
+    };
+    uint32_t step = 0u;
+
+    for (uint32_t line = 0u; line < OBS_RANGE_LINES; line++)
+    {
+        step = line * OBS_RANGE_PER_LINE;
+        if ((step + OBS_RANGE_PER_LINE) <= APP_SCAN_STEPS)
+        {
+            /* casts: <= 1020 mm fit int32_t */
+            app_log(p_fmt[line], (int32_t) g_obs_scan[step],
+                    (int32_t) g_obs_scan[step + 1u],
+                    (int32_t) g_obs_scan[step + 2u]);
+        }
+        else
+        {
+            /* cast: <= 1020 mm fits int32_t */
+            app_log(p_fmt[line], (int32_t) g_obs_scan[step], 0, 0);
+        }
+    }
+}
+
+/**
+ * obstacle_block_log
+ * @brief   Bring-up diagnosis (S5-U49): which return limits the free gap
+ *          on one side (none: nothing printed).
+ * @param   b_is_left true = left side, false = right side
+ * @param   step      blocking step, APP_SCAN_STEPS = none
+ * @param   gap_mm    free gap on that side
+ * @context obstacle_task (once per scan)
+ */
+static void obstacle_block_log(bool b_is_left, uint32_t step,
+                               uint32_t gap_mm)
+{
+    /* casts: <= 1020 mm and 30..150 deg fit int32_t */
+    int32_t const deg = (int32_t) (APP_SCAN_ANGLE_MIN_DEG
+                                   + (APP_SCAN_ANGLE_STEP_DEG * step));
+
+    if (step < APP_SCAN_STEPS)
+    {
+        if (b_is_left)
+        {
+            app_log("SCAN left gap %d mm, set by the return at %d deg"
+                    " (%d mm)\n", (int32_t) gap_mm, deg,
+                    (int32_t) g_obs_scan[step]);
+        }
+        else
+        {
+            app_log("SCAN right gap %d mm, set by the return at %d deg"
+                    " (%d mm)\n", (int32_t) gap_mm, deg,
+                    (int32_t) g_obs_scan[step]);
+        }
+    }
+}
+
+/**
+ * obstacle_median3
+ * @brief   Median of three readings (S5-U47).
+ * @param   p_val three values
+ * @return  the middle one
+ * @context any
+ */
+static uint32_t obstacle_median3(uint16_t const * p_val)
+{
+    uint32_t const val_a = p_val[0];
+    uint32_t const val_b = p_val[1];
+    uint32_t const val_c = p_val[2];
+    uint32_t       mid   = val_a;
+
+    if (((val_b >= val_a) && (val_b <= val_c))
+        || ((val_b <= val_a) && (val_b >= val_c)))
+    {
+        mid = val_b;
+    }
+    else if (((val_c >= val_a) && (val_c <= val_b))
+             || ((val_c <= val_a) && (val_c >= val_b)))
+    {
+        mid = val_c;
+    }
+    else
+    {
+        /* val_a is the middle value */
+    }
+
+    return mid;
+}
+
+/**
  * obstacle_fill_gaps
  * @brief   Every unmeasured step takes the nearer (smaller) of the nearest
  *          measured steps either side and is marked inferred (review R12):
@@ -1136,8 +1315,14 @@ static void obstacle_fill_gaps(void)
  */
 static void obstacle_set_step(uint32_t step)
 {
-    g_step   = step;
-    g_settle = OBS_SETTLE_PINGS;
+    uint32_t const moved = (step > g_step) ? (step - g_step)
+                                           : (g_step - step);
+
+    /* S5-U52: short moves (<= one coarse stride) settle in one ping */
+    g_settle     = (moved <= OBS_COARSE_STRIDE) ? OBS_SETTLE_SMALL_PINGS
+                                                : OBS_SETTLE_PINGS;
+    g_step       = step;
+    g_sample_cnt = 0u;
     drv_servo_set_deg(APP_SCAN_ANGLE_MIN_DEG
                       + (APP_SCAN_ANGLE_STEP_DEG * step));
 }

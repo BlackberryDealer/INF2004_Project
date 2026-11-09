@@ -55,6 +55,9 @@
    passed, so an unplugged sensor still raises NO_ECHO.               */
 #define OBS_WARMUP_PINGS       (34u)     /* MEASURE: first echo after boot */
 #define OBS_SETTLE_PINGS       (3u)      /* MEASURE: A9 (settle ms / 60)  */
+/* S5-U52 (2026-11-09 car scans took 8.3 s): a move of at most one
+   coarse stride (15 deg, SG90 ~25 ms) settles in one 60 ms ping.      */
+#define OBS_SETTLE_SMALL_PINGS (1u)
 #define OBS_WATCH_SETTLE_PINGS (4u)      /* MEASURE: A9, worst 120 deg move */
 
 /* C.4b: the settle countdown (PRV_OBS_A SETTLE) is 3 bits, the lost and
@@ -81,8 +84,92 @@
 #define OBS_ROBOT_LEN_MM       (180u)    /* MEASURE */
 #define OBS_DEPTH_ASSUMED_MM   (150u)    /* obstacles <= 150 mm deep: ask lab */
 #define OBS_SIDE_MARGIN_MM     (50u)
-#define OBS_LEG_LAT_MAX_MM     (300u)    /* NFR16 plan limit */
+#define OBS_LEG_LAT_BASE_MM    (300u)    /* normal plan limit (NFR16) */
+#define OBS_LEG_LAT_MAX_MM     (350u)    /* extended track-test limit */
+#define OBS_EXT_ECHO_LEAD_MM   (12u)     /* three 4 mm range steps */
 #define OBS_LEG_FWD_MAX_MM     (800u)    /* NFR16 plan limit */
+
+/* ---- beam-aware width estimate (S5-U45, S5-U46) ----------------------- */
+/* On-car 2026-11-09: the HC-SR04's ~30 deg cone kept hitting a box 400 mm
+   ahead while the servo pointed up to 45 deg off-axis, so the scan saw a
+   636 mm "wall" and planned NO_PATH with both gaps clear. Professor
+   (forum 2026-10-25): obstacles are 10..20 cm wide; use the maximum
+   expected width with the scan, background subtraction, consecutive-
+   angle detection with hysteresis and conservative margins.
+   - Background subtraction: only steps whose range is within
+     OBS_CORE_BAND_MM of the shortest echo belong to the obstacle (core);
+     farther steps are other objects / background.
+   - Hysteresis: one out-of-band step between core steps does not split
+     the core (OBS_CORE_GAP_STEPS).
+   - Beam correction: each end of the core's angular span is pulled in by
+     the beam half-angle (OBS_BEAM_HALF_STEPS x 5 deg), never past the
+     shortest echo.
+   - The estimate is kept within OBS_WIDTH_MIN_MM..OBS_WIDTH_MAX_MM; the
+     raw span is still reported (uncertainty, console + profile).      */
+#define OBS_CORE_BAND_MM       (80u)     /* TUNE: > box face curvature   */
+#define OBS_CORE_GAP_STEPS     (1u)      /* hysteresis: bridged dropouts */
+#define OBS_BEAM_HALF_STEPS    (3u)      /* MEASURE: ~15 deg half-beam  */
+#define OBS_WIDTH_MIN_MM       (100u)    /* professor: 10..20 cm        */
+#define OBS_WIDTH_MAX_MM       (200u)
+/* S5-U48 (on-car 2026-11-09 17:00: the car's side hit the box). The
+   shortest echo often reads the same over several steps (252 mm from 65
+   to 100 deg): the estimate is centred on the middle of those steps
+   (ranges within OBS_PLATEAU_MM of the shortest), and the lateral leg
+   adds OBS_EST_MARGIN_MM for the estimate's uncertainty (professor:
+   conservative safety margins); the free gap must allow for it too.  */
+/* 8 -> 16 (on-car 2026-11-09 18:00, S5-U51): with 8 mm one 396 mm step at
+   100 deg was the whole plateau, the estimate sat 70 mm left of the
+   symmetric smear (55..125 deg) and the shift went over 300 mm.       */
+#define OBS_PLATEAU_MM         (16u)     /* 4 x 4 mm range resolution   */
+#define OBS_EST_MARGIN_MM      (50u)     /* TUNE */
+/* S5-U49 (review 2026-11-09): a core return beside the estimate is
+   excused as beam smear only if the obstacle itself could have produced
+   it: measured (not inferred), within OBS_SMEAR_DEG of that side's
+   estimated edge and at the obstacle's own range (within
+   OBS_SMEAR_RANGE_MM of its shortest echo). Every other return counts
+   toward the free gap like a separate object (lane unconfirmed).
+   OBS_SMEAR_SIN_NUM / _DEN = sin(OBS_SMEAR_DEG).                       */
+#define OBS_SMEAR_DEG          (30u)     /* TUNE: car scans reach ~30 deg */
+#define OBS_SMEAR_SIN_NUM      (1u)
+#define OBS_SMEAR_SIN_DEN      (2u)
+/* 24 -> 80 = OBS_CORE_BAND_MM (on-car 2026-11-09 18:00, S5-U51): pointed
+   off-axis, the beam echoes off the box's side face and back corner,
+   +28..+52 mm beyond its front (and up to its depth): 24 mm blocked both
+   lanes on every scan. A core return can be the box; beyond the core
+   band (or > OBS_SMEAR_DEG off its edge, or inferred) it is real.     */
+#define OBS_SMEAR_RANGE_MM     (OBS_CORE_BAND_MM)
+
+/* ---- creep to the scan distance (S5-U54, S5-U55) ---------------------- */
+/* Track review 2026-11-09: the box smear projects into the bypass lanes
+   from ~40 cm (every 18:00 rescan there was ambiguous) but not from
+   ~25 cm. The car still stops at OBS_STOP_MM (~40 cm, braking buffer),
+   then the mission creeps it forward to OBS_SCAN_MM under sonar control
+   (obstacle_task brakes on a confirmed reading <= OBS_SCAN_MM, a lost
+   echo or disagreeing readings) and scans at standstill. Within
+   OBS_CREEP_TOL_MM of OBS_SCAN_MM it scans at once. On car: check >=
+   100 mm physical clearance after braking.                            */
+#define OBS_SCAN_MM            (250u)    /* TUNE: sonar range at the scan */
+#define OBS_CREEP_TOL_MM       (30u)
+
+/* ---- repeated measurements per scan step (S5-U47) ---------------------- */
+/* After the servo settles, OBS_SCAN_SAMPLES pings are taken and their
+   median is stored (professor: "repeated median-filtered measurements
+   after allowing the servo to settle"); one bad echo per step no longer
+   becomes a scan point. Must be odd.                                   */
+#define OBS_SCAN_SAMPLES       (3u)
+
+#if ((OBS_SCAN_SAMPLES != 3u))
+#error "obstacle_median3() takes exactly three samples"
+#endif
+#if ((OBS_SCAN_MM + OBS_CREEP_TOL_MM) >= OBS_SLOW_MM)
+#error "Scan distance must lie inside the slow-down range"
+#endif
+#if (OBS_SMEAR_DEG != 30u)
+#error "OBS_SMEAR_SIN_NUM / _DEN hold sin(30 deg): update them too"
+#endif
+#if (OBS_WIDTH_MIN_MM > OBS_WIDTH_MAX_MM)
+#error "Width estimate limits are reversed"
+#endif
 
 /* ---- ramp vs. obstacle discrimination (S5-U42) ----------------------- */
 /* While climbing or descending a ramp/hump (or within OBS_RAMP_CLEAR_MM /
@@ -118,6 +205,9 @@
 #endif
 #if ((APP_DIST_NONE_MM / 4u) != 511u) || ((APP_PROFILE_CLEAR_MM / 4u) != 255u)
 #error "Distance sentinels no longer match their packed fields"
+#endif
+#if (OBS_LEG_LAT_BASE_MM > OBS_LEG_LAT_MAX_MM)
+#error "The extended lateral limit must cover the normal limit"
 #endif
 #if (OBS_LEG_LAT_MAX_MM > 1020u) || (OBS_LEG_FWD_MAX_MM > 1020u)
 #error "Bypass leg limits no longer fit LEG_LAT/LEG_FWD (8 bits x 4 mm)"

@@ -665,13 +665,13 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
         case APP_SYS_FINISHED:
         case APP_SYS_LINE_LOST_STOP:
             mission_stop_motion(p_ctx);
-            mission_mode_clear(APP_MODE_MOTOR_EN);  /* every RUN exit */
+            mission_mode_clear(APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD);
             mission_summary(p_ctx, p_snap, now_us);
             break;
         case APP_SYS_FAULT:
             p_ctx->end_reason = APP_END_FAULT;
             mission_stop_motion(p_ctx);
-            mission_mode_clear(APP_MODE_MOTOR_EN);
+            mission_mode_clear(APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD);
             safety_set(SAFETY_FAULT);
             mission_summary(p_ctx, p_snap, now_us);
             break;
@@ -1233,8 +1233,8 @@ static void mission_timers(mission_ctx_t * p_ctx, uint32_t now_us)
 
 /**
  * mission_forward
- * @brief   Step 6: copies selected events to telemetry; MAP remaps a
- *          barcode character (optional on-day remapping).
+ * @brief   Step 6: copies selected events to telemetry and confirms MAP
+ *          updates after they are stored.
  * @context mission_task
  */
 static void mission_forward(mission_evt_in_t const * p_evt)
@@ -1252,11 +1252,26 @@ static void mission_forward(mission_evt_in_t const * p_evt)
             case APP_EVT_SIDE_TOO_CLOSE:
                 (void) telem_post_event(p_evt->type, p_evt->value); /* cnt */
                 break;
-            case APP_EVT_MAP:
-                barcode_map_set(p_evt->value & MISSION_BAR_CHAR_MASK,
-                                (p_evt->value >> MISSION_BAR_CMD_SHIFT)
-                                & MISSION_BAR_CMD_MASK);
+            case APP_EVT_JUNCTION:
+                (void) telem_post_event(APP_EVT_JUNCTION, p_evt->value);
+                /* cast: APP_JCT_* is 0..4 */
+                app_log("JUNCTION detected class %d (2 = cross)\n",
+                        (int32_t) p_evt->value, 0, 0);
                 break;
+            case APP_EVT_MAP:
+            {
+                uint32_t const ch = p_evt->value & MISSION_BAR_CHAR_MASK;
+                uint32_t const cmd = (p_evt->value >> MISSION_BAR_CMD_SHIFT)
+                                     & MISSION_BAR_CMD_MASK;
+                if (barcode_map_set(ch, cmd))
+                {
+                    (void) telem_post_event(APP_EVT_MAP, p_evt->value);
+                    /* casts: Code 39 index and command fit int32_t */
+                    app_log("MAP stored char index %d, command %d\n",
+                            (int32_t) ch, (int32_t) cmd, 0);
+                }
+                break;
+            }
             default:
                 break;                    /* not forwarded */
         }

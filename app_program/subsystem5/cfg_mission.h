@@ -26,8 +26,18 @@
 #define MISSION_START_WARN_MS       (1000u)
 #define MISSION_SEARCH_TIMEOUT_MS   (5000u)   /* FR14 */
 #define MISSION_SEARCH_SWEEP_DEG    (60)
-/* MEASURE: 1.5 x the largest barcode-to-junction spacing */
-#define MISSION_ARM_EXPIRE_MM       (1000u)
+/* The first reported barcode edge can be inside the strip. Back up
+   past it and require continuous white travel before reading again. */
+#define MISSION_BARCODE_LEAD_MM      (40u)  /* behind first reported edge */
+#define MISSION_BARCODE_QUIET_MM     (35u)
+#define MISSION_BARCODE_REWIND_MM    (150u)
+#define MISSION_BARCODE_BACK_PAD_MM  (10u)  /* leave room to brake */
+#define MISSION_BARCODE_WAIT_MS      (250u) /* let the line settle */
+#define MISSION_BARCODE_BRAKE_MS     (500u)
+#define MISSION_BARCODE_SPEED_MM_S   (70)   /* above decoder's 50 mm/s */
+#define MISSION_BARCODE_READ_MM      (380u) /* ~200 mm code + lead-in */
+#define MISSION_BARCODE_READ_MS      (8000u)
+#define MISSION_BARCODE_REARM_MM     (60u)
 #define MISSION_JCT_ADVANCE_MM      (60u)     /* MEASURE: sensors to axle */
 /* FR9 bypass limit (end of the pass leg -> line following again)
    5 s -> 20 s (Dylan, 2026-11-04): more time to find the line again,
@@ -44,14 +54,13 @@
    (> 75 mm) is still rejected.                                        */
 #define MISSION_REJOIN_WIDTH_MM     (45u)     /* MEASURE: sensor spacing */
 #define MISSION_REJOIN_WIDTH_TOL_MM (30u)
-/* Rejoin distance window around e = lateral leg x sqrt 2. The far end is
-   e + 30 %. The near end is 25 % of e (was e - 30 %): on the car
-   (2026-11-06 12:56) the line came at 221 mm of 407 (sensors ahead of
-   the axle, heading drift on the pass leg), was rejected as too early
-   and the car drove over it (S5-U43). The width check above still
-   rejects barcode bars and driving along the line.                    */
-#define MISSION_REJOIN_WIN_PCT      (30u)     /* far end: e + 30 %     */
-#define MISSION_REJOIN_LO_PCT       (25u)     /* near end: 25 % of e   */
+/* Rejoin distance window around e = lateral leg x sqrt 2. In the
+   9 November runs an early 116 mm crossing (e = 390) and a late
+   511 mm crossing (e = 395) led away from the original line. Keep
+   the width bounds and accept crossings between 50 % and 120 % of e.
+   The 221 mm crossing at e = 407 (S5-U43) is still in range.          */
+#define MISSION_REJOIN_WIN_PCT      (20u)     /* far end: e + 20 %     */
+#define MISSION_REJOIN_LO_PCT       (50u)     /* near end: 50 % of e   */
 #define MISSION_HEADING_TOL_CDEG    (500)     /* 5 deg */
 #define MISSION_INHIBIT_CLEAR_MM    (150u)
 #define MISSION_RESUME_PULSE_MS     (150u)    /* > 2 obstacle periods */
@@ -71,6 +80,14 @@
 #endif
 #if (MISSION_BTN_RESET_HOLD_TICKS > 255u)
 #error "Reset hold no longer fits the 8-bit BTN_RESET counter"
+#endif
+#if ((MISSION_BARCODE_QUIET_MM > MISSION_BARCODE_LEAD_MM) ||                  \
+     (MISSION_BARCODE_REWIND_MM <= MISSION_BARCODE_LEAD_MM) ||               \
+     (MISSION_BARCODE_REWIND_MM > MOTION_REVERSE_MAX_MM))
+#error "Barcode rewind must leave a lead-in and fit the reverse command"
+#endif
+#if (MISSION_BARCODE_SPEED_MM_S >= MOTION_CRUISE_MM_S)
+#error "Barcode reread must be slower than cruise"
 #endif
 #if (MISSION_RECOVER_MS < (MISSION_RUN_START_HOLD_MS * 3u))
 #error "Recovery must cover several cycles of every 10 ms task"

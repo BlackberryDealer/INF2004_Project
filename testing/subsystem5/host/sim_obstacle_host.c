@@ -59,6 +59,9 @@ static int w_mode;                 /* 0 = fixed distance, 1 = face, 2 = silent,
                                       3 = open track: echo rises, still high
                                       at the 40 ms timeout (car: "lost 1") */
 static uint32_t w_dist = 1000;
+/* S5-U47: one bad echo per scan step (multipath / cross-talk): the
+   w_spike_at-th ping after each servo move reads w_spike_mm.          */
+static uint32_t w_spike_at = 0u, w_spike_mm = 120u, w_pings_since = 0u, w_last_servo = 90u;
 static int32_t w_y = 240, w_xl = -60, w_xr = 80;
 static uint32_t world_mm(void) {
   if (0 == w_mode) return w_dist;
@@ -70,7 +73,11 @@ void drv_ultrasonic_trigger(void) {
   uint32_t d, w;
   if (2 == w_mode) return;
   if (3 == w_mode) { obstacle_echo_isr(DRV_GPIO_IRQ_RISE, g_now + 500u); return; }
-  d = world_mm(); w = (uint32_t) ((double) d * 5.8);
+  if (g_servo != w_last_servo) { w_last_servo = g_servo; w_pings_since = 0u; }
+  w_pings_since++;
+  d = world_mm();
+  if ((0u != w_spike_at) && (w_pings_since == w_spike_at)) d = w_spike_mm;
+  w = (uint32_t) ((double) d * 5.8);
   if (w > 38000u) w = 38000u;
   obstacle_echo_isr(DRV_GPIO_IRQ_RISE, g_now + 500u);
   obstacle_echo_isr(DRV_GPIO_IRQ_FALL, g_now + 500u + w); }
@@ -173,9 +180,28 @@ int main(void) {
   g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN; w_mode = 1;
   cyc(); CHECK("S5-U08", APP_SCAN_COARSE == g_state && 30u == g_servo, "RESCAN rise -> COARSE at 30 deg");
   log_clear();
-  for (int i = 0; i < 120 && (APP_SCAN_COARSE == g_state || APP_SCAN_FINE == g_state); i++) cyc();
+  for (int i = 0; i < 400 && (APP_SCAN_COARSE == g_state || APP_SCAN_FINE == g_state); i++) cyc();
   /* S5-U38: the scan prints its nearest point (face 240 mm straight ahead) */
-  CHECK("S5-U38", NULL != strstr(g_logbuf, "SCAN nearest 240 mm at 90 deg"), "scan log names the nearest point and its angle");
+  /* since S5-U50 85..95 deg are all measured (240 mm each); the log names the first */
+  CHECK("S5-U38", NULL != strstr(g_logbuf, "SCAN nearest 240 mm at 85 deg") || NULL != strstr(g_logbuf, "SCAN nearest 240 mm at 90 deg"), "scan log names the nearest point and its angle");
+  /* S5-U52 (2026-11-09 18:00 track runs: scans too slow; car
+     scans took 8.3 s each). The servo now settles OBS_SETTLE_PINGS only
+     after a move of more than one coarse stride, 1 ping after a 5..15
+     deg move. Same 140 mm face as above: was 5400 ms.               */
+  { int scan_ms = -1; char const *q = g_logbuf;
+    while ((q = strstr(q, "SCAN ")) != NULL) { int v; if (1 == sscanf(q, "SCAN %d ms", &v)) { scan_ms = v; break; } q += 5; }
+    printf("   S5-U52: scan took %d ms\n", scan_ms);
+    CHECK("S5-U52", (scan_ms > 0) && (scan_ms <= 4000), "scan of a 140 mm box in <= 4.0 s (was 5.4 s)"); }
+  /* S5-U50 (review 2026-11-09): the 17:00 car scan had 14 of 25 steps
+     inferred, including returns in the bypass lane. Every 5 deg step
+     next to a near coarse point is now measured, never inferred.      */
+  { uint32_t near_or_next = 0u;
+    for (uint32_t c = 0u; c < APP_SCAN_STEPS; c += OBS_COARSE_STRIDE) {
+      if (g_obs_scan[c] < OBS_NEAR_MM) {
+        for (uint32_t k = (c >= OBS_COARSE_STRIDE) ? (c - OBS_COARSE_STRIDE + 1u) : 0u; (k < c + OBS_COARSE_STRIDE) && (k < APP_SCAN_STEPS); k++) near_or_next |= (1u << k);
+      } }
+    printf("   S5-U50: inferred 0x%x, near region 0x%x\n", g_inferred, near_or_next);
+    CHECK("S5-U50", 0u != near_or_next && 0u == (g_inferred & near_or_next), "no inferred step beside a near coarse point"); }
   CHECK("S5-U25", APP_SCAN_WATCH_SETTLE == g_state && 0 == count_ev(APP_EVT_PLAN) && 30u == g_servo, "scan done -> WATCH_SETTLE, servo at watch angle, PLAN not posted yet");
   cyc(); cyc(); cyc(); CHECK("S5-U25", 0 == count_ev(APP_EVT_PLAN), "no PLAN before OBS_WATCH_SETTLE_PINGS cycles");
   cyc(); CHECK("S5-U25", 1 == count_ev(APP_EVT_PLAN) && APP_SIDE_LEFT == evv[nev - 1] && APP_SCAN_BYPASS_WATCH == g_state, "PLAN(left) after exactly 4 cycles -> BYPASS_WATCH");
@@ -192,9 +218,14 @@ int main(void) {
   g_modes = 0; w_dist = 1000; cyc(); cyc();
   /* NO_PATH */
   w_dist = 380; cyc(); cyc(); w_dist = 240; cyc(); cyc(); CHECK("S5-U08", APP_SCAN_STOPPED == g_state, "second obstacle -> STOPPED");
-  g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN; w_mode = 1; w_y = 200; w_xl = -400; w_xr = 400;
-  for (int i = 0; i < 120 && 0 == count_ev(APP_EVT_NO_PATH); i++) cyc();
-  CHECK("S5-U08", 1 == count_ev(APP_EVT_NO_PATH) && APP_SCAN_STOPPED == g_state && 90u == g_servo, "wide wall -> NO_PATH, STOPPED, servo 90");
+  /* 2026-11-09 (S5-U45): a wall 200 mm ahead is now planned as the 20 cm
+     maximum obstacle (professor: obstacles are 10..20 cm), so the
+     NO_PATH / RANGE_CLAMP path is driven by a face 500 mm ahead with
+     clear sides (x -150..+150; S5-U48's stricter free gap would reject
+     a wider wall first): forward leg 500 + 150 + 180 = 830 mm > 800.  */
+  g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN; w_mode = 1; w_y = 500; w_xl = -150; w_xr = 150;
+  for (int i = 0; i < 300 && 0 == count_ev(APP_EVT_NO_PATH); i++) cyc();  /* 3 pings per step since S5-U47 */
+  CHECK("S5-U08", 1 == count_ev(APP_EVT_NO_PATH) && APP_SCAN_STOPPED == g_state && 90u == g_servo, "far obstacle -> NO_PATH, STOPPED, servo 90");
   CHECK("S5-U08", 0u != (g_fault & APP_FAULT_RANGE_CLAMP), "clipped leg sets RANGE_CLAMP");
   /* S5-U26: one good echo, then pings with no edges at all */
   g_modes = APP_MODE_RESUME; w_mode = 0; w_dist = 600; cyc(); g_modes = 0; cyc();
@@ -294,7 +325,7 @@ int main(void) {
     /* 5: narrow glint on flat ground */
     nev = 0; g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN;
     w_mode = 1; w_y = 350; w_xl = -5; w_xr = 5;
-    for (int i = 0; i < 120 && (APP_SCAN_COARSE == g_state || APP_SCAN_FINE == g_state || APP_SCAN_STOPPED == g_state); i++) cyc();
+    for (int i = 0; i < 400 && (APP_SCAN_COARSE == g_state || APP_SCAN_FINE == g_state || APP_SCAN_STOPPED == g_state); i++) cyc();
     CHECK("S5-U42", APP_SCAN_PASSING == g_state && 1 == count_ev(APP_EVT_CONTINUE) && 0 == count_ev(APP_EVT_PLAN), "narrow 90 deg ramp glint (< OBS_MIN_WIDTH_MM) -> CONTINUE, PASSING");
     /* 6: real box scanned while pitched */
     g_modes = 0; g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; nev = 0;
@@ -306,6 +337,49 @@ int main(void) {
     for (int i = 0; i < 200 && APP_SCAN_PASSING != g_state && APP_SCAN_BYPASS_WATCH != g_state && 0 == count_ev(APP_EVT_PLAN) && 0 == count_ev(APP_EVT_NO_PATH); i++) cyc();
     CHECK("S5-U42", 0 == count_ev(APP_EVT_CONTINUE) && (1 == count_ev(APP_EVT_PLAN) || 1 == count_ev(APP_EVT_NO_PATH)), "real 140 mm box scanned while pitched -> PLAN or NO_PATH, never CONTINUE");
     status_board_write_imu(&flat_part); g_modes = 0; w_mode = 0; }
+  /* S5-U47 (professor, forum 2026-10-25: "repeated median-filtered
+     measurements after allowing the servo to settle"). A single ping per
+     step trusted one bad echo; the 120 mm spike on the first ping after
+     each settle turned the 140 mm box into a 120 mm wall at every angle.
+     Each step now stores the median of OBS_SCAN_SAMPLES pings.        */
+  { g_modes = 0; g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; g_fault = 0; nev = 0;
+    w_mode = 0; w_dist = 1000; cyc(); cyc(); w_dist = 380; cyc(); cyc(); cyc();
+    CHECK("S5-U47", APP_SCAN_STOPPED == g_state, "box at 380 mm -> STOPPED");
+    nev = 0; log_clear(); g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN;
+    w_mode = 1; w_y = 240; w_xl = -60; w_xr = 80; w_spike_at = OBS_SETTLE_PINGS + 1u;
+    for (int i = 0; i < 400 && 0 == count_ev(APP_EVT_PLAN) && 0 == count_ev(APP_EVT_NO_PATH) && 0 == count_ev(APP_EVT_CONTINUE); i++) cyc();
+    w_spike_at = 0u;
+    CHECK("S5-U47", 1 == count_ev(APP_EVT_PLAN) && 0 == count_ev(APP_EVT_NO_PATH), "one 120 mm spike per step: still PLAN");
+    CHECK("S5-U47", NULL != strstr(g_logbuf, "SCAN nearest 240 mm at 85 deg") || NULL != strstr(g_logbuf, "SCAN nearest 240 mm at 90 deg"), "the spike never becomes the nearest point");
+    CHECK("S5-U47", NULL != strstr(g_logbuf, "SCAN mm 90/95/100 deg: 240 244 ")
+          || NULL != strstr(g_logbuf, "SCAN mm 90/95/100 deg: 240 "), "per-step ranges are printed");
+    g_modes = 0; w_mode = 0; }
+  /* S5-U55 (review 2026-11-09): sonar guard on the creep to the scan
+     distance. In STOPPED with the car driving forward, obstacle_task
+     brakes (ESTOP) when a confirmed reading is <= OBS_SCAN_MM, when an
+     echo is lost, or when two readings disagree; standing still, or
+     driving backwards, it does nothing.                                */
+  { status_board_motion_t mv = {0};
+    g_modes = 0; g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; g_fault = 0; g_silent = 0; nev = 0;
+    w_mode = 0; w_dist = 1000; cyc(); cyc(); w_dist = 396; cyc(); cyc(); cyc();
+    CHECK("S5-U55", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP), "stopped at ~400 mm");
+    g_modes = APP_MODE_STOPPED; g_safety = 0; log_clear();             /* mission: ESTOP off, creep */
+    mv.speed_l_cpw = 15; mv.speed_r_cpw = 15; status_board_write_motion(&mv);
+    /* ~150 mm/s creep: ~9 mm per 60 ms ping; 16 mm steps here */
+    for (uint32_t d = 380u; d >= 252u; d -= 16u) { w_dist = d; cyc(); }
+    CHECK("S5-U55", 0u == (g_safety & SAFETY_ESTOP) && APP_SCAN_STOPPED == g_state, "creeping, agreeing readings > 250 mm: no brake");
+    w_dist = 248; cyc();
+    CHECK("S5-U55", (g_safety & SAFETY_ESTOP) && NULL != strstr(g_logbuf, "CREEP stop at 248 mm"), "confirmed 248 mm <= OBS_SCAN_MM: ESTOP, logged");
+    g_safety = 0; w_dist = 252; cyc(); cyc(); w_mode = 2; cyc();
+    CHECK("S5-U55", 0u != (g_safety & SAFETY_ESTOP), "echo lost while creeping: ESTOP");
+    g_safety = 0; w_mode = 0; w_dist = 256; cyc(); cyc(); g_safety = 0; w_dist = 320; cyc();
+    CHECK("S5-U55", 0u != (g_safety & SAFETY_ESTOP), "readings disagree (256 -> 320) while creeping: ESTOP");
+    g_safety = 0; mv.speed_l_cpw = 0; mv.speed_r_cpw = 0; status_board_write_motion(&mv);
+    w_dist = 200; cyc(); cyc(); w_mode = 2; cyc();
+    CHECK("S5-U55", 0u == (g_safety & SAFETY_ESTOP), "standing still: the guard does nothing");
+    mv.speed_l_cpw = -15; mv.speed_r_cpw = -15; status_board_write_motion(&mv); w_mode = 0; w_dist = 200; cyc(); cyc();
+    CHECK("S5-U55", 0u == (g_safety & SAFETY_ESTOP), "driving backwards: the guard does nothing");
+    mv.speed_l_cpw = 0; mv.speed_r_cpw = 0; status_board_write_motion(&mv); g_modes = 0; }
   printf("[TEST] S5-U08 obstacle simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
   return fail_n;
 }
