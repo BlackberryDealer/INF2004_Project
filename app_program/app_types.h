@@ -100,7 +100,8 @@
 #define APP_EVT_SUMMARY          (22u)
 #define APP_EVT_MAP              (23u)
 #define APP_EVT_SNAPSHOT         (24u)   /* remote "summary now" request */
-#define APP_EVT_COUNT            (25u)
+#define APP_EVT_BARCODE_PROBE    (25u)   /* first elements, travel in mm */
+#define APP_EVT_COUNT            (26u)
 #define APP_EVT_TYPE_BITS        (5u)
 
 #if (APP_EVT_COUNT > 32u)
@@ -117,7 +118,8 @@
 #define APP_MODE_JUNCTION_INHIBIT (0x40u)
 #define APP_MODE_RUN_START        (0x80u)  /* new run: reset per-run state */
 #define APP_MODE_MOTOR_EN         (0x100u) /* motion may drive (FR17)     */
-#define APP_MODE_ALL              (0x1FFu)
+#define APP_MODE_BARCODE_REREAD   (0x200u)
+#define APP_MODE_ALL              (0x3FFu)
 
 /* ---- Fault bits: FLG_FAULT (K12) -------------------------------------- */
 #define APP_FAULT_IDX_MOTOR_STALL    (0u)
