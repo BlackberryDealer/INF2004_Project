@@ -242,6 +242,14 @@ details.map summary { cursor: pointer; color: var(--text-2); }
 .map-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
 .map-row select { padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); }
 
+/* ---- scan results ----------------------------------------------------- */
+.scan-results { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.scan-value { font-size: 36px; font-weight: 700; line-height: 1.15; }
+.scan-caption { margin-top: 5px; font-size: 13px; color: var(--text-2); }
+@media (max-width: 700px) {
+    .scan-results { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+}
+
 /* ---- tiles ------------------------------------------------------------ */
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .tile { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); min-width: 0; }
@@ -389,6 +397,30 @@ details.map summary { cursor: pointer; color: var(--text-2); }
         </details>
     </section>
 
+    <div class="scan-results span-12">
+        <section class="card" aria-labelledby="obstacleWidthHeading">
+            <h2 id="obstacleWidthHeading">Estimated obstacle width</h2>
+            <div role="status">
+                <div class="scan-value num" id="sObsWidth">–</div>
+                <div class="scan-caption" id="sObsWidthDetail">Waiting for an obstacle scan</div>
+            </div>
+        </section>
+        <section class="card" aria-labelledby="barcodeCountHeading">
+            <h2 id="barcodeCountHeading">Latest barcode element count</h2>
+            <div role="status">
+                <div class="scan-value num" id="sBarCount">–</div>
+                <div class="scan-caption" id="sBarResult">Waiting for a reported capture</div>
+            </div>
+        </section>
+        <section class="card" aria-labelledby="barcodeDecodeHeading">
+            <h2 id="barcodeDecodeHeading">Last decoded character</h2>
+            <div role="status">
+                <div class="scan-value" id="sBarDecoded">–</div>
+                <div class="scan-caption" id="sBarDecodeDetail">Waiting for a valid decode</div>
+            </div>
+        </section>
+    </div>
+
     <!-- live tiles -->
     <section class="card span-8">
         <h2>Live readings <span class="spacer"></span><span class="muted" style="text-transform:none;letter-spacing:0" id="tilesNote">from c28/s</span></h2>
@@ -428,11 +460,11 @@ details.map summary { cursor: pointer; color: var(--text-2); }
 
     <!-- raw sensors (debug, c28/d) -->
     <section class="card span-12" id="sensCard">
-        <h2>Sensors (raw) <span class="spacer"></span><span class="muted num" id="sensAge" style="text-transform:none;letter-spacing:0">c28/d, 5 Hz</span></h2>
+        <h2>Raw sensors <span class="spacer"></span><span class="muted num" id="sensAge" style="text-transform:none;letter-spacing:0">c28/d, 5 Hz</span></h2>
         <div class="tiles">
             <div class="tile"><div class="l"><span><span class="swatch" style="background:var(--series-1)"></span>IR left (ADC)</span><span id="sIrLTag"></span></div><div class="v num" id="sIrL">–</div><div class="bar"><i id="bIrL"></i></div></div>
             <div class="tile"><div class="l"><span><span class="swatch" style="background:var(--series-2)"></span>IR right (ADC)</span><span id="sIrRTag"></span></div><div class="v num" id="sIrR">–</div><div class="bar"><i id="bIrR" style="background:var(--series-2)"></i></div></div>
-            <div class="tile"><div class="l"><span>Ultrasonic</span><span id="sUsTag"></span></div><div class="v num" id="sUs">–</div><div class="bar"><i id="bUs"></i></div></div>
+            <div class="tile"><div class="l"><span>Ultrasonic range</span><span id="sUsTag"></span></div><div class="v num" id="sUs">–</div><div class="bar"><i id="bUs"></i></div></div>
             <div class="tile"><div class="l">Scanner</div><div class="v txt" id="sScan">–</div></div>
             <div class="tile"><div class="l">Barcode DO</div><div class="v txt" id="sBar">–</div><div class="sub" id="sEdges"></div></div>
             <div class="tile"><div class="l">Accel X / Y</div><div class="v num" id="sAxy" style="font-size:17px">–</div><div class="sub">mg, after CAL_IMU offsets</div></div>

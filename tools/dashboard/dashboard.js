@@ -36,6 +36,7 @@
     var US_STOP_MM = 401;         /* OBS_STOP_MM (placeholder geometry) */
     var GAP_LIMIT_MS = 30;        /* watchdog window */
     var GAP_WARN_MS = 15;
+    var BAR_FRAME_ELEMENTS = 29;  /* one Code 39 character, two guards and two gaps */
     var QUIET_RE = /^(US dist|IR raw|ENC pos|BAR DO|BAR edges|WDT longest)/;
     var BAD_RE = /FAULT|ERROR|FAIL|ESTOP|TOO CLOSE|impossible/;
     var WARN_RE = /OBSTACLE|LINE LOST|LINE END|RAMP|REJOIN|SCAN|AVOID|BARCODE|BAR capture|JUNCTION|IMPACT|MOVE FAILED|dropped/;
@@ -376,7 +377,7 @@
         $("sScan").textContent = D.enumName("SCAN", e.scan).replace(/_/g, " ");
         $("sBar").textContent = e.bar ? "BLACK" : "white";
         var rec = recentEdges(t);
-        $("sEdges").textContent = "edges " + e.edges + " (mod 256)" + (rec === null ? "" : ", +" + rec + " in 2 s");
+        $("sEdges").textContent = "GPIO edges " + e.edges + " (mod 256)" + (rec === null ? "" : ", +" + rec + " in 2 s");
         $("sAxy").textContent = e.ax + " / " + e.ay;
         $("sAz").innerHTML = e.az + "<small>mg</small>";
         $("sGap").innerHTML = e.gap.toFixed(1) + "<small>ms</small>";
@@ -395,10 +396,25 @@
         download(lines.join("\r\n") + "\r\n", "text/csv", "c28_sensors_", ".csv");
     }
 
+    function showBarcodeCapture(count, result, t) {
+        $("sBarCount").textContent = count > 0 ? count + " / " + BAR_FRAME_ELEMENTS : "–";
+        $("sBarResult").textContent = result + " · " + clock(t).slice(0, 8);
+    }
+
     function onConsole(text, t) {
         conLines.push({ t: t, text: text });
         if (conLines.length > CON_MAX) { conLines.splice(0, conLines.length - CON_MAX); }
         if (!$("conPause").checked) { scheduleConsole(); }
+
+        /* INVALID events carry no count on the wire. Use the console reports. */
+        var dropped = /^BAR capture dropped: (edge missed after )?(\d+) elements(?: \(a barcode has \d+\))?$/.exec(text);
+        var invalid = /^BARCODE reread invalid \((\d+) elements\)$/.exec(text) ||
+                      /^BARCODE read but not valid Code 39 \((\d+)\): ignored$/.exec(text);
+        if (dropped) {
+            showBarcodeCapture(Number(dropped[2]), dropped[1] ? "Edge missed" : "Incomplete capture", t);
+        } else if (invalid) {
+            showBarcodeCapture(Number(invalid[1]), "Rejected capture", t);
+        }
     }
 
     var conQueued = false;
@@ -520,6 +536,13 @@
         var kind = (evt.name === "SENSOR_FAULT" || evt.name === "STALL") ? "fault" :
                    (evt.name === "STATE_CHANGE" ? "state" : "event");
         addLog({ kind: kind, topic: topic, type: evt.name, text: eventFriendly(evt), exact: D.lineFor(topic, bytes), bytes: bytes, t: t });
+        if (evt.name === "BARCODE" || evt.name === "UNMAPPED") {
+            var letter = c39(evt.values.CHAR);
+            var action = evt.name === "BARCODE" ? "Mapped to " + barName(evt.values.CMD) : "Unmapped";
+            showBarcodeCapture(BAR_FRAME_ELEMENTS, "Valid capture", t);
+            $("sBarDecoded").textContent = letter === " " ? "Space" : letter;
+            $("sBarDecodeDetail").textContent = action + " · " + clock(t).slice(0, 8);
+        }
         if (evt.name === "MAP" && S.pendingCmd && S.pendingCmd.name === "map") {
             resolvePending(true, "Car confirmed: " + eventFriendly(evt) + ".");
         }
@@ -537,7 +560,6 @@
 
     var lastSummary = null;
     var lastSnap = null;
-    var lastProfile = null;
 
     function onSummary(v, t, bytes, topic) {
         lastSummary = { v: v, t: t };
@@ -557,10 +579,12 @@
     }
 
     function onProfile(v, t, bytes, topic) {
-        lastProfile = { v: v, t: t };
-        addLog({ kind: "event", topic: topic, type: "PROFILE", text: "Obstacle scanned: width " + v.WIDTH * 4 + " mm, nearest " +
+        var width = v.WIDTH * 4;
+        if (width === 0 || width >= T.PROFILE_CLEAR_MM) { width = null; }
+        var size = width === null ? "width unavailable" : "estimated width " + width + " mm";
+        addLog({ kind: "event", topic: topic, type: "PROFILE", text: "Obstacle scanned: " + size + ", nearest " +
                  v.NEAREST * 4 + " mm, pass " + D.enumName("SIDE", v.SIDE), exact: D.lineFor(topic, bytes), bytes: bytes, t: t });
-        renderProfile();
+        renderProfile(v, t, width);
     }
 
     /* ---- commands -------------------------------------------------------- */
@@ -923,18 +947,21 @@
         if (html) { $("summary").innerHTML = html; }
     }
 
-    function renderProfile() {
-        if (!lastProfile) { return; }
-        var v = lastProfile.v;
+    function renderProfile(v, t, width) {
         var clear = T.PROFILE_CLEAR_MM;
         var mm = function (x) { return x * 4; };
-        var width = mm(v.WIDTH);
         var nearest = mm(v.NEAREST);
         var cl = mm(v.CLEAR_L);
         var cr = mm(v.CLEAR_R);
         var angle = T.SCAN_ANGLE_MIN_DEG + v.ANGLE_STEP * T.SCAN_ANGLE_STEP_DEG;
         var side = D.enumName("SIDE", v.SIDE);
         var txt = function (x) { return x >= clear ? "clear" : x + " mm"; };
+        var hasWidth = width !== null;
+        var widthCm = hasWidth ? (width / 10).toFixed(1) + " cm" : "–";
+        var widthMm = hasWidth ? width + " mm" : "No estimate";
+        $("sObsWidth").textContent = widthCm;
+        $("sObsWidthDetail").textContent = (hasWidth ? "Last scan" : "No width estimate") +
+            " · " + clock(t).slice(0, 8);
         /* Top view, car at the bottom centre, 1020 mm -> 150 px. The scan
            runs 30 deg (robot's right) to 150 deg (left); NEAREST is the
            forward distance, so the obstacle sits at y = NEAREST on its
@@ -954,7 +981,8 @@
             "<text x=\"" + (cx + 79) + "\" y=\"" + (cy - 4) + "\" font-size=\"10\" fill=\"var(--text-3)\">0.5 m</text>" +
             "<line x1=\"" + cx + "\" y1=\"" + cy + "\" x2=\"" + bx.toFixed(1) + "\" y2=\"" + by.toFixed(1) + "\" stroke=\"var(--text-3)\" stroke-width=\"1.5\"/>" +
             "<path d=\"M " + cx + " " + (cy - 20) + " q " + (side === "LEFT" ? -70 : 70) + " -50 0 -120\" fill=\"none\" stroke=\"var(--good)\" stroke-width=\"2\" stroke-dasharray=\"5 4\"/>" +
-            "<rect x=\"" + (bx - ow / 2).toFixed(1) + "\" y=\"" + (by - 7).toFixed(1) + "\" width=\"" + ow.toFixed(1) + "\" height=\"14\" rx=\"3\" fill=\"var(--critical)\"/>" +
+            (hasWidth ? "<rect x=\"" + (bx - ow / 2).toFixed(1) + "\" y=\"" + (by - 7).toFixed(1) +
+                "\" width=\"" + ow.toFixed(1) + "\" height=\"14\" rx=\"3\" fill=\"var(--critical)\"/>" : "") +
             "<rect x=\"" + (cx - 12) + "\" y=\"" + (cy - 4) + "\" width=\"24\" height=\"16\" rx=\"4\" fill=\"var(--series-1)\"/>" +
             "<text x=\"" + (cx - 150) + "\" y=\"214\" font-size=\"11\" fill=\"var(--text-2)\">left gap " + txt(cl) + "</text>" +
             "<text x=\"" + (cx + 150) + "\" y=\"214\" font-size=\"11\" fill=\"var(--text-2)\" text-anchor=\"end\">right gap " + txt(cr) + "</text>" +
@@ -962,9 +990,10 @@
             "</svg>";
         $("profile").innerHTML = svg + "<dl class=\"kv num\" style=\"margin-top:8px\">" +
             "<dt>Bearing</dt><dd>" + angle + "° (90° ahead, 30° right, 150° left)</dd>" +
-            "<dt>Width / nearest</dt><dd>" + txt(width) + " / " + txt(nearest) + "</dd>" +
+            "<dt>Estimated width</dt><dd>" + (hasWidth ? widthCm + " (" + widthMm + ")" : "Unavailable") + "</dd>" +
+            "<dt>Forward distance</dt><dd>" + txt(nearest) + "</dd>" +
             "<dt>Clearance left / right</dt><dd>" + txt(cl) + " / " + txt(cr) + "</dd></dl>";
-        $("profWhen").textContent = clock(lastProfile.t);
+        $("profWhen").textContent = clock(t);
     }
 
     /* ---- charts (canvas, no library) ------------------------------------- */
