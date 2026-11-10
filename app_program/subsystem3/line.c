@@ -52,6 +52,7 @@ static bool               gb_rejoin_white = false;
 /* Path where the current both-white stretch began (S3-U19, plain:
    add to the Week 13 packing list).                                 */
 static uint32_t           g_white_mark    = 0u;
+static uint32_t           g_cross_straight_until = 0u; /* path counts */
 static bool               gb_branch_seen  = false;
 static uint8_t            g_last_jct      = (uint8_t) APP_JCT_NONE;
 static uint32_t           g_raw_log_cnt   = 0u;
@@ -101,6 +102,7 @@ ER line_init(void)
     g_line_prv_d    = 0u;
     gb_rejoin_white = false;
     gb_branch_seen  = false;
+    g_cross_straight_until = 0u;
     g_last_jct      = (uint8_t) APP_JCT_NONE;
     g_raw_log_cnt   = 0u;
 
@@ -398,6 +400,7 @@ static void line_reset_run_state(uint32_t path)
     g_line_prv_d    = word_d;
     gb_rejoin_white = false;
     gb_branch_seen  = false;
+    g_cross_straight_until = 0u;
     g_last_jct      = (uint8_t) APP_JCT_NONE;
 }
 
@@ -782,6 +785,7 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
 
     if (b_inhibit_jct)
     {
+        g_cross_straight_until = 0u;
         line_track_jct_reset(&jct);
         line_jct_pack(&jct);
     }
@@ -808,9 +812,27 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
         jct_class = line_track_jct_step(&jct, &jct_in);
         line_jct_pack(&jct);
 
-        /* The cross stripe can darken one sensor as it enters or leaves.
-           Keep that edge out of the white-floor recovery memory. */
-        b_reset_steer = b_was_on_band || (APP_JCT_CROSS == jct_class)
+        /* A skewed stripe can leave one sensor dark for several cycles.
+           Clear steering bias until the stripe clears or travel expires,
+           even if the stripe did not satisfy the junction classifier. */
+        if ((norm_l >= LINE_BLACK_THRESHOLD)
+            && (norm_r >= LINE_BLACK_THRESHOLD))
+        {
+            g_cross_straight_until =
+                path + odometry_mm_to_counts(LINE_JUNCTION_EXIT_MM);
+        }
+        else if ((norm_l < LINE_WHITE_THRESHOLD)
+                 && (norm_r < LINE_WHITE_THRESHOLD))
+        {
+            g_cross_straight_until = 0u;
+        }
+        else
+        {
+            /* One sensor is still on the stripe or a line. */
+        }
+
+        b_reset_steer = (path < g_cross_straight_until)
+            || b_was_on_band || (APP_JCT_CROSS == jct_class)
             || ((LINE_JCT_STATE_CANDIDATE == jct.state) && jct.b_sat_l
                 && jct.b_sat_r);
 

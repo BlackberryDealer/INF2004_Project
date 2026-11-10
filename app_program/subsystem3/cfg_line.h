@@ -61,6 +61,7 @@
 #define LINE_STEER_MAX           (1000)  /* SB steering field domain    */
 #define LINE_JUNCTION_MIN_MM     (10u)   /* TUNE from A22 logs          */
 #define LINE_JUNCTION_CONFIRM_MM (30u)   /* TUNE from A22 logs          */
+#define LINE_JUNCTION_EXIT_MM    (15u)   /* max straight hold past band */
 /* SPEC-QUESTION: LINE_BRANCH_EARLY_MM (40u) is from spec v1.5.3 (finding F-03,
    B3.2.1) for a barcode-side branch reported ahead of the line sensors. */
 #define LINE_BRANCH_EARLY_MM     (40u)   /* MEASURE: barcode sensor lead */

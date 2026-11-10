@@ -441,5 +441,20 @@ int main(void)
                    "visible tape overrides the coast in either direction");
     }
 
+    /* S3-U35: a grey edge gets a gentler correction on either side. */
+    {
+        line_track_steer_t st = {0};
+
+        line_track_steer_reset(&st);
+        (void) line_track_steer_step(&st, 500u, 0u);
+        HOST_CHECK("S3-U35", (250 / LINE_STEER_FILT_DIV) == st.filt,
+                   "half-scale left error targets a quarter-scale steer");
+
+        line_track_steer_reset(&st);
+        (void) line_track_steer_step(&st, 0u, 500u);
+        HOST_CHECK("S3-U35", (-250 / LINE_STEER_FILT_DIV) == st.filt,
+                   "half-scale right error targets a quarter-scale steer");
+    }
+
     return (0 == HOST_SUMMARY("line_track")) ? 0 : 1;
 }

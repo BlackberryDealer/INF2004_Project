@@ -343,6 +343,112 @@ static void sim_bar_widths(uint8_t const * widths, uint32_t count,
     }
 }
 
+/* S3-U37: feed raw ISR edges. gap > 0: rising edge (DO now high),
+   gap < 0: falling edge. Path follows each edge's speed (cpw).       */
+static void sim_feed_raw(int32_t const * p_gap_us, uint8_t const * p_cpw,
+                         uint32_t count, uint32_t * p_now_us)
+{
+    for (uint32_t i = 0u; i < count; i++)
+    {
+        uint32_t const gap = (p_gap_us[i] < 0) ? (uint32_t) (-p_gap_us[i])
+                                               : (uint32_t) p_gap_us[i];
+
+        *p_now_us    += gap;
+        g_sim_bar_age_us = 0u;           /* task runs at the edge */
+        g_sim_speed_l = (int32_t) p_cpw[i];
+        g_sim_speed_r = g_sim_speed_l;
+        g_sim_path   += (gap * (uint32_t) p_cpw[i]) / 50000u;
+        gb_sim_bar_pin = (p_gap_us[i] > 0);
+        barcode_edge_isr((p_gap_us[i] > 0) ? DRV_GPIO_IRQ_RISE
+                                           : DRV_GPIO_IRQ_FALL, *p_now_us);
+        barcode_cycle();
+    }
+}
+
+/* S3-U37: '*' X '*' at a fixed speed with LM393 chatter: every second
+   transition is followed by echo edges 1.05 ms (and every fourth by a
+   second one 2.1 ms) later, and every third edge reports the wrong
+   level. Returns the number of raw edges written.                    */
+static uint32_t sim_chatter_frame(uint32_t pattern, bool b_reverse,
+                                  uint32_t cpw, int32_t * p_gap_us,
+                                  uint8_t * p_cpw)
+{
+    static uint16_t const frame_chars[3] = {0x094u, 0u, 0x094u};
+    uint8_t  widths[BAR_ELEMENTS];
+    uint32_t times[2u * (BAR_ELEMENTS + 1u) + 8u];
+    bool     levels[2u * (BAR_ELEMENTS + 1u) + 8u];
+    uint32_t n_ev  = 0u;
+    uint32_t t_us  = 0u;
+    uint32_t n_out = 0u;
+    uint32_t prev  = 0u;
+
+    for (uint32_t c = 0u; c < 3u; c++)
+    {
+        uint32_t const bits = (1u == c) ? pattern : frame_chars[c];
+
+        for (uint32_t e = 0u; e < 9u; e++)
+        {
+            bool const b_wide = (0u != (bits & (1u << (8u - e))));
+            bool const b_bar  = (0u == (e % 2u));
+
+            widths[(c * 10u) + e] = b_bar ? (b_wide ? 110u : 25u)
+                                          : (b_wide ? 150u : 55u);
+        }
+        if (c < 2u)
+        {
+            widths[(c * 10u) + 9u] = 55u;   /* inter-character gap */
+        }
+    }
+    if (b_reverse)
+    {
+        for (uint32_t i = 0u; i < (BAR_ELEMENTS / 2u); i++)
+        {
+            uint8_t const tmp = widths[i];
+
+            widths[i] = widths[BAR_ELEMENTS - 1u - i];
+            widths[BAR_ELEMENTS - 1u - i] = tmp;
+        }
+    }
+
+    for (uint32_t k = 0u; k <= BAR_ELEMENTS; k++)
+    {
+        bool const b_now_bar = (0u == (k % 2u)) && (k < BAR_ELEMENTS);
+
+        times[n_ev]  = t_us;
+        levels[n_ev] = ((k % 3u) == 1u) ? !b_now_bar : b_now_bar;
+        n_ev++;
+        if (0u == (k % 2u))
+        {
+            times[n_ev]  = t_us + 1050u;
+            levels[n_ev] = !levels[n_ev - 1u];
+            n_ev++;
+            if (0u == (k % 4u))
+            {
+                times[n_ev]  = t_us + 2100u;
+                levels[n_ev] = b_now_bar;
+                n_ev++;
+            }
+        }
+        if (k < BAR_ELEMENTS)
+        {
+            t_us += ((uint32_t) widths[k] * 5000000u)
+                    / (cpw * APP_UM_PER_COUNT);
+        }
+    }
+
+    prev = 0u;
+    for (uint32_t i = 0u; i < n_ev; i++)
+    {
+        int32_t const gap = (0u == i) ? 600000 : (int32_t) (times[i] - prev);
+
+        p_gap_us[n_out] = levels[i] ? gap : -gap;
+        p_cpw[n_out]    = (uint8_t) cpw;
+        n_out++;
+        prev = times[i];
+    }
+    return n_out;
+}
+
 static bool in_rng(int value, int lo, int hi)
 {
     return (value >= lo) && (value <= hi);
@@ -383,13 +489,13 @@ static void sim_feed_truncated(uint32_t char_idx, uint32_t n_elem)
    (on-car 2026-11-03): at element misread_elem the ISR reads the OLD
    level and the real level follows 800 us later; after element
    bounce_elem a flicker edge back to the old level comes 1500 us later,
-   then the real level again 1700 us later. b_false_pulses also inserts
-   a short return to the old level before six real transitions.     */
+   then the real level again 1700 us later. A nonzero false_pulse_us
+   inserts a pulse of that duration 3 ms before six real transitions. */
 static uint32_t sim_feed_barcode_chatter(uint32_t char_idx,
                                          uint32_t start_us,
                                          uint32_t misread_elem,
                                          uint32_t bounce_elem,
-                                         bool b_false_pulses)
+                                         uint32_t false_pulse_us)
 {
     uint32_t durations_us[BAR_ELEMENTS] = {0u};
     uint32_t chars[3]                   = { CODE39_STAR, char_idx, CODE39_STAR };
@@ -426,12 +532,16 @@ static uint32_t sim_feed_barcode_chatter(uint32_t char_idx,
 
         now_us += durations_us[elem];
         b_level = !b_level;
-        if (b_false_pulses && (elem >= 3u) && (elem < 9u))
+        if ((false_pulse_us != 0u) && (elem >= 3u) && (elem < 9u))
         {
+            /* Inside BAR_SETTLE_US before the real edge (S3-U37). */
+            uint32_t const lead_us = 3000u;
+
             gb_sim_bar_pin = b_level;
-            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us - 8000u);
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us - lead_us);
             gb_sim_bar_pin = b_old;
-            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us - 6000u);
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH,
+                             now_us - lead_us + false_pulse_us);
         }
         if (elem == misread_elem)
         {
@@ -458,8 +568,9 @@ static uint32_t sim_feed_barcode_chatter(uint32_t char_idx,
 }
 
 /* S3-U18: Feed a half-scale (small) barcode with heavy optical bar/space
-   asymmetry (narrow bar ~0.5 mm = 2200 us, wide bar ~2.8 mm = 12000 us,
-   narrow space ~2.3 mm = 9800 us, wide space ~4.6 mm = 19600 us at cpw=36)
+   asymmetry (narrow bar ~0.5 mm = 4400 us, wide bar ~2.8 mm = 24000 us,
+   narrow space ~2.3 mm = 19600 us, wide space ~4.6 mm = 39200 us at cpw=18,
+   cruise speed; S3-U37 folds edges closer than BAR_SETTLE_US)
    and optional leading stray edges (e.g. tape/paper edge before '*'). */
 static uint32_t sim_feed_small_biased_barcode(uint32_t char_idx,
                                               uint32_t start_us,
@@ -484,17 +595,17 @@ static uint32_t sim_feed_small_biased_barcode(uint32_t char_idx,
 
             if (b_bar)
             {
-                durations_us[elem] = b_wide ? 12000u : 2200u;
+                durations_us[elem] = b_wide ? 24000u : 4400u;
             }
             else
             {
-                durations_us[elem] = b_wide ? 19600u : 9800u;
+                durations_us[elem] = b_wide ? 39200u : 19600u;
             }
             elem++;
         }
         if (c_idx < 2u)
         {
-            durations_us[elem] = 9800u; /* narrow space inter-char gap */
+            durations_us[elem] = 19600u; /* narrow space inter-char gap */
             elem++;
         }
     }
@@ -504,10 +615,10 @@ static uint32_t sim_feed_small_biased_barcode(uint32_t char_idx,
     {
         gb_sim_bar_pin = true;
         barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
-        now_us += 4000u;
+        now_us += 8000u;
         gb_sim_bar_pin = false;
         barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
-        now_us += 6000u;
+        now_us += 12000u;
     }
 
     /* Leading edge of barcode '*' bar 0 */
@@ -598,10 +709,14 @@ static bool sim_test_u11_dropped_edge(void)
 
     barcode_cycle();
 
-    return ((BAR_STATE_IDLE == app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
-                                            PRV_BAR_A_STATE_BITS)) &&
-            (0u == app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
-                                PRV_BAR_A_N_ELEM_BITS)) &&
+    /* S3-U37: bar and space alternate; the DO level read during
+       chatter is ignored, so repeated levels keep the capture going. */
+    return ((BAR_STATE_CAPTURING == app_bits_get(g_bar_prv_a,
+                                                 PRV_BAR_A_STATE_POS,
+                                                 PRV_BAR_A_STATE_BITS)) &&
+            ((BAR_LEVEL_FIX_MAX + 1u) == app_bits_get(g_bar_prv_a,
+                                                      PRV_BAR_A_N_ELEM_POS,
+                                                      PRV_BAR_A_N_ELEM_BITS)) &&
             (0u == g_sim_evt_cnt));
 }
 
@@ -676,12 +791,12 @@ int main(void)
     HOST_CHECK("S3-U10", sim_test_u10_ring_pack(),
                "16-bit MSG_EDGE ring (128 B) packs/unpacks 0, 1, 0x7FFE, 0x7FFF and saturates");
     HOST_CHECK("S3-U11", sim_test_u11_dropped_edge(),
-               "dropped edge detected from packed MSG_EDGE_LEVEL bit resets capture to IDLE");
+               "repeated MSG_EDGE_LEVEL bits no longer reset the capture (S3-U37)");
 
     /* ---- S3-U17 (on-car 2026-11-03: LM393 chatter at bar edges) ----- */
     sim_reset();
     g_sim_path = 100u;
-    (void) sim_feed_barcode_chatter(13u, 50000u, 10u, BAR_ELEMENTS, false);
+    (void) sim_feed_barcode_chatter(13u, 50000u, 10u, BAR_ELEMENTS, 0u);
     barcode_cycle();
     exp_val = mission_evt_barcode_value(APP_BAR_CMD_UTURN, 13u);
     HOST_CHECK("S3-U17",
@@ -692,7 +807,7 @@ int main(void)
 
     sim_reset();
     g_sim_path = 100u;
-    (void) sim_feed_barcode_chatter(13u, 50000u, BAR_ELEMENTS, 6u, false);
+    (void) sim_feed_barcode_chatter(13u, 50000u, BAR_ELEMENTS, 6u, 0u);
     barcode_cycle();
     HOST_CHECK("S3-U17",
                (1u == g_sim_evt_cnt) &&
@@ -703,6 +818,8 @@ int main(void)
     /* ---- S3-U18 (Small barcode with optical bias + leading stray edge) */
     sim_reset();
     g_sim_path = 100u;
+    g_sim_speed_l = 18;
+    g_sim_speed_r = 18;
     (void) sim_feed_small_biased_barcode(10u, 50000u, 0u);
     barcode_cycle();
     exp_val = mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u);
@@ -714,6 +831,8 @@ int main(void)
 
     sim_reset();
     g_sim_path = 100u;
+    g_sim_speed_l = 18;
+    g_sim_speed_r = 18;
     (void) sim_feed_small_biased_barcode(11u, 50000u, 1u);
     barcode_cycle();
     exp_val = mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 11u);
@@ -1050,6 +1169,33 @@ int main(void)
                    && (APP_EVT_INVALID == g_sim_evts[0].type)
                    && (BAR_ELEMENTS == g_sim_evts[0].value),
                    "29 elements without valid Code 39 also fail the reread");
+
+        /* S3-U31: let an intact guard finish at cruise in both directions. */
+        for (uint32_t direction = 0u; direction < 2u; direction++)
+        {
+            uint8_t replay[BAR_ELEMENTS];
+
+            for (uint32_t i = 0u; i < BAR_ELEMENTS; i++)
+            {
+                replay[i] = (0u == direction)
+                    ? widths[i] : widths[BAR_ELEMENTS - 1u - i];
+            }
+
+            sim_reset();
+            g_sim_mode_mask = APP_MODE_MOTOR_EN;
+            g_sim_speed_l = odometry_mm_s_to_cpw(120);
+            g_sim_speed_r = g_sim_speed_l;
+            (void) barcode_map_set(15u, APP_BAR_CMD_RIGHT);
+            sim_bar_widths(replay, BAR_ELEMENTS, 50000u, true);
+            HOST_CHECK("S3-U31",
+                       (1u == g_sim_evt_cnt)
+                       && (APP_EVT_BARCODE == g_sim_evts[0].type)
+                       && (mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 15u)
+                           == g_sim_evts[0].value),
+                       (0u == direction)
+                           ? "reconstructed F at cruise decodes without rewind"
+                           : "opposite scan at cruise decodes without rewind");
+        }
     }
 
     {
@@ -1068,8 +1214,9 @@ int main(void)
         uint8_t const noise[] = {
             41u, 77u, 101u, 73u, 21u, 30u, 154u, 163u, 45u, 60u
         };
-        uint8_t const guard[] = {
-            30u, 75u, 30u, 30u, 75u, 30u, 75u, 30u, 30u, 30u
+        /* Forward guard without its first bar, then one data element. */
+        uint8_t const missing_first[] = {
+            75u, 30u, 30u, 75u, 30u, 75u, 30u, 30u, 30u, 30u
         };
 
         sim_reset();
@@ -1092,10 +1239,100 @@ int main(void)
         g_sim_mode_mask = APP_MODE_MOTOR_EN;
         g_sim_speed_l = odometry_mm_s_to_cpw(120);
         g_sim_speed_r = g_sim_speed_l;
-        sim_bar_widths(guard, sizeof(guard), 50000u, true);
+        sim_bar_widths(missing_first, sizeof(missing_first), 50000u, true);
         HOST_CHECK("S3-U27", (1u == g_sim_evt_cnt)
                    && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type),
-                   "a forward guard followed by a narrow gap can retry");
+                   "a forward guard missing its first bar can retry");
+    }
+
+    /* S3-U34: only a failed capture with a known guard can retry. */
+    {
+        static uint8_t const guard[] = {
+            30u, 75u, 30u, 30u, 75u, 30u, 75u, 30u, 30u, 30u
+        };
+        static uint8_t const noise[] = {
+            28u, 14u, 15u, 23u, 14u, 26u, 42u, 18u, 14u, 15u, 18u
+        };
+        int32_t const cruise_cpw = odometry_mm_s_to_cpw(120);
+
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = cruise_cpw;
+        g_sim_speed_r = cruise_cpw;
+        sim_bar_widths(guard, sizeof(guard), 50000u, true);
+        HOST_CHECK("S3-U34", 0u == g_sim_evt_cnt,
+                   "an intact guard alone lets the scan continue");
+
+        /* Miss a falling edge. The next rise leaves the recorded levels
+           one step out of phase until the mismatch budget is exhausted. */
+        for (uint32_t i = 0u; i <= BAR_LEVEL_FIX_MAX; i++)
+        {
+            gb_sim_bar_pin = ((i & 1u) == 0u);
+            g_sim_path += odometry_mm_to_counts(3u);
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, g_bar_last_us + 25000u);
+            barcode_cycle();
+        }
+        HOST_CHECK("S3-U34", (0u == g_sim_evt_cnt)
+                   && (BAR_STATE_CAPTURING == app_bits_get(
+                       g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                       PRV_BAR_A_STATE_BITS)),
+                   "repeated DO levels after an intact guard keep the capture"
+                   " (S3-U37)");
+
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = cruise_cpw;
+        g_sim_speed_r = cruise_cpw;
+        sim_bar_widths(guard, sizeof(guard), 50000u, true);
+        g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM);
+        barcode_cycle();
+        barcode_cycle();
+        HOST_CHECK("S3-U34", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type),
+                   "quiet after a known start can request one rewind");
+
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = cruise_cpw;
+        g_sim_speed_r = cruise_cpw;
+        {
+            uint8_t invalid[BAR_ELEMENTS];
+
+            memset(invalid, 15, sizeof(invalid));
+            for (uint32_t i = 0u; i < sizeof(guard); i++)
+            {
+                invalid[i] = guard[i] / 2u;
+            }
+            sim_bar_widths(invalid, BAR_ELEMENTS, 50000u, true);
+        }
+        g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM);
+        barcode_cycle();
+        HOST_CHECK("S3-U34", (2u == g_sim_evt_cnt)
+                   && (APP_EVT_INVALID == g_sim_evts[0].type)
+                   && (BAR_ELEMENTS == g_sim_evts[0].value)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[1].type),
+                   "an invalid short frame reports failure before retrying");
+
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = cruise_cpw;
+        g_sim_speed_r = cruise_cpw;
+        sim_bar_widths(noise, sizeof(noise), 50000u, true);
+        g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM);
+        barcode_cycle();
+        HOST_CHECK("S3-U34", 0u == g_sim_evt_cnt,
+                   "the recorded eleven-element fragment cannot request rewind");
+
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD;
+        g_sim_speed_l = odometry_mm_s_to_cpw(70);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(guard, sizeof(guard), 50000u, true);
+        g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM);
+        barcode_cycle();
+        HOST_CHECK("S3-U34", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_INVALID == g_sim_evts[0].type),
+                   "a failed slow reread does not request another rewind");
     }
 
     /* S3-U29: actual final F pass, missing the first narrow bar. */
@@ -1135,7 +1372,7 @@ int main(void)
     g_sim_speed_r = g_sim_speed_l;
     (void) barcode_map_set(15u, APP_BAR_CMD_RIGHT);
     (void) sim_feed_barcode_chatter(15u, 50000u, BAR_ELEMENTS, BAR_ELEMENTS,
-                                    true);
+                                    2000u);
     barcode_cycle();
     HOST_CHECK("S3-U30", (1u == g_sim_evt_cnt)
                && (APP_EVT_BARCODE == g_sim_evts[0].type)
@@ -1172,6 +1409,20 @@ int main(void)
     HOST_CHECK("S3-U30", (BAR_STATE_IDLE == app_bits_get(
                    g_bar_prv_a, PRV_BAR_A_STATE_POS, PRV_BAR_A_STATE_BITS)),
                "a rejected sub-millisecond return also leaves the scanner idle");
+
+    /* S3-U32: the ISR drops a 400 us return, then sees the real edge. */
+    sim_reset();
+    g_sim_speed_l = odometry_mm_s_to_cpw(120);
+    g_sim_speed_r = g_sim_speed_l;
+    (void) barcode_map_set(15u, APP_BAR_CMD_RIGHT);
+    (void) sim_feed_barcode_chatter(15u, 50000u, BAR_ELEMENTS, BAR_ELEMENTS,
+                                    400u);
+    barcode_cycle();
+    HOST_CHECK("S3-U32", (1u == g_sim_evt_cnt)
+               && (APP_EVT_BARCODE == g_sim_evts[0].type)
+               && (mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 15u)
+                   == g_sim_evts[0].value),
+               "a rejected pulse return does not break the measured F");
 
     /* S3-U25: preserve the first edge and still read all 29 elements. */
     {
@@ -1216,6 +1467,128 @@ int main(void)
                    "a falling first edge on reread still decodes all 29 elements");
     }
 
+    /* ---- S3-U36 (on-car 2026-11-10 20:54: 8 of 29 elements kept) ---- */
+    /* The edge counter saw the whole barcode, but only 8 widths reached
+       the capture. A failed capture now also prints the raw edges it was
+       given (task cycle, signed gap, speed used) so the merge point can
+       be replayed on the host.                                        */
+    {
+        uint8_t const six[6] = {30u, 75u, 30u, 30u, 75u, 30u};
+        uint32_t      lines  = 0u;
+        uint32_t      cpw    = 0u;
+        uint32_t      dt_us  = 0u;
+        char          want[48];
+        char const *  p_at   = NULL;
+
+        sim_reset();
+        g_sim_log_len   = 0u;
+        g_sim_log[0]    = '\0';
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l   = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r   = g_sim_speed_l;
+        g_sim_path      = 100u;
+        sim_bar_widths(six, 6u, 50000u, true);
+        g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM + 5u);
+        barcode_cycle();
+        for (uint32_t i = 0u; i < 200u; i++)
+        {
+            barcode_cycle();
+        }
+        for (p_at = strstr(g_sim_log, "BAR E "); NULL != p_at;
+             p_at = strstr(p_at + 1, "BAR E "))
+        {
+            lines++;
+        }
+        HOST_CHECK("S3-U36",
+                   NULL != strstr(g_sim_log, "BAR edge dump: 7 edges"),
+                   "a dropped capture announces a dump of its 7 raw edges");
+        HOST_CHECK("S3-U36", 7u == lines,
+                   "one line per raw edge, then the log is cleared");
+        cpw   = (uint32_t) g_sim_speed_l;
+        dt_us = (30u * 5000000u) / (cpw * APP_UM_PER_COUNT);
+        (void) snprintf(want, sizeof(want), " -%u %u\n",
+                        (unsigned) ((dt_us >> 4) << 4), (unsigned) cpw);
+        HOST_CHECK("S3-U36", NULL != strstr(g_sim_log, want),
+                   "the end of the first bar shows its gap (negative = now"
+                   " white) and the speed used");
+    }
+
+    /* ---- S3-U37 (on-car 2026-11-10 21:09, edge dump) ----------------- */
+    /* The 32 logged raw edges read as '*' then 'A' when chatter edges
+       (1.0-2.1 ms after a transition) are folded in and bar / space come
+       from alternation. 12 of them repeated the previous DO level, so the
+       level-based capture dropped after 8 elements. Logged gaps are
+       quantised to 16 us, so 15 us is added back to each.             */
+    {
+        static int32_t const dump_gap[32] = {
+            -524272, -250528, -524272, 51312, -125760, 52928, 36560, 147120,
+            -42768, 182320, -1056, -53600, 992, 83824, -43776, -992,
+            153872, -43600, 64720, -33376, 73216, -1056, -182096, -992,
+            -1008, 97328, -992, -43936, -992, 205728, 37360, 53632
+        };
+        static uint8_t const dump_cpw[32] = {
+            12u, 20u, 22u, 20u, 20u, 21u, 20u, 19u, 18u, 14u, 14u, 14u,
+            14u, 13u, 17u, 17u, 19u, 17u, 18u, 19u, 15u, 15u, 13u, 13u,
+            13u, 13u, 13u, 12u, 12u, 19u, 20u, 20u
+        };
+        int32_t  gaps[64];
+        uint8_t  cpws[64];
+        uint32_t now_us = 0u;
+        uint32_t n_raw  = 0u;
+        uint32_t n_elem = 0u;
+        bool     b_ok   = true;
+
+        for (uint32_t i = 0u; i < 32u; i++)
+        {
+            gaps[i] = (dump_gap[i] < 0) ? (dump_gap[i] - 15)
+                                        : (dump_gap[i] + 15);
+            cpws[i] = dump_cpw[i];
+        }
+        sim_reset();
+        g_sim_log_len   = 0u;
+        g_sim_log[0]    = '\0';
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_path      = 1000u;
+        barcode_cycle();
+        sim_feed_raw(gaps, cpws, 32u, &now_us);
+        n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                              PRV_BAR_A_N_ELEM_BITS);
+        HOST_CHECK("S3-U37", (NULL == strstr(g_sim_log, "BAR capture dropped"))
+                   && (21u == n_elem),
+                   "logged 21:09 pass: 21 elements, no drop on chatter");
+        HOST_CHECK("S3-U37",
+                   code39_has_start_guard(g_bar_widths, CODE39_START_ELEMENTS),
+                   "its first 10 elements are the '*' start guard");
+
+        /* Full frames with the same chatter, both reading directions. */
+        for (uint32_t d = 0u; d < 4u; d++)
+        {
+            uint32_t const pattern = (d < 2u) ? 0x109u : 0x058u;
+            uint32_t const exp_val = (d < 2u)
+                ? mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u)
+                : mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 15u);
+
+            sim_reset();
+            g_sim_mode_mask = APP_MODE_MOTOR_EN;
+            g_sim_path      = 1000u;
+            (void) barcode_map_set(15u, APP_BAR_CMD_RIGHT);
+            barcode_cycle();
+            now_us = 0u;
+            n_raw  = sim_chatter_frame(pattern, (1u == (d % 2u)), 18u,
+                                       gaps, cpws);
+            sim_feed_raw(gaps, cpws, n_raw, &now_us);
+            if (!((1u == g_sim_evt_cnt)
+                  && (APP_EVT_BARCODE == g_sim_evts[0].type)
+                  && (exp_val == g_sim_evts[0].value)))
+            {
+                b_ok = false;
+            }
+        }
+        HOST_CHECK("S3-U37", b_ok,
+                   "*A* and *F* with chatter and wrong DO levels decode in"
+                   " both directions");
+    }
+
     /* ---- S3-U14 (Full task barcode-branch + line junction integration) */
     sim_reset();
     sim_calibrate_line();
@@ -1223,8 +1596,6 @@ int main(void)
     /* Case 1: Early branch — barcode sensor sees a 16 mm black bar (69000 us
        at cpw = 36) 20 mm BEFORE the line sensors reach the junction. */
     g_sim_path     = 100u;
-    gb_sim_bar_pin = false;
-    barcode_edge_isr(DRV_GPIO_IRQ_BOTH, 10000u);
     gb_sim_bar_pin = true;
     barcode_edge_isr(DRV_GPIO_IRQ_BOTH, 20000u); /* leading edge of branch */
     gb_sim_bar_pin = false;
@@ -1305,6 +1676,12 @@ int main(void)
     HOST_CHECK("S3-U28", 0 == g_sim_line_out.steering,
                "a staggered cross edge cannot steer the car");
 
+    g_sim_path += odometry_mm_to_counts(2u);
+    line_cycle();
+    HOST_CHECK("S3-U33", (0 == g_sim_line_out.steering)
+               && line_track_steer_line_between(&g_steer),
+               "the next cycle on the trailing stripe keeps steering centred");
+
     g_sim_raw_r = 500u;
     line_cycle();
     HOST_CHECK("S3-U28", (0 == g_sim_line_out.steering)
@@ -1325,6 +1702,24 @@ int main(void)
     line_cycle();
     HOST_CHECK("S3-U28", g_sim_line_out.steering < 0,
                "line following responds normally after the cross");
+
+    /* Both sensors see black, below saturation and too briefly to classify. */
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path = odometry_mm_to_counts(100u);
+    g_sim_raw_l = 2900u;
+    g_sim_raw_r = 2900u;
+    line_cycle();
+    g_sim_path = odometry_mm_to_counts(105u);
+    g_sim_raw_l = 500u;
+    line_cycle();
+    HOST_CHECK("S3-U33", (0 == g_sim_line_out.steering)
+               && (0u == g_sim_evt_cnt),
+               "a brief dark band clears steering without a junction event");
+    g_sim_path = odometry_mm_to_counts(116u);
+    line_cycle();
+    HOST_CHECK("S3-U33", g_sim_line_out.steering < 0,
+               "a lasting one-sided reading steers again after the hold");
 
     return (0 == HOST_SUMMARY("line_barcode_sim")) ? 0 : 1;
 }
