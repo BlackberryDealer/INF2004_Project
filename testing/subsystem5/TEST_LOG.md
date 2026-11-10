@@ -57,6 +57,7 @@ Define a test here before running it. Test IDs never change.
 | S5-U64 | Defer a barcode retry during a short gap in line tracking | FR2, FR3 | auto (host) | Match the 71 mm start guard while both line sensors are white, then restore tracking or exceed a bound | Brake only when safe. Account for additional travel, and cancel on a junction or a valid first-pass decode. |
 | S5-U65 | Rewind the whole strip after a failed capture | FR2, FR3 | auto (host) | Probe with 286 mm of travel (on-car 10 Nov 21:37) after 600 mm of following | Brake, then reverse 150 + 150 + 106 mm (needed distance + 70 mm), then reread at 70 mm/s after a quiet lead-in. U64's cap check now uses the 450 mm cap. |
 | S5-U66 | A rewind may start while an obstacle is ahead (APPROACH) but not while passing one | FR2, FR3, FR6 | auto (host) | Probe with the scanner in APPROACH, then in PASSING | APPROACH brakes and backs up; PASSING does nothing. Replaces the S5-U57 check that skipped the rewind in APPROACH. |
+| S5-U67 | While armed, a T junction is taken as the cross | FR3, FR19 | auto (host) | Arm A (LEFT), then JUNCTION class T (on-car 10 Nov 22:03: the cross after the barcode was reported as T because both sensors read white once centred past the stripe) | Advance 60 mm, turn left 90, disarm. Replaces the S5-U57 check that ignored T. |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -108,6 +109,8 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-09 | S5-U64 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Mission host simulation | A 71 mm guard can wait for the line to be tracked again within the time and rewind limits. Cross and complete decode cancel the wait. |
 | 2026-11-10 | S5-U65, S5-U66 | `barcode-transition-settle` | Hanz | FAIL | Mission host simulation | The 286 mm probe and the probe during APPROACH were both ignored (7 checks failed). |
 | 2026-11-10 | S5-U64, S5-U65, S5-U66 | `barcode-reread-full-strip` | Hanz | PASS | Mission host simulation | Whole-strip rewind in three reverse moves, rewind allowed in APPROACH. Full subsystem 5 run: 55 + 174 + 8 + 77 pass. |
+| 2026-11-10 | S5-U67 | before fix | Hanz | FAIL | Mission host simulation | The armed car ignored the T, so no advance and no turn (3 checks failed). |
+| 2026-11-10 | S5-U67 | `barcode-reread-full-strip` | Hanz | PASS | Mission host simulation | T while armed advances and turns the mapped way. Full subsystem 5 run: 55 + 176 + 8 + 77 pass. |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 

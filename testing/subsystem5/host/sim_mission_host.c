@@ -534,8 +534,6 @@ int main(void) {
         "mapped F is stored and cruise resumes");
   EV(APP_EVT_JUNCTION, APP_JCT_SIDE_L);
   CHECK("S5-U57", !strcmp(mlog, "") && g_ctx.b_is_armed, "ignore a side branch");
-  EV(APP_EVT_JUNCTION, APP_JCT_T);
-  CHECK("S5-U57", !strcmp(mlog, "") && g_ctx.b_is_armed, "ignore a T junction");
   mot.path_counts += odometry_mm_to_counts(1100u);
   NONE();
   CHECK("S5-U57", APP_RUN_ARMED == g_ctx.run_state, "keep the code until CROSS");
@@ -568,6 +566,18 @@ int main(void) {
   DONE();
   CHECK("S5-U57", !strcmp(mlog, "FOL120 ") && !g_ctx.b_is_armed,
         "mapped straight crosses and disarms without a spin");
+
+  /* S5-U67: on-car 2026-11-10 22:03, the cross after the barcode was
+     reported as T: centred on the line, both sensors read white 30 mm
+     past the stripe. Armed, a T must turn like a cross. */
+  EV(APP_EVT_BARCODE, mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u));
+  EV(APP_EVT_JUNCTION, APP_JCT_T);
+  CHECK("S5-U67", !strcmp(mlog, "STOP0 F60 ") && APP_RUN_EXECUTE_TURN == g_ctx.run_state,
+        "armed: a T junction is taken as the cross");
+  DONE();
+  CHECK("S5-U67", !strcmp(mlog, "L90 "), "and A's mapped left is turned");
+  DONE();
+  CHECK("S5-U67", !g_ctx.b_is_armed, "the action is used up");
 
   barcode_test_follow(30u);
   EV(APP_EVT_BARCODE_PROBE, 35u);
