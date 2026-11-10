@@ -49,6 +49,7 @@ typedef struct
     int32_t exit_side;   /* +1 left, -1 right, 0 = between (S3-U19)   */
     bool    b_was_white; /* previous cycle both white                 */
     int32_t recover;     /* current recovery steer, ramps (S3-U21)    */
+    uint32_t coast_cycles; /* white cycles before steering recovery   */
 } line_track_steer_t;
 
 typedef struct

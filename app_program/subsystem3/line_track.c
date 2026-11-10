@@ -421,6 +421,7 @@ void line_track_steer_reset(line_track_steer_t * p_st)
     p_st->exit_side   = 0;
     p_st->b_was_white = true;
     p_st->recover     = LINE_RECOVER_STEER;
+    p_st->coast_cycles = 0u;
 }
 
 /**
@@ -441,11 +442,9 @@ bool line_track_steer_line_between(line_track_steer_t const * p_st)
  * line_track_steer_step
  * @brief   One 10 ms steering step. Both sensors white: the 18 mm line
  *          lies between them when the car is centred (on-car 2026-11-06),
- *          so the target is 0, unless the line went black under one
- *          sensor since they were last both white: then it may have left
- *          on that side and the target is the recovery steer toward it
- *          (S3-U19), which starts at LINE_RECOVER_STEER and grows by
- *          LINE_RECOVER_RAMP per cycle to LINE_RECOVER_MAX (S3-U21).
+ *          so the target is 0. After a black exit, allow a short coast.
+ *          If the sensors stay white, recover toward the exit side
+ *          (S3-U19) and increase the turn each cycle (S3-U21).
  *          Otherwise the target is norm_l - norm_r,
  *          and an error of at least LINE_SIDE_MIN records its side. The
  *          smoothed error moves 1/LINE_STEER_FILT_DIV of the way to the
@@ -468,11 +467,19 @@ int32_t line_track_steer_step(line_track_steer_t * p_st,
 
     if (b_white)
     {
-        /* recovery grows each cycle the line stays away (S3-U21) */
-        target            = p_st->exit_side * p_st->recover;
+        target            = 0;
         p_st->b_was_white = true;
-        if (0 != p_st->exit_side)
+        if (0 == p_st->exit_side)
         {
+            /* Centred: no recovery. */
+        }
+        else if (p_st->coast_cycles < LINE_RECOVER_COAST_CYCLES)
+        {
+            p_st->coast_cycles++;
+        }
+        else
+        {
+            target = p_st->exit_side * p_st->recover;
             p_st->recover += LINE_RECOVER_RAMP;
             if (p_st->recover > LINE_RECOVER_MAX)
             {
@@ -482,10 +489,6 @@ int32_t line_track_steer_step(line_track_steer_t * p_st,
             {
                 /* still ramping */
             }
-        }
-        else
-        {
-            /* centred: no recovery */
         }
     }
     else
@@ -549,6 +552,7 @@ static void line_track_steer_exit(line_track_steer_t * p_st,
         p_st->exit_side   = 0;          /* new excursion */
         p_st->b_was_white = false;
         p_st->recover     = LINE_RECOVER_STEER;  /* line seen again */
+        p_st->coast_cycles = 0u;
     }
 
     if (b_black_l && (!b_black_r))

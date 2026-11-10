@@ -14,9 +14,12 @@
 #define CODE39_OK       (0u)
 #define CODE39_INVALID  (1u)
 #define CODE39_STAR     (43u)   /* index of '*' in the pattern table */
+#define CODE39_START_ELEMENTS (10u) /* nine guard widths plus narrow gap */
 
 extern uint32_t code39_decode(uint8_t const * p_widths, uint32_t count,
                               uint32_t * p_char_index);
+extern bool     code39_has_start_guard(uint8_t const * p_widths,
+                                        uint32_t count);
 extern uint32_t code39_char_ascii(uint32_t char_index);  /* for logs/tests */
 
 #endif /* CODE39_H */

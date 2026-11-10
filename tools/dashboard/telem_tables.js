@@ -662,7 +662,8 @@
       "21": "STATE_CHANGE",
       "22": "SUMMARY",
       "23": "MAP",
-      "24": "SNAPSHOT"
+      "24": "SNAPSHOT",
+      "25": "BARCODE_PROBE"
      },
      "EVT_GROUP_ALIAS": {
       "MOTION_CLASS": "EVT_MCLASS",

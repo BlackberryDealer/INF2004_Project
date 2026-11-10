@@ -42,11 +42,20 @@ typedef struct
     uint32_t end_reason;         /* APP_END_*  */
     bool     b_is_armed;
     uint32_t armed_cmd;          /* APP_BAR_CMD_* */
+    uint32_t armed_char;         /* decoded Code 39 index */
     uint32_t no_path_cnt;        /* NO_PATH answers for this obstacle */
     uint32_t last_faults;        /* fault mask seen last pass */
     uint32_t sys_request;        /* set by RUN handlers: APP_SYS_* */
 
-    uint32_t arm_start;          /* path counts when armed */
+    uint32_t barcode_phase;      /* private RUN_BAR_* rewind/reread phase */
+    uint32_t barcode_mark;       /* rewind target, progress, or read start */
+    uint32_t barcode_probe_mark; /* pending rewind target, 0 = none */
+    uint32_t barcode_since_us;   /* brake and read phase deadline origin */
+    uint32_t barcode_probe_after; /* path before another rewind is allowed */
+    uint32_t barcode_follow_path; /* start of the current following stretch */
+    uint32_t barcode_back_path;   /* path when the reverse command started */
+    uint32_t barcode_edge_path;   /* path at last edge or black sample */
+    uint32_t barcode_edges;       /* last observed ISR edge count */
     uint32_t path_at_stop;       /* path counts when the bypass started */
     int32_t  diff_at_stop;       /* pos_l - pos_r when the bypass started */
     uint32_t run_start_path;     /* path counts at START */
@@ -76,6 +85,8 @@ typedef struct
     bool     b_inhibit_pending;  /* clear inhibits at inhibit_mark */
     bool     b_fr9_running;
     bool     b_wait_standstill;  /* AVOID entry: wait for 0 speed */
+    bool     b_creeping;         /* S5-U54: creeping to OBS_SCAN_MM */
+    bool     b_crept;            /* S5-U54: creep done for this stop */
     bool     b_has_run;          /* run start values are valid */
     bool     b_post_avoid_slow;  /* FOLLOW at SLOW until inhibits clear */
     bool     b_is_quiet;         /* test matrix: no logging */
