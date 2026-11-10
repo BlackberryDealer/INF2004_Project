@@ -28,6 +28,7 @@ Define a test here before running it. Test IDs never change.
 | S2-U17 | `APP_MODE_MOTOR_EN` clear: `motion_follow(250)` never drives; setting it later does not start the dropped command | FR17 | auto (host sim) + target | host: `test_motion_task_host.c`; target: Phase 3 (needs B5 `sys_tick` and `APP_MODE_MOTOR_EN`) | PASS |
 | S2-U18 | STOP cancels a MOVE: no MOVE_DONE for it; the next MOVE's MOVE_DONE carries the new tag | R06 | auto (host sim) + target | host: `test_motion_task_host.c`; target: Phase 3 (needs B5 `sys_tick` and `APP_MODE_MOTOR_EN`) | PASS |
 | S2-U27 | Strong FOLLOW corrections retain a forward target on the inside wheel | FR1 | auto (host sim) | `test_motion_task_host.c`: apply moderate steering and full steering in both directions at slow follow speed, then request zero speed | Moderate steering keeps its original split, full steering leaves at least one third of base speed on the inside wheel, and a zero-speed request stays still |
+| S2-U28 | Below slow speed the FOLLOW steering split shrinks with the base speed | FR1, FR2 | auto (host sim) | `test_motion_task_host.c`: steering 500 at slow speed, then at 70 mm/s (barcode reread; on-car 10 Nov 22:32 it swung across the line) | The 70 mm/s split is 70/100 of the slow-speed split (within 1 cpw); slow speed and cruise are unchanged |
 | S2-I01 | Speed settles ±5 % within 0.5 s, plot logged | NFR2b | manual (bench) | PID tuning log | PASS |
 | S2-I02 | 1 m straight × 10: ±3 % | NFR3a | manual (floor) | motion-accuracy table | PASS |
 | S2-I03 | 90° and 180° × 10: ±5° and ±8° | NFR3b, c | manual (floor) | motion-accuracy table | PASS |
@@ -102,3 +103,6 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S2-U02 | `<commit>` | | PASS | `logs/2026-10-22_host_odometry_speed_pid.txt` | 4 set-points, KI = 16 |
 | 2026-10-22 | S2-U01, U02, U11, U13, U14, U03, U12, U15–U19 | `<commit>` | | PASS | `logs/2026-10-22_host_all_v2.txt` | 64 host checks after the review fixes |
 | 2026-10-22 | S2-U01, U02, U11, U13, U14, U03, U12, U15–U19 | `<commit>` | | PASS | `logs/2026-10-22_host_all_v3.txt` | 68 host checks after the follow-up fix (late-cycle recovery) |
+
+| 2026-11-10 | S2-U28 | before fix | Hanz | FAIL | motion_task host sim | 70 mm/s used the same split as slow speed. |
+| 2026-11-10 | S2-U28 | `barcode-reread-full-strip` | Hanz | PASS | motion_task host sim | Split scaled to 70/100. Subsystem 2 run: 32 + 4 + 14 + 52 pass. |
