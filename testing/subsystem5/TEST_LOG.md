@@ -55,6 +55,8 @@ Define a test here before running it. Test IDs never change.
 | S5-U62 | Report an unarmed cross independently of a barcode | FR3, FR19 | auto (host) | Inject CROSS with no mapped action armed | Console and dashboard record the class and the mission keeps following. |
 | S5-U63 | Finish the bounded rewind before checking the white lead-in | FR2, FR3 | auto (host) | Present white before reverse completion and place a probe near a passed cross | Wait for the bounded move and both wheels to stop. Do not reverse across the previous cross. |
 | S5-U64 | Defer a barcode retry during a short gap in line tracking | FR2, FR3 | auto (host) | Match the 71 mm start guard while both line sensors are white, then restore tracking or exceed a bound | Brake only when safe. Account for additional travel, and cancel on a junction or a valid first-pass decode. |
+| S5-U65 | Rewind the whole strip after a failed capture | FR2, FR3 | auto (host) | Probe with 286 mm of travel (on-car 10 Nov 21:37) after 600 mm of following | Brake, then reverse 150 + 150 + 106 mm (needed distance + 70 mm), then reread at 70 mm/s after a quiet lead-in. U64's cap check now uses the 450 mm cap. |
+| S5-U66 | A rewind may start while an obstacle is ahead (APPROACH) but not while passing one | FR2, FR3, FR6 | auto (host) | Probe with the scanner in APPROACH, then in PASSING | APPROACH brakes and backs up; PASSING does nothing. Replaces the S5-U57 check that skipped the rewind in APPROACH. |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -104,6 +106,8 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-09 | S5-U62 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Mission host simulation | The unarmed cross emits its class without a turn. |
 | 2026-11-09 | S5-U63 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Mission host simulation | The reread waits for bounded rewind completion and a quiet lead-in. A probe too close to the previous cross cannot start a rewind. |
 | 2026-11-09 | S5-U64 | `obstacle-rejoin-barcode-reread-steering-cap` | Dylan | PASS | Mission host simulation | A 71 mm guard can wait for the line to be tracked again within the time and rewind limits. Cross and complete decode cancel the wait. |
+| 2026-11-10 | S5-U65, S5-U66 | `barcode-transition-settle` | Hanz | FAIL | Mission host simulation | The 286 mm probe and the probe during APPROACH were both ignored (7 checks failed). |
+| 2026-11-10 | S5-U64, S5-U65, S5-U66 | `barcode-reread-full-strip` | Hanz | PASS | Mission host simulation | Whole-strip rewind in three reverse moves, rewind allowed in APPROACH. Full subsystem 5 run: 55 + 174 + 8 + 77 pass. |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 

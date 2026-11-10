@@ -54,6 +54,7 @@ typedef struct
     uint32_t barcode_probe_after; /* path before another rewind is allowed */
     uint32_t barcode_follow_path; /* start of the current following stretch */
     uint32_t barcode_back_path;   /* path when the reverse command started */
+    uint32_t barcode_back_left;   /* rewind mm still to send, next moves */
     uint32_t barcode_edge_path;   /* path at last edge or black sample */
     uint32_t barcode_edges;       /* last observed ISR edge count */
     uint32_t path_at_stop;       /* path counts when the bypass started */

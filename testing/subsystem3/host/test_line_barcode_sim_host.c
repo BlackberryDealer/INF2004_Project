@@ -1335,6 +1335,33 @@ int main(void)
                    "a failed slow reread does not request another rewind");
     }
 
+    /* S3-U38: on-car 2026-11-10 21:37, a deliberately wrong barcode read
+       as 29 elements. Its start guard has a 23.8 mm wide bar, so the
+       guard check must accept it and the failed read must ask for a
+       rewind (it was only logged as invalid). */
+    {
+        static uint8_t const misread[BAR_ELEMENTS] = {
+            67u, 176u, 82u, 51u, 238u, 29u, 191u, 51u, 66u, 43u,
+            154u, 81u, 73u, 47u, 64u, 173u, 63u, 30u, 193u, 54u,
+            55u, 114u, 100u, 49u, 180u, 42u, 175u, 36u, 57u
+        };
+
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(misread, BAR_ELEMENTS, 50000u, true);
+        g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM);
+        barcode_cycle();
+        HOST_CHECK("S3-U38", (2u == g_sim_evt_cnt)
+                   && (APP_EVT_INVALID == g_sim_evts[0].type)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[1].type)
+                   && (g_sim_evts[1].value >= 270u)
+                   && (g_sim_evts[1].value <= 320u),
+                   "a logged misread with a 23.8 mm guard bar asks for a"
+                   " rewind of the whole strip");
+    }
+
     /* S3-U29: actual final F pass, missing the first narrow bar. */
     {
         uint8_t const widths[] = {

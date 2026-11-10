@@ -28,7 +28,7 @@
 #define BAR_GAP_SHIFT        (4u)
 #define BAR_LOG_MIN_ELEM     (4u)   /* shorter captures are edge noise */
 #define BAR_PROBE_MIN_01MM   (10u)   /* 1 mm, above flicker widths */
-#define BAR_PROBE_MAX_01MM   (200u)  /* 20 mm, allows optical broadening */
+#define BAR_PROBE_MAX_01MM   (254u)  /* 25.4 mm: 255 is a saturated width */
 #define BAR_GLITCH_01MM      (BAR_GLITCH_UM / 100u)
 #define BAR_BRANCH_MIN_01MM  (BAR_BRANCH_MIN_MM * 10u)
 #define BAR_WIDTH_DIVISOR    (312500u)

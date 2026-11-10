@@ -100,6 +100,8 @@ static void run_barcode_step(mission_ctx_t * p_ctx,
                               mission_evt_in_t const * p_evt,
                               status_board_t const * p_snap,
                               uint32_t now_us);
+static bool run_barcode_scan_ok(status_board_t const * p_snap);
+static void run_barcode_back(mission_ctx_t * p_ctx, uint32_t now_us);
 static void run_request(mission_ctx_t * p_ctx, uint32_t sys_state,
                         uint32_t end_reason);
 static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
@@ -512,7 +514,7 @@ static void run_barcode_try_rewind(mission_ctx_t * p_ctx,
             || (status_board_speed_l(p_snap) <= 0)
             || (status_board_speed_r(p_snap) <= 0)
             || (APP_LINE_JUNCTION == line)
-            || (APP_SCAN_MONITOR != status_board_scanner_state(p_snap))
+            || (!run_barcode_scan_ok(p_snap))
             || mission_mode_is_set(RUN_INHIBITS) || (0u != safety_get()))
         {
             p_ctx->barcode_probe_mark = 0u;
@@ -597,23 +599,24 @@ static void run_barcode_braked(mission_ctx_t * p_ctx,
             ? (follow_mm - MISSION_BARCODE_BACK_PAD_MM) : 0u;
         uint32_t const limit = (available < MISSION_BARCODE_REWIND_MM)
             ? available : MISSION_BARCODE_REWIND_MM;
+        uint32_t const back = ((need + MISSION_BARCODE_BACK_EXTRA_MM) < limit)
+            ? (need + MISSION_BARCODE_BACK_EXTRA_MM) : limit;
 
-        if ((need <= limit)
-            && (APP_SCAN_MONITOR == status_board_scanner_state(p_snap)))
+        if ((need <= limit) && run_barcode_scan_ok(p_snap))
         {
             p_ctx->barcode_mark      = path + odometry_mm_to_counts(need);
             p_ctx->barcode_back_path = path;
+            p_ctx->barcode_back_left = back;
             p_ctx->barcode_edge_path = path;
             p_ctx->barcode_edges     = barcode_edge_count();
             p_ctx->barcode_phase     = RUN_BAR_REVERSING;
             if (!p_ctx->b_is_quiet)
             {
-                /* casts: both distances <= 150 mm */
+                /* casts: both distances <= MISSION_BARCODE_REWIND_MM */
                 app_log("BARCODE rewind: needs %d mm, backing %d mm\n",
-                        (int32_t) need, (int32_t) limit, 0);
+                        (int32_t) need, (int32_t) back, 0);
             }
-            (void) mission_send_move(p_ctx, MISSION_MV_BACK, (int32_t) limit,
-                                     now_us);
+            run_barcode_back(p_ctx, now_us);
         }
         else
         {
@@ -627,6 +630,37 @@ static void run_barcode_braked(mission_ctx_t * p_ctx,
     {
         run_barcode_brake_timeout(p_ctx, now_us);
     }
+}
+
+/**
+ * run_barcode_scan_ok
+ * @brief   The scanner allows a rewind: no obstacle stop or bypass. An
+ *          obstacle ahead (APPROACH) is allowed, the car backs away from
+ *          it and the sonar guard still stops the slow pass.
+ * @context mission_task
+ */
+static bool run_barcode_scan_ok(status_board_t const * p_snap)
+{
+    uint32_t const state = status_board_scanner_state(p_snap);
+
+    return ((APP_SCAN_MONITOR == state) || (APP_SCAN_APPROACH == state));
+}
+
+/**
+ * run_barcode_back
+ * @brief   Send the next reverse move of the rewind. One move is at most
+ *          MOTION_REVERSE_MAX_MM, so a long rewind takes several.
+ * @context mission_task
+ */
+static void run_barcode_back(mission_ctx_t * p_ctx, uint32_t now_us)
+{
+    uint32_t const max_mm = (uint32_t) MOTION_REVERSE_MAX_MM;
+    uint32_t const step   = (p_ctx->barcode_back_left < max_mm)
+                            ? p_ctx->barcode_back_left : max_mm;
+
+    p_ctx->barcode_back_left -= step;
+    /* cast: step <= MOTION_REVERSE_MAX_MM */
+    (void) mission_send_move(p_ctx, MISSION_MV_BACK, (int32_t) step, now_us);
 }
 
 /**
@@ -787,10 +821,18 @@ static void run_barcode_step(mission_ctx_t * p_ctx,
         /* Keep updating the quiet stretch, but use the full bounded
            rewind. An edge during early braking could erase the lead. */
         (void) run_barcode_white_lead(p_ctx, path);
-        if (APP_EVT_MOVE_DONE == type)
+        if ((APP_EVT_MOVE_DONE == type) && (0u != p_ctx->barcode_back_left))
+        {
+            run_barcode_back(p_ctx, now_us);
+        }
+        else if (APP_EVT_MOVE_DONE == type)
         {
             p_ctx->barcode_phase    = RUN_BAR_SETTLING;
             p_ctx->barcode_since_us = now_us;
+        }
+        else
+        {
+            /* Reverse move still running. */
         }
     }
     else if (RUN_BAR_SETTLING == p_ctx->barcode_phase)

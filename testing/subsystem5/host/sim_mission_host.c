@@ -572,10 +572,49 @@ int main(void) {
   barcode_test_follow(30u);
   EV(APP_EVT_BARCODE_PROBE, 35u);
   CHECK("S5-U57", !strcmp(mlog, ""), "skip a rewind beyond the run start");
+  /* S5-U66: on-car 2026-11-10 phantom echoes kept the scanner in
+     APPROACH over the barcode; the rewind backs away from the obstacle. */
   obs.scanner_state = APP_SCAN_APPROACH;
   mot.path_counts = odometry_mm_to_counts(235u);
   EV(APP_EVT_BARCODE_PROBE, 35u);
-  CHECK("S5-U57", !strcmp(mlog, ""), "skip a rewind during obstacle approach");
+  CHECK("S5-U66", !strcmp(mlog, "STOP0 ") && MODE(APP_MODE_BARCODE_INHIBIT),
+        "a rewind may start during obstacle approach");
+  barcode_test_brake();
+  CHECK("S5-U66", !strcmp(mlog, "B150 "), "and backs up during approach");
+  obs.scanner_state = APP_SCAN_PASSING;
+  barcode_test_follow(235u);
+  obs.scanner_state = APP_SCAN_PASSING;
+  EV(APP_EVT_BARCODE_PROBE, 35u);
+  CHECK("S5-U66", !strcmp(mlog, "") && !MODE(APP_MODE_BARCODE_INHIBIT),
+        "no rewind while passing an obstacle");
+  obs.scanner_state = APP_SCAN_MONITOR;
+
+  /* S5-U65: on-car 2026-11-10 21:37, a misread strip asked for a rewind
+     after its quiet zone (286 mm); 150 mm was refused. The rewind is now
+     sent as reverse moves of at most 150 mm. */
+  barcode_test_follow(600u);
+  EV(APP_EVT_BARCODE_PROBE, 286u);
+  CHECK("S5-U65", !strcmp(mlog, "STOP0 ") && MODE(APP_MODE_BARCODE_INHIBIT),
+        "a whole-strip rewind is accepted");
+  mot.motion_state = APP_MOT_BRAKE;
+  mot.speed_l_cpw = mot.speed_r_cpw = 0;
+  mot.path_counts = odometry_mm_to_counts(610u);
+  NONE();
+  CHECK("S5-U65", !strcmp(mlog, "B150 ") && 0u != g_ctx.barcode_back_left,
+        "first reverse move is capped at 150 mm");
+  barcode_test_back(760u, 0u, 0u);
+  DONE();
+  CHECK("S5-U65", !strcmp(mlog, "B150 "), "second reverse move");
+  barcode_test_back(910u, 1u, 20u);
+  DONE();
+  CHECK("S5-U65", !strcmp(mlog, "B106 ") && 0u == g_ctx.barcode_back_left,
+        "last move backs past the strip: 336 + 70 mm in total");
+  barcode_test_back(950u, 0u, 1u);
+  barcode_test_back(1016u, 0u, 0u);
+  DONE();
+  barcode_test_still();
+  CHECK("S5-U65", !strcmp(mlog, "FOL70 ") && MODE(APP_MODE_BARCODE_REREAD),
+        "white lead-in found: slow reread of the whole strip");
 
   barcode_test_read();
   obs.scanner_state = APP_SCAN_APPROACH;
@@ -665,7 +704,8 @@ int main(void) {
     barcode_test_follow(235u);
     status_board_write_line(&white);
     EV(APP_EVT_BARCODE_PROBE, 71u);
-    mot.path_counts = odometry_mm_to_counts(265u);
+    /* 124 mm mark: cancel once the rewind needs more than 450 - 10 mm */
+    mot.path_counts = odometry_mm_to_counts(566u);
     status_board_write_line(&seen);
     NONE();
     CHECK("S5-U64", !strcmp(mlog, ""), "keep brake room inside the rewind cap");
