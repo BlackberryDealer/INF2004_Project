@@ -103,6 +103,8 @@ static void run_barcode_step(mission_ctx_t * p_ctx,
 static bool run_barcode_scan_ok(status_board_t const * p_snap);
 static bool run_jct_both(uint32_t jct_class);
 static void run_barcode_back(mission_ctx_t * p_ctx, uint32_t now_us);
+static bool run_barcode_retry(mission_ctx_t * p_ctx,
+                              status_board_t const * p_snap, uint32_t now_us);
 static void run_request(mission_ctx_t * p_ctx, uint32_t sys_state,
                         uint32_t end_reason);
 static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
@@ -306,7 +308,8 @@ static bool run_common(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
             p_ctx->barcode_probe_mark = 0u;
         }
         if ((APP_EVT_JUNCTION == p_evt->type)
-            && run_jct_both(p_evt->value))
+            && run_jct_both(p_evt->value)
+            && (RUN_BAR_IDLE == p_ctx->barcode_phase))
         {
             p_ctx->barcode_follow_path = status_board_path(p_snap);
         }
@@ -528,6 +531,7 @@ static void run_barcode_try_rewind(mission_ctx_t * p_ctx,
             p_ctx->barcode_probe_mark = 0u;
             p_ctx->barcode_phase      = RUN_BAR_BRAKING;
             p_ctx->barcode_since_us   = now_us;
+            p_ctx->barcode_tries      = 0u;
             mission_mode_set(RUN_INHIBITS | APP_MODE_BARCODE_REREAD);
             mission_stop_motion(p_ctx);
         }
@@ -794,7 +798,12 @@ static void run_barcode_read(mission_ctx_t * p_ctx,
             break;
     }
 
-    if (b_finished)
+    if (b_finished && (APP_EVT_BARCODE != type) && (APP_EVT_UNMAPPED != type)
+        && run_barcode_retry(p_ctx, p_snap, now_us))
+    {
+        /* Rewinding to the start of this pass for another read. */
+    }
+    else if (b_finished)
     {
         run_barcode_clear(p_ctx, path);
         if (b_cross && p_ctx->b_is_armed)
@@ -806,6 +815,34 @@ static void run_barcode_read(mission_ctx_t * p_ctx,
             run_follow_or_armed(p_ctx, p_snap, now_us);
         }
     }
+}
+
+/**
+ * run_barcode_retry
+ * @brief   A slow pass ended without a decode: brake and rewind to the
+ *          start of that pass (barcode_mark) for another slow pass, at
+ *          most MISSION_BARCODE_RETRIES times (S5-U68).
+ * @return  true if the retry started
+ * @context mission_task
+ */
+static bool run_barcode_retry(mission_ctx_t * p_ctx,
+                              status_board_t const * p_snap, uint32_t now_us)
+{
+    bool b_retry = false;
+
+    if ((p_ctx->barcode_tries < MISSION_BARCODE_RETRIES)
+        && run_barcode_scan_ok(p_snap) && (0u == safety_get()))
+    {
+        p_ctx->barcode_tries++;
+        p_ctx->barcode_phase    = RUN_BAR_BRAKING;
+        p_ctx->barcode_since_us = now_us;
+        mission_mode_set(RUN_INHIBITS | APP_MODE_BARCODE_REREAD);
+        mission_stop_motion(p_ctx);
+        run_log_event(p_ctx, "BARCODE reread failed: rewinding for"
+                      " retry %d\n", p_ctx->barcode_tries);
+        b_retry = true;
+    }
+    return b_retry;
 }
 
 /**

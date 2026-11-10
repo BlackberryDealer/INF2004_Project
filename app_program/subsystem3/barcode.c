@@ -62,6 +62,8 @@ static uint32_t          g_bar_carry_16us             = 0u; /* flicker time */
 static uint32_t          g_bar_start_path             = 0u;
 static bool              gb_bar_reread_first          = false;
 static bool              gb_bar_has_full_guard        = false;
+/* S3-U40: always reread slowly after an intact start guard. */
+static bool              gb_bar_reread_always = (0u != BAR_REREAD_ALWAYS);
 static uint8_t           g_bar_widths[BAR_CAPTURE_MAX];
 #if (BAR_EDGE_LOG_ON != 0u)
 /* Raw edge log (S3-U36). Entry: task cycle in bits 23..30, speed (cpw)
@@ -890,7 +892,11 @@ static void barcode_probe(uint32_t path)
     {
         gb_bar_has_full_guard =
             code39_has_start_guard(g_bar_widths, CODE39_START_ELEMENTS);
-        if ((!gb_bar_has_full_guard)
+        if (gb_bar_has_full_guard && gb_bar_reread_always)
+        {
+            barcode_request_rewind(path);
+        }
+        else if ((!gb_bar_has_full_guard)
             && code39_has_start_guard(g_bar_widths,
                                       CODE39_START_ELEMENTS - 1u))
         {

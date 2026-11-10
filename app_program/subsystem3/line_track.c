@@ -29,6 +29,7 @@ static uint32_t line_track_jct_confirm(line_track_jct_t * p_jct,
                                        line_track_jct_in_t const * p_in);
 static void line_track_steer_exit(line_track_steer_t * p_st,
                                   uint32_t norm_l, uint32_t norm_r);
+static uint32_t line_track_steer_coast(line_track_steer_t const * p_st);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -422,6 +423,7 @@ void line_track_steer_reset(line_track_steer_t * p_st)
     p_st->b_was_white = true;
     p_st->recover     = LINE_RECOVER_STEER;
     p_st->coast_cycles = 0u;
+    p_st->prev_exit   = 0;
 }
 
 /**
@@ -473,7 +475,7 @@ int32_t line_track_steer_step(line_track_steer_t * p_st,
         {
             /* Centred: no recovery. */
         }
-        else if (p_st->coast_cycles < LINE_RECOVER_COAST_CYCLES)
+        else if (p_st->coast_cycles < line_track_steer_coast(p_st))
         {
             p_st->coast_cycles++;
         }
@@ -553,6 +555,14 @@ static void line_track_steer_exit(line_track_steer_t * p_st,
 
     if (p_st->b_was_white)
     {
+        if (0 != p_st->exit_side)
+        {
+            p_st->prev_exit = p_st->exit_side;
+        }
+        else
+        {
+            /* grey-only excursion: keep the last black exit side */
+        }
         p_st->exit_side   = 0;          /* new excursion */
         p_st->b_was_white = false;
         p_st->recover     = LINE_RECOVER_STEER;  /* line seen again */
@@ -571,6 +581,21 @@ static void line_track_steer_exit(line_track_steer_t * p_st,
     {
         /* grey only, or both black (junction): keep */
     }
+}
+
+/**
+ * line_track_steer_coast
+ * @brief   White cycles to coast before the recovery arc. An exit on the
+ *          other side from the last black exit means the car swung across
+ *          the line: it is most likely back between the sensors (S3-U39).
+ * @param   p_st  Steering state.
+ * @return  coast length in 10 ms cycles
+ * @context line_task (10 ms hot path)
+ */
+static uint32_t line_track_steer_coast(line_track_steer_t const * p_st)
+{
+    return ((0 != p_st->prev_exit) && (p_st->exit_side == -p_st->prev_exit))
+           ? LINE_RECOVER_FLIP_COAST_CYCLES : LINE_RECOVER_COAST_CYCLES;
 }
 
 /*** end of file ***/

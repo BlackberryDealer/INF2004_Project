@@ -51,6 +51,8 @@ Define a test here before running it. Test IDs never change.
 | S3-U36 | Print the raw barcode edges after a failed capture | FR2 | auto (host) | Drop a six-element capture at the quiet zone and run the task for 2 s | A header and one line per raw edge (task cycle, signed gap, speed used); the first bar shows its gap and speed. |
 | S3-U37 | Read bars and spaces from transition timing, not from the DO level read during comparator chatter | FR2, FR3 | auto (host) | Replay the 32 logged raw edges of the 10 Nov 21:09 pass, then complete `*A*` and `*F*` frames with echo edges 1.05 and 2.1 ms after transitions and wrong DO levels on every third edge, in both directions | The logged pass keeps 21 elements starting with the `*` guard and is not dropped; every synthetic frame decodes to its mapped command. |
 | S3-U38 | A failed capture whose start guard has a wide bar over 20 mm still asks for a rewind | FR2, FR3 | auto (host) | Replay the 29 widths of the deliberately wrong barcode logged on 10 Nov 21:37 (wide guard bar 23.8 mm) at cruise, then 30 mm of white | INVALID, then BARCODE_PROBE with the whole strip's travel (270 to 320 mm). |
+| S3-U39 | A line exit on the other side from the last one coasts longer before the recovery arc | FR1 | auto (host) | Black left, 300 ms white, black right, 300 ms white (on-car 10 Nov 22:44: after the U-turn the sensors went black L, R, L every 0.6 s for 8 s) | Steering stays near 0 after the right exit; recovery starts after the long coast; the same side twice (a curve) still recovers after the short coast. |
+| S3-U40 | An intact start guard at cruise always asks for a slow reread | FR2, FR3 | auto (host) | The 10-element start guard at 120 mm/s, then the same during the slow reread | One BARCODE_PROBE at cruise; nothing during the reread. |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -99,6 +101,10 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-10 | S3-U11, S3-U14, S3-U18, S3-U30, S3-U32, S3-U34 | `barcode-transition-settle` | Dylan | PASS | Barcode host simulation | Re-run after the capture stopped using the DO level. U11 and U34 now expect repeated levels to keep the capture. U18 runs its 0.5 mm bars at cruise speed. U30 and U32 place the false pulse 3 ms before the real edge, inside the settle window. U14 no longer sends a white edge before the branch. |
 | 2026-11-10 | S3-U38 | `barcode-transition-settle` | Hanz | FAIL | Barcode host simulation | Only INVALID was posted: the 23.8 mm guard bar was over the 20 mm guard limit, so no rewind was asked for. |
 | 2026-11-10 | S3-U38 | `barcode-reread-full-strip` | Hanz | PASS | Barcode host simulation | INVALID then BARCODE_PROBE for the whole strip. Full subsystem 3 run: 46 + 16 + 71 pass. |
+| 2026-11-10 | S3-U39 | before fix | Hanz | FAIL | Line track host test | Recovery arc to the right started 120 ms after the right exit. |
+| 2026-11-10 | S3-U39 | `barcode-reread-full-strip` | Hanz | PASS | Line track host test | Full subsystem 3 run: 49 + 16 + 73 pass. |
+| 2026-11-10 | S3-U40 | before fix | Hanz | FAIL | Barcode host simulation | No probe after an intact guard. |
+| 2026-11-10 | S3-U40 | `barcode-reread-full-strip` | Hanz | PASS | Barcode host simulation | Probe at the guard, none during the reread. |
 
 ## SPEC-QUESTION
 

@@ -58,6 +58,7 @@ Define a test here before running it. Test IDs never change.
 | S5-U65 | Rewind the whole strip after a failed capture | FR2, FR3 | auto (host) | Probe with 286 mm of travel (on-car 10 Nov 21:37) after 600 mm of following | Brake, then reverse 150 + 150 + 106 mm (needed distance + 70 mm), then reread at 70 mm/s after a quiet lead-in. U64's cap check now uses the 450 mm cap. |
 | S5-U66 | A rewind may start while an obstacle is ahead (APPROACH) but not while passing one | FR2, FR3, FR6 | auto (host) | Probe with the scanner in APPROACH, then in PASSING | APPROACH brakes and backs up; PASSING does nothing. Replaces the S5-U57 check that skipped the rewind in APPROACH. |
 | S5-U67 | While armed, a T junction is taken as the cross | FR3, FR19 | auto (host) | Arm A (LEFT), then JUNCTION class T (on-car 10 Nov 22:03: the cross after the barcode was reported as T because both sensors read white once centred past the stripe) | Advance 60 mm, turn left 90, disarm. Replaces the S5-U57 check that ignored T. |
+| S5-U68 | A failed slow pass rewinds to its start and reads again, up to 2 more times | FR2, FR3 | auto (host) | Slow pass ends INVALID, then a pass ends at the cross undecoded, then a third pass ends INVALID (on-car 10 Nov 22:39: the failed pass carried on) | Each of the first two failures brakes and backs up (need + 70 mm in 150 mm moves) and reads at 60 mm/s again; the third gives up and follows at the normal speed. |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -111,6 +112,8 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-10 | S5-U64, S5-U65, S5-U66 | `barcode-reread-full-strip` | Hanz | PASS | Mission host simulation | Whole-strip rewind in three reverse moves, rewind allowed in APPROACH. Full subsystem 5 run: 55 + 174 + 8 + 77 pass. |
 | 2026-11-10 | S5-U67 | before fix | Hanz | FAIL | Mission host simulation | The armed car ignored the T, so no advance and no turn (3 checks failed). |
 | 2026-11-10 | S5-U67 | `barcode-reread-full-strip` | Hanz | PASS | Mission host simulation | T while armed advances and turns the mapped way. Full subsystem 5 run: 55 + 176 + 8 + 77 pass. |
+| 2026-11-10 | S5-U68 | before fix | Hanz | FAIL | Mission host simulation | With no retries the failed pass resumed following. |
+| 2026-11-10 | S5-U68 | `barcode-reread-full-strip` | Hanz | PASS | Mission host simulation | Two retries, the cross does not block the rewind. Full subsystem 5 run: 55 + 187 + 8 + 77 pass. |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 

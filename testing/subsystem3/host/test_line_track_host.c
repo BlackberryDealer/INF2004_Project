@@ -286,7 +286,8 @@ int main(void)
         {
             out = line_track_steer_step(&st, 0u, 800u);
         }
-        for (uint32_t i = 0u; i < 20u; i++)
+        /* left then right: the longer coast applies first (S3-U39) */
+        for (uint32_t i = 0u; i < (LINE_RECOVER_FLIP_COAST_CYCLES + 8u); i++)
         {
             out = line_track_steer_step(&st, 0u, 0u);
         }
@@ -403,19 +404,65 @@ int main(void)
                    "then grows smoothly to ~LINE_RECOVER_MAX in 600 ms");
         for (uint32_t i = 0u; i < 5u; i++)
         {
-            out = line_track_steer_step(&st, 0u, 450u);   /* found (grey) */
+            out = line_track_steer_step(&st, 450u, 0u);   /* found (grey) */
         }
         for (uint32_t i = 0u; i < 5u; i++)
         {
-            out = line_track_steer_step(&st, 0u, 800u);   /* black right */
+            out = line_track_steer_step(&st, 800u, 0u);   /* black left */
         }
         for (uint32_t i = 0u; i < (LINE_RECOVER_COAST_CYCLES + 12u); i++)
         {
             out = line_track_steer_step(&st, 0u, 0u);
         }
-        HOST_CHECK("S3-U21", (out <= -LINE_RECOVER_STEER)
-                   && (out > -(LINE_RECOVER_STEER + 300)),
-                   "next exit (right) starts again from LINE_RECOVER_STEER");
+        HOST_CHECK("S3-U21", (out >= LINE_RECOVER_STEER)
+                   && (out < (LINE_RECOVER_STEER + 300)),
+                   "next exit (left) starts again from LINE_RECOVER_STEER");
+    }
+
+    /* S3-U39 (on-car 2026-11-10 22:44): after the U-turn the line went
+       black under L, then R, then L, every 0.6 s. Each exit was the line
+       coming back between the sensors; the recovery arc pushed it across.
+       An exit on the other side from the last one coasts longer. The
+       same side twice (a curve) still recovers after the short coast. */
+    {
+        line_track_steer_t st;
+        int32_t            out = 0;
+
+        line_track_steer_reset(&st);
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 800u, 0u);   /* black left */
+        }
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 800u);   /* black right */
+        }
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U39", (out > -10) && (out < 10),
+                   "swing L then R: coast, no recovery arc after 300 ms");
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U39", out <= -LINE_RECOVER_STEER,
+                   "still white after the long coast: recover right");
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 800u);   /* right again */
+        }
+        for (uint32_t i = 0u; i < (LINE_RECOVER_COAST_CYCLES + 12u); i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U39", out <= -LINE_RECOVER_STEER,
+                   "same side twice (curve): short coast, then recover");
     }
 
     /* S3-U26: let the steering settle before assuming a black exit. */

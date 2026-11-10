@@ -40,6 +40,12 @@
 /* A black-to-white transition may mean the tape is between the sensors
    again. Let steering decay for 120 ms before starting the search arc. */
 #define LINE_RECOVER_COAST_CYCLES (12u)  /* 10 ms cycles */
+/* S3-U39 (on-car 2026-11-10 22:44): after the U-turn the line went black
+   under the left sensor, then the right, then the left, every 0.6 s for
+   8 s. Each exit was the line returning between the sensors, and the
+   recovery arc pushed it across to the other side. An exit on the other
+   side from the last one coasts longer before recovering.             */
+#define LINE_RECOVER_FLIP_COAST_CYCLES (40u)  /* TUNE: 10 ms cycles */
 #define LINE_RECOVER_STEER       (200)   /* initial recovery, permille */
 /* S3-U21: a fixed recovery often failed to find the line within 60 mm.
    If both sensors stay white, the recovery grows into a tightening arc. */

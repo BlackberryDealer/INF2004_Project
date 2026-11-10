@@ -50,6 +50,7 @@ typedef struct
     bool    b_was_white; /* previous cycle both white                 */
     int32_t recover;     /* current recovery steer, ramps (S3-U21)    */
     uint32_t coast_cycles; /* white cycles before steering recovery   */
+    int32_t prev_exit;   /* exit side of the last black excursion     */
 } line_track_steer_t;
 
 typedef struct

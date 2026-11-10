@@ -232,6 +232,7 @@ bool mission_post_event(uint32_t type, uint32_t value)
 
 static void sim_reset(void)
 {
+    gb_bar_reread_always = false;   /* older tests read at cruise; S3-U40 */
     g_sim_evt_cnt    = 0u;
     g_sim_mode_mask  = 0u;
     g_sim_fault_mask = 0u;
@@ -1360,6 +1361,36 @@ int main(void)
                    && (g_sim_evts[1].value <= 320u),
                    "a logged misread with a 23.8 mm guard bar asks for a"
                    " rewind of the whole strip");
+    }
+
+    /* S3-U40 (Hanz 2026-11-10 22:48): cruise is too fast for small,
+       thin barcodes. An intact start guard at cruise always asks for a
+       rewind, so the whole strip is read at the slow speed. Not during
+       the slow reread itself. */
+    {
+        static uint8_t const guard[] = {
+            30u, 75u, 30u, 30u, 75u, 30u, 75u, 30u, 30u, 30u
+        };
+
+        sim_reset();
+        gb_bar_reread_always = true;
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(guard, sizeof(guard), 50000u, true);
+        HOST_CHECK("S3-U40", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type)
+                   && (g_sim_evts[0].value < 80u),
+                   "an intact guard at cruise asks for a slow reread");
+
+        sim_reset();
+        gb_bar_reread_always = true;
+        g_sim_mode_mask = APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD;
+        g_sim_speed_l = odometry_mm_s_to_cpw(60);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(guard, sizeof(guard), 50000u, true);
+        HOST_CHECK("S3-U40", 0u == g_sim_evt_cnt,
+                   "the slow reread itself does not ask again");
     }
 
     /* S3-U29: actual final F pass, missing the first narrow bar. */

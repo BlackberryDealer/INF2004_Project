@@ -33,7 +33,7 @@
 
 static uint64_t           g_line_stack[LINE_STACK_WORDS];
 static line_track_steer_t g_steer         = {0, 0, 0, 0, true,
-                                              LINE_RECOVER_STEER, 0u};
+                                              LINE_RECOVER_STEER, 0u, 0};
 
 /* Packed private state words (Phase 4, B3.4). */
 static uint32_t           g_prv_cal_l     = 0u; /* PRV_CAL_L: WHITE, BLACK */
