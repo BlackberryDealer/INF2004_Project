@@ -28,9 +28,8 @@
 #define BAR_GAP_SHIFT        (4u)
 #define BAR_LOG_MIN_ELEM     (4u)   /* shorter captures are edge noise */
 #define BAR_PROBE_MIN_01MM   (10u)   /* 1 mm, above flicker widths */
-#define BAR_PROBE_MAX_01MM   (200u)  /* 20 mm, allows optical broadening */
+#define BAR_PROBE_MAX_01MM   (254u)  /* 25.4 mm: 255 is a saturated width */
 #define BAR_GLITCH_01MM      (BAR_GLITCH_UM / 100u)
-#define BAR_BOUNCE_MAX_US    (8000u) /* also bounds the wait at low speed */
 #define BAR_BRANCH_MIN_01MM  (BAR_BRANCH_MIN_MM * 10u)
 #define BAR_WIDTH_DIVISOR    (312500u)
 #define BAR_MAP_EMPTY        (0xFFu)
@@ -40,16 +39,6 @@
 #define BAR_STATE_CAPTURING  (1u)
 #define BAR_STATE_DECODING   (2u)
 #define BAR_STATE_COOLDOWN   (3u)
-
-/* An edge can be held briefly to see whether DO returns to its old level. */
-typedef struct
-{
-    uint32_t gap_16us;
-    uint32_t level;
-    uint32_t cpw;
-    uint32_t path;
-    bool     b_active;
-} barcode_pending_t;
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -72,11 +61,24 @@ static uint32_t          g_bar_fix_cnt                = 0u; /* level fixes */
 static uint32_t          g_bar_carry_16us             = 0u; /* flicker time */
 static uint32_t          g_bar_start_path             = 0u;
 static bool              gb_bar_reread_first          = false;
+static bool              gb_bar_has_full_guard        = false;
+/* S3-U40: always reread slowly after an intact start guard. */
+static bool              gb_bar_reread_always = (0u != BAR_REREAD_ALWAYS);
 static uint8_t           g_bar_widths[BAR_CAPTURE_MAX];
-static barcode_pending_t g_bar_pending               = {0};
-static uint32_t          g_bar_stable_level          = 0u;
-static uint32_t          g_bar_short_return_16us     = 0u;
-static uint32_t          g_bar_merge_16us            = 0u;
+#if (BAR_EDGE_LOG_ON != 0u)
+/* Raw edge log (S3-U36). Entry: task cycle in bits 23..30, speed (cpw)
+   in 16..22, level after the edge in 15, gap in 16 us units in 0..14. */
+static uint32_t          g_bar_elog[BAR_EDGE_LOG_MAX];
+static uint32_t          g_bar_elog_head              = 0u; /* next slot */
+static uint32_t          g_bar_elog_cnt               = 0u; /* stored */
+static uint32_t          g_bar_elog_left              = 0u; /* to print */
+static uint32_t          g_bar_cycle_seq              = 0u;
+#endif
+/* Time since the last accepted DO transition, 16 us units (S3-U37). */
+static uint32_t          g_bar_settle_16us           = 0u;
+/* The sensor is known to be on white with no edge behind it: set at
+   init and at RUN start, cleared by an inhibit or a transition.     */
+static bool              gb_bar_quiet_known          = false;
 
 /* Default character-to-command map: A->LEFT, B->RIGHT, C->STRAIGHT, D->UTURN */
 static uint8_t const g_bar_default_map[BAR_MAP_ENTRIES] =
@@ -102,12 +104,8 @@ static void     barcode_cycle(void);
 static void     barcode_filter_reset(void);
 static uint32_t barcode_gap_add(uint32_t first, uint32_t second);
 static uint32_t barcode_width_01mm(uint32_t gap_16us, uint32_t cpw);
-static bool     barcode_short_pulse(uint32_t gap_16us, uint32_t cpw);
-static void     barcode_commit_pending(void);
-static void     barcode_resolve_return(bool b_keep_first);
-static void     barcode_filter_edge(uint32_t gap_16us, uint32_t level,
-                                    uint32_t cpw, uint32_t path);
-static void     barcode_filter_flush(void);
+static void     barcode_settle_edge(uint32_t gap_16us, uint32_t cpw,
+                                    uint32_t path);
 static uint32_t barcode_avg_cpw(int32_t speed_l, int32_t speed_r);
 static void     barcode_process_edge(uint32_t gap_16us, uint32_t level,
                                      uint32_t cpw, uint32_t path);
@@ -116,6 +114,7 @@ static void     barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
                                        uint32_t cpw, uint32_t path);
 static void     barcode_store_width(uint32_t n_elem, uint8_t width);
 static void     barcode_probe(uint32_t path);
+static void     barcode_request_rewind(uint32_t path);
 static void     barcode_step_decoding(uint32_t path);
 static void     barcode_check_timeouts(uint32_t path);
 static bool     barcode_lookup_cmd(uint32_t char_index, uint32_t * p_cmd);
@@ -123,6 +122,12 @@ static void     barcode_mark_set(uint32_t path);
 static uint32_t barcode_mark_get(void);
 static void     barcode_state_set(uint32_t state, uint32_t n_elem);
 static void     barcode_log_widths(uint32_t n_elem);
+#if (BAR_EDGE_LOG_ON != 0u)
+static void     barcode_elog_add(uint32_t gap_16us, uint32_t level,
+                                 uint32_t cpw);
+static void     barcode_elog_request(void);
+static void     barcode_elog_step(void);
+#endif
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -302,8 +307,16 @@ static void barcode_init_state(void)
     g_bar_prv_b      = 0u;
     g_bar_fix_cnt    = 0u;
     g_bar_carry_16us    = 0u;
-    gb_bar_reread_first = false;
+    gb_bar_reread_first   = false;
+    gb_bar_has_full_guard = false;
+    gb_bar_quiet_known    = true;
     barcode_filter_reset();
+#if (BAR_EDGE_LOG_ON != 0u)
+    g_bar_elog_head = 0u;
+    g_bar_elog_cnt  = 0u;
+    g_bar_elog_left = 0u;
+    g_bar_cycle_seq = 0u;
+#endif
 
     for (idx = 0u; idx < BAR_MAP_ENTRIES; idx++)
     {
@@ -477,6 +490,10 @@ static void barcode_cycle(void)
     path = status_board_path(&snap);
     cpw  = barcode_avg_cpw(status_board_speed_l(&snap),
                            status_board_speed_r(&snap));
+#if (BAR_EDGE_LOG_ON != 0u)
+    g_bar_cycle_seq++;
+    barcode_elog_step();
+#endif
 
     if (b_reset || b_inhib)
     {
@@ -486,6 +503,9 @@ static void barcode_cycle(void)
         barcode_filter_reset();
         gb_bar_reread_first = !b_reset
                              && mission_mode_is_set(APP_MODE_BARCODE_REREAD);
+        /* The car starts a run on white. Any other release must first
+           see a quiet zone (or mission's verified reread lead-in). */
+        gb_bar_quiet_known  = b_reset;
         barcode_state_set(BAR_STATE_IDLE, 0u);
         barcode_mark_set(path);
     }
@@ -504,34 +524,32 @@ static void barcode_cycle(void)
             uint32_t const word     = (uint32_t) g_bar_ring[tail];
             uint32_t const gap_16us = app_bits_get(word, MSG_EDGE_GAP_POS,
                                                    MSG_EDGE_GAP_BITS);
-            uint32_t const level    = app_bits_get(word, MSG_EDGE_LEVEL_POS,
-                                                   MSG_EDGE_LEVEL_BITS);
 
             /* cast: masked ring index fits in uint8_t */
             g_bar_tail =
                 (uint8_t) (((uint32_t) tail + 1u) & (BAR_RING_ENTRIES - 1u));
-            barcode_filter_edge(gap_16us, level, cpw, path);
+#if (BAR_EDGE_LOG_ON != 0u)
+            /* The DO level is kept for the diagnosis log only. */
+            barcode_elog_add(gap_16us,
+                             app_bits_get(word, MSG_EDGE_LEVEL_POS,
+                                          MSG_EDGE_LEVEL_BITS), cpw);
+#endif
+            barcode_settle_edge(gap_16us, cpw, path);
         }
 
-        barcode_filter_flush();
-        if (!g_bar_pending.b_active)
-        {
-            barcode_check_timeouts(path);
-        }
+        barcode_check_timeouts(path);
     }
 }
 
 /**
  * barcode_filter_reset
- * @brief   Drop pending pulses when a run starts or capture is inhibited.
+ * @brief   Forget the settle time when a run starts or capture is
+ *          inhibited.
  * @context usermain, barcode_task
  */
 static void barcode_filter_reset(void)
 {
-    g_bar_pending.b_active   = false;
-    g_bar_stable_level       = barcode_do_level();
-    g_bar_short_return_16us  = 0u;
-    g_bar_merge_16us         = 0u;
+    g_bar_settle_16us = 0u;
 }
 
 /**
@@ -558,121 +576,59 @@ static uint32_t barcode_width_01mm(uint32_t gap_16us, uint32_t cpw)
 }
 
 /**
- * barcode_short_pulse
- * @brief   Whether a pulse is short enough to be comparator bounce.
+ * barcode_settle_edge
+ * @brief   Turn raw DO edges into transitions (S3-U37). An edge less than
+ *          BAR_SETTLE_US after the last accepted transition is comparator
+ *          chatter: its time is folded into the next element. The DO level
+ *          the ISR read during chatter is not used. In a capture, bar and
+ *          space alternate. In IDLE, a transition after a BAR_QUIET_MM
+ *          quiet zone (or the first one after init or RUN start) is the
+ *          front of a bar; any other one only restarts the quiet distance.
+ * @param   gap_16us  Time since the previous raw edge (16 us units).
+ * @param   cpw       Current average speed in counts per 50 ms window.
+ * @param   path      Current odometry path in counts.
  * @context barcode_task
  */
-static bool barcode_short_pulse(uint32_t gap_16us, uint32_t cpw)
+static void barcode_settle_edge(uint32_t gap_16us, uint32_t cpw,
+                                uint32_t path)
 {
-    return (gap_16us < (BAR_BOUNCE_MAX_US >> BAR_GAP_SHIFT))
-        && (barcode_width_01mm(gap_16us, cpw) < BAR_GLITCH_01MM);
-}
+    uint32_t const since = barcode_gap_add(g_bar_settle_16us, gap_16us);
 
-/**
- * barcode_commit_pending
- * @brief   Deliver the edge using the wheel speed and path at arrival.
- * @context barcode_task
- */
-static void barcode_commit_pending(void)
-{
-    g_bar_stable_level     = g_bar_pending.level;
-    g_bar_pending.b_active = false;
-    barcode_process_edge(g_bar_pending.gap_16us, g_bar_pending.level,
-                         g_bar_pending.cpw, g_bar_pending.path);
-}
-
-/**
- * barcode_resolve_return
- * @brief   Discard a short pulse and merge its time into the next gap.
- *          Keep the first edge if the ISR missed a quick bounce-back.
- * @context barcode_task
- */
-static void barcode_resolve_return(bool b_keep_first)
-{
-    g_bar_merge_16us        = g_bar_short_return_16us;
-    g_bar_short_return_16us = 0u;
-    if (b_keep_first)
+    if (since < (BAR_SETTLE_US >> BAR_GAP_SHIFT))
     {
-        barcode_commit_pending();
+        g_bar_settle_16us = since;
     }
     else
     {
-        g_bar_merge_16us = barcode_gap_add(g_bar_pending.gap_16us,
-                                           g_bar_merge_16us);
-        g_bar_pending.b_active = false;
-    }
-}
+        uint32_t const state = app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                                            PRV_BAR_A_STATE_BITS);
+        uint32_t       level = 0u; /* 1 = now on a bar */
 
-/**
- * barcode_filter_edge
- * @brief   Hold one edge and look for a short return to the old level.
- *          An adjacent same-level report can mean the ISR rejected the
- *          bounce-back inside its 1 ms gap filter.
- * @context barcode_task
- */
-static void barcode_filter_edge(uint32_t gap_16us, uint32_t level,
-                                uint32_t cpw, uint32_t path)
-{
-    if (g_bar_pending.b_active)
-    {
-        if (0u != g_bar_short_return_16us)
+        g_bar_settle_16us = 0u;
+        if (BAR_STATE_IDLE == state)
         {
-            barcode_resolve_return(level == g_bar_stable_level);
-        }
-        else if ((g_bar_pending.level != g_bar_stable_level)
-                 && (level == g_bar_stable_level)
-                 && barcode_short_pulse(gap_16us, g_bar_pending.cpw))
-        {
-            g_bar_short_return_16us = gap_16us;
-            return;
+            level = (gb_bar_quiet_known
+                     || ((path - barcode_mark_get())
+                         >= odometry_mm_to_counts(BAR_QUIET_MM))) ? 1u : 0u;
+            gb_bar_quiet_known = false;
         }
         else
         {
-            barcode_commit_pending();
+            level = (0u == app_bits_get(g_bar_prv_a,
+                                        PRV_BAR_A_LAST_LEVEL_POS,
+                                        PRV_BAR_A_LAST_LEVEL_BITS)) ? 1u : 0u;
         }
-    }
 
-    g_bar_pending.gap_16us = barcode_gap_add(g_bar_merge_16us, gap_16us);
-    g_bar_pending.level    = level;
-    g_bar_pending.cpw      = cpw;
-    g_bar_pending.path     = path;
-    g_bar_pending.b_active = true;
-    g_bar_merge_16us       = 0u;
-}
-
-/**
- * barcode_filter_flush
- * @brief   Release the last edge once it settles, including the final bar
- *          of a barcode, which has no following edge to confirm it.
- * @context barcode_task
- */
-static void barcode_filter_flush(void)
-{
-    if (g_bar_pending.b_active)
-    {
-        uint32_t const last_us = g_bar_last_us;
-        uint32_t const age_16us =
-            (sys_tick_now_us() - last_us) >> BAR_GAP_SHIFT;
-        uint32_t const level = barcode_do_level();
-
-        if ((g_bar_head == g_bar_tail)
-            && !barcode_short_pulse(age_16us, g_bar_pending.cpw))
+        barcode_process_edge(since, level, cpw, path);
+        if (BAR_STATE_IDLE == app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                                           PRV_BAR_A_STATE_BITS))
         {
-            if (0u != g_bar_short_return_16us)
-            {
-                barcode_resolve_return(level == g_bar_pending.level);
-            }
-            else if ((g_bar_pending.level != g_bar_stable_level)
-                     && (level == g_bar_stable_level))
-            {
-                /* The ISR skipped the short return inside its gap filter. */
-                g_bar_merge_16us       = g_bar_pending.gap_16us;
-                g_bar_pending.b_active = false;
-            }
-            else
-            {
-                barcode_commit_pending();
-            }
+            /* No capture started: wait for a new quiet zone. */
+            barcode_mark_set(path);
+        }
+        else
+        {
+            /* The state handler has set the mark. */
         }
     }
 }
@@ -740,9 +696,10 @@ static void barcode_process_edge(uint32_t gap_16us, uint32_t level,
 
 /**
  * barcode_edge_idle
- * @brief   Start a normal capture on black. After a verified reread
- *          lead-in, use the first edge of either polarity as the start.
- * @param   level  DO level after the edge (1 = black, 0 = white).
+ * @brief   Start a capture on the front of a bar (level 1 after a quiet
+ *          zone, see barcode_settle_edge). After a verified reread
+ *          lead-in, the first transition starts the capture.
+ * @param   level  1 = transition after a quiet zone, 0 = mid-pattern.
  * @param   path   Current odometry path in counts.
  * @return  none
  * @context barcode_task
@@ -764,8 +721,9 @@ static void barcode_edge_idle(uint32_t level, uint32_t path)
                             PRV_BAR_A_N_ELEM_BITS, 0u);
         word = app_bits_put(word, PRV_BAR_A_LAST_LEVEL_POS,
                             PRV_BAR_A_LAST_LEVEL_BITS, level);
-        g_bar_prv_a      = word;
-        g_bar_start_path = path;
+        g_bar_prv_a           = word;
+        g_bar_start_path      = path;
+        gb_bar_has_full_guard = false;
         barcode_mark_set(path);
     }
     else
@@ -845,6 +803,10 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
 
         if (lvl == last_lvl)
         {
+            if (gb_bar_has_full_guard)
+            {
+                barcode_request_rewind(path);
+            }
             if (n_elem >= BAR_LOG_MIN_ELEM)
             {
                 /* Bring-up diagnosis. cast: count <= 63 */
@@ -910,32 +872,54 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
 
 /**
  * barcode_probe
- * @brief   Report a plausible prefix once so mission can back up.
- *          The event carries travel since the first edge in mm.
+ * @brief   Keep an intact start guard for recovery if the capture fails.
+ *          A guard with a missed first bar needs an immediate retry.
  * @context barcode_task
  */
 static void barcode_probe(uint32_t path)
+{
+    uint32_t narrow = BAR_PROBE_MAX_01MM;
+    uint32_t wide   = 0u;
+
+    for (uint32_t idx = 0u; idx < CODE39_START_ELEMENTS; idx++)
+    {
+        uint32_t const width = (uint32_t) g_bar_widths[idx];
+        narrow = (width < narrow) ? width : narrow;
+        wide   = (width > wide) ? width : wide;
+    }
+
+    if ((narrow >= BAR_PROBE_MIN_01MM) && (wide <= BAR_PROBE_MAX_01MM))
+    {
+        gb_bar_has_full_guard =
+            code39_has_start_guard(g_bar_widths, CODE39_START_ELEMENTS);
+        if (gb_bar_has_full_guard && gb_bar_reread_always)
+        {
+            barcode_request_rewind(path);
+        }
+        else if ((!gb_bar_has_full_guard)
+            && code39_has_start_guard(g_bar_widths,
+                                      CODE39_START_ELEMENTS - 1u))
+        {
+            barcode_request_rewind(path);
+        }
+    }
+}
+
+/**
+ * barcode_request_rewind
+ * @brief   Send travel since capture start in mm. Mission checks whether
+ *          a rewind fits on the followed track and can start safely.
+ * @context barcode_task
+ */
+static void barcode_request_rewind(uint32_t path)
 {
     if (mission_mode_is_set(APP_MODE_MOTOR_EN)
         && !mission_mode_is_set(APP_MODE_CAL_IR | APP_MODE_BARCODE_REREAD))
     {
         uint32_t const travel = odometry_counts_to_mm(path - g_bar_start_path);
-        uint32_t narrow = BAR_PROBE_MAX_01MM;
-        uint32_t wide   = 0u;
 
-        for (uint32_t idx = 0u; idx < CODE39_START_ELEMENTS; idx++)
-        {
-            uint32_t const width = (uint32_t) g_bar_widths[idx];
-            narrow = (width < narrow) ? width : narrow;
-            wide   = (width > wide) ? width : wide;
-        }
-
-        if ((narrow >= BAR_PROBE_MIN_01MM) && (wide <= BAR_PROBE_MAX_01MM)
-            && (travel >= (CODE39_START_ELEMENTS * BAR_PROBE_MIN_01MM) / 10u)
-            && (travel <= (uint32_t) MSG_EVT_VALUE_MAX)
-            && (code39_has_start_guard(g_bar_widths, CODE39_START_ELEMENTS)
-                || code39_has_start_guard(g_bar_widths,
-                                          CODE39_START_ELEMENTS - 1u)))
+        if ((travel >= (CODE39_START_ELEMENTS * BAR_PROBE_MIN_01MM) / 10u)
+            && (travel <= (uint32_t) MSG_EVT_VALUE_MAX))
         {
             (void) mission_post_event(APP_EVT_BARCODE_PROBE, travel);
         }
@@ -983,8 +967,9 @@ static void barcode_step_decoding(uint32_t path)
 
 /**
  * barcode_check_timeouts
- * @brief   Checks the 30 mm quiet-zone timeout in CAPTURING and the 150 mm
- *          cooldown distance in COOLDOWN.
+ * @brief   Drops a capture whose first bar was only a pulse (DO settled
+ *          back on white), then checks the 30 mm quiet-zone timeout in
+ *          CAPTURING and the 150 mm cooldown distance in COOLDOWN.
  * @param   path  Current odometry path in counts.
  * @return  none
  * @context barcode_task
@@ -997,18 +982,35 @@ static void barcode_check_timeouts(uint32_t path)
                                          PRV_BAR_A_N_ELEM_BITS);
     uint32_t const mark   = barcode_mark_get();
 
-    if ((BAR_STATE_CAPTURING == state) &&
-        ((path - mark) >= odometry_mm_to_counts(BAR_QUIET_MM)))
+    if ((BAR_STATE_CAPTURING == state) && (0u == n_elem)
+        && !mission_mode_is_set(APP_MODE_BARCODE_REREAD)
+        && ((sys_tick_now_us() - g_bar_last_us) >= BAR_SETTLE_US)
+        && (0u == barcode_do_level()))
+    {
+        /* A pulse on the quiet zone: DO settled back on white before the
+           first bar ended. Not a barcode; the zone is still quiet. */
+        gb_bar_quiet_known = true;
+        barcode_state_set(BAR_STATE_IDLE, 0u);
+    }
+    else if ((BAR_STATE_CAPTURING == state) &&
+             ((path - mark) >= odometry_mm_to_counts(BAR_QUIET_MM)))
     {
         if (n_elem < BAR_ELEMENTS)
         {
             if (n_elem >= BAR_LOG_MIN_ELEM)
             {
+                bool const b_reread =
+                    mission_mode_is_set(APP_MODE_BARCODE_REREAD);
+
+                if (gb_bar_has_full_guard)
+                {
+                    barcode_request_rewind(path);
+                }
                 /* Bring-up diagnosis: a barcode needs 29. cast: <= 63 */
                 app_log("BAR capture dropped: %d elements (a barcode has"
                         " 29)\n", (int32_t) n_elem, 0, 0);
                 barcode_log_widths(n_elem);
-                if (mission_mode_is_set(APP_MODE_BARCODE_REREAD))
+                if (b_reread)
                 {
                     (void) mission_post_event(APP_EVT_INVALID, n_elem);
                 }
@@ -1022,6 +1024,10 @@ static void barcode_check_timeouts(uint32_t path)
         else
         {
             (void) mission_post_event(APP_EVT_INVALID, n_elem);
+            if (gb_bar_has_full_guard)
+            {
+                barcode_request_rewind(path);
+            }
             barcode_log_widths(n_elem);
             barcode_mark_set(path);
             barcode_state_set(BAR_STATE_COOLDOWN, n_elem);
@@ -1089,6 +1095,9 @@ static void barcode_log_widths(uint32_t n_elem)
     uint32_t const count = (n_elem < BAR_ELEMENTS) ? n_elem : BAR_ELEMENTS;
     uint32_t       idx   = 0u;
 
+#if (BAR_EDGE_LOG_ON != 0u)
+    barcode_elog_request();
+#endif
     for (idx = 0u; (idx + 1u) < count; idx += 2u)
     {
         /* casts: element number <= 29, widths <= 255 fit int32_t */
@@ -1106,5 +1115,107 @@ static void barcode_log_widths(uint32_t n_elem)
         /* even count: all printed */
     }
 }
+
+#if (BAR_EDGE_LOG_ON != 0u)
+/**
+ * barcode_elog_add
+ * @brief   Bring-up diagnosis (S3-U36): keep one raw edge as the task
+ *          receives it, with the speed used to turn its gap into a width.
+ *          Recording pauses while a dump is being printed.
+ * @param   gap_16us  Time since the previous edge (16 us units).
+ * @param   level     DO level after the edge (1 = black, 0 = white).
+ * @param   cpw       Speed used for this edge, counts per 50 ms window.
+ * @context barcode_task
+ */
+static void barcode_elog_add(uint32_t gap_16us, uint32_t level,
+                             uint32_t cpw)
+{
+    if (0u == g_bar_elog_left)
+    {
+        uint32_t entry = 0u;
+
+        entry = app_bits_put(entry, 0u, 15u, gap_16us);
+        entry = app_bits_put(entry, 15u, 1u, level);
+        entry = app_bits_put(entry, 16u, 7u, (cpw > 127u) ? 127u : cpw);
+        entry = app_bits_put(entry, 23u, 8u, g_bar_cycle_seq & 0xFFu);
+        g_bar_elog[g_bar_elog_head] = entry;
+        g_bar_elog_head = (g_bar_elog_head + 1u) % BAR_EDGE_LOG_MAX;
+        if (g_bar_elog_cnt < BAR_EDGE_LOG_MAX)
+        {
+            g_bar_elog_cnt++;
+        }
+        else
+        {
+            /* Full: the oldest entry was overwritten. */
+        }
+    }
+    else
+    {
+        /* A dump is in progress: keep its entries unchanged. */
+    }
+}
+
+/**
+ * barcode_elog_request
+ * @brief   Start printing the stored edges, oldest first, unless a dump
+ *          is already running.
+ * @context barcode_task
+ */
+static void barcode_elog_request(void)
+{
+    if ((0u == g_bar_elog_left) && (g_bar_elog_cnt > 0u))
+    {
+        g_bar_elog_left = g_bar_elog_cnt;
+        /* cast: count <= 48 */
+        app_log("BAR edge dump: %d edges, oldest first (cycle, +gap us"
+                " now black / -gap us now white, cpw)\n",
+                (int32_t) g_bar_elog_cnt, 0, 0);
+    }
+    else
+    {
+        /* Nothing stored, or a dump is running. */
+    }
+}
+
+/**
+ * barcode_elog_step
+ * @brief   Print one stored edge every BAR_EDGE_LOG_EVERY task cycles so
+ *          the console queue is not flooded. Clears the log when done.
+ * @context barcode_task
+ */
+static void barcode_elog_step(void)
+{
+    if ((g_bar_elog_left > 0u)
+        && (0u == (g_bar_cycle_seq % BAR_EDGE_LOG_EVERY)))
+    {
+        uint32_t const slot =
+            (g_bar_elog_head + BAR_EDGE_LOG_MAX - g_bar_elog_left)
+            % BAR_EDGE_LOG_MAX;
+        uint32_t const entry  = g_bar_elog[slot];
+        /* casts: gap <= 32767 x 16 us and cpw <= 127 fit int32_t */
+        int32_t const  gap_us =
+            (int32_t) (app_bits_get(entry, 0u, 15u) << BAR_GAP_SHIFT);
+        int32_t const  signed_gap =
+            (0u != app_bits_get(entry, 15u, 1u)) ? gap_us : -gap_us;
+
+        app_log("BAR E %d %d %d\n",
+                (int32_t) app_bits_get(entry, 23u, 8u), signed_gap,
+                (int32_t) app_bits_get(entry, 16u, 7u));
+        g_bar_elog_left--;
+        if (0u == g_bar_elog_left)
+        {
+            g_bar_elog_cnt = 0u;
+        }
+        else
+        {
+            /* More lines on later cycles. */
+        }
+    }
+    else
+    {
+        /* Nothing to print this cycle. */
+    }
+}
+#endif
 
 /*** end of file ***/

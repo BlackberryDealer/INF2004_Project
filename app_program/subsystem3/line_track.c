@@ -29,6 +29,7 @@ static uint32_t line_track_jct_confirm(line_track_jct_t * p_jct,
                                        line_track_jct_in_t const * p_in);
 static void line_track_steer_exit(line_track_steer_t * p_st,
                                   uint32_t norm_l, uint32_t norm_r);
+static uint32_t line_track_steer_coast(line_track_steer_t const * p_st);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -374,13 +375,11 @@ static uint32_t line_track_jct_confirm(line_track_jct_t * p_jct,
 
     if ((p_in->path_counts - p_jct->mark_counts) >= p_in->confirm_counts)
     {
-        bool const b_is_present =
-            ((p_in->norm_l >= LINE_WHITE_THRESHOLD) ||
-             (p_in->norm_r >= LINE_WHITE_THRESHOLD));
-
         if (p_jct->b_sat_l && p_jct->b_sat_r)
         {
-            jct_class = b_is_present ? APP_JCT_CROSS : APP_JCT_T;
+            /* Stripe under both sensors: the cross-junction. What the
+               sensors read past it does not matter (one junction type). */
+            jct_class = APP_JCT_CROSS;
         }
         else if (p_jct->b_sat_l)
         {
@@ -422,6 +421,7 @@ void line_track_steer_reset(line_track_steer_t * p_st)
     p_st->b_was_white = true;
     p_st->recover     = LINE_RECOVER_STEER;
     p_st->coast_cycles = 0u;
+    p_st->prev_exit   = 0;
 }
 
 /**
@@ -445,9 +445,10 @@ bool line_track_steer_line_between(line_track_steer_t const * p_st)
  *          so the target is 0. After a black exit, allow a short coast.
  *          If the sensors stay white, recover toward the exit side
  *          (S3-U19) and increase the turn each cycle (S3-U21).
- *          Otherwise the target is norm_l - norm_r,
- *          and an error of at least LINE_SIDE_MIN records its side. The
- *          smoothed error moves 1/LINE_STEER_FILT_DIV of the way to the
+ *          A visible line gets a smaller correction near centre, growing
+ *          to full steering at full sensor contrast. An error of at least
+ *          LINE_SIDE_MIN records its side. The smoothed error moves
+ *          1/LINE_STEER_FILT_DIV of the way to the
  *          target; the output adds LINE_STEER_KD x its change since the
  *          last cycle (damping), clamped to +-LINE_STEER_MAX.
  * @param   p_st    Steering state.
@@ -462,18 +463,17 @@ int32_t line_track_steer_step(line_track_steer_t * p_st,
     int32_t const raw     = line_track_steering(norm_l, norm_r);
     bool const    b_white = ((norm_l < LINE_WHITE_THRESHOLD)
                              && (norm_r < LINE_WHITE_THRESHOLD));
-    int32_t       target  = raw;
+    int32_t       target  = 0;
     int32_t       out     = 0;
 
     if (b_white)
     {
-        target            = 0;
         p_st->b_was_white = true;
         if (0 == p_st->exit_side)
         {
             /* Centred: no recovery. */
         }
-        else if (p_st->coast_cycles < LINE_RECOVER_COAST_CYCLES)
+        else if (p_st->coast_cycles < line_track_steer_coast(p_st))
         {
             p_st->coast_cycles++;
         }
@@ -493,6 +493,10 @@ int32_t line_track_steer_step(line_track_steer_t * p_st,
     }
     else
     {
+        int32_t const magnitude = (raw < 0) ? -raw : raw;
+
+        /* Scale the correction by contrast. |raw| is at most 1000. */
+        target = (raw * magnitude) / (int32_t) LINE_NORM_MAX;
         line_track_steer_exit(p_st, norm_l, norm_r);
         if (raw >= LINE_SIDE_MIN)
         {
@@ -549,6 +553,14 @@ static void line_track_steer_exit(line_track_steer_t * p_st,
 
     if (p_st->b_was_white)
     {
+        if (0 != p_st->exit_side)
+        {
+            p_st->prev_exit = p_st->exit_side;
+        }
+        else
+        {
+            /* grey-only excursion: keep the last black exit side */
+        }
         p_st->exit_side   = 0;          /* new excursion */
         p_st->b_was_white = false;
         p_st->recover     = LINE_RECOVER_STEER;  /* line seen again */
@@ -567,6 +579,21 @@ static void line_track_steer_exit(line_track_steer_t * p_st,
     {
         /* grey only, or both black (junction): keep */
     }
+}
+
+/**
+ * line_track_steer_coast
+ * @brief   White cycles to coast before the recovery arc. An exit on the
+ *          other side from the last black exit means the car swung across
+ *          the line: it is most likely back between the sensors (S3-U39).
+ * @param   p_st  Steering state.
+ * @return  coast length in 10 ms cycles
+ * @context line_task (10 ms hot path)
+ */
+static uint32_t line_track_steer_coast(line_track_steer_t const * p_st)
+{
+    return ((0 != p_st->prev_exit) && (p_st->exit_side == -p_st->prev_exit))
+           ? LINE_RECOVER_FLIP_COAST_CYCLES : LINE_RECOVER_COAST_CYCLES;
 }
 
 /*** end of file ***/

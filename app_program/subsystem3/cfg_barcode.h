@@ -12,6 +12,12 @@
 
 #define BAR_DO_BLACK_IS_HIGH      (true)  /* MEASURE: A3 */
 #define BAR_EDGE_REJECT_US        (1000u) /* chatter filter */
+/* LM393 chatter after a real transition (on-car 2026-11-10 21:09: echo
+   edges 1.0-2.1 ms after it, with random DO levels). An edge this soon
+   after an accepted transition is folded into it, and the capture takes
+   bar / space from alternation, not from DO (S3-U37). The narrowest
+   element (BAR_NARROW_MIN_UM) at 300 mm/s still lasts 5 ms.          */
+#define BAR_SETTLE_US             (4000u)
 /* LM393 chatter (on-car 2026-11-03): the module has no hysteresis and DO
    flickers for longer than the 1 ms ISR filter at a bar edge (33 edges
    for a 30-edge barcode, capture dropped "edge missed"). In barcode_task:
@@ -25,6 +31,11 @@
 #define BAR_NARROW_MIN_UM         (1500u) /* half-scale narrow bar */
 #define BAR_WIDE_MAX_UM           (9000u) /* full-scale wide bar */
 #define BAR_DECODE_SPEED_MIN_MM_S (50u)
+/* S3-U40 (Hanz 2026-11-10 22:48): cruise is too fast for small, thin
+   barcodes. After an intact start guard, always ask mission to back up
+   and read the whole strip at the slow reread speed. 0 = read at
+   cruise and rewind only after a failed read.                       */
+#define BAR_REREAD_ALWAYS         (1u)
 #define BAR_ELEMENTS              (29u) /* 3 chars x 9 + 2 gaps */
 #define BAR_CAPTURE_MAX           (32u)
 #define BAR_QUIET_MM              (30u) /* capture ends */
@@ -33,6 +44,11 @@
 #define BAR_WIDE_RATIO_X10_MIN    (18u) /* wide >= 1.8 x narrow */
 #define BAR_RING_ENTRIES          (64u) /* power of two */
 #define BAR_MAP_ENTRIES           (8u)
+/* Bring-up diagnosis (S3-U36): keep the last raw edges and print them
+   after a failed capture. Set BAR_EDGE_LOG_ON to 0u for the demo. */
+#define BAR_EDGE_LOG_ON           (1u)
+#define BAR_EDGE_LOG_MAX          (48u) /* edges kept, ~1.5 barcodes */
+#define BAR_EDGE_LOG_EVERY        (4u)  /* task cycles per printed line */
 
 #if ((2u * BAR_EDGE_REJECT_US) >                                               \
      ((BAR_NARROW_MIN_UM * 1000u) / APP_SPEED_PHYS_MAX_MM_S))

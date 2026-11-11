@@ -215,13 +215,19 @@ int main(void)
     HOST_CHECK("S3-U01", -1000 == line_track_steering(0u, 1000u),
                "right full black, left white gives -1000");
 
+    /* S3-U41: one junction type. The + crossing reads as a stripe under
+       both sensors; past it the arm ahead runs between them (both white),
+       so it looks like a T. Both traces are the same cross-junction. */
     cls = replay_trace(trace_t, 6u, &fires);
-    HOST_CHECK("S3-U02", (APP_JCT_T == cls) && (1u == fires),
-               "T-junction trace classified as APP_JCT_T once");
+    HOST_CHECK("S3-U41", (APP_JCT_CROSS == cls) && (1u == fires),
+               "stripe, then both white: one APP_JCT_CROSS event");
 
     cls = replay_trace(trace_cross, 6u, &fires);
     HOST_CHECK("S3-U02", (APP_JCT_CROSS == cls) && (1u == fires),
-               "Cross-junction trace classified as APP_JCT_CROSS once");
+               "stripe, then tape still seen: one APP_JCT_CROSS event");
+    HOST_CHECK("S3-U41", (1u == APP_JCT_CROSS) && (2u == APP_JCT_SIDE_L)
+               && (3u == APP_JCT_SIDE_R),
+               "no T class: the junction codes run NONE, CROSS, SIDE_L, SIDE_R");
 
     cls = replay_trace(trace_side_l, 5u, &fires);
     HOST_CHECK("S3-U02", (APP_JCT_SIDE_L == cls) && (1u == fires),
@@ -244,7 +250,7 @@ int main(void)
                "Early barcode branch (b_branch_recent) sets barcode-side flag");
 
     cls = replay_trace(trace_branch_late, 5u, &fires);
-    HOST_CHECK("S3-U14", (APP_JCT_T == cls) && (1u == fires),
+    HOST_CHECK("S3-U14", (APP_JCT_CROSS == cls) && (1u == fires),
                "Late barcode branch (in CONFIRM) sets barcode-side flag");
 
     /* S3-U16 (on-car 2026-11-03): smoothed, damped steering with side
@@ -286,7 +292,8 @@ int main(void)
         {
             out = line_track_steer_step(&st, 0u, 800u);
         }
-        for (uint32_t i = 0u; i < 20u; i++)
+        /* left then right: the longer coast applies first (S3-U39) */
+        for (uint32_t i = 0u; i < (LINE_RECOVER_FLIP_COAST_CYCLES + 8u); i++)
         {
             out = line_track_steer_step(&st, 0u, 0u);
         }
@@ -403,19 +410,65 @@ int main(void)
                    "then grows smoothly to ~LINE_RECOVER_MAX in 600 ms");
         for (uint32_t i = 0u; i < 5u; i++)
         {
-            out = line_track_steer_step(&st, 0u, 450u);   /* found (grey) */
+            out = line_track_steer_step(&st, 450u, 0u);   /* found (grey) */
         }
         for (uint32_t i = 0u; i < 5u; i++)
         {
-            out = line_track_steer_step(&st, 0u, 800u);   /* black right */
+            out = line_track_steer_step(&st, 800u, 0u);   /* black left */
         }
         for (uint32_t i = 0u; i < (LINE_RECOVER_COAST_CYCLES + 12u); i++)
         {
             out = line_track_steer_step(&st, 0u, 0u);
         }
-        HOST_CHECK("S3-U21", (out <= -LINE_RECOVER_STEER)
-                   && (out > -(LINE_RECOVER_STEER + 300)),
-                   "next exit (right) starts again from LINE_RECOVER_STEER");
+        HOST_CHECK("S3-U21", (out >= LINE_RECOVER_STEER)
+                   && (out < (LINE_RECOVER_STEER + 300)),
+                   "next exit (left) starts again from LINE_RECOVER_STEER");
+    }
+
+    /* S3-U39 (on-car 2026-11-10 22:44): after the U-turn the line went
+       black under L, then R, then L, every 0.6 s. Each exit was the line
+       coming back between the sensors; the recovery arc pushed it across.
+       An exit on the other side from the last one coasts longer. The
+       same side twice (a curve) still recovers after the short coast. */
+    {
+        line_track_steer_t st;
+        int32_t            out = 0;
+
+        line_track_steer_reset(&st);
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 800u, 0u);   /* black left */
+        }
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 800u);   /* black right */
+        }
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U39", (out > -10) && (out < 10),
+                   "swing L then R: coast, no recovery arc after 300 ms");
+        for (uint32_t i = 0u; i < 30u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U39", out <= -LINE_RECOVER_STEER,
+                   "still white after the long coast: recover right");
+        for (uint32_t i = 0u; i < 5u; i++)
+        {
+            out = line_track_steer_step(&st, 0u, 800u);   /* right again */
+        }
+        for (uint32_t i = 0u; i < (LINE_RECOVER_COAST_CYCLES + 12u); i++)
+        {
+            out = line_track_steer_step(&st, 0u, 0u);
+        }
+        HOST_CHECK("S3-U39", out <= -LINE_RECOVER_STEER,
+                   "same side twice (curve): short coast, then recover");
     }
 
     /* S3-U26: let the steering settle before assuming a black exit. */
@@ -439,6 +492,21 @@ int main(void)
         out = line_track_steer_step(&st, 0u, 900u);
         HOST_CHECK("S3-U26", out < 0,
                    "visible tape overrides the coast in either direction");
+    }
+
+    /* S3-U35: a grey edge gets a gentler correction on either side. */
+    {
+        line_track_steer_t st = {0};
+
+        line_track_steer_reset(&st);
+        (void) line_track_steer_step(&st, 500u, 0u);
+        HOST_CHECK("S3-U35", (250 / LINE_STEER_FILT_DIV) == st.filt,
+                   "half-scale left error targets a quarter-scale steer");
+
+        line_track_steer_reset(&st);
+        (void) line_track_steer_step(&st, 0u, 500u);
+        HOST_CHECK("S3-U35", (-250 / LINE_STEER_FILT_DIV) == st.filt,
+                   "half-scale right error targets a quarter-scale steer");
     }
 
     return (0 == HOST_SUMMARY("line_track")) ? 0 : 1;

@@ -1254,9 +1254,16 @@ static void mission_forward(mission_evt_in_t const * p_evt)
                 break;
             case APP_EVT_JUNCTION:
                 (void) telem_post_event(APP_EVT_JUNCTION, p_evt->value);
-                /* cast: APP_JCT_* is 0..4 */
-                app_log("JUNCTION detected class %d (2 = cross)\n",
-                        (int32_t) p_evt->value, 0, 0);
+                if (APP_JCT_CROSS == p_evt->value)
+                {
+                    app_log("CROSS-JUNCTION detected\n", 0, 0, 0);
+                }
+                else
+                {
+                    /* cast: APP_JCT_SIDE_L / APP_JCT_SIDE_R are 2..3 */
+                    app_log("SIDE MARK detected (%d: 2 = left, 3 = right)\n",
+                            (int32_t) p_evt->value, 0, 0);
+                }
                 break;
             case APP_EVT_MAP:
             {

@@ -522,9 +522,9 @@ int main(void) {
   DONE();
   CHECK("S5-U63", !strcmp(mlog, ""), "wait for the reverse wheels to settle");
   barcode_test_still();
-  CHECK("S5-U57", !strcmp(mlog, "FOL70 ") && MODE(APP_MODE_BARCODE_REREAD)
+  CHECK("S5-U57", !strcmp(mlog, "FOL60 ") && MODE(APP_MODE_BARCODE_REREAD)
         && !MODE(APP_MODE_BARCODE_INHIBIT | APP_MODE_JUNCTION_INHIBIT),
-        "resume line following at 70 mm/s and capture from the lead-in");
+        "resume line following at 60 mm/s and capture from the lead-in");
   EV(APP_EVT_BARCODE_PROBE, 35u);
   CHECK("S5-U57", !strcmp(mlog, ""), "no second rewind during the slow pass");
   mot.path_counts += odometry_mm_to_counts(245u);
@@ -534,8 +534,6 @@ int main(void) {
         "mapped F is stored and cruise resumes");
   EV(APP_EVT_JUNCTION, APP_JCT_SIDE_L);
   CHECK("S5-U57", !strcmp(mlog, "") && g_ctx.b_is_armed, "ignore a side branch");
-  EV(APP_EVT_JUNCTION, APP_JCT_T);
-  CHECK("S5-U57", !strcmp(mlog, "") && g_ctx.b_is_armed, "ignore a T junction");
   mot.path_counts += odometry_mm_to_counts(1100u);
   NONE();
   CHECK("S5-U57", APP_RUN_ARMED == g_ctx.run_state, "keep the code until CROSS");
@@ -569,22 +567,113 @@ int main(void) {
   CHECK("S5-U57", !strcmp(mlog, "FOL120 ") && !g_ctx.b_is_armed,
         "mapped straight crosses and disarms without a spin");
 
+  /* S5-U67: on-car 2026-11-10 22:03, centred on the line both sensors
+     read white past the cross-junction's stripe (it looks like a T to
+     them). There is one junction type, so it is the cross. */
+  EV(APP_EVT_BARCODE, mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u));
+  EV(APP_EVT_JUNCTION, APP_JCT_CROSS);
+  CHECK("S5-U67", !strcmp(mlog, "STOP0 F60 ") && APP_RUN_EXECUTE_TURN == g_ctx.run_state,
+        "armed: the cross-junction advances for the turn");
+  DONE();
+  CHECK("S5-U67", !strcmp(mlog, "L90 "), "and A's mapped left is turned");
+  DONE();
+  CHECK("S5-U67", !g_ctx.b_is_armed, "the action is used up");
+
   barcode_test_follow(30u);
   EV(APP_EVT_BARCODE_PROBE, 35u);
   CHECK("S5-U57", !strcmp(mlog, ""), "skip a rewind beyond the run start");
+  /* S5-U66: on-car 2026-11-10 phantom echoes kept the scanner in
+     APPROACH over the barcode; the rewind backs away from the obstacle. */
   obs.scanner_state = APP_SCAN_APPROACH;
   mot.path_counts = odometry_mm_to_counts(235u);
   EV(APP_EVT_BARCODE_PROBE, 35u);
-  CHECK("S5-U57", !strcmp(mlog, ""), "skip a rewind during obstacle approach");
+  CHECK("S5-U66", !strcmp(mlog, "STOP0 ") && MODE(APP_MODE_BARCODE_INHIBIT),
+        "a rewind may start during obstacle approach");
+  barcode_test_brake();
+  CHECK("S5-U66", !strcmp(mlog, "B150 "), "and backs up during approach");
+  obs.scanner_state = APP_SCAN_PASSING;
+  barcode_test_follow(235u);
+  obs.scanner_state = APP_SCAN_PASSING;
+  EV(APP_EVT_BARCODE_PROBE, 35u);
+  CHECK("S5-U66", !strcmp(mlog, "") && !MODE(APP_MODE_BARCODE_INHIBIT),
+        "no rewind while passing an obstacle");
+  obs.scanner_state = APP_SCAN_MONITOR;
 
-  barcode_test_read();
+  /* S5-U65: on-car 2026-11-10 21:37, a misread strip asked for a rewind
+     after its quiet zone (286 mm); 150 mm was refused. The rewind is now
+     sent as reverse moves of at most 150 mm. */
+  barcode_test_follow(600u);
+  EV(APP_EVT_BARCODE_PROBE, 286u);
+  CHECK("S5-U65", !strcmp(mlog, "STOP0 ") && MODE(APP_MODE_BARCODE_INHIBIT),
+        "a whole-strip rewind is accepted");
+  mot.motion_state = APP_MOT_BRAKE;
+  mot.speed_l_cpw = mot.speed_r_cpw = 0;
+  mot.path_counts = odometry_mm_to_counts(610u);
+  NONE();
+  CHECK("S5-U65", !strcmp(mlog, "B150 ") && 0u != g_ctx.barcode_back_left,
+        "first reverse move is capped at 150 mm");
+  barcode_test_back(760u, 0u, 0u);
+  DONE();
+  CHECK("S5-U65", !strcmp(mlog, "B150 "), "second reverse move");
+  barcode_test_back(910u, 1u, 20u);
+  DONE();
+  CHECK("S5-U65", !strcmp(mlog, "B106 ") && 0u == g_ctx.barcode_back_left,
+        "last move backs past the strip: 336 + 70 mm in total");
+  barcode_test_back(950u, 0u, 1u);
+  barcode_test_back(1016u, 0u, 0u);
+  DONE();
+  barcode_test_still();
+  CHECK("S5-U65", !strcmp(mlog, "FOL60 ") && MODE(APP_MODE_BARCODE_REREAD),
+        "white lead-in found: slow reread of the whole strip");
+
+  /* S5-U68: on-car 2026-11-10 22:39, a failed slow pass carried on.
+     It now rewinds to the start of that pass and reads again, up to
+     MISSION_BARCODE_RETRIES times, also when the pass ends at the cross. */
+  barcode_test_read();                       /* slow pass from 390 mm */
+  mot.path_counts = odometry_mm_to_counts(690u);
+  EV(APP_EVT_INVALID, 16u);
+  CHECK("S5-U68", !strcmp(mlog, "STOP0 ") && MODE(APP_MODE_BARCODE_INHIBIT)
+        && MODE(APP_MODE_BARCODE_REREAD) && 1u == g_ctx.barcode_tries,
+        "a failed slow pass brakes for a retry");
+  mot.motion_state = APP_MOT_BRAKE;
+  mot.speed_l_cpw = mot.speed_r_cpw = 0;
+  mot.path_counts = odometry_mm_to_counts(700u);
+  NONE();
+  CHECK("S5-U68", !strcmp(mlog, "B150 "), "rewind to the pass start: 310 + 70 mm");
+  barcode_test_back(850u, 0u, 0u); DONE();
+  CHECK("S5-U68", !strcmp(mlog, "B150 "), "second reverse move");
+  barcode_test_back(1000u, 0u, 0u); DONE();
+  CHECK("S5-U68", !strcmp(mlog, "B80 "), "last reverse move");
+  barcode_test_back(1080u, 0u, 0u); DONE();
+  barcode_test_still();
+  CHECK("S5-U68", !strcmp(mlog, "FOL60 ") && MODE(APP_MODE_BARCODE_REREAD),
+        "second slow pass");
+  mot.path_counts = odometry_mm_to_counts(1480u);
+  EV(APP_EVT_JUNCTION, APP_JCT_CROSS);
+  CHECK("S5-U68", !strcmp(mlog, "STOP0 ") && 2u == g_ctx.barcode_tries
+        && APP_RUN_EXECUTE_TURN != g_ctx.run_state,
+        "a pass that reaches the cross undecoded also retries");
+  mot.motion_state = APP_MOT_BRAKE;
+  mot.speed_l_cpw = mot.speed_r_cpw = 0;
+  mot.path_counts = odometry_mm_to_counts(1490u);
+  NONE();
+  CHECK("S5-U68", !strcmp(mlog, "B150 "), "the cross does not block the rewind");
+  barcode_test_back(1640u, 0u, 0u); DONE();
+  CHECK("S5-U68", !strcmp(mlog, "B150 "), "410 + 70 mm in 150 mm moves");
+  barcode_test_back(1790u, 0u, 0u); DONE();
+  CHECK("S5-U68", !strcmp(mlog, "B150 "), "third 150 mm move");
+  barcode_test_back(1940u, 0u, 0u); DONE();
+  CHECK("S5-U68", !strcmp(mlog, "B30 "), "last move");
+  barcode_test_back(1970u, 0u, 0u); DONE();
+  barcode_test_still();
+  CHECK("S5-U68", !strcmp(mlog, "FOL60 "), "third slow pass");
   obs.scanner_state = APP_SCAN_APPROACH;
   EV(APP_EVT_OBSTACLE_AHEAD, 0u);
   CHECK("S5-U57", !strcmp(mlog, ""), "approach does not speed up the reread");
   EV(APP_EVT_INVALID, 28u);
   CHECK("S5-U57", !strcmp(mlog, "FOL100 ") && !g_ctx.b_is_armed
         && !MODE(APP_MODE_BARCODE_REREAD),
-        "incomplete reread leaves no route and respects approach speed");
+        "retries used up: no route, and approach speed is respected");
   obs.scanner_state = APP_SCAN_MONITOR;
   EV(APP_EVT_CONTINUE, 0u);
   CHECK("S5-U57", !strcmp(mlog, "FOL120 "), "clear road restores cruise");
@@ -665,7 +754,8 @@ int main(void) {
     barcode_test_follow(235u);
     status_board_write_line(&white);
     EV(APP_EVT_BARCODE_PROBE, 71u);
-    mot.path_counts = odometry_mm_to_counts(265u);
+    /* 124 mm mark: cancel once the rewind needs more than 600 - 10 mm */
+    mot.path_counts = odometry_mm_to_counts(716u);
     status_board_write_line(&seen);
     NONE();
     CHECK("S5-U64", !strcmp(mlog, ""), "keep brake room inside the rewind cap");
@@ -690,12 +780,13 @@ int main(void) {
   barcode_test_read();
   mot.path_counts += odometry_mm_to_counts(MISSION_BARCODE_READ_MM);
   NONE();
-  CHECK("S5-U57", !strcmp(mlog, "FOL120 ") && !g_ctx.b_is_armed
-        && !MODE(APP_MODE_BARCODE_REREAD), "unreadable scan has a distance limit");
+  CHECK("S5-U57", !strcmp(mlog, "STOP0 ") && !g_ctx.b_is_armed
+        && 1u == g_ctx.barcode_tries,
+        "unreadable scan has a distance limit, then a retry (S5-U68)");
   barcode_test_read();
   idle_ms(MISSION_BARCODE_READ_MS);
-  CHECK("S5-U57", !strcmp(mlog, "FOL120 ") && !MODE(APP_MODE_BARCODE_REREAD),
-        "unreadable scan also has a time limit");
+  CHECK("S5-U57", !strcmp(mlog, "STOP0 ") && 1u == g_ctx.barcode_tries,
+        "unreadable scan also has a time limit, then a retry (S5-U68)");
 
   barcode_test_read();
   safety_set(SAFETY_ESTOP);
@@ -739,9 +830,16 @@ int main(void) {
   tlog[0] = 0;
   clog[0] = 0;
   EV(APP_EVT_JUNCTION, APP_JCT_CROSS);
-  CHECK("S5-U62", strstr(tlog, "E3:2 ") && !strcmp(mlog, "")
-        && strstr(clog, "JUNCTION detected class 2"),
+  CHECK("S5-U62", strstr(tlog, "E3:1 ") && !strcmp(mlog, ""),
         "an unarmed cross is reported and the car keeps following");
+  CHECK("S5-U69", (NULL != strstr(clog, "CROSS-JUNCTION detected"))
+        && (NULL == strstr(clog, "class")),
+        "the one junction type is logged as a cross-junction, no class");
+  clog[0] = 0;
+  EV(APP_EVT_JUNCTION, APP_JCT_SIDE_L);
+  CHECK("S5-U69", (NULL != strstr(clog, "SIDE MARK detected (2"))
+        && !strcmp(mlog, ""),
+        "a one-sided mark is logged as a side mark and not turned at");
 
   /* S5-U40: slower cruise (professor feedback) */
   CHECK("S5-U40", (120 == MOTION_CRUISE_MM_S) && (MOTION_SLOW_MM_S < MOTION_CRUISE_MM_S), "cruise 120 mm/s, 'slow' stays below cruise");

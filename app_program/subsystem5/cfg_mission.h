@@ -30,13 +30,20 @@
    past it and require continuous white travel before reading again. */
 #define MISSION_BARCODE_LEAD_MM      (40u)  /* behind first reported edge */
 #define MISSION_BARCODE_QUIET_MM     (35u)
-#define MISSION_BARCODE_REWIND_MM    (150u)
+/* A failed capture asks for a rewind only after its quiet zone, so the
+   whole strip is behind the sensor (on-car 2026-11-10: 286 mm). The
+   rewind is sent as moves of at most MOTION_REVERSE_MAX_MM.          */
+#define MISSION_BARCODE_REWIND_MM    (600u)
+#define MISSION_BARCODE_BACK_EXTRA_MM (70u) /* past the needed distance */
 #define MISSION_BARCODE_BACK_PAD_MM  (10u)  /* leave room to brake */
 #define MISSION_BARCODE_WAIT_MS      (250u) /* let the line settle */
 #define MISSION_BARCODE_BRAKE_MS     (500u)
-#define MISSION_BARCODE_SPEED_MM_S   (70)   /* above decoder's 50 mm/s */
-#define MISSION_BARCODE_READ_MM      (380u) /* ~200 mm code + lead-in */
-#define MISSION_BARCODE_READ_MS      (8000u)
+#define MISSION_BARCODE_SPEED_MM_S   (60)   /* half cruise, above decoder 50 */
+#define MISSION_BARCODE_READ_MM      (650u) /* rewind + code + quiet */
+/* S5-U68 (on-car 2026-11-10 22:39): a failed slow pass rewinds to its
+   own start and reads again, up to this many more times.             */
+#define MISSION_BARCODE_RETRIES      (2u)
+#define MISSION_BARCODE_READ_MS      (9000u)
 #define MISSION_BARCODE_REARM_MM     (60u)
 #define MISSION_JCT_ADVANCE_MM      (60u)     /* MEASURE: sensors to axle */
 /* FR9 bypass limit (end of the pass leg -> line following again)
@@ -83,7 +90,7 @@
 #endif
 #if ((MISSION_BARCODE_QUIET_MM > MISSION_BARCODE_LEAD_MM) ||                  \
      (MISSION_BARCODE_REWIND_MM <= MISSION_BARCODE_LEAD_MM) ||               \
-     (MISSION_BARCODE_REWIND_MM > MOTION_REVERSE_MAX_MM))
+     (MISSION_BARCODE_READ_MM < MISSION_BARCODE_REWIND_MM))
 #error "Barcode rewind must leave a lead-in and fit the reverse command"
 #endif
 #if (MISSION_BARCODE_SPEED_MM_S >= MOTION_CRUISE_MM_S)

@@ -695,6 +695,35 @@ int main(void)
         g_sim_steer = 0;
     }
 
+    /* S2-U28: on-car 2026-11-10 22:32, the 70 mm/s barcode reread swung
+       across the line (sensors alternating black left / black right).
+       Below slow speed the split shrinks with the base speed, so the
+       turn per mm matches slow speed; slow speed itself is unchanged. */
+    {
+        int32_t sp_l = 0;
+        int32_t sp_r = 0;
+        int32_t slow_split = 0;
+        int32_t read_split = 0;
+        int32_t const slow_cpw = odometry_mm_s_to_cpw(MOTION_SLOW_MM_S);
+        int32_t const read_cpw = odometry_mm_s_to_cpw(70);
+
+        sim_reset();
+        sim_send(APP_CMD_FOLLOW, MOTION_SLOW_MM_S, 1u);
+        sim_cycles(3u);
+        g_sim_steer = 500;
+        motion_state_follow(&sp_l, &sp_r);
+        slow_split = sp_r - sp_l;
+        sim_send(APP_CMD_FOLLOW, 70u, 2u);
+        sim_cycles(3u);
+        motion_state_follow(&sp_l, &sp_r);
+        read_split = sp_r - sp_l;
+        HOST_CHECK("S2-U28", (read_split > 0)
+                   && ((read_split * slow_cpw) <= (slow_split * read_cpw) + slow_cpw)
+                   && ((read_split * slow_cpw) >= (slow_split * read_cpw) - slow_cpw),
+                   "70 mm/s: steering split scaled to 70 / 100 of slow speed");
+        g_sim_steer = 0;
+    }
+
     return (0 == HOST_SUMMARY("motion_task")) ? 0 : 1;
 }
 
