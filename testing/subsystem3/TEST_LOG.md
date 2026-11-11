@@ -15,7 +15,7 @@ Define a test here before running it. Test IDs never change.
 | S3-I07 | A3 / A12 barcode DO edges: edge times over sample barcodes at 2–4 mm height; 20 powered passes per scale at 150 and 250 mm/s | A3, A12, FR2, NFR5 | manual (bench) | Phase 1 measurement (`drv_gpio_irq`) | Sets `BAR_DO_BLACK_IS_HIGH` and sensor height |
 | S3-I08 | A22 junction traces: log `nL, nR, path, DO level` every 10 ms at 150 mm/s over every junction type of the course | A22, FR19 | manual (track) | Phase 1 measurement (`logs/junction_<type>_<n>.csv`) | Sets `LINE_JUNCTION_MIN_MM`, `LINE_JUNCTION_CONFIRM_MM`, `LINE_BRANCH_EARLY_MM` |
 | S3-U01 | `line_track_normalise` & `line_track_steering`: exact endpoints 0 and 1000, midpoint 500, clamping, and `+1000` (left) / `-1000` (right) steering sign convention | FR1, NFR1, NFR4 | auto | Host (`test_line_track_host.c`) & target (`test_line.c`) | All assertions pass |
-| S3-U02 | `line_track_jct_step`: Table J1 classification for `APP_JCT_SIDE_L`, `APP_JCT_SIDE_R`, `APP_JCT_T`, `APP_JCT_CROSS`, and short-patch rejection | FR19, NFR4 | auto | Host (`test_line_track_host.c`) & target (`test_line.c`) | All assertions pass |
+| S3-U02 | `line_track_jct_step`: Table J1 classification for `APP_JCT_SIDE_L`, `APP_JCT_SIDE_R`, `APP_JCT_CROSS`, and short-patch rejection | FR19, NFR4 | auto | Host (`test_line_track_host.c`) & target (`test_line.c`) | All assertions pass |
 | S3-U03 | `code39_decode`: all 43 valid `*<char>*` characters in forward and reverse scan order | FR2, NFR5 | auto | Host (`test_code39_host.c`) & target (`test_barcode.c`) | Returns `CODE39_OK` and exact index `0..42` |
 | S3-U04 | `code39_decode`: half-scale widths decode all 43 valid `*<char>*` characters in forward and reverse scan order | FR2, NFR5 | auto | Host (`test_code39_host.c`) | Returns `CODE39_OK` and exact index `0..42` |
 | S3-U05 | `code39_decode`: rejection of `< 29` elements, missing `*` delimiters, wide inter-char gap, and collapsed ratio (`wide/narrow < 1.8`); table uniqueness and 3-bit checks | FR2, NFR5 | auto | Host (`test_code39_host.c`) & target (`test_barcode.c`) | Returns `CODE39_INVALID`; table checks pass |
@@ -53,6 +53,7 @@ Define a test here before running it. Test IDs never change.
 | S3-U38 | A failed capture whose start guard has a wide bar over 20 mm still asks for a rewind | FR2, FR3 | auto (host) | Replay the 29 widths of the deliberately wrong barcode logged on 10 Nov 21:37 (wide guard bar 23.8 mm) at cruise, then 30 mm of white | INVALID, then BARCODE_PROBE with the whole strip's travel (270 to 320 mm). |
 | S3-U39 | A line exit on the other side from the last one coasts longer before the recovery arc | FR1 | auto (host) | Black left, 300 ms white, black right, 300 ms white (on-car 10 Nov 22:44: after the U-turn the sensors went black L, R, L every 0.6 s for 8 s) | Steering stays near 0 after the right exit; recovery starts after the long coast; the same side twice (a curve) still recovers after the short coast. |
 | S3-U40 | An intact start guard at cruise always asks for a slow reread | FR2, FR3 | auto (host) | The 10-element start guard at 120 mm/s, then the same during the slow reread | One BARCODE_PROBE at cruise; nothing during the reread. |
+| S3-U41 | One junction type: a stripe under both line sensors is always `APP_JCT_CROSS`, whatever the sensors read past it | FR3, FR19 | auto (host) | Replay the stripe-then-both-white trace (how the + cross-junction reads with the arm ahead between the centred sensors) and check the junction codes | One `APP_JCT_CROSS` event; codes run `NONE` 0, `CROSS` 1, `SIDE_L` 2, `SIDE_R` 3 (no T class). S3-U02 and S3-U14 now expect `APP_JCT_CROSS` for every stripe across both sensors. |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -105,6 +106,8 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-10 | S3-U39 | `barcode-reread-full-strip` | Hanz | PASS | Line track host test | Full subsystem 3 run: 49 + 16 + 73 pass. |
 | 2026-11-10 | S3-U40 | before fix | Hanz | FAIL | Barcode host simulation | No probe after an intact guard. |
 | 2026-11-10 | S3-U40 | `barcode-reread-full-strip` | Hanz | PASS | Barcode host simulation | Probe at the guard, none during the reread. |
+| 2026-11-11 | S3-U41, S3-U14 | before fix (`5efabbd`) | Dylan | FAIL | Line track host test, barcode host simulation | Stripe then both white gave `APP_JCT_T`; T was still a separate code (4 checks failed). |
+| 2026-11-11 | S3-U02, S3-U14, S3-U41 | `one-cross-junction-type` | Dylan | PASS | Line track host test, barcode host simulation | Full subsystem 3 run: 50 + 16 + 73 pass. |
 
 ## SPEC-QUESTION
 

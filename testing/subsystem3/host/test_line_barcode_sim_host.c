@@ -1675,7 +1675,7 @@ int main(void)
     line_cycle();
 
     g_sim_path += odometry_mm_to_counts(14u); /* >= LINE_JUNCTION_MIN_MM */
-    g_sim_raw_l = 500u;  /* white after -> T-junction */
+    g_sim_raw_l = 500u;  /* white after: the cross-junction's arm ahead */
     g_sim_raw_r = 500u;
     line_cycle();
 
@@ -1685,8 +1685,8 @@ int main(void)
     HOST_CHECK("S3-U14",
                (1u == g_sim_evt_cnt) &&
                (APP_EVT_JUNCTION == g_sim_evts[0].type) &&
-               (APP_JCT_T == g_sim_evts[0].value),
-               "full task replay: early barcode branch + right sat -> APP_JCT_T");
+               (APP_JCT_CROSS == g_sim_evts[0].value),
+               "full task replay: early barcode branch + right sat -> APP_JCT_CROSS");
 
     /* Case 2: Late branch — line sensors enter CANDIDATE first, barcode
        sensor reports the >= 14 mm branch during CONFIRM. */

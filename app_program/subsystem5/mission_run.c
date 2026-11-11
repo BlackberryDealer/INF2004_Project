@@ -101,7 +101,6 @@ static void run_barcode_step(mission_ctx_t * p_ctx,
                               status_board_t const * p_snap,
                               uint32_t now_us);
 static bool run_barcode_scan_ok(status_board_t const * p_snap);
-static bool run_jct_both(uint32_t jct_class);
 static void run_barcode_back(mission_ctx_t * p_ctx, uint32_t now_us);
 static bool run_barcode_retry(mission_ctx_t * p_ctx,
                               status_board_t const * p_snap, uint32_t now_us);
@@ -308,7 +307,7 @@ static bool run_common(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
             p_ctx->barcode_probe_mark = 0u;
         }
         if ((APP_EVT_JUNCTION == p_evt->type)
-            && run_jct_both(p_evt->value)
+            && (APP_JCT_CROSS == p_evt->value)
             && (RUN_BAR_IDLE == p_ctx->barcode_phase))
         {
             p_ctx->barcode_follow_path = status_board_path(p_snap);
@@ -424,7 +423,7 @@ static void run_armed(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         switch (p_evt->type)
         {
             case APP_EVT_JUNCTION:
-                if (run_jct_both(p_evt->value))
+                if (APP_JCT_CROSS == p_evt->value)
                 {
                     run_cross(p_ctx, p_snap, now_us);
                 }
@@ -638,19 +637,6 @@ static void run_barcode_braked(mission_ctx_t * p_ctx,
 }
 
 /**
- * run_jct_both
- * @brief   A junction with branches on both sides (CROSS or T). Centred
- *          on the line, both sensors read white past the stripe, so a
- *          cross is often reported as T (on-car 2026-11-10 22:03).
- * @param   jct_class APP_JCT_*
- * @context mission_task
- */
-static bool run_jct_both(uint32_t jct_class)
-{
-    return ((APP_JCT_CROSS == jct_class) || (APP_JCT_T == jct_class));
-}
-
-/**
  * run_barcode_scan_ok
  * @brief   The scanner allows a rewind: no obstacle stop or bypass. An
  *          obstacle ahead (APPROACH) is allowed, the car backs away from
@@ -766,7 +752,7 @@ static void run_barcode_read(mission_ctx_t * p_ctx,
     uint32_t const type = p_evt->b_has_event ? p_evt->type : APP_EVT_COUNT;
     uint32_t const path = status_board_path(p_snap);
     bool const     b_cross = (APP_EVT_JUNCTION == type)
-                             && run_jct_both(p_evt->value);
+                             && (APP_JCT_CROSS == p_evt->value);
     bool           b_finished = true;
 
     switch (type)

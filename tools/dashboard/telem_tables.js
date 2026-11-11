@@ -734,7 +734,6 @@
       ],
       "JCT": [
        "NONE",
-       "T",
        "CROSS",
        "SIDE_L",
        "SIDE_R"

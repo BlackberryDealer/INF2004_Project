@@ -81,8 +81,8 @@ void test_line_run(void)
 #if (0 != APP_TEST)
 /**
  * test_line_early_branch
- * @brief   Verifies S3-U14 early barcode branch + right sat + white -> T.
- * @return  true if classified as APP_JCT_T, else false.
+ * @brief   Verifies S3-U14 early barcode branch + right sat + white -> CROSS.
+ * @return  true if classified as APP_JCT_CROSS, else false.
  * @context usermain (APP_PRI_TEST)
  */
 static bool test_line_early_branch(void)
@@ -109,7 +109,7 @@ static bool test_line_early_branch(void)
     in.path_counts = 230u;
     cls            = line_track_jct_step(&jct, &in);
 
-    return (APP_JCT_T == cls);
+    return (APP_JCT_CROSS == cls);
 }
 
 /**

@@ -375,13 +375,11 @@ static uint32_t line_track_jct_confirm(line_track_jct_t * p_jct,
 
     if ((p_in->path_counts - p_jct->mark_counts) >= p_in->confirm_counts)
     {
-        bool const b_is_present =
-            ((p_in->norm_l >= LINE_WHITE_THRESHOLD) ||
-             (p_in->norm_r >= LINE_WHITE_THRESHOLD));
-
         if (p_jct->b_sat_l && p_jct->b_sat_r)
         {
-            jct_class = b_is_present ? APP_JCT_CROSS : APP_JCT_T;
+            /* Stripe under both sensors: the cross-junction. What the
+               sensors read past it does not matter (one junction type). */
+            jct_class = APP_JCT_CROSS;
         }
         else if (p_jct->b_sat_l)
         {

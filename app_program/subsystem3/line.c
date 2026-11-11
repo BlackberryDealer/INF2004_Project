@@ -831,15 +831,21 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
             /* One sensor is still on the stripe or a line. */
         }
 
+        /* On the confirm cycle the bias is cleared only while tape is
+           still under a sensor; centred and both white, steering is
+           left alone.                                               */
         b_reset_steer = (path < g_cross_straight_until)
-            || b_was_on_band || (APP_JCT_CROSS == jct_class)
+            || b_was_on_band
+            || ((APP_JCT_CROSS == jct_class)
+                && ((norm_l >= LINE_WHITE_THRESHOLD)
+                    || (norm_r >= LINE_WHITE_THRESHOLD)))
             || ((LINE_JCT_STATE_CANDIDATE == jct.state) && jct.b_sat_l
                 && jct.b_sat_r);
 
         if (APP_JCT_NONE != jct_class)
         {
             (void) mission_post_event(APP_EVT_JUNCTION, jct_class);
-            /* cast: APP_JCT_* enum 0..4 fits in uint8_t */
+            /* cast: APP_JCT_* enum 0..3 fits in uint8_t */
             g_last_jct     = (uint8_t) jct_class;
             gb_branch_seen = false;
         }

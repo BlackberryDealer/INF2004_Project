@@ -567,13 +567,13 @@ int main(void) {
   CHECK("S5-U57", !strcmp(mlog, "FOL120 ") && !g_ctx.b_is_armed,
         "mapped straight crosses and disarms without a spin");
 
-  /* S5-U67: on-car 2026-11-10 22:03, the cross after the barcode was
-     reported as T: centred on the line, both sensors read white 30 mm
-     past the stripe. Armed, a T must turn like a cross. */
+  /* S5-U67: on-car 2026-11-10 22:03, centred on the line both sensors
+     read white past the cross-junction's stripe (it looks like a T to
+     them). There is one junction type, so it is the cross. */
   EV(APP_EVT_BARCODE, mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u));
-  EV(APP_EVT_JUNCTION, APP_JCT_T);
+  EV(APP_EVT_JUNCTION, APP_JCT_CROSS);
   CHECK("S5-U67", !strcmp(mlog, "STOP0 F60 ") && APP_RUN_EXECUTE_TURN == g_ctx.run_state,
-        "armed: a T junction is taken as the cross");
+        "armed: the cross-junction advances for the turn");
   DONE();
   CHECK("S5-U67", !strcmp(mlog, "L90 "), "and A's mapped left is turned");
   DONE();
@@ -649,7 +649,7 @@ int main(void) {
   CHECK("S5-U68", !strcmp(mlog, "FOL60 ") && MODE(APP_MODE_BARCODE_REREAD),
         "second slow pass");
   mot.path_counts = odometry_mm_to_counts(1480u);
-  EV(APP_EVT_JUNCTION, APP_JCT_T);
+  EV(APP_EVT_JUNCTION, APP_JCT_CROSS);
   CHECK("S5-U68", !strcmp(mlog, "STOP0 ") && 2u == g_ctx.barcode_tries
         && APP_RUN_EXECUTE_TURN != g_ctx.run_state,
         "a pass that reaches the cross undecoded also retries");
@@ -830,9 +830,16 @@ int main(void) {
   tlog[0] = 0;
   clog[0] = 0;
   EV(APP_EVT_JUNCTION, APP_JCT_CROSS);
-  CHECK("S5-U62", strstr(tlog, "E3:2 ") && !strcmp(mlog, "")
-        && strstr(clog, "JUNCTION detected class 2"),
+  CHECK("S5-U62", strstr(tlog, "E3:1 ") && !strcmp(mlog, ""),
         "an unarmed cross is reported and the car keeps following");
+  CHECK("S5-U69", (NULL != strstr(clog, "CROSS-JUNCTION detected"))
+        && (NULL == strstr(clog, "class")),
+        "the one junction type is logged as a cross-junction, no class");
+  clog[0] = 0;
+  EV(APP_EVT_JUNCTION, APP_JCT_SIDE_L);
+  CHECK("S5-U69", (NULL != strstr(clog, "SIDE MARK detected (2"))
+        && !strcmp(mlog, ""),
+        "a one-sided mark is logged as a side mark and not turned at");
 
   /* S5-U40: slower cruise (professor feedback) */
   CHECK("S5-U40", (120 == MOTION_CRUISE_MM_S) && (MOTION_SLOW_MM_S < MOTION_CRUISE_MM_S), "cruise 120 mm/s, 'slow' stays below cruise");

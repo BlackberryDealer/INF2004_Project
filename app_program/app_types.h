@@ -153,11 +153,15 @@
 #define APP_LINE_JUNCTION     (2u)
 #define APP_LINE_CALIBRATING  (3u)
 
+/* The track has one junction type, the + cross-junction. The two front
+   line sensors see it as a stripe across both of them; the arm ahead
+   then runs between them (both white), so it reads like a T and is not
+   split into T and cross classes. SIDE_L / SIDE_R are marks under one
+   sensor only (no turn is taken there).                                */
 #define APP_JCT_NONE    (0u)
-#define APP_JCT_T       (1u)
-#define APP_JCT_CROSS   (2u)
-#define APP_JCT_SIDE_L  (3u)
-#define APP_JCT_SIDE_R  (4u)
+#define APP_JCT_CROSS   (1u)
+#define APP_JCT_SIDE_L  (2u)
+#define APP_JCT_SIDE_R  (3u)
 
 #define APP_BAR_CMD_LEFT      (0u)
 #define APP_BAR_CMD_RIGHT     (1u)

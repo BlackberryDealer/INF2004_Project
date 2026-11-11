@@ -215,13 +215,19 @@ int main(void)
     HOST_CHECK("S3-U01", -1000 == line_track_steering(0u, 1000u),
                "right full black, left white gives -1000");
 
+    /* S3-U41: one junction type. The + crossing reads as a stripe under
+       both sensors; past it the arm ahead runs between them (both white),
+       so it looks like a T. Both traces are the same cross-junction. */
     cls = replay_trace(trace_t, 6u, &fires);
-    HOST_CHECK("S3-U02", (APP_JCT_T == cls) && (1u == fires),
-               "T-junction trace classified as APP_JCT_T once");
+    HOST_CHECK("S3-U41", (APP_JCT_CROSS == cls) && (1u == fires),
+               "stripe, then both white: one APP_JCT_CROSS event");
 
     cls = replay_trace(trace_cross, 6u, &fires);
     HOST_CHECK("S3-U02", (APP_JCT_CROSS == cls) && (1u == fires),
-               "Cross-junction trace classified as APP_JCT_CROSS once");
+               "stripe, then tape still seen: one APP_JCT_CROSS event");
+    HOST_CHECK("S3-U41", (1u == APP_JCT_CROSS) && (2u == APP_JCT_SIDE_L)
+               && (3u == APP_JCT_SIDE_R),
+               "no T class: the junction codes run NONE, CROSS, SIDE_L, SIDE_R");
 
     cls = replay_trace(trace_side_l, 5u, &fires);
     HOST_CHECK("S3-U02", (APP_JCT_SIDE_L == cls) && (1u == fires),
@@ -244,7 +250,7 @@ int main(void)
                "Early barcode branch (b_branch_recent) sets barcode-side flag");
 
     cls = replay_trace(trace_branch_late, 5u, &fires);
-    HOST_CHECK("S3-U14", (APP_JCT_T == cls) && (1u == fires),
+    HOST_CHECK("S3-U14", (APP_JCT_CROSS == cls) && (1u == fires),
                "Late barcode branch (in CONFIRM) sets barcode-side flag");
 
     /* S3-U16 (on-car 2026-11-03): smoothed, damped steering with side
