@@ -62,6 +62,7 @@ Define a test here before running it. Test IDs never change.
 | S5-U69 | The junction log names the one junction type | FR3, FR19 | auto (host) | Inject the cross-junction, then a one-sided mark, with nothing armed | Console shows `CROSS-JUNCTION detected` (no class number) and `SIDE MARK detected (2 …)`; no turn for either. |
 | S5-U74 | Status board K6 stored as the 11 packed `SB_*` words (Tribunal 1 minimum-bit change, item 6: data shared between tasks); writers and getters unchanged | Min-bit item 6, NFR11 | auto (host) | `test_status_board_host.c`: write every part at its minimum, maximum and typical values (sentinels 2044 / 1020 mm), read back through the getters; initial board; snapshot size | Every field reads back unchanged; initial board = nothing ahead, profile clear, other fields 0; snapshot 44 B; pitch beyond ±45° stored as ±45° (the ramp check compares with ±2°) |
 | S5-U75 | K4 mission event is one 16-bit `MSG_EVT` word (11-bit value, 5-bit type), Tribunal 1 minimum-bit change (post-tribunal gap 3); a value above 2047 is clamped and flagged, never wrapped | Min-bit items 6, 7; K4 | auto (host) | `sim_mission_host.c` with a K4 mock using the kernel cost (4 B header + size rounded to 4): message size and buffer, six event types with values 0..2047 posted and read back, one value of 5000 | Messages 2 B, 16 entries in 128 B (S5-U04 high-water is now 128 B, was 256 B); every type and value back unchanged in FIFO order; 5000 arrives as 2047 with `APP_FAULT_RANGE_CLAMP` |
+| S5-U76 | A barcode slow pass may take up to 15 s (`MISSION_BARCODE_READ_MS`) before it ends without a decode | FR2, FR3 | auto (host sim) | `sim_mission_host.c`: a slow pass with no decoder result for 10 s, then to 15 s (on-car 12 Nov 14:23: a pass through a bend decoded after 8.4 s, 0.6 s before the old 9 s limit) | Still reading after 10 s; ends at 15 s with the S5-U68 retry. |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -123,6 +124,8 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-12 | S5-U07, S5-U08, S5-U74 | `pack-status-board-words` | Dylan | PASS | Status board host test, mission and obstacle simulations | Packed board: 8 + 189 + 8 + 77 pass, same totals as before the change. |
 | 2026-11-12 | S5-U75 | before fix (`745abc0`) | Dylan | FAIL | Mission host simulation | 12 B messages in a 256 B buffer, values not limited (3 checks failed); S5-U04 and the 189 simulation checks pass on both. |
 | 2026-11-12 | S5-U04, S5-U07, S5-U75 | `pack-mission-event-word` | Dylan | PASS | Mission host simulation | 189 + 11 pass; K4 high-water = whole 128 B buffer. |
+| 2026-11-12 | S5-U76 | before fix (`745abc0`) | Dylan | FAIL | Mission host simulation | The pass ended at 9 s (1 check failed). |
+| 2026-11-12 | S5-U57, S5-U68, S5-U76 | `barcode-reread-time-limit` | Dylan | PASS | Mission host simulation | Mission simulation 191 pass. |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 

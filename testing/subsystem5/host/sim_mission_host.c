@@ -791,6 +791,26 @@ int main(void) {
   idle_ms(MISSION_BARCODE_READ_MS);
   CHECK("S5-U57", !strcmp(mlog, "STOP0 ") && 1u == g_ctx.barcode_tries,
         "unreadable scan also has a time limit, then a retry (S5-U68)");
+  /* S5-U76: on-car 2026-11-12 14:23, a slow pass through a bend took
+     8.4 s to decode, 0.6 s before the 9 s limit. The limit is 15 s. */
+  {
+    bool b_ended = false;
+
+    barcode_test_read();
+    for (uint32_t i = 0u; i < 1000u; i++)          /* 10 s */
+    {
+      NONE();
+      b_ended = b_ended || (NULL != strstr(mlog, "STOP0"));
+    }
+    CHECK("S5-U76", !b_ended && MODE(APP_MODE_BARCODE_REREAD),
+          "slow pass still reading after 10 s");
+    for (uint32_t i = 0u; i < 500u; i++)           /* to 15 s */
+    {
+      NONE();
+      b_ended = b_ended || (NULL != strstr(mlog, "STOP0"));
+    }
+    CHECK("S5-U76", b_ended, "slow pass ends at 15 s, then the retry");
+  }
 
   barcode_test_read();
   safety_set(SAFETY_ESTOP);
