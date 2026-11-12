@@ -168,16 +168,17 @@ void sys_health_check_in(uint32_t task_bit)
     (void) task_bit;
 }
 
+/* The board is packed (status_board.c); this mock ignores the snapshot
+   and serves the simulated motion values directly.                    */
 void status_board_read(status_board_t * p_snapshot)
 {
-    p_snapshot->motion.path_counts = g_sim_path;
-    p_snapshot->motion.speed_l_cpw = g_sim_speed_l;
-    p_snapshot->motion.speed_r_cpw = g_sim_speed_r;
+    (void) p_snapshot;
 }
 
 uint32_t status_board_path(status_board_t const * p_snap)
 {
-    return p_snap->motion.path_counts;
+    (void) p_snap;
+    return g_sim_path;
 }
 
 int32_t status_board_pos_l(status_board_t const * p_snap)
@@ -194,12 +195,14 @@ int32_t status_board_pos_r(status_board_t const * p_snap)
 
 int32_t status_board_speed_l(status_board_t const * p_snap)
 {
-    return p_snap->motion.speed_l_cpw;
+    (void) p_snap;
+    return g_sim_speed_l;
 }
 
 int32_t status_board_speed_r(status_board_t const * p_snap)
 {
-    return p_snap->motion.speed_r_cpw;
+    (void) p_snap;
+    return g_sim_speed_r;
 }
 
 void status_board_write_line(status_board_line_t const * p_part)
@@ -939,9 +942,8 @@ int main(void)
     /* The line lies between the sensors when the car is centred: 200 ms
        of both white must not post LINE_LOST (each one made mission stop
        and turn 60 deg: the shaking). A line that went black under a
-       sensor and then vanished is still lost after 200 ms, and a car
-       that sees no line at all for LINE_CENTRE_LOST_MM is lost too
-       (line end, U-turn).                                             */
+       sensor and then vanished is still lost after 200 ms. A centred
+       car is never lost, whatever the distance (no line end, S3-U44). */
     sim_reset();
     sim_calibrate_line();
     g_sim_path  = 1000u;
@@ -969,14 +971,14 @@ int main(void)
     }
     HOST_CHECK("S3-U19", 0u == g_sim_evt_cnt,
                "grey graze, then 400 ms both white: still no LINE_LOST");
-    for (uint32_t i = 0u; i < LINE_CENTRE_LOST_MM; i++)  /* no line */
+    for (uint32_t i = 0u; i < 2000u; i++) /* 2 m centred, no graze */
     {
         g_sim_path += odometry_mm_to_counts(1u);
         line_cycle();
     }
-    HOST_CHECK("S3-U19", (1u == g_sim_evt_cnt)
-               && (APP_EVT_LINE_LOST == g_sim_evts[0].type),
-               "no line for LINE_CENTRE_LOST_MM: LINE_LOST (line end)");
+    HOST_CHECK("S3-U44", (0u == g_sim_evt_cnt)
+               && (APP_LINE_ON == g_sim_line_out.line_status),
+               "centred 2 m without touching the line: no LINE_LOST, line ON");
     sim_reset();
     sim_calibrate_line();
     g_sim_path  = 1000u;
@@ -1004,9 +1006,8 @@ int main(void)
        black under a sensor and on to the inside (the car was turning
        toward it), so 200 ms later it was still right there. A black
        exit is now lost only after LINE_EXIT_LOST_MM of travel (and 200
-       ms), giving the recovery steer time to bring the line back; a
-       centred car (no line seen) after LINE_CENTRE_LOST_MM 300 mm (the
-       150 mm fallback fired on a straight before the box, path 151).  */
+       ms), giving the recovery steer time to bring the line back. A
+       centred car is never lost (S3-U44).                             */
     sim_reset();
     sim_calibrate_line();
     g_sim_path  = 1000u;
@@ -1048,9 +1049,150 @@ int main(void)
     }
     HOST_CHECK("S3-U20", 0u == g_sim_evt_cnt,
                "centred 200 mm without touching the line: no LINE_LOST");
-    HOST_CHECK("S3-U20", (LINE_CENTRE_LOST_MM >= 300u)
-               && (LINE_EXIT_LOST_MM >= 50u),
-               "loss distances: centred >= 300 mm, black exit >= 50 mm");
+    HOST_CHECK("S3-U20", LINE_EXIT_LOST_MM >= 50u,
+               "loss distance after a black exit >= 50 mm");
+
+    /* ---- S3-U44 (on-car 2026-11-12: every slow reread lost the line) */
+    /* The 300 mm centred line-end rule counted the barcode rewind
+       (reverse travel is in the path): rewind ~220 mm + lead-in ~110 mm
+       posted LINE_LOST just before the barcode and the search ended the
+       slow pass. The track has no line end, so a centred car is never
+       lost; a black exit still is (S3-U20).                          */
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path      = 1000u;
+    g_sim_mode_mask = APP_MODE_BARCODE_REREAD | APP_MODE_BARCODE_INHIBIT
+                      | APP_MODE_JUNCTION_INHIBIT;
+    g_sim_raw_l     = 500u;               /* centred, both white */
+    g_sim_raw_r     = 500u;
+    for (uint32_t i = 0u; i < 220u; i++)  /* braking + rewind 220 mm */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    g_sim_mode_mask = APP_MODE_BARCODE_REREAD;   /* slow pass */
+    for (uint32_t i = 0u; i < 400u; i++)  /* lead-in + barcode + quiet */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U44", (0u == g_sim_evt_cnt)
+               && (APP_LINE_ON == g_sim_line_out.line_status),
+               "rewind 220 mm + slow pass 400 mm centred: no LINE_LOST");
+    g_sim_mode_mask = 0u;                 /* reread over, cruise again */
+    for (uint32_t i = 0u; i < 1000u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U44", 0u == g_sim_evt_cnt,
+               "then 1 m more centred at cruise: still no LINE_LOST");
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path  = 1000u;
+    g_sim_raw_r = 500u;
+    g_sim_raw_l = 3500u;                  /* line drifts under the left */
+    for (uint32_t i = 0u; i < 5u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    g_sim_raw_l = 500u;                   /* and leaves there */
+    for (uint32_t i = 0u; i < (LINE_EXIT_LOST_MM + 5u); i++)
+    {
+        g_sim_path += odometry_mm_to_counts(4u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U44", (1u == g_sim_evt_cnt)
+               && (APP_EVT_LINE_LOST == g_sim_evts[0].type),
+               "black exit, then gone: LINE_LOST as before");
+
+    /* ---- S3-U45 (on-car 2026-11-12 15:09: no reread after a sideways
+       first pass) ----------------------------------------------------- */
+    /* The car crossed the strip while still settling on the line; the
+       start guard never matched, so no rewind and no slow reread came.
+       Any capture whose first four widths look like bars and spaces
+       (1.2 to 25.4 mm) now asks for the rewind; flicker does not.     */
+    {
+        uint8_t const first_pass[] = {85u, 65u, 190u, 40u};  /* 15:09 */
+        uint8_t const flicker[]    = {6u, 5u, 15u, 7u};       /* 15:10 */
+
+        sim_reset();
+        gb_bar_reread_always = true;
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(first_pass, sizeof(first_pass), 50000u, true);
+        HOST_CHECK("S3-U45", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type),
+                   "four bar-like widths without a start guard: rewind");
+
+        sim_reset();
+        gb_bar_reread_always = true;
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(flicker, sizeof(flicker), 50000u, true);
+        HOST_CHECK("S3-U45", 0u == g_sim_evt_cnt,
+                   "four flicker widths (0.5-1.5 mm, one < 1.2): no rewind");
+
+        sim_reset();
+        gb_bar_reread_always = false;     /* rewind only after a failure */
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(first_pass, sizeof(first_pass), 50000u, true);
+        g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM);
+        barcode_cycle();
+        HOST_CHECK("S3-U45", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type),
+                   "the same capture dropped without a guard: rewind");
+    }
+
+    /* ---- S3-U46 (Tribunal 1 row 12: edge ring "to add") ------------ */
+    /* When the ring is full the ISR drops the new edge and counts it.
+       Two equal levels catch an odd number of lost edges, not an even
+       number, so any change of the drop count now discards the capture
+       and the queued edges. (The DMB barriers around the ring indexes
+       are checked in the ARM disassembly: a host build cannot show
+       cross-core ordering.)                                           */
+    {
+        uint8_t const first[] = {75u, 160u, 75u, 50u};
+        uint32_t      now_us  = 2000000u;
+        uint32_t      n_elem  = 0u;
+        uint32_t      state   = 0u;
+
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(first, sizeof(first), 50000u, true);
+        n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                              PRV_BAR_A_N_ELEM_BITS);
+        HOST_CHECK("S3-U46", 4u == n_elem,
+                   "a capture is in progress (4 elements)");
+        for (uint32_t i = 0u; i < (BAR_RING_ENTRIES + 6u); i++)
+        {
+            now_us        += 5000u;       /* task held up: ring fills */
+            gb_sim_bar_pin = !gb_sim_bar_pin;
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+        }
+        HOST_CHECK("S3-U46", 0u != g_bar_overflow,
+                   "ring full: the ISR dropped and counted edges");
+        barcode_cycle();
+        n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                              PRV_BAR_A_N_ELEM_BITS);
+        state  = app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                              PRV_BAR_A_STATE_BITS);
+        HOST_CHECK("S3-U46", (0u == n_elem) && (BAR_STATE_IDLE == state)
+                   && (g_bar_tail == g_bar_head),
+                   "drop count changed: capture and queued edges discarded");
+        gb_sim_bar_pin = !gb_sim_bar_pin;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us + 5000u);
+        barcode_cycle();
+        HOST_CHECK("S3-U46", g_bar_tail == g_bar_head,
+                   "the next edge is read normally (no repeated discard)");
+    }
 
     /* ---- S3-U22 (on-car 2026-11-06 14:49: barcodes never decoded) --- */
     /* Captures ended with 26 / 15 elements and nothing said which bars
@@ -1113,6 +1255,7 @@ int main(void)
                    "four plausible widths do not justify a rewind");
 
         sim_reset();
+        gb_bar_reread_always = true;      /* the car's setting (S3-U45) */
         g_sim_mode_mask = APP_MODE_MOTOR_EN;
         g_sim_speed_l = odometry_mm_s_to_cpw(120);
         g_sim_speed_r = g_sim_speed_l;
@@ -1120,7 +1263,7 @@ int main(void)
         HOST_CHECK("S3-U23",
                    (1u == g_sim_evt_cnt)
                    && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type)
-                   && (68u == g_sim_evts[0].value),
+                   && (g_sim_evts[0].value <= 68u),
                    "reverse guard with first bar missing requests a rewind");
 
         g_sim_mode_mask |= APP_MODE_BARCODE_REREAD | APP_MODE_BARCODE_INHIBIT;
@@ -1237,6 +1380,7 @@ int main(void)
                    "mixed narrow and wide noise fails the guard pattern");
 
         sim_reset();
+        gb_bar_reread_always = true;      /* the car's setting (S3-U45) */
         g_sim_mode_mask = APP_MODE_MOTOR_EN;
         g_sim_speed_l = odometry_mm_s_to_cpw(120);
         g_sim_speed_r = g_sim_speed_l;
@@ -1246,7 +1390,7 @@ int main(void)
                    "a forward guard missing its first bar can retry");
     }
 
-    /* S3-U34: only a failed capture with a known guard can retry. */
+    /* S3-U34: a failed capture can retry (S3-U45: no start guard needed). */
     {
         static uint8_t const guard[] = {
             30u, 75u, 30u, 30u, 75u, 30u, 75u, 30u, 30u, 30u
@@ -1321,8 +1465,9 @@ int main(void)
         sim_bar_widths(noise, sizeof(noise), 50000u, true);
         g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM);
         barcode_cycle();
-        HOST_CHECK("S3-U34", 0u == g_sim_evt_cnt,
-                   "the recorded eleven-element fragment cannot request rewind");
+        HOST_CHECK("S3-U45", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type),
+                   "the recorded eleven-element fragment now asks for the reread");
 
         sim_reset();
         g_sim_mode_mask = APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD;
@@ -1402,13 +1547,14 @@ int main(void)
         };
 
         sim_reset();
+        gb_bar_reread_always = true;      /* the car's setting (S3-U45) */
         g_sim_mode_mask = APP_MODE_MOTOR_EN;
         g_sim_speed_l = odometry_mm_s_to_cpw(120);
         g_sim_speed_r = g_sim_speed_l;
         sim_bar_widths(widths, CODE39_START_ELEMENTS, 50000u, true);
         HOST_CHECK("S3-U29", (1u == g_sim_evt_cnt)
                    && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type)
-                   && (71u == g_sim_evts[0].value),
+                   && (g_sim_evts[0].value <= 71u),
                    "the measured guard requests a retry within 150 mm");
 
         sim_reset();

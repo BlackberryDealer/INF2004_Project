@@ -20,22 +20,24 @@
 #include "../app_types.h"
 #include "cfg_motion.h"
 #include "motion_task.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
 
 /* ---- private constants and types ------------------------------------ */
 
 #define MOTION_STACK_WORDS     (APP_STACK_MOTION_BYTES / 8u)
 #define MOTION_TAG_MASK        (0x3u)   /* MSG_CMD TAG: 2 bits */
 
-/* K5 message, Phase 2 baseline (Phase 4: one MSG_CMD 16-bit word). */
-typedef struct
-{
-    uint32_t type;    /* APP_CMD_* */
-    int32_t  param;   /* mm, deg or mm/s; validated before sending */
-    uint32_t tag;     /* 0..3 */
-} motion_cmd_t;
+#if (MSG_CMD_USED_BITS != 16u) || (APP_CMD_ZERO > MSG_CMD_TYPE_MAX) \
+    || (MOTION_TAG_MASK > MSG_CMD_TAG_MAX)
+#error "K5 command no longer fits the 16-bit MSG_CMD word"
+#endif
 
-/* Kernel cost of one message: 4-byte header + length rounded up to 4. */
-#define MOTION_CMD_MSG_BYTES   (sizeof(motion_cmd_t))           /* 12 B */
+/* K5 message: one MSG_CMD 16-bit word (Tribunal 1, min-bit change,
+   gap 3): 11-bit parameter, 3-bit type, 2-bit tag. Kernel cost per
+   entry: 4-byte header + 2 B rounded up to 4 = 8 B (was 16 B with the
+   12-byte natural-type struct), so 4 entries take 32 B (was 64 B).   */
+#define MOTION_CMD_MSG_BYTES   (2u)
 #define MOTION_MBF_ENTRY_BYTES (4u + ((MOTION_CMD_MSG_BYTES + 3u) & ~3u))
 #define MOTION_MBF_BYTES       (MOTION_K5_ENTRIES * MOTION_MBF_ENTRY_BYTES)
 
@@ -69,8 +71,8 @@ ER motion_init(void)
     ID     mbf  = 0;
 
     cmbf.mbfatr = TA_TFIFO | TA_USERBUF;
-    cmbf.bufsz  = (SZ) MOTION_MBF_BYTES;      /* cast: 64 B, kernel size */
-    cmbf.maxmsz = (INT) MOTION_CMD_MSG_BYTES; /* cast: 12 B, kernel size */
+    cmbf.bufsz  = (SZ) MOTION_MBF_BYTES;      /* cast: 32 B, kernel size */
+    cmbf.maxmsz = (INT) MOTION_CMD_MSG_BYTES; /* cast: 2 B, kernel size */
     cmbf.bufptr = (void *) g_motion_mbf_buf;  /* cast: kernel buffer type */
 
     mbf = tk_cre_mbf(&cmbf);
@@ -249,21 +251,24 @@ uint32_t motion_last_tag(void)
 bool motion_cmd_receive(uint32_t * p_type, uint32_t * p_param,
                         uint32_t * p_tag)
 {
-    motion_cmd_t msg        = {0u, 0, 0u};
-    bool         b_has_cmd  = false;
+    uint16_t msg       = 0u;           /* one MSG_CMD word */
+    bool     b_has_cmd = false;
 
     if ((NULL != p_type) && (NULL != p_param) && (NULL != p_tag))
     {
         /* TMO_POL: returns at once; E_TMOUT (< 0) when K5 is empty */
         b_has_cmd = (tk_rcv_mbf(gh_motion_mbf, &msg, TMO_POL)
-                     == (INT) MOTION_CMD_MSG_BYTES); /* cast: 12 B */
+                     == (INT) MOTION_CMD_MSG_BYTES); /* cast: 2 B */
     }
 
     if (b_has_cmd)
     {
-        *p_type  = msg.type;
-        *p_param = (uint32_t) msg.param; /* cast: validated >= 0 at send */
-        *p_tag   = msg.tag;
+        uint32_t const word = (uint32_t) msg;   /* cast: widening */
+
+        *p_type  = app_bits_get(word, MSG_CMD_TYPE_POS, MSG_CMD_TYPE_BITS);
+        *p_param = app_bits_get(word, MSG_CMD_PARAM_POS,
+                                MSG_CMD_PARAM_BITS);
+        *p_tag   = app_bits_get(word, MSG_CMD_TAG_POS, MSG_CMD_TAG_BITS);
     }
 
     return b_has_cmd;
@@ -285,12 +290,23 @@ static bool motion_send(uint32_t type, int32_t param)
     /* cast: (tag + 1) & 3 is 0..3, fits uint8_t */
     uint8_t const next_tag = (uint8_t) ((g_motion_tag + 1u)
                                         & MOTION_TAG_MASK);
-    motion_cmd_t  msg      = {type, param, (uint32_t) next_tag};
+    uint32_t      word     = 0u;
+    uint16_t      msg      = 0u;
     ER            ercd     = E_OK;
+
+    /* Every public command validates param to 0..2047 (cfg_motion.h
+       checks each limit against MSG_CMD PARAM), so nothing is lost.
+       cast: param >= 0 here                                          */
+    word = app_bits_put(0u, MSG_CMD_PARAM_POS, MSG_CMD_PARAM_BITS,
+                        (uint32_t) param);
+    word = app_bits_put(word, MSG_CMD_TYPE_POS, MSG_CMD_TYPE_BITS, type);
+    word = app_bits_put(word, MSG_CMD_TAG_POS, MSG_CMD_TAG_BITS,
+                        (uint32_t) next_tag);
+    msg  = (uint16_t) word;     /* cast: MSG_CMD_USED_BITS == 16 */
 
     /* Never blocks: a full K5 is reported to the caller (Part C.2). */
     ercd = tk_snd_mbf(gh_motion_mbf, &msg,
-                      (INT) MOTION_CMD_MSG_BYTES, /* cast: 12 B */
+                      (INT) MOTION_CMD_MSG_BYTES, /* cast: 2 B */
                       TMO_POL);
     if (E_OK == ercd)
     {

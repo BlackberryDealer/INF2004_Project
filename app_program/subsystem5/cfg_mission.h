@@ -43,7 +43,9 @@
 /* S5-U68 (on-car 2026-11-10 22:39): a failed slow pass rewinds to its
    own start and reads again, up to this many more times.             */
 #define MISSION_BARCODE_RETRIES      (2u)
-#define MISSION_BARCODE_READ_MS      (9000u)
+/* S5-U76 (on-car 2026-11-12 14:23): a slow pass through a bend decoded
+   after 8.4 s, 0.6 s before the old 9 s limit.                        */
+#define MISSION_BARCODE_READ_MS      (15000u)
 #define MISSION_BARCODE_REARM_MM     (60u)
 #define MISSION_JCT_ADVANCE_MM      (60u)     /* MEASURE: sensors to axle */
 /* FR9 bypass limit (end of the pass leg -> line following again)

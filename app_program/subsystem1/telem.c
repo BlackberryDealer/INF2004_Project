@@ -771,14 +771,14 @@ static void telem_send_heartbeat(void)
  * telem_evt_word
  * @brief   The 16-bit app event word (MSG_EVT layout): value clamped to
  *          the type's width in bits 0-10, type in bits 11-15.
- * @param   type   APP_EVT_* (clamped to 0..23)
+ * @param   type   APP_EVT_* (clamped to 0..MSG_EVT_TYPE_MAX)
  * @param   value  event value
  * @return  the event word
  * @context any task
  */
 static uint32_t telem_evt_word(uint32_t type, uint32_t value)
 {
-    /* casts: positive layout constants (23) */
+    /* casts: positive layout constants (MSG_EVT_TYPE_MAX 25) */
     uint32_t const evt_type = app_bits_clamp_u(type,
                                                (uint32_t) MSG_EVT_TYPE_MAX,
                                                NULL);

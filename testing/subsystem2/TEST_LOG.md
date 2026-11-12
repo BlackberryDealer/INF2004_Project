@@ -34,6 +34,8 @@ Define a test here before running it. Test IDs never change.
 | S2-I03 | 90° and 180° × 10: ±5° and ±8° | NFR3b, c | manual (floor) | motion-accuracy table | PASS |
 | S2-I04 | Safety flag → motor inputs low ≤ 15 ms | NFR10a | probe (`PROBE=1`, GP14) | scope | ≤ 15 ms |
 | S2-I06 | Blocked wheel → brake + STALL after 300 ms | FR15 | manual (bench) | hold a wheel | STALL event, fault bit |
+| S2-U29 | K5 motion command is one 16-bit `MSG_CMD` word (11-bit parameter, 3-bit type, 2-bit tag), Tribunal 1 minimum-bit change (post-tribunal gap 3) | Min-bit items 1, 7; K5 | auto (host) | `test_motion_cmd_host.c`: `motion.c` against a mock message buffer with the kernel cost (4 B header + size rounded to 4); every command at its limits, out-of-range calls, 5 commands into the 4-deep queue | Every command arrives with the same type, parameter and tag; out-of-range calls refused; 4 fit, the 5th is refused, FIFO order kept; messages are 2 B and the K5 buffer is 32 B (was 12 B messages, 64 B buffer) |
+| S2-U30 | Below slow speed the speed-scaled FOLLOW split is rounded to nearest instead of truncated, so a moderate steering error still turns at the barcode reread speed; slow speed and cruise keep the same split | FR1, FR2 | auto (host sim) | `test_motion_task_host.c`: steering ±150/250/420/600 at 60 mm/s; steering 200 at 60 mm/s; every steering value −1000..1000 at cruise (on-car 12 Nov 14:23: the 60 mm/s reread crawled 8.4 s through a bend with the line under the left sensor) | 60 mm/s split = (steer × gain / 256) × 60/100 rounded, both sides; steer 200 turns; cruise split unchanged. S2-U28 still passes. |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -106,3 +108,8 @@ Add a new row for every run. Never edit or delete old rows.
 
 | 2026-11-10 | S2-U28 | before fix | Hanz | FAIL | motion_task host sim | 70 mm/s used the same split as slow speed. |
 | 2026-11-10 | S2-U28 | `barcode-reread-full-strip` | Hanz | PASS | motion_task host sim | Split scaled to 70/100. Subsystem 2 run: 32 + 4 + 14 + 52 pass. |
+| 2026-11-12 | S2-U29 | before fix (`745abc0`) | Dylan | FAIL | K5 command host test | All 8 behaviour checks pass (same commands, refusals, depth and order) but messages are 12 B and the buffer 64 B (2 checks failed). |
+| 2026-11-12 | S2-U29 | `pack-motion-command-word` | Dylan | PASS | K5 command host test | 10 checks pass. Full subsystem 2 run: 32 + 4 + 14 + 52 + 10 pass. |
+| 2026-11-12 | S2-U30 | before fix (`745abc0`) | Dylan | FAIL | Motion task host simulation | At 60 mm/s steer 150/250 gave no split and 420 gave 2 instead of 4 cpw (2 checks failed); the cruise check passes on both. |
+| 2026-11-12 | S2-U28, S2-U30 | `follow-split-rounded` | Dylan | PASS | Motion task host simulation | Motion task 55 pass (was 52). |
+| 2026-11-12 | S2-U29, S2-U30 | `shared-event-type-range` (patches 6–15) | Dylan | PASS | Car run on the track | 16:37: line following, MAP sent in RUN, barcode A decoded, U-turn at the cross, obstacle slow-down, ramp, STOP; K5 commands (follow, reverse, turns) behave as before. S2-U30: the 60 mm/s rereads at 15:41 and 15:49 (patches 6–13) decoded A in 8.2 s. |

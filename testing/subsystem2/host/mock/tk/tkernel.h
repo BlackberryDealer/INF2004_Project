@@ -1,7 +1,8 @@
 /*
  *  mock/tk/tkernel.h
  *  Host-only stand-in for the micro T-Kernel header, so subsystem 2's
- *  kernel-side modules (safety.c, fault.c, motion_task.c) can be compiled
+ *  kernel-side modules (safety.c, fault.c, motion_task.c, motion.c) can be
+ *  compiled
  *  and tested on a laptop against isolated objects. Outside BARR-C scope.
  *
  *  Only what those modules use. Values match include/tk/ (typedef.h,
@@ -51,6 +52,21 @@ typedef struct
     ID     wtsk;
     UINT   flgptn;
 } T_RFLG;
+
+/* Message buffers (K5 test, S2-U29): only the fields motion.c uses. */
+#define TA_USERBUF  (0x00000020u)
+typedef struct
+{
+    void * exinf;
+    ATR    mbfatr;
+    SZ     bufsz;
+    INT    maxmsz;
+    void * bufptr;
+} T_CMBF;
+
+ID tk_cre_mbf(T_CMBF const * pk_cmbf);
+ER tk_snd_mbf(ID mbfid, void const * msg, INT msgsz, TMO tmout);
+INT tk_rcv_mbf(ID mbfid, void * msg, TMO tmout);
 
 ID tk_cre_flg(T_CFLG const * pk_cflg);
 ER tk_set_flg(ID flgid, UINT setptn);

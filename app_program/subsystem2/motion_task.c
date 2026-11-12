@@ -155,7 +155,7 @@ static void motion_zero(uint32_t tag);
 static void motion_cancel_active(void);
 static void motion_state_step(int32_t * p_sp_l, int32_t * p_sp_r);
 static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r);
-static int32_t motion_follow_slow_diff(int32_t diff);
+static int32_t motion_follow_split(int32_t steer);
 static void motion_state_move(int32_t * p_sp_l, int32_t * p_sp_r);
 static void motion_state_turn(int32_t * p_sp_l, int32_t * p_sp_r);
 static void motion_finish_if_done(void);
@@ -826,8 +826,7 @@ static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r)
                       >> 10);
     /* Signed division by 256: shift with sign fix-up, no library call. */
     base = (g_base_cpw * (MOTION_Q8_ONE - cut)) / MOTION_Q8_ONE;
-    diff = (steer * MOTION_KP_STEER_Q8) / MOTION_Q8_ONE;
-    diff = motion_follow_slow_diff(diff);
+    diff = motion_follow_split(steer);
     diff_max = (2 * base) / 3;
     if (diff > diff_max)
     {
@@ -846,29 +845,39 @@ static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r)
 }
 
 /**
- * motion_follow_slow_diff
- * @brief   Below MOTION_SLOW_MM_S, shrink the steering split in proportion
- *          to the base speed, so a steering error bends the path as much
- *          per mm as at slow speed. The same split at 70 mm/s turned the
- *          car almost twice as hard per mm and it swung across the line
- *          (on-car 2026-11-10 22:32, barcode reread, S2-U28).
- * @param   diff  split from the steering gain, cpw
- * @return  split for the current base speed, cpw
+ * motion_follow_split
+ * @brief   Steering split from the steering error. Below MOTION_SLOW_MM_S
+ *          it shrinks in proportion to the base speed, so a steering error
+ *          bends the path as much per mm as at slow speed (S2-U28: the same
+ *          split at 70 mm/s swung the car across the line). That scaling
+ *          is rounded to nearest: truncating it gave no correction below
+ *          |steer| 256 at 60 mm/s (128 at slow speed) and the barcode
+ *          reread crawled 8.4 s through a bend with the line under one
+ *          sensor (on-car 12 Nov, S2-U30). At slow speed and above the
+ *          split is unchanged (S2-U25, S2-U27).
+ * @param   steer  steering error, -1000..+1000 (+ = line left)
+ * @return  split, cpw
  * @context motion_task
  */
-static int32_t motion_follow_slow_diff(int32_t diff)
+static int32_t motion_follow_split(int32_t steer)
 {
     int32_t const slow = odometry_mm_s_to_cpw(MOTION_SLOW_MM_S);
-    int32_t       out  = diff;
+    /* Signed division by 256 truncates toward zero, as before. */
+    int32_t const full = (steer * MOTION_KP_STEER_Q8) / MOTION_Q8_ONE;
+    int32_t       out  = full;
 
     if ((g_base_cpw > 0) && (g_base_cpw < slow))
     {
-        /* |diff| <= 8 cpw and base < slow: the product is small. */
-        out = (diff * g_base_cpw) / slow;
+        /* |full| <= 7 cpw and base < slow: the product is small. */
+        int32_t const prod = full * g_base_cpw;
+        int32_t const half = slow / 2;
+
+        out = (prod >= 0) ? ((prod + half) / slow)
+                          : (-((half - prod) / slow));
     }
     else
     {
-        /* Slow speed and above keep the tuned gain (S2-U25, S2-U27). */
+        /* Slow speed and above keep the tuned gain. */
     }
 
     return out;

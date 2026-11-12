@@ -217,7 +217,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | ARMED | SB_MIS0 | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | A barcode command is stored |
 | ARMED_CMD | SB_MIS0 | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | APP_BAR_CMD_* |
 | VALUE | MSG_EVT | 0..2047 × 1 per type | 1 | 11 | 11 | RNG | S | K4/K7 event value (width per EVT_ group) |
-| TYPE | MSG_EVT | 0..24 × 1 code | 1 | 5 | 5 | ENUM | S | APP_EVT_* |
+| TYPE | MSG_EVT | 0..25 × 1 code | 1 | 5 | 5 | ENUM | S | APP_EVT_* |
 | WIDTH | MSG_ECHO | 0..4095 × 4 us | 4 | 12 | 12 | SAT | S | Echo pulse width; 4095 = no echo |
 | SEQ | MSG_ECHO | 0..3 × 1 count | 1 | 2 | 2 | RAW | S | Ping sequence (wraps by design) |
 | VALID | MSG_ECHO | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | Width is a complete measurement |

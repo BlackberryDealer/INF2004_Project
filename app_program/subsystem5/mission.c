@@ -10,6 +10,8 @@
 
 #include "mission.h"           /* own header first (BARR-C 4.3.c) */
 #include "../app_types.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "../subsystem1/telem.h"
 #include "../subsystem2/fault.h"
 #include "../subsystem2/safety.h"
@@ -26,21 +28,25 @@
 
 /* ---- private constants and types ------------------------------------ */
 
-/* K4 baseline message (natural types): 12 B, 16 B per entry with the
-   4-byte kernel header, 16 entries = 256 B.                          */
-typedef struct
-{
-    uint32_t type;      /* APP_EVT_* */
-    int32_t  arg_a;     /* event value */
-    int32_t  arg_b;     /* spare (always 0) */
-} mission_evt_t;
-
+/* K4 message: one MSG_EVT 16-bit word (Tribunal 1 min-bit change,
+   gap 3): 11-bit value, 5-bit type. Kernel cost per entry: 4-byte
+   header + 2 B rounded up to 4 = 8 B (was 16 B with the 12-byte
+   natural-type struct), so 16 entries take 128 B (was 256 B).        */
 #define MISSION_K4_ENTRIES     (16u)
-#define MISSION_EVT_MSG_BYTES  (12u)   /* sizeof(mission_evt_t) */
+#define MISSION_EVT_MSG_BYTES  (2u)    /* one MSG_EVT word */
+#define MISSION_EVT_SLOT_BYTES (4u)    /* 2 B rounded up to 4 */
 #define MISSION_MBF_HDR_BYTES  (4u)    /* kernel header per message */
 #define MISSION_MBF_BYTES      (MISSION_K4_ENTRIES                     \
                                 * (MISSION_MBF_HDR_BYTES               \
-                                   + MISSION_EVT_MSG_BYTES))
+                                   + MISSION_EVT_SLOT_BYTES))
+
+#if (MSG_EVT_USED_BITS != 16u) \
+    || (APP_EVT_COUNT > (1u << MSG_EVT_TYPE_BITS))
+#error "K4 event no longer fits the 16-bit MSG_EVT word"
+#endif
+#if (APP_EVT_COUNT > (MSG_EVT_TYPE_MAX + 1))
+#error "tools/layout.csv MSG_EVT TYPE max is below the last APP_EVT_* code"
+#endif
 #define MISSION_WAKE_TMO_MS    (20)    /* backup if an R2 wake is lost  */
 #define MISSION_EVTS_PER_WAKE  (8u)    /* bounds one wake's work        */
 #define MISSION_STACK_WORDS    (APP_STACK_MISSION_BYTES / 8u)
@@ -237,13 +243,28 @@ ER mission_start(void)
  */
 bool mission_post_event(uint32_t type, uint32_t value)
 {
-    mission_evt_t msg       = {0u, 0, 0};
-    bool          b_is_sent = false;
+    uint32_t evt_value = value;
+    uint32_t word      = 0u;
+    uint16_t msg       = 0u;           /* one MSG_EVT word */
+    bool     b_is_sent = false;
 
     if (type < APP_EVT_COUNT)
     {
-        msg.type  = type;
-        msg.arg_a = (int32_t) value;  /* cast: values < 2048 (D.13) */
+        /* Every producer sends < 2048 (D.13); a larger value is clamped,
+           never wrapped, and flagged (Tribunal 1: every write clamps). */
+        if (evt_value > (uint32_t) MSG_EVT_VALUE_MAX)
+        {
+            evt_value = (uint32_t) MSG_EVT_VALUE_MAX; /* cast: 2047 */
+            fault_set(APP_FAULT_RANGE_CLAMP);
+        }
+        else
+        {
+            /* fits the 11-bit field */
+        }
+        word = app_bits_put(0u, MSG_EVT_VALUE_POS, MSG_EVT_VALUE_BITS,
+                            evt_value);
+        word = app_bits_put(word, MSG_EVT_TYPE_POS, MSG_EVT_TYPE_BITS, type);
+        msg  = (uint16_t) word;    /* cast: MSG_EVT_USED_BITS == 16 */
         if (E_OK == tk_snd_mbf(gh_mission_mbf, &msg,
                                (INT) MISSION_EVT_MSG_BYTES, /* cast: size */
                                TMO_POL))
@@ -342,7 +363,7 @@ uint32_t mission_queue_high_water(void)
  */
 static void mission_task(INT stacd, void * p_exinf)
 {
-    mission_evt_t    msg      = {0u, 0, 0};
+    uint16_t         msg      = 0u;    /* last MSG_EVT word received */
     mission_evt_in_t evt      = {false, 0u, 0u};
     mission_evt_in_t btn      = {false, 0u, 0u};
     status_board_t   snap     = {0};
@@ -385,8 +406,12 @@ static void mission_task(INT stacd, void * p_exinf)
             size            = tk_rcv_mbf(gh_mission_mbf, &msg, TMO_POL);
             n_pass++;
             evt.b_has_event = (size > 0);
-            evt.type        = msg.type;
-            evt.value       = (uint32_t) msg.arg_a; /* cast: 0..2047 */
+            evt.type        = app_bits_get((uint32_t) msg, /* cast: widen */
+                                           MSG_EVT_TYPE_POS,
+                                           MSG_EVT_TYPE_BITS);
+            evt.value       = app_bits_get((uint32_t) msg, /* cast: widen */
+                                           MSG_EVT_VALUE_POS,
+                                           MSG_EVT_VALUE_BITS);
 
             /* 2. buttons every 10 ms */
             now_us          = sys_tick_now_us();

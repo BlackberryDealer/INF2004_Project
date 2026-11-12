@@ -7,6 +7,8 @@
 #   S2-U02          test_speed_pid_host.c    (speed_pid.c)
 #   S2-U13, S2-U14  test_flags_host.c        (safety.c, fault.c on isolated
 #                                             mock kernel event flags)
+#   S2-U29          test_motion_cmd_host.c   (motion.c: K5 as one 16-bit
+#                                             MSG_CMD word, mock kernel MBF)
 #   S2-U03, U12, U15..U19  test_motion_task_host.c  (motion_task.c simulated
 #                   with mocks; complements the Phase 3 on-target runs)
 # mock/tk/tkernel.h stands in for the kernel header on the laptop.
@@ -20,8 +22,8 @@ CFLAGS  := -std=c99 -Wall -Wextra -Werror -pedantic -Wconversion \
 
 MOCK    := -Imock
 
-.PHONY: all odometry speed_pid flags motion_task
-all: odometry speed_pid flags motion_task
+.PHONY: all odometry speed_pid flags motion_task motion_cmd
+all: odometry speed_pid flags motion_task motion_cmd
 
 test_odometry_host.out: test_odometry_host.c $(S2_DIR)/odometry.c \
                         $(S2_DIR)/odometry.h $(APP_DIR)/app_types.h \
@@ -57,3 +59,11 @@ flags: test_flags_host.out
 
 motion_task: test_motion_task_host.out
 	./test_motion_task_host.out
+
+test_motion_cmd_host.out: test_motion_cmd_host.c mock/tk/tkernel.h \
+                          $(S2_DIR)/motion.c $(S2_DIR)/motion.h \
+                          $(S2_DIR)/cfg_motion.h ../../host/host_test.h
+	$(CC) $(CFLAGS) $(MOCK) -o $@ test_motion_cmd_host.c
+
+motion_cmd: test_motion_cmd_host.out
+	./test_motion_cmd_host.out

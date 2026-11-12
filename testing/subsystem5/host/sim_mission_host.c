@@ -12,6 +12,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "app_program/subsystem5/mission.c"
+#include "app_program/app_bits.h"
+#include "app_program/app_layout.h"
 #include "app_program/subsystem2/safety.h"
 
 /* ---------------- kernel mocks ---------------- */
@@ -23,17 +25,19 @@ ER tk_ref_flg(ID id, T_RFLG *r) { r->flgptn = flg[id]; return E_OK; }
 /* K4 mock with the kernel's sizing (kernel/tkernel/messagebuf.h): each
    message takes HEADERSZ (4) + ROUNDSZ(msgsz) bytes of bufsz; a send fits
    only if HEADERSZ + msgsz <= free bytes. TMO_POL never waits. */
-static mission_evt_t q[64]; static int qn = 0;
-static int mbf_bufsz, mbf_used, mbf_waits;
+static uint8_t q[64][16]; static int qsz[64]; static int qn = 0;   /* raw messages, any size */
+static int mbf_bufsz, mbf_used, mbf_waits, mbf_max_msg;
 #define MBF_ENTRY(sz) (4 + (((sz) + 3) & ~3))
 ID tk_cre_mbf(T_CMBF const *p) { mbf_bufsz = p->bufsz; mbf_used = 0; return 1; }
 ER tk_snd_mbf(ID id, void const *m, INT sz, TMO t) { (void) id;
   if (TMO_POL != t) { mbf_waits++; }
-  if (4 + sz > mbf_bufsz - mbf_used) { return E_TMOUT; }
-  memcpy(&q[qn++], m, sizeof(mission_evt_t)); mbf_used += MBF_ENTRY(sz); return E_OK; }
-INT tk_rcv_mbf(ID id, void *m, TMO t) { (void) id; (void) t; if (!qn) return E_TMOUT;
-  memcpy(m, &q[0], sizeof(mission_evt_t)); memmove(q, q + 1, (size_t)(--qn) * sizeof(q[0]));
-  mbf_used -= MBF_ENTRY(12); return 12; }
+  if (sz > mbf_max_msg) { mbf_max_msg = sz; }
+  if (MBF_ENTRY(sz) > mbf_bufsz - mbf_used) { return E_TMOUT; }
+  memcpy(q[qn], m, (size_t) sz); qsz[qn++] = sz; mbf_used += MBF_ENTRY(sz); return E_OK; }
+INT tk_rcv_mbf(ID id, void *m, TMO t) { int sz; (void) id; (void) t; if (!qn) return E_TMOUT;
+  sz = qsz[0]; memcpy(m, q[0], (size_t) sz);
+  memmove(q, q + 1, (size_t)(qn - 1) * sizeof(q[0])); memmove(qsz, qsz + 1, (size_t)(qn - 1) * sizeof(qsz[0]));
+  qn--; mbf_used -= MBF_ENTRY(sz); return sz; }
 ER tk_ref_mbf(ID id, T_RMBF *r) { (void) id; r->frbufsz = mbf_bufsz - mbf_used; return E_OK; }
 ID tk_cre_mtx(T_CMTX const *p) { (void) p; return 1; }
 ER tk_loc_mtx(ID id, TMO t) { (void) id; (void) t; return E_OK; }
@@ -787,6 +791,26 @@ int main(void) {
   idle_ms(MISSION_BARCODE_READ_MS);
   CHECK("S5-U57", !strcmp(mlog, "STOP0 ") && 1u == g_ctx.barcode_tries,
         "unreadable scan also has a time limit, then a retry (S5-U68)");
+  /* S5-U76: on-car 2026-11-12 14:23, a slow pass through a bend took
+     8.4 s to decode, 0.6 s before the 9 s limit. The limit is 15 s. */
+  {
+    bool b_ended = false;
+
+    barcode_test_read();
+    for (uint32_t i = 0u; i < 1000u; i++)          /* 10 s */
+    {
+      NONE();
+      b_ended = b_ended || (NULL != strstr(mlog, "STOP0"));
+    }
+    CHECK("S5-U76", !b_ended && MODE(APP_MODE_BARCODE_REREAD),
+          "slow pass still reading after 10 s");
+    for (uint32_t i = 0u; i < 500u; i++)           /* to 15 s */
+    {
+      NONE();
+      b_ended = b_ended || (NULL != strstr(mlog, "STOP0"));
+    }
+    CHECK("S5-U76", b_ended, "slow pass ends at 15 s, then the retry");
+  }
 
   barcode_test_read();
   safety_set(SAFETY_ESTOP);
@@ -850,11 +874,39 @@ int main(void) {
     qn = 0; mbf_used = 0; g_queue_high_water = 0; g_fault = 0;
     for (uint32_t i = 0; i < 20u; i++) { if (mission_post_event(APP_EVT_SUMMARY, i)) sent++; else refused++; }
     hw = mission_queue_high_water();
-    CHECK("S5-U04", 16 == sent, "K4 holds 16 events (real capacity: 256 B / (4 + 12))");
+    CHECK("S5-U04", 16 == sent, "K4 holds 16 events (real capacity: 128 B / (4 + 4))");
     CHECK("S5-U04", 4 == refused, "extra posts are refused");
     CHECK("S5-U04", waits0 == mbf_waits, "every post uses TMO_POL: a refused post returns at once");
     CHECK("S5-U04", 0u != (g_fault & APP_FAULT_QUEUE_OVERFLOW), "QUEUE_OVERFLOW fault set");
-    CHECK("S5-U04", 256u == hw, "high-water mark = whole buffer");
+    CHECK("S5-U04", MISSION_MBF_BYTES == hw, "high-water mark = whole buffer");
+    /* S5-U75 (Tribunal 1 min-bit, gap 3): K4 events are one 16-bit MSG_EVT word */
+    CHECK("S5-U75", 2 == mbf_max_msg && 128u == MISSION_MBF_BYTES && 128u == hw,
+          "K4 messages are 2 B, 16 entries take 128 B (was 12 B / 256 B)");
+    {
+      static uint32_t const types[] = {APP_EVT_START, APP_EVT_LINE_FOUND, APP_EVT_BARCODE,
+                                       APP_EVT_MAP, APP_EVT_BARCODE_PROBE, APP_EVT_HUMP};
+      static uint32_t const vals[]  = {0u, 255u, 0xFFu, 0xC7u, 2047u, 127u};
+      bool ok = true;
+      qn = 0; mbf_used = 0;
+      for (uint32_t i = 0; i < 6u; i++) { ok = ok && mission_post_event(types[i], vals[i]); }
+      for (uint32_t i = 0; i < 6u; i++) {
+        uint8_t b[16] = {0}; uint16_t w = 0; ok = ok && (2 == tk_rcv_mbf(1, b, TMO_POL)); memcpy(&w, b, 2);
+        ok = ok && (types[i] == app_bits_get(w, MSG_EVT_TYPE_POS, MSG_EVT_TYPE_BITS))
+                && (vals[i] == app_bits_get(w, MSG_EVT_VALUE_POS, MSG_EVT_VALUE_BITS)); }
+      CHECK("S5-U75", ok, "type 0..25 and value 0..2047 round trip in FIFO order");
+      g_fault = 0; qn = 0; mbf_used = 0;
+      ok = mission_post_event(APP_EVT_SUMMARY, 5000u);
+      { uint8_t b[16] = {0}; uint16_t w = 0; ok = ok && (2 == tk_rcv_mbf(1, b, TMO_POL)); memcpy(&w, b, 2); ok = ok
+                         && (2047u == app_bits_get(w, MSG_EVT_VALUE_POS, MSG_EVT_VALUE_BITS)); }
+      CHECK("S5-U75", ok && 0u != (g_fault & APP_FAULT_RANGE_CLAMP),
+            "a value above 2047 is clamped to 2047 and flagged, never wrapped");
+      qn = 0; mbf_used = 0; g_fault = 0;
+    }
+    /* S5-U77 (Tribunal 1 min-bit table): the layout's MSG_EVT TYPE range
+       covers every APP_EVT_* code (it stopped at 24, BARCODE_PROBE is 25) */
+    CHECK("S5-U77", (APP_EVT_COUNT - 1u) <= (uint32_t) MSG_EVT_TYPE_MAX
+          && (uint32_t) MSG_EVT_TYPE_MAX < (1u << MSG_EVT_TYPE_BITS),
+          "layout TYPE max = last event code (25) and fits 5 bits");
     CHECK("S5-U04", !mission_post_event(APP_EVT_COUNT, 0), "unknown event type refused");
     qn = 0; mbf_used = 0;
     /* S5-U05 (moved from target, Fix 2): every state x every event type */
