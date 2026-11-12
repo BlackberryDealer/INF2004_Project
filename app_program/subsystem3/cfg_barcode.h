@@ -32,9 +32,10 @@
 #define BAR_WIDE_MAX_UM           (9000u) /* full-scale wide bar */
 #define BAR_DECODE_SPEED_MIN_MM_S (50u)
 /* S3-U40 (Hanz 2026-11-10 22:48): cruise is too fast for small, thin
-   barcodes. After an intact start guard, always ask mission to back up
-   and read the whole strip at the slow reread speed. 0 = read at
-   cruise and rewind only after a failed read.                       */
+   barcodes. After the first bars of any barcode (S3-U45: no clean start
+   guard needed), always ask mission to back up and read the whole strip
+   at the slow reread speed. 0 = read at cruise and rewind only after a
+   failed read.                                                      */
 #define BAR_REREAD_ALWAYS         (1u)
 #define BAR_ELEMENTS              (29u) /* 3 chars x 9 + 2 gaps */
 #define BAR_CAPTURE_MAX           (32u)

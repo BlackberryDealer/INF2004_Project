@@ -1107,6 +1107,48 @@ int main(void)
                && (APP_EVT_LINE_LOST == g_sim_evts[0].type),
                "black exit, then gone: LINE_LOST as before");
 
+    /* ---- S3-U45 (on-car 2026-11-12 15:09: no reread after a sideways
+       first pass) ----------------------------------------------------- */
+    /* The car crossed the strip while still settling on the line; the
+       start guard never matched, so no rewind and no slow reread came.
+       Any capture whose first four widths look like bars and spaces
+       (1.2 to 25.4 mm) now asks for the rewind; flicker does not.     */
+    {
+        uint8_t const first_pass[] = {85u, 65u, 190u, 40u};  /* 15:09 */
+        uint8_t const flicker[]    = {6u, 5u, 15u, 7u};       /* 15:10 */
+
+        sim_reset();
+        gb_bar_reread_always = true;
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(first_pass, sizeof(first_pass), 50000u, true);
+        HOST_CHECK("S3-U45", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type),
+                   "four bar-like widths without a start guard: rewind");
+
+        sim_reset();
+        gb_bar_reread_always = true;
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(flicker, sizeof(flicker), 50000u, true);
+        HOST_CHECK("S3-U45", 0u == g_sim_evt_cnt,
+                   "four flicker widths (0.5-1.5 mm, one < 1.2): no rewind");
+
+        sim_reset();
+        gb_bar_reread_always = false;     /* rewind only after a failure */
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(first_pass, sizeof(first_pass), 50000u, true);
+        g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM);
+        barcode_cycle();
+        HOST_CHECK("S3-U45", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type),
+                   "the same capture dropped without a guard: rewind");
+    }
+
     /* ---- S3-U22 (on-car 2026-11-06 14:49: barcodes never decoded) --- */
     /* Captures ended with 26 / 15 elements and nothing said which bars
        or spaces were missing. A dropped or invalid capture now prints
@@ -1168,6 +1210,7 @@ int main(void)
                    "four plausible widths do not justify a rewind");
 
         sim_reset();
+        gb_bar_reread_always = true;      /* the car's setting (S3-U45) */
         g_sim_mode_mask = APP_MODE_MOTOR_EN;
         g_sim_speed_l = odometry_mm_s_to_cpw(120);
         g_sim_speed_r = g_sim_speed_l;
@@ -1175,7 +1218,7 @@ int main(void)
         HOST_CHECK("S3-U23",
                    (1u == g_sim_evt_cnt)
                    && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type)
-                   && (68u == g_sim_evts[0].value),
+                   && (g_sim_evts[0].value <= 68u),
                    "reverse guard with first bar missing requests a rewind");
 
         g_sim_mode_mask |= APP_MODE_BARCODE_REREAD | APP_MODE_BARCODE_INHIBIT;
@@ -1292,6 +1335,7 @@ int main(void)
                    "mixed narrow and wide noise fails the guard pattern");
 
         sim_reset();
+        gb_bar_reread_always = true;      /* the car's setting (S3-U45) */
         g_sim_mode_mask = APP_MODE_MOTOR_EN;
         g_sim_speed_l = odometry_mm_s_to_cpw(120);
         g_sim_speed_r = g_sim_speed_l;
@@ -1301,7 +1345,7 @@ int main(void)
                    "a forward guard missing its first bar can retry");
     }
 
-    /* S3-U34: only a failed capture with a known guard can retry. */
+    /* S3-U34: a failed capture can retry (S3-U45: no start guard needed). */
     {
         static uint8_t const guard[] = {
             30u, 75u, 30u, 30u, 75u, 30u, 75u, 30u, 30u, 30u
@@ -1376,8 +1420,9 @@ int main(void)
         sim_bar_widths(noise, sizeof(noise), 50000u, true);
         g_sim_path += odometry_mm_to_counts(BAR_QUIET_MM);
         barcode_cycle();
-        HOST_CHECK("S3-U34", 0u == g_sim_evt_cnt,
-                   "the recorded eleven-element fragment cannot request rewind");
+        HOST_CHECK("S3-U45", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type),
+                   "the recorded eleven-element fragment now asks for the reread");
 
         sim_reset();
         g_sim_mode_mask = APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD;
@@ -1457,13 +1502,14 @@ int main(void)
         };
 
         sim_reset();
+        gb_bar_reread_always = true;      /* the car's setting (S3-U45) */
         g_sim_mode_mask = APP_MODE_MOTOR_EN;
         g_sim_speed_l = odometry_mm_s_to_cpw(120);
         g_sim_speed_r = g_sim_speed_l;
         sim_bar_widths(widths, CODE39_START_ELEMENTS, 50000u, true);
         HOST_CHECK("S3-U29", (1u == g_sim_evt_cnt)
                    && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type)
-                   && (71u == g_sim_evts[0].value),
+                   && (g_sim_evts[0].value <= 71u),
                    "the measured guard requests a retry within 150 mm");
 
         sim_reset();
