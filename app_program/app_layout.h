@@ -311,7 +311,7 @@
 #define MSG_EVT_TYPE_POS                (MSG_EVT_VALUE_POS + MSG_EVT_VALUE_BITS)
 #define MSG_EVT_TYPE_BITS               (5u)
 #define MSG_EVT_TYPE_MIN                (0)
-#define MSG_EVT_TYPE_MAX                (24)
+#define MSG_EVT_TYPE_MAX                (25)
 #define MSG_EVT_TYPE_OFFSET             (0)
 #define MSG_EVT_TYPE_KIND               (APP_KIND_ENUM)
 #define MSG_EVT_USED_BITS               (MSG_EVT_TYPE_POS + MSG_EVT_TYPE_BITS)

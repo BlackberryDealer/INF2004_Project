@@ -44,6 +44,9 @@
     || (APP_EVT_COUNT > (1u << MSG_EVT_TYPE_BITS))
 #error "K4 event no longer fits the 16-bit MSG_EVT word"
 #endif
+#if (APP_EVT_COUNT > (MSG_EVT_TYPE_MAX + 1))
+#error "tools/layout.csv MSG_EVT TYPE max is below the last APP_EVT_* code"
+#endif
 #define MISSION_WAKE_TMO_MS    (20)    /* backup if an R2 wake is lost  */
 #define MISSION_EVTS_PER_WAKE  (8u)    /* bounds one wake's work        */
 #define MISSION_STACK_WORDS    (APP_STACK_MISSION_BYTES / 8u)

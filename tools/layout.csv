@@ -36,7 +36,7 @@ MSG_CMD,16,PARAM,11,1,mm|deg|mm/s,0,2047,0,RNG,S,B2,K5 command parameter
 MSG_CMD,16,TYPE,3,1,code,0,6,0,ENUM,S,B2,APP_CMD_*
 MSG_CMD,16,TAG,2,1,count,0,3,0,RAW,S,B2,Command tag; echoed in MOVE_DONE; wraps
 MSG_EVT,16,VALUE,11,1,per type,0,2047,0,RNG,S,B5,K4/K7 event value (width per EVT_ group)
-MSG_EVT,16,TYPE,5,1,code,0,24,0,ENUM,S,B5,APP_EVT_*
+MSG_EVT,16,TYPE,5,1,code,0,25,0,ENUM,S,B5,APP_EVT_*
 MSG_ECHO,16,WIDTH,12,4,us,0,4095,0,SAT,S,B5,Echo pulse width; 4095 = no echo
 MSG_ECHO,16,SEQ,2,1,count,0,3,0,RAW,S,B5,Ping sequence (wraps by design)
 MSG_ECHO,16,VALID,1,1,flag,0,1,0,FLAG,S,B5,Width is a complete measurement

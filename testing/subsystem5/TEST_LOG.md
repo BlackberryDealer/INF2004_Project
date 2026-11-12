@@ -63,6 +63,7 @@ Define a test here before running it. Test IDs never change.
 | S5-U74 | Status board K6 stored as the 11 packed `SB_*` words (Tribunal 1 minimum-bit change, item 6: data shared between tasks); writers and getters unchanged | Min-bit item 6, NFR11 | auto (host) | `test_status_board_host.c`: write every part at its minimum, maximum and typical values (sentinels 2044 / 1020 mm), read back through the getters; initial board; snapshot size | Every field reads back unchanged; initial board = nothing ahead, profile clear, other fields 0; snapshot 44 B; pitch beyond ±45° stored as ±45° (the ramp check compares with ±2°) |
 | S5-U75 | K4 mission event is one 16-bit `MSG_EVT` word (11-bit value, 5-bit type), Tribunal 1 minimum-bit change (post-tribunal gap 3); a value above 2047 is clamped and flagged, never wrapped | Min-bit items 6, 7; K4 | auto (host) | `sim_mission_host.c` with a K4 mock using the kernel cost (4 B header + size rounded to 4): message size and buffer, six event types with values 0..2047 posted and read back, one value of 5000 | Messages 2 B, 16 entries in 128 B (S5-U04 high-water is now 128 B, was 256 B); every type and value back unchanged in FIFO order; 5000 arrives as 2047 with `APP_FAULT_RANGE_CLAMP` |
 | S5-U76 | A barcode slow pass may take up to 15 s (`MISSION_BARCODE_READ_MS`) before it ends without a decode | FR2, FR3 | auto (host sim) | `sim_mission_host.c`: a slow pass with no decoder result for 10 s, then to 15 s (on-car 12 Nov 14:23: a pass through a bend decoded after 8.4 s, 0.6 s before the old 9 s limit) | Still reading after 10 s; ends at 15 s with the S5-U68 retry. |
+| S5-U77 | The layout's `MSG_EVT` TYPE range covers every `APP_EVT_*` code (was 0..24 while `APP_EVT_BARCODE_PROBE` is 25); a build check stops the layout falling behind again | Tribunal 1 min-bit table; K4/K7 | auto (host sim) + build check | Compare `MSG_EVT_TYPE_MAX` with `APP_EVT_COUNT - 1` and the 5-bit field; `mission.c` `#error` when the layout max is below the last code | Max 25 = last code, fits 5 bits. No event type is published differently (type 25 is never forwarded to telemetry). |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -126,6 +127,8 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-12 | S5-U04, S5-U07, S5-U75 | `pack-mission-event-word` | Dylan | PASS | Mission host simulation | 189 + 11 pass; K4 high-water = whole 128 B buffer. |
 | 2026-11-12 | S5-U76 | before fix (`745abc0`) | Dylan | FAIL | Mission host simulation | The pass ended at 9 s (1 check failed). |
 | 2026-11-12 | S5-U57, S5-U68, S5-U76 | `barcode-reread-time-limit` | Dylan | PASS | Mission host simulation | Mission simulation 191 pass. |
+| 2026-11-12 | S5-U77 | before fix (`745abc0`) | Dylan | FAIL | Mission host simulation | Layout max 24 below code 25 (1 check failed; with the new build check `mission.c` does not compile). |
+| 2026-11-12 | S5-U75, S5-U77 | `shared-event-type-range` | Dylan | PASS | Mission host simulation | Mission simulation 191 pass, mission host tests pass; generated `app_layout.h` and `docs/data_representation.md` differ only in the TYPE max. |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 

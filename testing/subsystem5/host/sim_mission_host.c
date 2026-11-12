@@ -902,6 +902,11 @@ int main(void) {
             "a value above 2047 is clamped to 2047 and flagged, never wrapped");
       qn = 0; mbf_used = 0; g_fault = 0;
     }
+    /* S5-U77 (Tribunal 1 min-bit table): the layout's MSG_EVT TYPE range
+       covers every APP_EVT_* code (it stopped at 24, BARCODE_PROBE is 25) */
+    CHECK("S5-U77", (APP_EVT_COUNT - 1u) <= (uint32_t) MSG_EVT_TYPE_MAX
+          && (uint32_t) MSG_EVT_TYPE_MAX < (1u << MSG_EVT_TYPE_BITS),
+          "layout TYPE max = last event code (25) and fits 5 bits");
     CHECK("S5-U04", !mission_post_event(APP_EVT_COUNT, 0), "unknown event type refused");
     qn = 0; mbf_used = 0;
     /* S5-U05 (moved from target, Fix 2): every state x every event type */
