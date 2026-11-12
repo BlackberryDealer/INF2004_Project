@@ -51,6 +51,7 @@ static volatile uint16_t g_bar_ring[BAR_RING_ENTRIES];
 static volatile uint8_t  g_bar_head                   = 0u; /* E6 ISR writer */
 static volatile uint8_t  g_bar_tail                   = 0u; /* E6 task writer */
 static volatile uint8_t  g_bar_overflow               = 0u; /* SH_BAR_OVF */
+static uint8_t           g_bar_ovf_seen               = 0u; /* task copy */
 static volatile uint32_t g_bar_last_us               = 0u; /* ISR writes */
 static volatile uint8_t  g_bar_branch_seq             = 0u; /* SH_BAR */
 static volatile uint32_t g_bar_edge_cnt               = 0u; /* ISR only */
@@ -103,6 +104,9 @@ static void     barcode_edge_isr(uint32_t events, uint32_t now_us);
 static void     barcode_init_state(void);
 static void     barcode_cycle(void);
 static void     barcode_filter_reset(void);
+static void     barcode_ring_barrier(void);
+static void     barcode_drain_ring(uint32_t cpw, uint32_t path);
+static void     barcode_discard_after_drop(uint32_t path);
 static uint32_t barcode_gap_add(uint32_t first, uint32_t second);
 static uint32_t barcode_width_01mm(uint32_t gap_16us, uint32_t cpw);
 static void     barcode_settle_edge(uint32_t gap_16us, uint32_t cpw,
@@ -302,6 +306,7 @@ static void barcode_init_state(void)
     g_bar_head       = 0u;
     g_bar_tail       = 0u;
     g_bar_overflow   = 0u;
+    g_bar_ovf_seen   = 0u;
     g_bar_last_us    = 0u;
     g_bar_branch_seq = 0u;
     g_bar_prv_a      = 0u;
@@ -441,6 +446,7 @@ static void barcode_edge_isr(uint32_t events, uint32_t now_us)
                                  MSG_EDGE_LEVEL_BITS, level);
             /* cast: MSG_EDGE_USED_BITS <= 16 by layout check */
             g_bar_ring[head] = (uint16_t) entry;
+            barcode_ring_barrier();          /* entry before head */
             g_bar_head       = next;
             /* E_QOVR when semaphore is already at maxsem is benign. */
             (void) tk_sig_sem(gh_bar_sem, 1);
@@ -498,6 +504,7 @@ static void barcode_cycle(void)
 
     if (b_reset || b_inhib)
     {
+        g_bar_ovf_seen   = g_bar_overflow;
         g_bar_tail       = g_bar_head;
         g_bar_fix_cnt    = 0u;
         g_bar_carry_16us    = 0u;
@@ -518,28 +525,92 @@ static void barcode_cycle(void)
             gb_bar_reread_first = false;
         }
 
-        while (g_bar_tail != g_bar_head)
+        if (g_bar_overflow != g_bar_ovf_seen)
         {
-            uint8_t const  tail     = g_bar_tail;
-            /* cast: widen 16-bit packed MSG_EDGE word */
-            uint32_t const word     = (uint32_t) g_bar_ring[tail];
-            uint32_t const gap_16us = app_bits_get(word, MSG_EDGE_GAP_POS,
-                                                   MSG_EDGE_GAP_BITS);
-
-            /* cast: masked ring index fits in uint8_t */
-            g_bar_tail =
-                (uint8_t) (((uint32_t) tail + 1u) & (BAR_RING_ENTRIES - 1u));
-#if (BAR_EDGE_LOG_ON != 0u)
-            /* The DO level is kept for the diagnosis log only. */
-            barcode_elog_add(gap_16us,
-                             app_bits_get(word, MSG_EDGE_LEVEL_POS,
-                                          MSG_EDGE_LEVEL_BITS), cpw);
-#endif
-            barcode_settle_edge(gap_16us, cpw, path);
+            barcode_discard_after_drop(path);
         }
-
-        barcode_check_timeouts(path);
+        else
+        {
+            barcode_drain_ring(cpw, path);
+            barcode_check_timeouts(path);
+        }
     }
+}
+
+/**
+ * barcode_ring_barrier
+ * @brief   Memory barrier for the edge ring (Tribunal 1 row 12, S3-U46):
+ *          a DMB on the RP2040, so the entry and the index stay in order
+ *          when the ISR and barcode_task run on different cores.
+ * @context ISR (R1), barcode_task
+ */
+static void barcode_ring_barrier(void)
+{
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+}
+
+/**
+ * barcode_drain_ring
+ * @brief   Reads the edge ring in order head, barrier, entry, barrier,
+ *          tail (Tribunal 1 row 12) and passes each edge to the decoder.
+ * @param   cpw   Current average wheel speed in cpw.
+ * @param   path  Current odometry path in counts.
+ * @context barcode_task
+ */
+static void barcode_drain_ring(uint32_t cpw, uint32_t path)
+{
+    uint8_t head = g_bar_head;
+
+    barcode_ring_barrier();                  /* head before entry */
+    while (g_bar_tail != head)
+    {
+        uint8_t const  tail     = g_bar_tail;
+        /* cast: widen 16-bit packed MSG_EDGE word */
+        uint32_t const word     = (uint32_t) g_bar_ring[tail];
+        uint32_t const gap_16us = app_bits_get(word, MSG_EDGE_GAP_POS,
+                                               MSG_EDGE_GAP_BITS);
+
+        barcode_ring_barrier();              /* entry before tail */
+        /* cast: masked ring index fits in uint8_t */
+        g_bar_tail =
+            (uint8_t) (((uint32_t) tail + 1u) & (BAR_RING_ENTRIES - 1u));
+#if (BAR_EDGE_LOG_ON != 0u)
+        /* The DO level is kept for the diagnosis log only. */
+        barcode_elog_add(gap_16us,
+                         app_bits_get(word, MSG_EDGE_LEVEL_POS,
+                                      MSG_EDGE_LEVEL_BITS), cpw);
+#endif
+        barcode_settle_edge(gap_16us, cpw, path);
+        head = g_bar_head;
+        barcode_ring_barrier();              /* head before entry */
+    }
+}
+
+/**
+ * barcode_discard_after_drop
+ * @brief   The ISR dropped an edge (ring full): the element sequence now
+ *          has a gap. Two equal levels catch an odd number of lost edges
+ *          but not an even number, so discard the capture and the queued
+ *          edges and wait for a quiet zone (Tribunal 1 row 12, S3-U46).
+ * @param   path  Current odometry path in counts.
+ * @context barcode_task
+ */
+static void barcode_discard_after_drop(uint32_t path)
+{
+    uint32_t const n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                                         PRV_BAR_A_N_ELEM_BITS);
+
+    g_bar_ovf_seen   = g_bar_overflow;
+    g_bar_tail       = g_bar_head;
+    g_bar_fix_cnt    = 0u;
+    g_bar_carry_16us = 0u;
+    barcode_filter_reset();
+    gb_bar_quiet_known = false;
+    barcode_state_set(BAR_STATE_IDLE, 0u);
+    barcode_mark_set(path);
+    /* cast: count <= 63 */
+    app_log("BAR capture dropped: edge ring full after %d elements\n",
+            (int32_t) n_elem, 0, 0);
 }
 
 /**

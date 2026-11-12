@@ -1149,6 +1149,51 @@ int main(void)
                    "the same capture dropped without a guard: rewind");
     }
 
+    /* ---- S3-U46 (Tribunal 1 row 12: edge ring "to add") ------------ */
+    /* When the ring is full the ISR drops the new edge and counts it.
+       Two equal levels catch an odd number of lost edges, not an even
+       number, so any change of the drop count now discards the capture
+       and the queued edges. (The DMB barriers around the ring indexes
+       are checked in the ARM disassembly: a host build cannot show
+       cross-core ordering.)                                           */
+    {
+        uint8_t const first[] = {75u, 160u, 75u, 50u};
+        uint32_t      now_us  = 2000000u;
+        uint32_t      n_elem  = 0u;
+        uint32_t      state   = 0u;
+
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r = g_sim_speed_l;
+        sim_bar_widths(first, sizeof(first), 50000u, true);
+        n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                              PRV_BAR_A_N_ELEM_BITS);
+        HOST_CHECK("S3-U46", 4u == n_elem,
+                   "a capture is in progress (4 elements)");
+        for (uint32_t i = 0u; i < (BAR_RING_ENTRIES + 6u); i++)
+        {
+            now_us        += 5000u;       /* task held up: ring fills */
+            gb_sim_bar_pin = !gb_sim_bar_pin;
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+        }
+        HOST_CHECK("S3-U46", 0u != g_bar_overflow,
+                   "ring full: the ISR dropped and counted edges");
+        barcode_cycle();
+        n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                              PRV_BAR_A_N_ELEM_BITS);
+        state  = app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                              PRV_BAR_A_STATE_BITS);
+        HOST_CHECK("S3-U46", (0u == n_elem) && (BAR_STATE_IDLE == state)
+                   && (g_bar_tail == g_bar_head),
+                   "drop count changed: capture and queued edges discarded");
+        gb_sim_bar_pin = !gb_sim_bar_pin;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us + 5000u);
+        barcode_cycle();
+        HOST_CHECK("S3-U46", g_bar_tail == g_bar_head,
+                   "the next edge is read normally (no repeated discard)");
+    }
+
     /* ---- S3-U22 (on-car 2026-11-06 14:49: barcodes never decoded) --- */
     /* Captures ended with 26 / 15 elements and nothing said which bars
        or spaces were missing. A dropped or invalid capture now prints
