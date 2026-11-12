@@ -596,12 +596,13 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
             /* Saturate at 31 (5-bit LOST_CNT). */
         }
 
-        /* Centred (line between the sensors, S3-U19): not lost until no
-           line was seen for LINE_CENTRE_LOST_MM (line end). After a
-           black exit: not before LINE_EXIT_LOST_MM (S3-U20).          */
+        /* Centred (line between the sensors, S3-U19): never lost. The
+           track has no line end and the car keeps following; a distance
+           limit here also fired after a barcode rewind, whose reverse
+           travel counts in the path (on-car 12 Nov, S3-U44). After a
+           black exit: lost after LINE_EXIT_LOST_MM (S3-U20).           */
         white_mm     = odometry_counts_to_mm(path - g_white_mark);
-        b_is_between = line_track_steer_line_between(&g_steer)
-                       && (white_mm < LINE_CENTRE_LOST_MM);
+        b_is_between = line_track_steer_line_between(&g_steer);
         b_is_waiting = (!line_track_steer_line_between(&g_steer))
                        && (white_mm < LINE_EXIT_LOST_MM);
 

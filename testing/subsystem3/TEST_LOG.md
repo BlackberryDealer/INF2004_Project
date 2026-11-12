@@ -55,6 +55,7 @@ Define a test here before running it. Test IDs never change.
 | S3-U40 | An intact start guard at cruise always asks for a slow reread | FR2, FR3 | auto (host) | The 10-element start guard at 120 mm/s, then the same during the slow reread | One BARCODE_PROBE at cruise; nothing during the reread. |
 | S3-U41 | One junction type: a stripe under both line sensors is always `APP_JCT_CROSS`, whatever the sensors read past it | FR3, FR19 | auto (host) | Replay the stripe-then-both-white trace (how the + cross-junction reads with the arm ahead between the centred sensors) and check the junction codes | One `APP_JCT_CROSS` event; codes run `NONE` 0, `CROSS` 1, `SIDE_L` 2, `SIDE_R` 3 (no T class). S3-U02 and S3-U14 now expect `APP_JCT_CROSS` for every stripe across both sensors. |
 | S3-U43 | The first and last bar of a capture are always narrow (each `*` guard begins and ends with a narrow bar, read either way), so a long end bar no longer stops a decode | FR2 | auto (host) | The 29 widths logged on-car 12 Nov 14:15:46 (`*A*`, first bar 10.8 mm against ~7 mm narrow bars), the same read the other way, all 43 characters both ways with the first or last bar at 1.7x narrow, and two broken frames | Logged capture decodes A both ways; all 43 characters decode; a broken start guard or data character is still rejected. |
+| S3-U44 | No line-end rule: a centred car (line between the sensors, both white) is never reported lost, whatever the distance, including during a barcode rewind and slow reread; a line that leaves under a sensor is still lost after `LINE_EXIT_LOST_MM` | FR2, FR14 | auto (host) | Centred white for 2 m; a 220 mm rewind + 400 mm slow pass with `APP_MODE_BARCODE_REREAD` set, then 1 m at cruise; a black exit | No LINE_LOST and line ON for every centred stretch; LINE_LOST after the black exit as before. Replaces the S3-U19 line-end check (300 mm). |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -111,6 +112,8 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-11 | S3-U02, S3-U14, S3-U41 | `one-cross-junction-type` | Dylan | PASS | Line track host test, barcode host simulation | Full subsystem 3 run: 50 + 16 + 73 pass. |
 | 2026-11-12 | S3-U43 | before fix (`745abc0`) | Dylan | FAIL | Code 39 host test | 4 of 6 checks fail: the logged capture and every long-end-bar frame are rejected (pooled ratio 160/108 < 1.8). The 2 broken-frame checks pass. |
 | 2026-11-12 | S3-U43 | `barcode-end-bars-narrow` | Dylan | PASS | Code 39 host test, barcode host simulation | Code 39 22 pass (was 16), simulation 73 pass. |
+| 2026-11-12 | S3-U44 | before fix (`745abc0`) | Dylan | FAIL | Barcode host simulation | 3 of 4 checks fail: LINE_LOST after 300 mm of centred white (on-car 12 Nov: rewind ~220 mm + lead-in ~110 mm, line lost just before the barcode on every reread). The black-exit check passes. |
+| 2026-11-12 | S3-U44 | `line-no-line-end` | Dylan | PASS | Barcode host simulation | Simulation 76 pass (was 73; the S3-U19 line-end check is now an S3-U44 check). |
 
 ## SPEC-QUESTION
 

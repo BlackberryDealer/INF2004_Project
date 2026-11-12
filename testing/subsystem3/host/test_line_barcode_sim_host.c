@@ -942,9 +942,8 @@ int main(void)
     /* The line lies between the sensors when the car is centred: 200 ms
        of both white must not post LINE_LOST (each one made mission stop
        and turn 60 deg: the shaking). A line that went black under a
-       sensor and then vanished is still lost after 200 ms, and a car
-       that sees no line at all for LINE_CENTRE_LOST_MM is lost too
-       (line end, U-turn).                                             */
+       sensor and then vanished is still lost after 200 ms. A centred
+       car is never lost, whatever the distance (no line end, S3-U44). */
     sim_reset();
     sim_calibrate_line();
     g_sim_path  = 1000u;
@@ -972,14 +971,14 @@ int main(void)
     }
     HOST_CHECK("S3-U19", 0u == g_sim_evt_cnt,
                "grey graze, then 400 ms both white: still no LINE_LOST");
-    for (uint32_t i = 0u; i < LINE_CENTRE_LOST_MM; i++)  /* no line */
+    for (uint32_t i = 0u; i < 2000u; i++) /* 2 m centred, no graze */
     {
         g_sim_path += odometry_mm_to_counts(1u);
         line_cycle();
     }
-    HOST_CHECK("S3-U19", (1u == g_sim_evt_cnt)
-               && (APP_EVT_LINE_LOST == g_sim_evts[0].type),
-               "no line for LINE_CENTRE_LOST_MM: LINE_LOST (line end)");
+    HOST_CHECK("S3-U44", (0u == g_sim_evt_cnt)
+               && (APP_LINE_ON == g_sim_line_out.line_status),
+               "centred 2 m without touching the line: no LINE_LOST, line ON");
     sim_reset();
     sim_calibrate_line();
     g_sim_path  = 1000u;
@@ -1007,9 +1006,8 @@ int main(void)
        black under a sensor and on to the inside (the car was turning
        toward it), so 200 ms later it was still right there. A black
        exit is now lost only after LINE_EXIT_LOST_MM of travel (and 200
-       ms), giving the recovery steer time to bring the line back; a
-       centred car (no line seen) after LINE_CENTRE_LOST_MM 300 mm (the
-       150 mm fallback fired on a straight before the box, path 151).  */
+       ms), giving the recovery steer time to bring the line back. A
+       centred car is never lost (S3-U44).                             */
     sim_reset();
     sim_calibrate_line();
     g_sim_path  = 1000u;
@@ -1051,9 +1049,63 @@ int main(void)
     }
     HOST_CHECK("S3-U20", 0u == g_sim_evt_cnt,
                "centred 200 mm without touching the line: no LINE_LOST");
-    HOST_CHECK("S3-U20", (LINE_CENTRE_LOST_MM >= 300u)
-               && (LINE_EXIT_LOST_MM >= 50u),
-               "loss distances: centred >= 300 mm, black exit >= 50 mm");
+    HOST_CHECK("S3-U20", LINE_EXIT_LOST_MM >= 50u,
+               "loss distance after a black exit >= 50 mm");
+
+    /* ---- S3-U44 (on-car 2026-11-12: every slow reread lost the line) */
+    /* The 300 mm centred line-end rule counted the barcode rewind
+       (reverse travel is in the path): rewind ~220 mm + lead-in ~110 mm
+       posted LINE_LOST just before the barcode and the search ended the
+       slow pass. The track has no line end, so a centred car is never
+       lost; a black exit still is (S3-U20).                          */
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path      = 1000u;
+    g_sim_mode_mask = APP_MODE_BARCODE_REREAD | APP_MODE_BARCODE_INHIBIT
+                      | APP_MODE_JUNCTION_INHIBIT;
+    g_sim_raw_l     = 500u;               /* centred, both white */
+    g_sim_raw_r     = 500u;
+    for (uint32_t i = 0u; i < 220u; i++)  /* braking + rewind 220 mm */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    g_sim_mode_mask = APP_MODE_BARCODE_REREAD;   /* slow pass */
+    for (uint32_t i = 0u; i < 400u; i++)  /* lead-in + barcode + quiet */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U44", (0u == g_sim_evt_cnt)
+               && (APP_LINE_ON == g_sim_line_out.line_status),
+               "rewind 220 mm + slow pass 400 mm centred: no LINE_LOST");
+    g_sim_mode_mask = 0u;                 /* reread over, cruise again */
+    for (uint32_t i = 0u; i < 1000u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U44", 0u == g_sim_evt_cnt,
+               "then 1 m more centred at cruise: still no LINE_LOST");
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path  = 1000u;
+    g_sim_raw_r = 500u;
+    g_sim_raw_l = 3500u;                  /* line drifts under the left */
+    for (uint32_t i = 0u; i < 5u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    g_sim_raw_l = 500u;                   /* and leaves there */
+    for (uint32_t i = 0u; i < (LINE_EXIT_LOST_MM + 5u); i++)
+    {
+        g_sim_path += odometry_mm_to_counts(4u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U44", (1u == g_sim_evt_cnt)
+               && (APP_EVT_LINE_LOST == g_sim_evts[0].type),
+               "black exit, then gone: LINE_LOST as before");
 
     /* ---- S3-U22 (on-car 2026-11-06 14:49: barcodes never decoded) --- */
     /* Captures ended with 26 / 15 elements and nothing said which bars

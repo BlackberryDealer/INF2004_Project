@@ -34,9 +34,8 @@
    both with the car on the line, i.e. the 18 mm line lies between the
    sensors). The recovery and LINE_LOST after LINE_LOST_CYCLES apply only
    once the line went black under one sensor (it may have left there);
-   after a grey graze both white means centred: steer 0, line ON. With
-   no line under either sensor for LINE_CENTRE_LOST_MM it is lost anyway
-   (line end). S3-U19.                                                 */
+   after a grey graze both white means centred: steer 0, line ON, for
+   any distance: the track has no line end (S3-U19, S3-U44).           */
 /* A black-to-white transition may mean the tape is between the sensors
    again. Let steering decay for 120 ms before starting the search arc. */
 #define LINE_RECOVER_COAST_CYCLES (12u)  /* 10 ms cycles */
@@ -55,9 +54,8 @@
    posted LINE_LOST every 30-50 mm (line found again 90-190 ms later,
    i.e. it had passed to the inside), each a mission STOP + 60 deg pivot:
    violent shaking. A black exit now needs LINE_EXIT_LOST_MM of travel
-   as well as 200 ms, so the recovery steer can bring the line back;
-   the centred fallback 150 -> 300 mm (it fired at 151 mm on a straight). */
-#define LINE_CENTRE_LOST_MM      (300u)  /* TUNE: centred white -> lost */
+   as well as 200 ms, so the recovery steer can bring the line back.
+   The centred fallback (150, then 300 mm) is gone: no line end (S3-U44). */
 #define LINE_EXIT_LOST_MM        (60u)   /* TUNE: black exit -> lost    */
 #define LINE_SIDE_MIN            (150)   /* TUNE: |error| that sets side */
 #define LINE_STEER_FILT_DIV      (4)     /* TUNE: 1 = no smoothing      */
