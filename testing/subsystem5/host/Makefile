@@ -5,6 +5,7 @@
 #   sim_obstacle_host     : obstacle_task simulation (obstacle.c + profile)
 #   test_drv_ultrasonic_host : S5-U09, trigger pulse >= 10 us when
 #                           interrupted and across the timer wrap
+#   test_status_board_host : S5-U74, packed status board round trip
 # The simulations compile copies of the real sources in build/ next to a
 # mock app.h, so "../app.h" inside them resolves to the mock.
 # Run: make -C testing/subsystem5/host   (also called by testing/host)
@@ -18,11 +19,12 @@ B       := build/app_program
 .PHONY: all clean tree
 
 all: test_obs_profile_host.out sim_mission_host.out sim_obstacle_host.out \
-     test_drv_ultrasonic_host.out
+     test_drv_ultrasonic_host.out test_status_board_host.out
 	./test_obs_profile_host.out
 	./test_drv_ultrasonic_host.out
 	./sim_mission_host.out
 	./sim_obstacle_host.out
+	./test_status_board_host.out
 
 test_obs_profile_host.out: test_obs_profile_host.c $(S5)/obs_profile.c \
                            $(S5)/obs_profile.h $(S5)/cfg_obstacle.h
@@ -41,6 +43,7 @@ tree:
 	mkdir -p build/hardware
 	cp mock/hardware/gpio.h build/hardware/gpio.h
 	cp $(APP)/app_types.h $(APP)/board_pins.h $(B)/
+	cp $(APP)/app_bits.h $(APP)/app_bits.c $(APP)/app_layout.h $(B)/
 	cp $(APP)/subsystem1/telem.h $(APP)/subsystem1/telem_bin.h $(B)/subsystem1/
 	cp $(APP)/subsystem2/safety.h $(APP)/subsystem2/fault.h \
 	   $(APP)/subsystem2/motion.h $(APP)/subsystem2/odometry.h \
@@ -52,11 +55,17 @@ tree:
 
 sim_mission_host.out: sim_mission_host.c tree
 	$(CC) $(SIMFLAGS) -DMISSION_HOST_TEST -o $@ sim_mission_host.c \
-	    $(B)/subsystem5/mission_run.c $(B)/subsystem5/status_board.c
+	    $(B)/subsystem5/mission_run.c $(B)/subsystem5/status_board.c \
+	    $(B)/app_bits.c
 
 sim_obstacle_host.out: sim_obstacle_host.c tree
 	$(CC) $(SIMFLAGS) -o $@ sim_obstacle_host.c \
-	    $(B)/subsystem5/obs_profile.c $(B)/subsystem5/status_board.c -lm
+	    $(B)/subsystem5/obs_profile.c $(B)/subsystem5/status_board.c \
+	    $(B)/app_bits.c -lm
+
+test_status_board_host.out: test_status_board_host.c tree
+	$(CC) $(SIMFLAGS) -o $@ test_status_board_host.c \
+	    $(B)/subsystem5/status_board.c $(B)/app_bits.c
 
 clean:
 	rm -rf *.out build

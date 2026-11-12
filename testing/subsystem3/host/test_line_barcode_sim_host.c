@@ -168,16 +168,17 @@ void sys_health_check_in(uint32_t task_bit)
     (void) task_bit;
 }
 
+/* The board is packed (status_board.c); this mock ignores the snapshot
+   and serves the simulated motion values directly.                    */
 void status_board_read(status_board_t * p_snapshot)
 {
-    p_snapshot->motion.path_counts = g_sim_path;
-    p_snapshot->motion.speed_l_cpw = g_sim_speed_l;
-    p_snapshot->motion.speed_r_cpw = g_sim_speed_r;
+    (void) p_snapshot;
 }
 
 uint32_t status_board_path(status_board_t const * p_snap)
 {
-    return p_snap->motion.path_counts;
+    (void) p_snap;
+    return g_sim_path;
 }
 
 int32_t status_board_pos_l(status_board_t const * p_snap)
@@ -194,12 +195,14 @@ int32_t status_board_pos_r(status_board_t const * p_snap)
 
 int32_t status_board_speed_l(status_board_t const * p_snap)
 {
-    return p_snap->motion.speed_l_cpw;
+    (void) p_snap;
+    return g_sim_speed_l;
 }
 
 int32_t status_board_speed_r(status_board_t const * p_snap)
 {
-    return p_snap->motion.speed_r_cpw;
+    (void) p_snap;
+    return g_sim_speed_r;
 }
 
 void status_board_write_line(status_board_line_t const * p_part)

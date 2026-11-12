@@ -65,15 +65,23 @@ typedef struct                  /* writer: mission_task (B5) */
     uint32_t armed_cmd;         /* APP_BAR_CMD_* */
 } status_board_mission_t;
 
-/* Snapshot. Phase 2: five part structs. Phase 4: 11 packed words.
-   NOBODY outside status_board.c touches its members. */
+/* Snapshot: the 11 packed SB_* words of tools/layout.csv (min-bit item
+   6; 44 B instead of the 5 natural-type part structs). The part structs
+   above stay the writers' interface in natural units. NOBODY outside
+   status_board.c touches its members: read them with the getters.   */
 typedef struct
 {
-    status_board_line_t    line;
-    status_board_motion_t  motion;
-    status_board_imu_t     imu;
-    status_board_obs_t     obs;
-    status_board_mission_t mission;
+    uint32_t line0;             /* SB_LINE0 */
+    uint32_t mot0;              /* SB_MOT0  */
+    uint32_t mot1;              /* SB_MOT1  */
+    uint32_t mot2;              /* SB_MOT2  */
+    uint32_t mot3;              /* SB_MOT3  */
+    uint32_t imu0;              /* SB_IMU0  */
+    uint32_t imu1;              /* SB_IMU1  */
+    uint32_t obs0;              /* SB_OBS0  */
+    uint32_t obs1;              /* SB_OBS1  */
+    uint32_t obs2;              /* SB_OBS2  */
+    uint32_t mis0;              /* SB_MIS0  */
 } status_board_t;
 
 extern ER       status_board_init(void);   /* creates MTX_STATUS */
