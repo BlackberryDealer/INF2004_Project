@@ -35,6 +35,12 @@
    Allow that ratio for a retry trigger. Decoding uses the standard ratio. */
 #define CODE39_GUARD_BAR_RATIO_X10 (14u)
 #define CODE39_NOT_FOUND       (0xFFu)
+/* Bars that are narrow in every valid frame, read either way: the first
+   and last bar of each '*' guard (elements 1, 9, 21 and 29). */
+#define CODE39_FIRST_BAR_IDX   (0u)
+#define CODE39_START_END_BAR   (8u)
+#define CODE39_STOP_FIRST_BAR  (20u)
+#define CODE39_LAST_BAR_IDX    (28u)
 #define CODE39_ASCII_UNKNOWN   ((uint32_t) '?')
 
 /* ---- private data ---------------------------------------------------- */
@@ -95,6 +101,8 @@ static uint32_t code39_try_split_both(uint8_t const * p_widths,
 
 static bool     code39_guard_matches(uint8_t const * p_widths,
                                        uint32_t first, bool b_reverse);
+static void     code39_narrow_ends(uint8_t const * p_widths,
+                                   uint8_t * p_adjusted);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -103,7 +111,8 @@ static bool     code39_guard_matches(uint8_t const * p_widths,
  * @brief   Decodes a 29-element `*<char>*` Code 39 capture in either
  *          forward or reverse order. Falls back to separate per-character
  *          bar/space thresholding when optical spot bias shifts bar vs
- *          space widths on small or high-contrast barcodes.
+ *          space widths on small or high-contrast barcodes. The first
+ *          and last bars are capped to a narrow guard bar first (S3-U43).
  * @param   p_widths      Array of 29 element widths (0.1 mm units).
  * @param   count         Number of elements captured (must be 29).
  * @param   p_char_index  Output data character index (0..42) on success.
@@ -119,11 +128,13 @@ uint32_t code39_decode(uint8_t const * p_widths, uint32_t count,
         (CODE39_CHAR_NULL != p_char_index) &&
         (BAR_ELEMENTS == count))
     {
-        uint8_t  sorted[BAR_ELEMENTS] = {0u};
-        uint32_t narrow_max           = 0u;
-        uint32_t wide_min             = 0u;
+        uint8_t  adjusted[BAR_ELEMENTS] = {0u};
+        uint8_t  sorted[BAR_ELEMENTS]   = {0u};
+        uint32_t narrow_max             = 0u;
+        uint32_t wide_min               = 0u;
 
-        code39_sort_n(p_widths, sorted, BAR_ELEMENTS);
+        code39_narrow_ends(p_widths, adjusted);
+        code39_sort_n(adjusted, sorted, BAR_ELEMENTS);
         narrow_max = (uint32_t) sorted[CODE39_NARROW_MAX_IDX]; /* cast: widen */
         wide_min   = (uint32_t) sorted[CODE39_WIDE_MIN_IDX];   /* cast: widen */
 
@@ -133,7 +144,7 @@ uint32_t code39_decode(uint8_t const * p_widths, uint32_t count,
         {
             uint32_t const threshold = ((narrow_max + wide_min) + 1u) / 2u;
 
-            result = code39_try_both(p_widths, threshold, p_char_index);
+            result = code39_try_both(adjusted, threshold, p_char_index);
         }
         else
         {
@@ -142,7 +153,7 @@ uint32_t code39_decode(uint8_t const * p_widths, uint32_t count,
 
         if (CODE39_OK != result)
         {
-            result = code39_try_split_both(p_widths, p_char_index);
+            result = code39_try_split_both(adjusted, p_char_index);
         }
         else
         {
@@ -209,6 +220,50 @@ uint32_t code39_char_ascii(uint32_t char_index)
 }
 
 /* ---- private functions ------------------------------------------------ */
+
+/**
+ * code39_narrow_ends
+ * @brief   Copies the 29 widths and caps the first and the last bar at the
+ *          other end bar of the same '*' guard. Every valid frame is *X*,
+ *          and read in either direction each '*' begins and ends with a
+ *          narrow bar, so a long first or last bar (10.8 mm against 7 mm
+ *          narrow bars on-car 12 Nov) is a measuring error. The full
+ *          pattern check of both guards and the data character still runs.
+ * @param   p_widths    Array of 29 element widths (0.1 mm units).
+ * @param   p_adjusted  Output array of 29 widths with the end bars capped.
+ * @return  none
+ * @context barcode_task
+ */
+static void code39_narrow_ends(uint8_t const * p_widths,
+                               uint8_t * p_adjusted)
+{
+    uint32_t idx = 0u;
+
+    for (idx = 0u; idx < BAR_ELEMENTS; idx++)
+    {
+        p_adjusted[idx] = p_widths[idx];
+    }
+
+    if ((0u != p_widths[CODE39_START_END_BAR]) &&
+        (p_widths[CODE39_START_END_BAR] < p_widths[CODE39_FIRST_BAR_IDX]))
+    {
+        p_adjusted[CODE39_FIRST_BAR_IDX] = p_widths[CODE39_START_END_BAR];
+    }
+    else
+    {
+        /* First bar already no wider than the guard's last bar. */
+    }
+
+    if ((0u != p_widths[CODE39_STOP_FIRST_BAR]) &&
+        (p_widths[CODE39_STOP_FIRST_BAR] < p_widths[CODE39_LAST_BAR_IDX]))
+    {
+        p_adjusted[CODE39_LAST_BAR_IDX] = p_widths[CODE39_STOP_FIRST_BAR];
+    }
+    else
+    {
+        /* Last bar already no wider than the guard's first bar. */
+    }
+}
 
 /**
  * code39_sort_n

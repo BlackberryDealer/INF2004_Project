@@ -8,8 +8,12 @@
  *    S3-U18  Optical bar/space width bias (narrow bars eroded, spaces dilated)
  *            and speed ramp across characters still decode all 43 characters
  *            in both directions at half-scale and full-scale
+ *    S3-U43  A long first or last bar (end bars of the '*' guards are always
+ *            narrow) still decodes; a broken guard or data character is
+ *            still rejected
  */
 
+#include <string.h>
 #include "host_test.h"
 #include "cfg_barcode.h"
 #include "code39.h"
@@ -163,6 +167,53 @@ static bool check_all_chars_biased(uint8_t nar_bar, uint8_t wid_bar,
     return b_all;
 }
 
+/* S3-U43: the 29 widths logged on-car 12 Nov 14:15:46 (*A*, first bar
+   10.8 mm against ~7 mm narrow bars), 0.1 mm, bar first. */
+static uint8_t const g_long_first_bar[BAR_ELEMENTS] =
+{
+    108u, 160u, 73u, 48u, 192u, 47u, 181u, 51u, 70u, 47u,
+    173u, 49u, 78u, 48u, 71u, 165u, 69u, 46u, 194u, 45u,
+    72u, 170u, 73u, 51u, 193u, 43u, 199u, 44u, 73u
+};
+
+static void reverse_widths(uint8_t const * p_in, uint8_t * p_out)
+{
+    uint32_t idx = 0u;
+
+    for (idx = 0u; idx < BAR_ELEMENTS; idx++)
+    {
+        p_out[idx] = p_in[(BAR_ELEMENTS - 1u) - idx];
+    }
+}
+
+/* Every character, both directions, with the first (b_last false) or the
+   last element widened to 'end' (between narrow and wide). */
+static bool check_all_chars_long_end(uint8_t end_w, bool b_last)
+{
+    bool     b_ok  = true;
+    uint32_t ch    = 0u;
+    uint32_t dir   = 0u;
+
+    for (ch = 0u; ch < APP_C39_CHAR_COUNT; ch++)
+    {
+        for (dir = 0u; dir < 2u; dir++)
+        {
+            uint8_t  widths[BAR_ELEMENTS] = {0u};
+            uint32_t out_idx              = 0xFFu;
+
+            build_frame(ch, 20u, 50u, (1u == dir), widths);
+            widths[b_last ? (BAR_ELEMENTS - 1u) : 0u] = end_w;
+            if ((CODE39_OK != code39_decode(widths, BAR_ELEMENTS, &out_idx))
+                || (out_idx != ch))
+            {
+                b_ok = false;
+            }
+        }
+    }
+
+    return b_ok;
+}
+
 static void check_pattern_table(bool * p_three_bits, bool * p_unique)
 {
     uint32_t idx_a        = 0u;
@@ -270,6 +321,33 @@ int main(void)
                "large barcode with optical bias + 40% speed change decodes all 43 fwd");
     HOST_CHECK("S3-U18", check_all_chars_biased(20u, 60u, 40u, 85u, true, true),
                "large barcode with optical bias + 40% speed change decodes all 43 rev");
+
+    /* S3-U43: long end bar of a '*' guard */
+    out_idx = 0xFFu;
+    HOST_CHECK("S3-U43",
+               (CODE39_OK == code39_decode(g_long_first_bar, BAR_ELEMENTS,
+                                           &out_idx)) && (10u == out_idx),
+               "on-car capture with a 10.8 mm first bar decodes 'A'");
+    reverse_widths(g_long_first_bar, widths);
+    out_idx = 0xFFu;
+    HOST_CHECK("S3-U43",
+               (CODE39_OK == code39_decode(widths, BAR_ELEMENTS, &out_idx))
+               && (10u == out_idx),
+               "same capture read the other way (long last bar) decodes 'A'");
+    HOST_CHECK("S3-U43", check_all_chars_long_end(34u, false),
+               "first bar 1.7x narrow: all 43 chars decode fwd and rev");
+    HOST_CHECK("S3-U43", check_all_chars_long_end(34u, true),
+               "last bar 1.7x narrow: all 43 chars decode fwd and rev");
+    (void) memcpy(widths, g_long_first_bar, BAR_ELEMENTS);
+    widths[2] = 181u;                 /* start guard: n w W ... not '*' */
+    HOST_CHECK("S3-U43",
+               CODE39_INVALID == code39_decode(widths, BAR_ELEMENTS, &out_idx),
+               "long first bar does not rescue a broken start guard");
+    (void) memcpy(widths, g_long_first_bar, BAR_ELEMENTS);
+    widths[12] = 170u;                /* data char gets a 4th wide element */
+    HOST_CHECK("S3-U43",
+               CODE39_INVALID == code39_decode(widths, BAR_ELEMENTS, &out_idx),
+               "long first bar does not rescue a broken data character");
 
     return (0 == HOST_SUMMARY("code39")) ? 0 : 1;
 }

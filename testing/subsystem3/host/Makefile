@@ -4,7 +4,7 @@
 # with "make -C testing/host". Any FAIL fails make.
 #
 #   S3-U01, U02, U06, U14, U16        test_line_track_host.c        (line_track.c)
-#   S3-U03, U04, U05, U18             test_code39_host.c            (code39.c)
+#   S3-U03, U04, U05, U18, U43        test_code39_host.c            (code39.c)
 #   S3-U07..U11, U14, U15, U17, U18   test_line_barcode_sim_host.c  (line.c + barcode.c)
 ################################################################################
 
