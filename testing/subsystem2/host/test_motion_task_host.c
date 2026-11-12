@@ -724,6 +724,69 @@ int main(void)
         g_sim_steer = 0;
     }
 
+    /* S2-U30: on-car 2026-11-12 14:23, the 60 mm/s barcode reread crawled
+       8.4 s through a bend with the line under the left sensor. The
+       speed scaling of the split truncated: no correction below |steer|
+       256 at 60 mm/s. It now rounds to nearest. Cruise keeps the same
+       split for every steering value.                                 */
+    {
+        int32_t       sp_l      = 0;
+        int32_t       sp_r      = 0;
+        int32_t const slow_cpw  = odometry_mm_s_to_cpw(MOTION_SLOW_MM_S);
+        int32_t const read_cpw  = odometry_mm_s_to_cpw(60);
+        int32_t const steers[4] = { 150, 250, 420, 600 };
+        bool          b_scaled  = true;
+        bool          b_same    = true;
+
+        sim_reset();
+        sim_send(APP_CMD_FOLLOW, 60u, 1u);
+        sim_cycles(3u);
+        for (uint32_t i = 0u; i < 4u; i++)
+        {
+            int32_t const full = (steers[i] * MOTION_KP_STEER_Q8) / 256;
+            int32_t const want = ((full * read_cpw) + (slow_cpw / 2))
+                                 / slow_cpw;
+
+            g_sim_steer = steers[i];
+            motion_state_follow(&sp_l, &sp_r);
+            if ((sp_r - sp_l) != (2 * want))
+            {
+                b_scaled = false;
+            }
+            g_sim_steer = -steers[i];
+            motion_state_follow(&sp_l, &sp_r);
+            if ((sp_l - sp_r) != (2 * want))
+            {
+                b_scaled = false;
+            }
+        }
+        HOST_CHECK("S2-U30", b_scaled,
+                   "60 mm/s: split = (steer x gain) x 60/100 rounded, both sides");
+        g_sim_steer = 200;
+        motion_state_follow(&sp_l, &sp_r);
+        HOST_CHECK("S2-U30", (sp_r - sp_l) > 0,
+                   "60 mm/s: steer 200 already turns (was 0 below 256)");
+        sim_send(APP_CMD_FOLLOW, MOTION_CRUISE_MM_S, 2u);
+        sim_cycles(3u);
+        for (int32_t st = -1000; st <= 1000; st += 10)
+        {
+            int32_t const want = (st * MOTION_KP_STEER_Q8) / 256;
+            int32_t       dmax = 0;
+
+            g_sim_steer = st;
+            motion_state_follow(&sp_l, &sp_r);
+            dmax = ((sp_l + sp_r) / 2) * 2 / 3;
+            if (((sp_r - sp_l) != (2 * want)) && ((sp_r - sp_l) / 2 != dmax)
+                && ((sp_l - sp_r) / 2 != dmax))
+            {
+                b_same = false;
+            }
+        }
+        HOST_CHECK("S2-U30", b_same,
+                   "cruise: split unchanged (steer x gain / 256) for every steer");
+        g_sim_steer = 0;
+    }
+
     return (0 == HOST_SUMMARY("motion_task")) ? 0 : 1;
 }
 
