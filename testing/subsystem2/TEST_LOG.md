@@ -34,6 +34,7 @@ Define a test here before running it. Test IDs never change.
 | S2-I03 | 90° and 180° × 10: ±5° and ±8° | NFR3b, c | manual (floor) | motion-accuracy table | PASS |
 | S2-I04 | Safety flag → motor inputs low ≤ 15 ms | NFR10a | probe (`PROBE=1`, GP14) | scope | ≤ 15 ms |
 | S2-I06 | Blocked wheel → brake + STALL after 300 ms | FR15 | manual (bench) | hold a wheel | STALL event, fault bit |
+| S2-U29 | K5 motion command is one 16-bit `MSG_CMD` word (11-bit parameter, 3-bit type, 2-bit tag), Tribunal 1 minimum-bit change (post-tribunal gap 3) | Min-bit items 1, 7; K5 | auto (host) | `test_motion_cmd_host.c`: `motion.c` against a mock message buffer with the kernel cost (4 B header + size rounded to 4); every command at its limits, out-of-range calls, 5 commands into the 4-deep queue | Every command arrives with the same type, parameter and tag; out-of-range calls refused; 4 fit, the 5th is refused, FIFO order kept; messages are 2 B and the K5 buffer is 32 B (was 12 B messages, 64 B buffer) |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -106,3 +107,5 @@ Add a new row for every run. Never edit or delete old rows.
 
 | 2026-11-10 | S2-U28 | before fix | Hanz | FAIL | motion_task host sim | 70 mm/s used the same split as slow speed. |
 | 2026-11-10 | S2-U28 | `barcode-reread-full-strip` | Hanz | PASS | motion_task host sim | Split scaled to 70/100. Subsystem 2 run: 32 + 4 + 14 + 52 pass. |
+| 2026-11-12 | S2-U29 | before fix (`745abc0`) | Dylan | FAIL | K5 command host test | All 8 behaviour checks pass (same commands, refusals, depth and order) but messages are 12 B and the buffer 64 B (2 checks failed). |
+| 2026-11-12 | S2-U29 | `pack-motion-command-word` | Dylan | PASS | K5 command host test | 10 checks pass. Full subsystem 2 run: 32 + 4 + 14 + 52 + 10 pass. |
