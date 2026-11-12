@@ -194,7 +194,7 @@
 #define APP_MCLASS_TURNING       (2u)
 #define APP_MCLASS_CLIMBING      (3u)
 #define APP_MCLASS_DESCENDING    (4u)
-#define APP_MCLASS_IMPACT        (5u)
+#define APP_MCLASS_LIFTED        (5u)  /* lifted or overturned: lift-stop */
 #define APP_MCLASS_CRUISING      (6u)  /* moving steadily: none of the above */
 
 #define APP_SYS_BOOT            (0u)

@@ -13,7 +13,7 @@
 #include "../app.h"
 
 #define SAFETY_ESTOP    (0x01u)   /* set by obstacle_task            */
-#define SAFETY_IMPACT   (0x02u)   /* set from R1 (IMU INT1 callback) */
+#define SAFETY_LIFT     (0x02u)   /* set by imu_task: lifted/overturned */
 #define SAFETY_FAULT    (0x04u)   /* set by mission_task in FAULT    */
 #define SAFETY_ALL      (0x07u)
 

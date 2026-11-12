@@ -14,7 +14,6 @@
 
 extern ER imu_init(void);
 extern ER imu_start(void);
-extern void imu_diag_service(void); /* mission_task: INT1 report line */
 /* Calibrated accelerometer averages as one SH_IMU_ACC word (AX, AY, AZ
    in 4 mg steps, offset 512). One aligned load, so atomic.            */
 extern uint32_t imu_acc_word(void);

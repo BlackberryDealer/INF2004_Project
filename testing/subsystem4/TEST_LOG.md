@@ -25,7 +25,7 @@ Define a test here before running it. Test IDs never change (spec B4).
 | S4-U11 | Hump 127/128 clamp sets RANGE_CLAMP (Phase 4) | SB_IMU0_HUMP_* | auto (target) | `test_imu.c` with the packed status board | 127 passes; 128 sets `APP_FAULT_RANGE_CLAMP` |
 | S4-I01 | Flat cruise, no false hump | NFR7 | track | 3 runs at cruise | No hump event |
 | S4-I02 | Humps 15/25/40 mm, short and long, 150 and 250 mm/s | FR4, FR5, NFR7 | track | 5 runs each, CSVs committed | All detected within ±20 % or ±5 mm |
-| S4-I03 | Impact taps from front/back/left/right | FR13 | bench | 5 taps each side; log `INT1_SRC_A`; with Buddy 2 | INT1 fires every time; motors low ≤ 15 ms |
+| S4-I03 | ~~Impact taps from front/back/left/right~~ **Withdrawn 2026-11-12** | FR13 (old) | — | Collision detection with the IMU was removed by Change Requirement 2; the INT1 impact path no longer exists. Replaced by S4-I12 / S4-I13. ID kept, never reused. | — |
 | S4-I04 | 10 on-the-spot turns: IMU vs encoder rate | A7 | floor | turn left/right, compare rates | Within 10 % or flagged `b_is_turn_from_enc` |
 | S4-I05 | Unplug SDA | B4.2.2 step 2 | bench | pull SDA during RUN | Fault after 3 errors; recovers on reconnect |
 | S4-I06 | FIFO burst read equals single reads; identity | B4.1.1 verify wrap (LSM303D: SQ-B4-2) | bench | burst of 4 vs 4 single reads; read WHO_AM_I (0x0F) | Equal samples; identity `0x49` on address 0x1D |
@@ -34,6 +34,9 @@ Define a test here before running it. Test IDs never change (spec B4).
 | S4-I09 | I2C time on GP14 | B.3 budgets | bench | GP14 around FIFO read | Record µs for 4 samples and magnetometer; ≤ budget |
 | S4-I10 | Magnetometer hard-iron offsets | R15 | bench | level, 360 deg slow turn, log mx/my | Offsets into `cfg_imu.h` |
 | S4-I11 | Mag vs encoder rate after S4-I10 | A7 | bench | 10 on-the-spot turns | Within 10 % |
+| S4-U16 | Lift-stop check `terrain_lift_step` (Change Requirement 2) | FR13 (lift-stop) | auto (host) | `make -C testing/subsystem4/host terrain`: flat, 45 deg slope, ±0.2 g braking, 40 ms bumps, hand lift +350 mg, upside down, 70 deg tip, lowered fast, out-of-range input, class LIFTED | No stop on the flat, the slope, braking or a 40 ms bump; stop on the 5th lifted cycle (50 ms); count saturates at 5 (3-bit LIFT_CNT); LIFTED class wins while SAFETY_LIFT is set |
+| S4-I12 | Lift-stop on the car (Change Requirement 2) | FR13 (lift-stop), NFR10a | car | RUN on the track; lift the car straight up, then tilted, then turn it over on a soft surface; 10 lifts in all; console + dashboard; optional GP14 probe on the motor pins | Every lift: `LIFT STOP` log, motors stop within 100 ms of the lift (50 ms confirm + ≤ 10 ms imu cycle + ≤ 11 ms motion), state FINISHED with end reason STOP; RESET → READY |
+| S4-I13 | No false lift-stop on humps and ramps (Change Requirement 2) | FR4, FR13 | track | 3 full runs over every hump and ramp at cruise, plus 3 obstacle stops | No `LIFT STOP` line; if one trips, raise `IMU_LIFT_DG_MG` or `IMU_LIFT_CONFIRM_CYCLES` (≤ 7) and repeat S4-I12 |
 
 *Method:* **auto** = `TEST_CHECK` / `HOST_CHECK` in code, result printed;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -56,6 +59,8 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S4-U14 + SQ-B4-2 register facts | LSM303D port | Faris | PASS (host) | `logs/2026-10-22_host_lsm303d.txt` | after the LSM303D port: terrain 19/19, fifo planner 8/8 (2 new checks lock address 0x1D and WHO_AM_I 0x49); normal and `TEST=1` images clean, `barr_check.sh` 85 files no findings. Hardware confirmation of the register set is S4-I06 |
 | 2026-10-22 | S4-I01, I02, I03, I04, I09 (Phase 3) | — | Faris | pending | — | integration on the car: INT1→motors low ≤15 ms with Buddy 2 (GP14), course humps vs ruler, imu_task WCET. Blocked on hardware; plan below |
 | 2026-10-22 | S4-I01–I11 | — | Faris | pending | — | bench/track: needs the physical car (placeholders kept, spec rule A.3) |
+| 2026-11-12 | S4-U01–U03, U06, U07, U10, U12–U14, U16 | `imu-lift-stop` | Hanz | PASS (host) | `logs/2026-11-12_host_lift_stop.txt` | Change Requirement 2: terrain 31/31 (12 new S4-U16 checks), drv_lsm303 14/14. Normal (`NET=lwip MQTT=1`) and `TEST=1` images build with zero warnings; `barr_check.sh` 95 files, no findings |
+| 2026-11-12 | S4-I12, S4-I13 | — | — | pending | — | needs the car: lift-stop timing and no false trip on humps |
 
 ## SPEC-QUESTION
 
@@ -111,6 +116,28 @@ branch `shared-b4-layout-rows` (commit `36da4ae`), where the deviation
 from B4.4 is written up. That PR is merged, so the rows are on `main` and
 `b4-imu` carries them too; no merge conflict results.
 
+## Change Requirement 2: lift-stop replaces IMU collision detection (2026-11-12)
+
+The lecturer removed collision detection with the IMU (it conflicted with
+obstacle avoidance). The only replacement: when the car is lifted or
+overturned the motors must stop at once; lifting the car ends the run in the
+demonstration. No sophisticated classification is wanted. Full write-up:
+`docs/change_requirement_2_lift_stop.md`.
+
+| Before | After |
+|---|---|
+| LSM303D interrupt generator 1 on INT1 (CTRL3 0x20, IG_CFG1 X/Y high, IG_THS1 `IMU_IMPACT_THS`, IG_DUR1 2, LIR1 latch) | INT1 not routed (CTRL3 0x00), IG_CFG1 0x00, no latch (CTRL5 0x70); IG_THS1/IG_DUR1 no longer written |
+| R1 callback `imu_int1_isr` on GP19 → `safety_set_from_isr(SAFETY_IMPACT)` | no callback; GP19 spare. `imu_task` sets `SAFETY_LIFT` (same K3 bit 0x02) |
+| `IMPACT_HOLD` (5 bits) + `IMPACT_SEQ` (4 bits) in PRV_IMU_A, `SH_IMU.IMPACT_SEQ` (8-bit ISR byte) | `LIFT_CNT` (3 bits, 0..5) in PRV_IMU_A; SH_IMU removed |
+| class `APP_MCLASS_IMPACT` (5) | `APP_MCLASS_LIFTED` (5), same 3-bit MCLASS field |
+| IMPACT in RUN → FAULT | LIFT in RUN → FINISHED, end reason STOP (end-of-run signal); LIFT in the CAL_IR sweep or run start → FAULT |
+
+The check (`terrain_lift_step`, host-tested by S4-U16) is armed only while
+`APP_MODE_MOTOR_EN` is set: az below 500 mg (tilted past 60 deg or upside
+down), or the size of the acceleration more than 300 mg away from 1 g,
+for 5 cycles in a row (50 ms). Both thresholds are TUNE values for
+S4-I12 / S4-I13. SQ point 1 below (IG_THS1 weight) is no longer relevant.
+
 ## Audit pass (review of Phases 1–5)
 
 Re-read every subsystem 4 file against Part A, Part C and Part D before
@@ -132,10 +159,10 @@ everything below is fixed and re-tested except where marked pending.
 
 ## Phase 3 integration plan (pending hardware)
 
-- **INT1 → motors low ≤ 15 ms:** with Buddy 2's motion merged, tap the
-  chassis; probe GP14 and the motor pins. The path is
-  R1 → `imu_int1_isr` → `safety_set_from_isr(SAFETY_IMPACT)` → motion's
-  step 3 brake, inside one 10 ms cycle (B4.2.2 step 3 timing note).
+- **Lift → motors low (S4-I12, replaces the INT1 test after Change
+  Requirement 2):** lift the car during RUN; probe the motor pins. The path
+  is `imu_task` (50 ms confirm) → `safety_set(SAFETY_LIFT)` → motion's
+  step 3 brake at its next 10 ms cycle.
 - **Humps on the course vs a ruler:** run S4-I02 profiles; the terrain
   monitor's integrated peak was host-validated at 20 mm ± 5 mm.
 - **imu_task WCET:** GP14 around the three paths (2 samples, magnetometer

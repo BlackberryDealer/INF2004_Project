@@ -59,6 +59,10 @@
 #define TERRAIN_ACC_MUL     (1074u)
 #define TERRAIN_ACC_SHIFT_2 (20u)
 
+/* Lift-stop: each axis is clamped to +-8192 mg before it is squared, so
+   the sum of three squares stays below 2.1e8 (int32_t safe).          */
+#define TERRAIN_LIFT_AXIS_MAX (8192)
+
 /* ---- private data ---------------------------------------------------- */
 
 /* atan table, 0.1 deg, atan(k/32) for k = 0..32 (B4.2.1) */
@@ -82,6 +86,7 @@ static int32_t const g_sin_tab[91] = {
 /* ---- private function prototypes ------------------------------------- */
 
 static uint32_t terrain_state_get(terrain_t const * p_ter);
+static int32_t  terrain_lift_clamp(int32_t mg);
 static void     terrain_state_set(terrain_t * p_ter, uint32_t state);
 static uint32_t terrain_hyst_get(terrain_t const * p_ter);
 static void     terrain_hyst_set(terrain_t * p_ter, uint32_t hyst);
@@ -448,22 +453,22 @@ void terrain_step(terrain_t * p_ter, terrain_input_t const * p_in,
 
 /**
  * terrain_classify
- * @brief   Motion class, first match wins: IMPACT, CLIMBING, DESCENDING,
+ * @brief   Motion class, first match wins: LIFTED, CLIMBING, DESCENDING,
  *          TURNING, ACCELERATING, STATIONARY, else CRUISING.
  * @param   terrain_state  TERRAIN_*
- * @param   b_impact_hold  impact class hold active
+ * @param   b_is_lifted    SAFETY_LIFT is set (lifted or overturned)
  * @param   turn_dps       turn rate, deg/s
  * @param   a_fwd_mg       forward acceleration, mg
  * @param   speed_cpw      speed, counts per 50 ms window
  * @return  APP_MCLASS_*
  * @context imu_task, host test
  */
-uint32_t terrain_classify(uint32_t terrain_state, bool b_impact_hold,
+uint32_t terrain_classify(uint32_t terrain_state, bool b_is_lifted,
                           int32_t turn_dps, int32_t a_fwd_mg, int32_t speed_cpw)
 {
-    if (b_impact_hold)
+    if (b_is_lifted)
     {
-        return APP_MCLASS_IMPACT;
+        return APP_MCLASS_LIFTED;
     }
     if (TERRAIN_CLIMBING == terrain_state)
     {
@@ -488,7 +493,81 @@ uint32_t terrain_classify(uint32_t terrain_state, bool b_impact_hold,
     return APP_MCLASS_CRUISING;
 }
 
+/**
+ * terrain_lift_step
+ * @brief   Lift-stop check (Change Requirement 2): no classification,
+ *          two thresholds on the calibrated averages. The car counts as
+ *          lifted or overturned while az < IMU_LIFT_TILT_AZ_MG (tilted
+ *          past 60 deg or upside down) or the size of the acceleration
+ *          differs from 1 g by more than IMU_LIFT_DG_MG (a hand picking
+ *          it up or putting it down). The size is compared squared:
+ *          (1000 - DG)^2 <= ax^2 + ay^2 + az^2 <= (1000 + DG)^2 is "on
+ *          the ground", whatever the slope. It must hold
+ *          IMU_LIFT_CONFIRM_CYCLES cycles in a row; one cycle without it
+ *          restarts the count.
+ * @param   lift_cnt      cycles in a row so far (PRV_IMU_A LIFT_CNT)
+ * @param   ax_mg         calibrated X average this cycle
+ * @param   ay_mg         calibrated Y average this cycle
+ * @param   az_mg         calibrated Z average this cycle (+1000 at rest)
+ * @param   pb_is_lifted  out: true once the count reaches the confirm
+ *                        value
+ * @return  the new count, 0..IMU_LIFT_CONFIRM_CYCLES (saturates)
+ * @context imu_task, host test
+ */
+uint32_t terrain_lift_step(uint32_t lift_cnt, int32_t ax_mg, int32_t ay_mg,
+                           int32_t az_mg, bool * pb_is_lifted)
+{
+    /* Clamped to +-8192 mg (the +-4 g range plus the 12-bit offsets
+       stays inside it), so each square is < 6.8e7 and the sum < 2.1e8:
+       no overflow in int32_t. */
+    int32_t const ax       = terrain_lift_clamp(ax_mg);
+    int32_t const ay       = terrain_lift_clamp(ay_mg);
+    int32_t const az       = terrain_lift_clamp(az_mg);
+    int32_t const mag2     = (ax * ax) + (ay * ay) + (az * az);
+    int32_t const lo       = IMU_REST_AZ_MG - IMU_LIFT_DG_MG;
+    int32_t const hi       = IMU_REST_AZ_MG + IMU_LIFT_DG_MG;
+    bool const    b_tilted = (az_mg < IMU_LIFT_TILT_AZ_MG);
+    bool const    b_push   = (mag2 < (lo * lo)) || (mag2 > (hi * hi));
+    uint32_t      cnt      = 0u;
+
+    if (b_tilted || b_push)
+    {
+        cnt = (lift_cnt < IMU_LIFT_CONFIRM_CYCLES) ? (lift_cnt + 1u)
+                                                   : IMU_LIFT_CONFIRM_CYCLES;
+    }
+    *pb_is_lifted = (cnt >= IMU_LIFT_CONFIRM_CYCLES);
+
+    return cnt;
+}
+
 /* ---- private functions ------------------------------------------------ */
+
+/**
+ * terrain_lift_clamp
+ * @brief   Clamps one axis to +-TERRAIN_LIFT_AXIS_MAX before squaring.
+ * @param   mg  calibrated average, mg
+ * @return  the clamped value
+ * @context imu_task, host test
+ */
+static int32_t terrain_lift_clamp(int32_t mg)
+{
+    int32_t out = mg;
+
+    if (out > TERRAIN_LIFT_AXIS_MAX)
+    {
+        out = TERRAIN_LIFT_AXIS_MAX;
+    }
+    else if (out < -TERRAIN_LIFT_AXIS_MAX)
+    {
+        out = -TERRAIN_LIFT_AXIS_MAX;
+    }
+    else
+    {
+        /* in range */
+    }
+
+    return out;
+}
 
 /**
  * terrain_state_get / _set

@@ -102,9 +102,20 @@ extern void terrain_step(terrain_t * p_ter, terrain_input_t const * p_in,
 
 /* ---- motion classifier (FR18) ---------------------------------------- */
 
-extern uint32_t terrain_classify(uint32_t terrain_state, bool b_impact_hold,
+extern uint32_t terrain_classify(uint32_t terrain_state, bool b_is_lifted,
                                  int32_t turn_dps, int32_t a_fwd_mg,
                                  int32_t speed_cpw);
+
+/* ---- lift-stop (Change Requirement 2) -------------------------------- */
+
+/* One 10 ms step of the lift / overturn check on the calibrated
+   averages (mg, az = +1000 at rest). lift_cnt is the PRV_IMU_A LIFT_CNT
+   value (cycles in a row the condition held, 0..IMU_LIFT_CONFIRM_CYCLES);
+   the new count is returned and *pb_is_lifted is true once it reaches
+   IMU_LIFT_CONFIRM_CYCLES.                                             */
+extern uint32_t terrain_lift_step(uint32_t lift_cnt, int32_t ax_mg,
+                                  int32_t ay_mg, int32_t az_mg,
+                                  bool * pb_is_lifted);
 
 #endif /* TERRAIN_H */
 

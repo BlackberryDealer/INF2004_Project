@@ -1,7 +1,8 @@
 /**
  * @file    drv_gpio_irq.c
- * @brief   R1: the only GPIO bank 0 interrupt handler. Serves GP1 (echo),
- *          GP7 (barcode) and GP19 (IMU INT1) through a callback table.
+ * @brief   R1: the only GPIO bank 0 interrupt handler. Serves GP1 (echo)
+ *          and GP7 (barcode) through a callback table (GP19, the IMU INT1,
+ *          is no longer used: Change Requirement 2).
  * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    drv
  * @reqs    NFR5a (edge timing), A12 (R1 < 20 us); deviation D6

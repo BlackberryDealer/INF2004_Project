@@ -139,8 +139,7 @@ PRV_IMU_A,32,GOOD_CNT,2,1,count,0,3,0,SAT,P,B4,Good reads in FAULT
 PRV_IMU_A,32,CLASS_GAP,5,1,tick,0,31,0,SAT,P,B4,Ticks since MOTION_CLASS
 PRV_IMU_A,32,LAST_CLASS,3,1,code,0,6,0,ENUM,P,B4,Last posted class
 PRV_IMU_A,32,MAG_DIV,3,1,tick,0,4,0,RNG,P,B4,Cycles to next magnetometer read
-PRV_IMU_A,32,IMPACT_HOLD,5,1,tick,0,31,0,SAT,P,B4,Impact class hold
-PRV_IMU_A,32,IMPACT_SEQ,4,1,count,0,15,0,RAW,P,B4,Last seen INT1 sequence (low bits)
+PRV_IMU_A,32,LIFT_CNT,3,1,tick,0,5,0,SAT,P,B4,Lift-stop: cycles in a row lifted or overturned (CR2)
 PRV_IMU_A,32,NEED_CFG,1,1,flag,0,1,0,FLAG,P,B4,LSM303D registers must be (re)written
 PRV_IMU_B,32,CAL_CNT,8,1,sample,0,200,0,RNG,P,B4,Calibration samples
 PRV_IMU_B,32,CLIMB_CNT,11,1,count,0,2047,0,SAT,P,B4,Climb distance
@@ -165,7 +164,6 @@ PRV_OFS_B,32,FIFO_OVR,8,1,count,0,255,0,SAT,P,B4,FIFO overruns
 E_IMU,32,ACC,28,1,um x mg,0,0,0,RAW,E,B4,E2 height accumulator: arithmetic headroom
 E_IMU,32,CAL_SUM,20,1,code,0,0,0,RAW,E,B4,E2 calibration sums x3 (live 2 s only)
 E_IMU_SAMPLE,16,RAW_SAMPLE,12,1,code,0,0,0,RAW,E,B4,E4 accelerometer register image (own E group; SPEC-QUESTION in TEST_LOG)
-SH_IMU,8,IMPACT_SEQ,8,1,count,0,255,0,RAW,S,B4,R1 callback -> imu_task; wraps
 PRV_TEL,32,DROPS,8,1,count,0,255,0,SAT,P,B1,K11 drops; telem_task only
 PRV_TEL,32,HB_DIV,3,1,count,0,4,0,RNG,P,B1,State cycles since heartbeat
 PRV_TEL,32,UPTIME_HI,16,1,s,0,65535,0,SAT,P,B1,Uptime seconds

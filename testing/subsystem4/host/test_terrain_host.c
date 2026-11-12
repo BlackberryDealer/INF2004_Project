@@ -2,7 +2,8 @@
  *  test_terrain_host.c
  *  Laptop tests of the pure Terrain Monitor (terrain.c): synthetic hump
  *  replays (S4-U01, U02, U06, U07), integer trig against math.h
- *  (S4-U03) and the forward-acceleration history (S4-U12). All HOST_CHECK
+ *  (S4-U03), the forward-acceleration history (S4-U12) and the lift-stop
+ *  check (S4-U16, Change Requirement 2). All HOST_CHECK
  *  calls live in main() because HOST_INIT declares its counters there.
  *
  *  Host-only, outside BARR-C scope (docs/BARR_C_DEVIATIONS.md, D7):
@@ -164,6 +165,27 @@ static bool host_ds_guard_ok(void)
             (0u == terrain_ds_counts(0, 0)));
 }
 
+/* S4-U16: feeds n cycles of one (ax, ay, az) to terrain_lift_step and
+   returns the count; *pb_lifted_any is set if any cycle reported lifted. */
+static uint32_t host_lift_feed(uint32_t cnt, int32_t ax_mg, int32_t az_mg,
+                               uint32_t n, bool * pb_lifted_any)
+{
+    uint32_t idx = 0u;
+
+    for (idx = 0u; idx < n; idx++)
+    {
+        bool b_lifted = false;
+
+        cnt = terrain_lift_step(cnt, ax_mg, 0, az_mg, &b_lifted);
+        if (b_lifted)
+        {
+            *pb_lifted_any = true;
+        }
+    }
+
+    return cnt;
+}
+
 int main(void)
 {
     HOST_INIT();
@@ -297,6 +319,64 @@ int main(void)
         HOST_CHECK("S4-U07",
                    (u07.max_hump_now_mm * 10u) >= (u01.max_hump_now_mm * 9u),
                    "slip changes the height by <= 10 %");
+    }
+
+    {
+        /* S4-U16: lift-stop thresholds (cfg_imu.h: az < 500 mg, or
+           | |a| - 1 g | > 300 mg, 5 cycles in a row). */
+        bool     b_any  = false;
+        bool     b_last = false;
+        uint32_t cnt    = 0u;
+
+        cnt = host_lift_feed(0u, 0, 1000, 200u, &b_any);
+        HOST_CHECK("S4-U16", (0u == cnt) && !b_any,
+                   "flat driving (az +1000 mg, 2 s): never lifted");
+        b_any = false;
+        cnt   = host_lift_feed(0u, 707, 707, 200u, &b_any);
+        HOST_CHECK("S4-U16", (0u == cnt) && !b_any,
+                   "45 deg slope held 2 s (A24 limit): |a| = 1 g, not lifted");
+        b_any = false;
+        cnt   = host_lift_feed(0u, 200, 1000, 200u, &b_any);
+        HOST_CHECK("S4-U16", (0u == cnt) && !b_any,
+                   "braking / accelerating at 0.2 g on the flat: not lifted");
+        b_any = false;
+        cnt   = host_lift_feed(0u, 0, 1400, 4u, &b_any);
+        cnt   = host_lift_feed(cnt, 0, 1000, 1u, &b_any);
+        cnt   = host_lift_feed(cnt, 0, 600, 4u, &b_any);
+        HOST_CHECK("S4-U16", !b_any && (4u == cnt),
+                   "40 ms bumps (+400 / -400 mg) with a level cycle between:"
+                   " no stop, the count restarted");
+        b_any = false;
+        cnt   = host_lift_feed(0u, 0, 1350, 4u, &b_any);
+        HOST_CHECK("S4-U16", !b_any && (4u == cnt),
+                   "hand lift (+350 mg): not yet after 4 cycles (40 ms)");
+        cnt = terrain_lift_step(cnt, 0, 0, 1350, &b_last);
+        HOST_CHECK("S4-U16", b_last && (IMU_LIFT_CONFIRM_CYCLES == cnt),
+                   "hand lift: stop on the 5th cycle (50 ms)");
+        cnt = host_lift_feed(cnt, 0, 1350, 20u, &b_any);
+        HOST_CHECK("S4-U16", (IMU_LIFT_CONFIRM_CYCLES == cnt)
+                   && (cnt <= (uint32_t)PRV_IMU_A_LIFT_CNT_MAX),
+                   "count saturates at 5: fits the 3-bit LIFT_CNT field");
+        b_any = false;
+        (void)host_lift_feed(0u, 0, -1000, 5u, &b_any);
+        HOST_CHECK("S4-U16", b_any, "upside down (az -1000 mg): stop");
+        b_any = false;
+        (void)host_lift_feed(0u, 940, 342, 5u, &b_any); /* 70 deg */
+        HOST_CHECK("S4-U16", b_any, "tipped over 70 deg (az 342 mg): stop");
+        b_any = false;
+        (void)host_lift_feed(0u, 0, 650, 5u, &b_any);
+        HOST_CHECK("S4-U16", b_any,
+                   "lowered fast / dropping (|a| 650 mg): stop");
+        b_any = false;
+        (void)host_lift_feed(0u, 30000, 30000, 5u, &b_any);
+        HOST_CHECK("S4-U16", b_any,
+                   "out-of-range input is clamped, no overflow: stop");
+        HOST_CHECK("S4-U16",
+                   (APP_MCLASS_LIFTED == terrain_classify(TERRAIN_CLIMBING,
+                                                          true, 90, 200, 10))
+                   && (APP_MCLASS_CLIMBING
+                       == terrain_classify(TERRAIN_CLIMBING, false, 0, 0, 10)),
+                   "class LIFTED wins while SAFETY_LIFT is set, else as before");
     }
 
     return (0 == HOST_SUMMARY("terrain")) ? 0 : 1;

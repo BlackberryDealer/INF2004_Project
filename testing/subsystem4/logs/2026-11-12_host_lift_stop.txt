@@ -1,0 +1,54 @@
+make: Entering directory './testing/subsystem4/host'
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -Wconversion -Wsign-conversion -I../../host -I../../../app_program -I../../../app_program/subsystem4 -I../../../app_program/subsystem2 -o test_terrain_host.out test_terrain_host.c ../../../app_program/subsystem4/terrain.c \
+    ../../../app_program/subsystem2/odometry.c ../../../app_program/app_bits.c -lm
+./test_terrain_host.out
+[TEST] S4-U03 PASS  atan2 1-deg grid error <= 0.2 deg
+[TEST] S4-U03 PASS  atan2 cardinal and diagonal points
+[TEST] S4-U03 PASS  sin/cos table points at 0, 30, 60, 90 deg
+[TEST] S4-U03 PASS  heading wrap and shortest-delta maths
+[TEST] S4-U13 PASS  ds from the slower wheel; rebase gives 0
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U12 PASS  fresh (zero-filled) history: a_fwd = speed x gain
+[TEST] S4-U12 PASS  40 - 0 over 50 ms = 528 mg (hand calculation)
+[TEST] S4-U12 PASS  40 - 10 over 50 ms = 396 mg
+[TEST] S4-U12 PASS  0 - 20 over 50 ms = -264 mg
+[TEST] S4-U12 PASS  0 - 30 over 50 ms = -396 mg
+[TEST] S4-U01 PASS  one hump reported for the recorded profile
+[TEST] S4-U01 PASS  20 mm ruler hump within +-20 % / +-5 mm
+[TEST] S4-U01 PASS  climb pitch was seen (>= 4.5 deg)
+[TEST] S4-U02 PASS  ramp longer than TERRAIN_MAX_CLIMB_MM: no hump
+[TEST] S4-U06 PASS  long hump at ~150 mm/s is not rejected
+[TEST] S4-U06 PASS  long-hump peak within tolerance
+[TEST] S4-U07 PASS  slip replay still reports the hump
+[TEST] S4-U07 PASS  slip changes the height by <= 10 %
+[TEST] S4-U16 PASS  flat driving (az +1000 mg, 2 s): never lifted
+[TEST] S4-U16 PASS  45 deg slope held 2 s (A24 limit): |a| = 1 g, not lifted
+[TEST] S4-U16 PASS  braking / accelerating at 0.2 g on the flat: not lifted
+[TEST] S4-U16 PASS  40 ms bumps (+400 / -400 mg) with a level cycle between: no stop, the count restarted
+[TEST] S4-U16 PASS  hand lift (+350 mg): not yet after 4 cycles (40 ms)
+[TEST] S4-U16 PASS  hand lift: stop on the 5th cycle (50 ms)
+[TEST] S4-U16 PASS  count saturates at 5: fits the 3-bit LIFT_CNT field
+[TEST] S4-U16 PASS  upside down (az -1000 mg): stop
+[TEST] S4-U16 PASS  tipped over 70 deg (az 342 mg): stop
+[TEST] S4-U16 PASS  lowered fast / dropping (|a| 650 mg): stop
+[TEST] S4-U16 PASS  out-of-range input is clamped, no overflow: stop
+[TEST] S4-U16 PASS  class LIFTED wins while SAFETY_LIFT is set, else as before
+[TEST] terrain SUMMARY 31 passed, 0 failed
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -Wconversion -Wsign-conversion -I../../host -I../../../app_program -I../../../app_program/subsystem4 -I../../../app_program/subsystem2 -o test_drv_lsm303_host.out test_drv_lsm303_host.c
+./test_drv_lsm303_host.out
+[TEST] S4-U14 PASS  empty FIFO: take 0, no overrun
+[TEST] S4-U14 PASS  two unread samples: take 2
+[TEST] S4-U14 PASS  backlog of 6: take 4 now
+[TEST] S4-U14 PASS  backlog of 2 next cycle: take 2
+[TEST] S4-U14 PASS  overrun: no samples used, counter +1
+[TEST] S4-U14 PASS  overrun counter saturates at 255
+[TEST] S4-U14 PASS  LSM303D answers on the single address 0x1D
+[TEST] S4-U14 PASS  LSM303D WHO_AM_I is 0x49, not the DLHC 'H','4','3'
+[TEST] S4-U15 PASS  the two SA0 addresses are 0x1D (high) and 0x1E (low)
+[TEST] S4-U15 PASS  answers at the current address: keep it
+[TEST] S4-U15 PASS  NACK at 0x1D, identity at 0x1E: switch to 0x1E
+[TEST] S4-U15 PASS  SA0 back high: switch back to 0x1D
+[TEST] S4-U15 PASS  nothing answers: keep the address (fault path as before)
+[TEST] S4-U15 PASS  other address answers with a wrong identity: not taken
+[TEST] drv_lsm303 SUMMARY 14 passed, 0 failed
+make: Leaving directory './testing/subsystem4/host'

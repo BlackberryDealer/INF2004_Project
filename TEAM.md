@@ -23,7 +23,7 @@ every affected buddy.
 | 1 | Communications: MQTT telemetry, remote START/STOP/RESET, packing helpers (`app_bits`), layout generator, laptop decoder | Hanzalah | | | `app_program/subsystem1/` | `testing/subsystem1/` |
 | 2 | Motion control: closed-loop wheel speed, move/turn, odometry, stall detection, safety interlock (K3), shared fault bitmask (K12) | Dylan | | | `app_program/subsystem2/` | `testing/subsystem2/` |
 | 3 | Line following, junction classification, Code 39 barcodes | Lucas | | | `app_program/subsystem3/` | `testing/subsystem3/` |
-| 4 | IMU, terrain (humps, motion class, turn rate), impact interrupt, RAM report | Faris | | | `app_program/subsystem4/` | `testing/subsystem4/` |
+| 4 | IMU, terrain (humps, motion class, turn rate), lift-stop (Change Requirement 2), RAM report | Faris | | | `app_program/subsystem4/` | `testing/subsystem4/` |
 | 5 | Shared services (status board, mission queue, ticks, watchdog, GPIO IRQ), obstacles, mission statechart, HMI | Afif | | | `app_program/subsystem5/` | `testing/subsystem5/` |
 
 Each member fills in their own Student ID and GitHub username.
@@ -57,7 +57,7 @@ in the firmware that names a GPIO number is `app_program/board_pins.h`.
 | GP16 | `PIN_ENC_R_A` | motion_task, S2 | Right encoder A | PIO quadrature (B = A + 1) |
 | GP17 | `PIN_ENC_R_B` | motion_task, S2 | Right encoder B | PIO quadrature |
 | GP18 | `PIN_RGB` | mission_task, S5 | On-board WS2812 RGB LED | PIO |
-| GP19 | `PIN_IMU_INT1` | R1 → FLG_SAFETY, S4 callback | LSM303 INT1 (impact) | GPIO IRQ, rising |
+| GP19 | `PIN_SPARE_19` | — | Spare (was LSM303 INT1; impact interrupt removed by Change Requirement 2, the wire may stay) | not configured |
 | GP20 | `PIN_BTN_RUN` | mission_task, S5 | RUN button | GPIO in, polled every 10 ms |
 | GP21 | `PIN_BTN_RESET` | mission_task, S5 | RESET button | GPIO in, polled every 10 ms |
 | GP22 | `PIN_BUZZER` | mission_task, S5 | Buzzer | PWM slice 3 A |
@@ -89,7 +89,7 @@ folder, never under `device/`.
 | PWM slice 7 B | S5 | obstacle_task (`drv_servo.c`) | GP15 |
 | PIO: quadrature encoder program (K9) | S2 | motion_task (`drv_encoder.c`) | GP4/5, GP16/17 |
 | PIO: WS2812 program | S5 | mission_task (`drv_ws2812.c`) | GP18 |
-| GPIO bank-0 interrupt (R1) | S5 | `drv_gpio_irq.c` dispatches to S3, S4, S5 callbacks | GP1, GP7, GP19 |
+| GPIO bank-0 interrupt (R1) | S5 | `drv_gpio_irq.c` dispatches to S3, S5 callbacks | GP1, GP7 |
 | Timer (1 MHz time base, read only) | S5 | `sys_tick.c` (`sys_tick_now_us()` for everyone) | — |
 | Watchdog | S5 | mission_task via `sys_health.c` (registers directly) | — |
 | WiFi radio, TCP/IP, MQTT | *kernel* | `cyw43_utk_task` (template; S1 code in `mqtt_utk.c`) | GP23–25, GP29 |
@@ -121,8 +121,9 @@ kernel's 128-byte system part.
 | T7 | `telem_task` | S1 | 20 (`APP_PRI_TELEM`) | K7 message or 200 ms timeout | 2176 | 500 µs |
 | — | `usermain` (TEST=1 suites) | team | 21 (`APP_PRI_TEST`) | after boot | kernel initial task | — |
 
-Handlers: **R1** `gpio_bank0_isr` (S5, interrupt level 2) serves GP1, GP7 and
-GP19 through registered callbacks. **R2** 10 ms cyclic handler wakes T1–T3.
+Handlers: **R1** `gpio_bank0_isr` (S5, interrupt level 2) serves GP1 and GP7
+through registered callbacks (GP19, the IMU INT1, is unused since Change
+Requirement 2). **R2** 10 ms cyclic handler wakes T1–T3.
 **R3** 60 ms cyclic handler wakes T4. R2 and R3 live in `sys_tick.c` (S5).
 
 ## 5. Interfaces between subsystems
@@ -134,7 +135,7 @@ access API (the headers in Part D of the spec, already in the repo).
 |---|---|---|---|---|---|
 | K1 | R1 → S5 obstacle_task | semaphore | `SEM_ECHO` (`obstacle.c`) | internal, R1 callback `obstacle_echo_isr` | echo edge captured |
 | K2 | R1 → S3 barcode_task | semaphore + 64-entry edge ring | `SEM_BAR` (`barcode.c`) | internal, R1 callback `barcode_edge_isr` | 16-bit edge words (`MSG_EDGE`) |
-| K3 | S4 (R1), S5 → S2 motion_task | event flag | `FLG_SAFETY` (`safety.c`) | `safety_*()` | `SAFETY_ESTOP / IMPACT / FAULT`: motors brake while any bit is set |
+| K3 | S4 imu_task, S5 → S2 motion_task | event flag | `FLG_SAFETY` (`safety.c`) | `safety_*()` | `SAFETY_ESTOP / LIFT / FAULT`: motors brake while any bit is set (LIFT = lifted or overturned, Change Requirement 2) |
 | K4 | all, radio task → S5 mission_task | message buffer | `MBF_MISSION_EVT` (`mission.c`) | `mission_post_event()` | 16-bit event word (`MSG_EVT`, Part D.13) |
 | K5 | S5 mission_task → S2 motion_task | message buffer | `MBF_MOTION_CMD` (`motion.c`) | `motion_*()` commands | 16-bit command word (`MSG_CMD`) |
 | K6 | each task → all | shared data + mutex (TA_INHERIT) | status board + `MTX_STATUS` (`status_board.c`) | `status_board_*()` | one writer per part; readers copy a snapshot |

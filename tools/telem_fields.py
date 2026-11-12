@@ -230,8 +230,7 @@ GROUPS = {
         ('CLASS_GAP', 5, 0, 1, 'tick'),
         ('LAST_CLASS', 3, 0, 1, 'code'),
         ('MAG_DIV', 3, 0, 1, 'tick'),
-        ('IMPACT_HOLD', 5, 0, 1, 'tick'),
-        ('IMPACT_SEQ', 4, 0, 1, 'count'),
+        ('LIFT_CNT', 3, 0, 1, 'tick'),
         ('NEED_CFG', 1, 0, 1, 'flag'),
     ],
     'PRV_IMU_B': [
@@ -271,9 +270,6 @@ GROUPS = {
     'PRV_OFS_B': [
         ('AZ', 12, 2048, 2, 'mg'),
         ('FIFO_OVR', 8, 0, 1, 'count'),
-    ],
-    'SH_IMU': [
-        ('IMPACT_SEQ', 8, 0, 1, 'count'),
     ],
     'PRV_TEL': [
         ('DROPS', 8, 0, 1, 'count'),
