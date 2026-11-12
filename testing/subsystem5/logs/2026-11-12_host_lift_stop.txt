@@ -1,0 +1,1082 @@
+make: Entering directory './testing/subsystem5/host'
+rm -rf build
+mkdir -p build/app_program/subsystem1 build/app_program/subsystem2 build/app_program/subsystem3 build/app_program/subsystem5
+cp mock/app.h build/app_program/app.h
+mkdir -p build/hardware
+cp mock/hardware/gpio.h build/hardware/gpio.h
+cp ../../../app_program/app_types.h ../../../app_program/board_pins.h build/app_program/
+cp ../../../app_program/app_bits.h ../../../app_program/app_bits.c ../../../app_program/app_layout.h build/app_program/
+cp ../../../app_program/subsystem1/telem.h ../../../app_program/subsystem1/telem_bin.h build/app_program/subsystem1/
+cp ../../../app_program/subsystem2/safety.h ../../../app_program/subsystem2/fault.h \
+   ../../../app_program/subsystem2/motion.h ../../../app_program/subsystem2/odometry.h \
+   ../../../app_program/subsystem2/cfg_motion.h build/app_program/subsystem2/
+cp ../../../app_program/subsystem3/barcode.h build/app_program/subsystem3/
+mkdir -p build/app_program/subsystem4
+cp ../../../app_program/subsystem4/imu.h build/app_program/subsystem4/
+cp ../../../app_program/subsystem5/*.c ../../../app_program/subsystem5/*.h build/app_program/subsystem5/
+cc -std=gnu99 -Wall -Wno-unused-function -Ibuild -Ibuild/app_program -DMISSION_HOST_TEST -o sim_mission_host.out sim_mission_host.c \
+    build/app_program/subsystem5/mission_run.c build/app_program/subsystem5/status_board.c \
+    build/app_program/app_bits.c
+cc -std=gnu99 -Wall -Wno-unused-function -Ibuild -Ibuild/app_program -o sim_obstacle_host.out sim_obstacle_host.c \
+    build/app_program/subsystem5/obs_profile.c build/app_program/subsystem5/status_board.c \
+    build/app_program/app_bits.c -lm
+cc -std=gnu99 -Wall -Wno-unused-function -Ibuild -Ibuild/app_program -o test_status_board_host.out test_status_board_host.c \
+    build/app_program/subsystem5/status_board.c build/app_program/app_bits.c
+./test_obs_profile_host.out
+[TEST] S5-U01 PASS  profile valid
+[TEST] S5-U01 PASS  width = 100 mm minimum after beam correction
+[TEST] S5-U01 PASS  measured span ~ 132 mm still reported
+[TEST] S5-U01 PASS  nearest ~ 300 mm
+[TEST] S5-U01 PASS  lateral extent 100 mm around the plateau middle (85..90 deg, S5-U51)
+[TEST] S5-U01 PASS  no other objects: both sides clear
+[TEST] S5-U01 PASS  outcome PLAN
+[TEST] S5-U01 PASS  picks the smaller shift (left)
+[TEST] S5-U01 PASS  lateral leg = corridor + uncertainty margin - x_left (S5-U48)
+[TEST] S5-U01 PASS  forward leg = nearest + depth + length
+[TEST] S5-U01 PASS  legs within NFR16
+[TEST] S5-U01 PASS  left gap too small
+[TEST] S5-U01 PASS  falls back to the right
+[TEST] S5-U02 PASS  empty scan: no profile
+[TEST] S5-U02 PASS  empty scan: CONTINUE
+[TEST] S5-U02 PASS  object right of the corridor does not block
+[TEST] S5-U02 PASS  clear of the path: CONTINUE
+[TEST] S5-U02b PASS  the blocking central object is chosen
+[TEST] S5-U02b PASS  plan is not CONTINUE
+[TEST] S5-U03 PASS  both gaps too small
+[TEST] S5-U03 PASS  both sides blocked: NO_PATH
+[TEST] S5-U03 PASS  not a clamp case
+[TEST] S5-U03 PASS  forward leg over its limit
+[TEST] S5-U03 PASS  clipped plan is never driven: NO_PATH
+[TEST] S5-U03 PASS  reported leg clipped to 800 mm
+[TEST] S5-U45 PASS  wide face: 200 mm maximum centred on the shortest echo
+[TEST] S5-U45 PASS  80 cm wall at 250 mm: path + margin cannot clear it, NO_PATH
+[TEST] S5-U23 PASS  estimate edge exactly at the shift-0 line (x_left = 175)
+[TEST] S5-U23 PASS  lateral leg = OBS_LEG_MIN_MM, never 0
+[TEST] S5-U23 PASS  no unsigned wrap: leg within NFR16
+[TEST] S5-U44 PASS  box estimate 100 mm (span ~112), not the whole 30..125 arc
+[TEST] S5-U44 PASS  box edges x ~ -8..+92 mm, nearest ~240 mm
+[TEST] S5-U44 PASS  objects behind the box do not block: PLAN, leg not clamped
+[TEST] S5-U44 PASS  gaps only from points beside the pass leg (the 60 and 120 deg points at y 554, x +-320): pass left
+[TEST] S5-U44 PASS  real objects beside the box: still NO_PATH
+[TEST] S5-U45 PASS  smeared box: width estimate 100..200 mm, not the span
+[TEST] S5-U45 PASS  the measured span (~580 mm) is still reported
+[TEST] S5-U45 PASS  nearest = the shortest echo (396 mm at 90 deg), not a beam-edge point's forward distance
+[TEST] S5-U45 PASS  smear scanned from 40 cm: path + margin not provable, NO_PATH
+[TEST] S5-U49 PASS  smear 31 deg beyond the estimate: lanes unconfirmed
+[TEST] S5-U46 PASS  chair (130 deg, 620 mm) blocks the left gap, right clear
+[TEST] S5-U46 PASS  passes on the side away from the chair, path + margin clear
+[TEST] S5-U48 PASS  estimate centred mid-plateau (16 mm: 50..130 deg -> 90 deg, S5-U51), not on 75 deg
+[TEST] S5-U48 PASS  17:00 scene: no lane with path + margin clear, NO_PATH
+[TEST] S5-U49 PASS  300 mm return at 130 deg is in the left extent or gap (logged)
+[TEST] S5-U49 PASS  never a pass whose path + margin touches that return
+[TEST] S5-U49 PASS  300 mm at every angle: both lanes unconfirmed, NO_PATH
+[TEST] S5-U49 PASS  measured scan: any PLAN keeps path + margin clear
+[TEST] S5-U49 PASS  inferred return in the left lane: no left pass
+[TEST] S5-U51 PASS  18:00 car scans from 25 cm: PLAN centred within 45 mm
+[TEST] S5-U53 PASS  every PLAN on the real car scans keeps the car's body + 50 mm clear of every return
+[TEST] S5-U51 PASS  real 568 mm object at 50 deg still blocks the right
+[TEST] S5-U59 PASS  logged outer echo clears with the 334 mm extended pass
+[TEST] S5-U59 PASS  a return limiting that lane keeps the 300 mm cap
+[TEST] S5-U59 PASS  a required shift of 351 mm still stops
+[TEST] subsystem5 host SUMMARY 55 passed, 0 failed
+./test_drv_ultrasonic_host.out
+[TEST] S5-U09 PASS  uninterrupted pulse is 10..20 us
+[TEST] S5-U09 PASS  pulse stays >= 10 us with a 40 us interruption anywhere
+[TEST] S5-U09 PASS  interruption right after the first timer read: >= 10 us
+[TEST] S5-U09 PASS  pulse across the 32-bit timer wrap is 10..20 us
+[TEST] S5-U09 PASS  interrupted pulse across the timer wrap: >= 10 us
+[TEST] drv_ultrasonic SUMMARY 5 passed, 0 failed
+./sim_mission_host.out
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+[TEST] S5-U07 PASS  BOOT: watchdog startup window, modes cleared, RESUME pulse
+[TEST] S5-U07 PASS  BOOT waits for the first check-ins
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+[TEST] S5-U07 PASS  started -> CAL_IMU
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+[TEST] S5-U07 PASS  CAL_IR: CAL_IR|MOTOR_EN, sweep left 30
+[TEST] S5-U07 PASS  MOVE_DONE with a stale tag is ignored
+[TEST] S5-U07 PASS  tagged MOVE_DONE -> right 60
+[TEST] S5-U07 PASS  left 30
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+[TEST] S5-U07 PASS  sweep done clears CAL_IR and MOTOR_EN
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S5-U07 PASS  both calibrations valid -> READY
+[TEST] S5-U07 PASS  START: 1 s warning
+[TEST] S5-U07 PASS  still warning
+[TEST] S5-U20 PASS  run start: RUN_START set, ZERO sent
+[TEST] S5-U20 PASS  ZERO acked, RUN_START held for 30 ms
+   log: STATE RUN (blue): following the line
+[TEST] S5-U20 PASS  -> RUN: RUN_START cleared, MOTOR_EN set, path 0, FOLLOW cruise
+   log: BARCODE value 75: armed for the next cross-junction
+[TEST] S5-U07 PASS  BARCODE(RIGHT) -> ARMED at cruise
+   log: CROSS: executing barcode char index 11, command 1
+   log: CROSS-JUNCTION detected
+[TEST] S5-U07 PASS  CROSS -> stop, advance 60 (tracked)
+[TEST] S5-U07 PASS  turn right 90
+[TEST] S5-U07 PASS  turn done -> FOLLOW cruise; FOLLOW is never tracked
+   log: LINE LOST (both sensors white 200 ms): searching, path 0 mm
+[TEST] S5-U15 PASS  LINE_LOST -> STOP first, then turn left 60
+[TEST] S5-U15 PASS  next leg on the tagged MOVE_DONE: right 120
+   log: LINE FOUND again after 20 ms of search
+[TEST] S5-U15 PASS  LINE_FOUND during a leg -> FOLLOW, pending cleared
+   log: LINE LOST (both sensors white 200 ms): searching, path 0 mm
+[TEST] S5-U36 PASS  line last seen right -> STOP, turn right 60 first
+[TEST] S5-U36 PASS  then left 120
+[TEST] S5-U36 PASS  then right 60
+   log: LINE FOUND again after 30 ms of search
+[TEST] S5-U36 PASS  found -> FOLLOW
+[TEST] S5-U07 PASS  OBSTACLE -> AVOID, standstill -> scan request
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 0 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+[TEST] S5-U07 PASS  PLAN -> ESTOP off, profile, turn left 90
+[TEST] S5-U40 PASS  scanned width printed on the console with the MQTT profile
+   log: AVOID step 1 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+[TEST] S5-U07 PASS  lateral leg 176
+   log: AVOID step 2 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+[TEST] S5-U07 PASS  turn parallel
+   log: AVOID step 3 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+[TEST] S5-U27 PASS  pass leg 632 mm; deadline long enough for it
+[TEST] S5-U27 PASS  a healthy 632 mm leg is not faulted at 5 s
+   log: AVOID step 4 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+[TEST] S5-U07 PASS  turn 45 toward the line, FR9 starts
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: REJOIN: line expected at 248 mm (accept 124..297 mm)
+[TEST] S5-U07 PASS  rejoin move e x 1.2
+   log: REJOIN: LINE_FOUND at 250 mm, width 24 mm (want 45)
+   log: REJOIN accepted at 250 mm, width 24 mm
+[TEST] S5-U07 PASS  LINE_FOUND in the window -> advance 60
+   log: AVOID step 5 done: heading 800 cdeg from the stop (+ = right), 250 mm since the stop
+[TEST] S5-U07 PASS  heading +8 deg -> turn left 8
+   log: AVOID step 5 done: heading 800 cdeg from the stop (+ = right), 250 mm since the stop
+   log: FR9 40 ms
+[TEST] S5-U07 PASS  bypass done -> FOLLOW slow, RESUME
+[TEST] S5-U07 PASS  RESUME cleared after 150 ms
+[TEST] S5-U07 PASS  inhibits cleared 150 mm later, cruise
+   log: STATE FINISHED (green blink)
+[TEST] S5-U21 PASS  STOP in WAIT_PLAN -> FINISHED, MOTOR_EN off, ESTOP still set
+[TEST] S5-U21 PASS  RESET: common recovery clears ESTOP, pulses RESUME
+[TEST] S5-U21 PASS  recovery waits 100 ms (mission keeps looping)
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S5-U21 PASS  -> READY
+   log: STATE RUN (blue): following the line
+[TEST] S5-U21 PASS  the next run starts
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 0 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+   log: AVOID step 1 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U07 PASS  SIDE_TOO_CLOSE on a leg -> FAULT, forwarded to telemetry
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+[TEST] S5-U16 PASS  RESET from FAULT -> BOOT (recalibration), not READY
+[TEST] S5-U16 PASS  watchdog startup window only on the first boot
+[TEST] S5-U16 PASS  recalibration starts, IMU not valid yet
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: SAFETY LIFT latched before the motors were enabled: cleared
+[TEST] S5-U32 PASS  LIFT latched in CAL_IMU is cleared on entering CAL_IR: sweep runs, no FAULT
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S5-U16 PASS  recalibrated -> READY
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: SAFETY LIFT latched before the motors were enabled: cleared
+   log: FAULT LIFT (lifted during the sweep or the run start)
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U32 PASS  LIFT during the CAL_IR sweep (after the stale one was cleared) -> FAULT
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+[TEST] S5-U32 PASS  ESTOP set before CAL_IR is kept (hazard not proven gone)
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S5-U32 PASS  clean recalibration -> READY
+   log: SAFETY LIFT latched before the motors were enabled: cleared
+   log: STATE RUN (blue): following the line
+[TEST] S5-U32 PASS  LIFT latched in READY is cleared before the ZERO; the motion model acks it: RUN, no FAULT
+   log: RUN END: robot lifted (lift-stop)
+   log: STATE FINISHED (green blink)
+[TEST] S5-U78 PASS  LIFT during FOLLOW -> FINISHED (end STOP), MOTOR_EN off
+[TEST] S5-U78 PASS  LIFT stays set (motion stays braked) until RESET
+   log: FAULT bit 1 ENCODER (impossible encoder read)
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U16 PASS  stop fault in FINISHED -> FAULT
+   log: FAULT bit 9 PIO_LOAD (no PIO space for RGB)
+[TEST] S5-U18 PASS  stop fault set again during recovery -> stay in FAULT
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S5-U07 PASS  clean RESET -> BOOT -> READY
+   log: STATE RUN (blue): following the line
+   log: LINE LOST (both sensors white 200 ms): searching, path 401 mm
+[TEST] S5-U22 PASS  first refusal: retry pending
+[TEST] S5-U22 PASS  retried on the next pass and accepted
+   log: LINE FOUND again after 20 ms of search
+   log: LINE LOST (both sensors white 200 ms): searching, path 401 mm
+   log: FAULT bit 0 MOTOR_STALL (wheel not turning)
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U22 PASS  refused twice -> MOTOR_STALL, FAULT
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S5-U22 PASS  run start waits for ZERO
+[TEST] S5-U22 PASS  still waiting 180 ms after ZERO
+   log: MOVE FAILED (no MOVE_DONE in time, or refused twice): motion state 0 (6 = ESTOP), safety bits 0 (1 = ESTOP, 2 = LIFT)
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U22 PASS  no ZERO acknowledgement -> FAULT after 200 ms
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S5-U33 PASS  clean READY
+   log: SAFETY LIFT latched before the motors were enabled: cleared
+[TEST] S5-U33 PASS  LIFT during the warning: cleared before ZERO, the model acknowledges it
+   log: STATE RUN (blue): following the line
+[TEST] S5-U33 PASS  -> RUN
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S5-U33 PASS  ZERO sent, not yet acknowledged
+   log: FAULT LIFT (lifted during the sweep or the run start)
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U33 PASS  fresh LIFT with the ZERO pending -> FAULT LIFT now (not the 200 ms deadline); STOP drops the ZERO
+[TEST] S5-U33 PASS  motors never enabled
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S5-U33 PASS  ZERO acknowledged, holding RUN_START
+   log: FAULT LIFT (lifted during the sweep or the run start)
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U33 PASS  fresh LIFT in the run-start hold -> FAULT, motors never enabled
+[TEST] S5-U27 PASS  800 mm at 150 mm/s -> ~9 000 ms
+[TEST] S5-U27 PASS  2 047 mm move gets > 20 s
+[TEST] S5-U27 PASS  ZERO: 200 ms
+[TEST] S5-U27 PASS  reverse (100 mm/s) gets longer than forward
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: LINE LOST (both sensors white 200 ms): searching, path 401 mm
+[TEST] S5-U27 PASS  60 deg turn (deadline ~1.65 s) still in time at 1.5 s
+   log: MOVE FAILED (no MOVE_DONE in time, or refused twice): motion state 0 (6 = ESTOP), safety bits 0 (1 = ESTOP, 2 = LIFT)
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U27 PASS  a turn that never completes (blocked wheel) ends in FAULT at its deadline
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: FAULT bit 4 WIFI_LOSS (info only)
+[TEST] S5-U07 PASS  Wi-Fi loss is not a transition
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+[TEST] S1-U41 PASS  READY, no run yet: snapshot with 0 mm, 0 s; state unchanged
+   log: STATE RUN (blue): following the line
+[TEST] S1-U41 PASS  RUN: distance and time so far (500 mm, 2 s), no motion command, still RUN
+   log: STATE FINISHED (green blink)
+[TEST] S1-U41 PASS  FINISHED: distance and time frozen at the end of the run
+   log: FAULT bit 6 RANGE_CLAMP (info only)
+[TEST] S1-U41 PASS  faults reported; FINISHED kept
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 0 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+   log: AVOID step 1 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 2 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 3 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 4 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+[TEST] S5-U39 PASS  pass leg done: FR9 timer starts, turn 45
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: REJOIN: line expected at 248 mm (accept 124..297 mm)
+[TEST] S5-U39 PASS  turn took 1.2 s, rejoin drive
+   log: REJOIN: LINE_FOUND at 250 mm, width 24 mm (want 45)
+   log: REJOIN accepted at 250 mm, width 24 mm
+[TEST] S5-U39 PASS  line found after 3 s more (4.2 s): still RUN
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 250 mm since the stop
+   log: FR9 5430 ms
+[TEST] S5-U39 PASS  5.4 s after the pass leg: no REACQUIRE_FAIL
+[TEST] S5-U39 PASS  rejoin finished at ~6.3 s -> FOLLOW (no fault)
+[TEST] S5-U39 PASS  FR9 limit is 20 s
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 0 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+   log: AVOID step 1 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 2 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 3 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 4 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: REJOIN: line expected at 248 mm (accept 124..297 mm)
+[TEST] S5-U41 PASS  rejoin drive started
+   log: REJOIN: LINE_FOUND at 250 mm, width 10 mm (want 45)
+[TEST] S5-U41 PASS  10 mm (barcode bar) in the window: rejected, keeps driving
+   log: REJOIN: LINE_FOUND at 250 mm, width 90 mm (want 45)
+[TEST] S5-U41 PASS  90 mm (along the line): rejected
+   log: REJOIN: LINE_FOUND at 250 mm, width 49 mm (want 45)
+   log: REJOIN accepted at 250 mm, width 49 mm
+[TEST] S5-U41 PASS  49 mm (the car's real crossing): accepted, advance 60
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 250 mm since the stop
+   log: FR9 50 ms
+[TEST] S5-U41 PASS  back to FOLLOW, no REACQUIRE_FAIL
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 0 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+   log: AVOID step 1 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 2 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 3 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 4 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: REJOIN: line expected at 407 mm (accept 203..488 mm)
+[TEST] S5-U43 PASS  rejoin drive e x 1.2 = 488 mm
+[TEST] S5-U43 PASS  console shows the 50..120 % window
+   log: REJOIN: LINE_FOUND at 202 mm, width 38 mm (want 45)
+[TEST] S5-U43 PASS  38 mm wide at 202 mm (< 203): still rejected
+   log: REJOIN: LINE_FOUND at 221 mm, width 38 mm (want 45)
+   log: REJOIN accepted at 221 mm, width 38 mm
+[TEST] S5-U43 PASS  38 mm wide at 221 mm (the car's crossing): accepted, advance 60
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 221 mm since the stop
+   log: FR9 40 ms
+[TEST] S5-U43 PASS  back to FOLLOW, no REACQUIRE_FAIL
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 1 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+   log: AVOID step 1 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 2 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 3 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 4 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: REJOIN: line expected at 390 mm (accept 195..468 mm)
+   log: REJOIN: LINE_FOUND at 89 mm, width 12 mm (want 45)
+[TEST] S5-U58 PASS  reject the early, narrow or late crossing
+   log: REJOIN: LINE_FOUND at 116 mm, width 17 mm (want 45)
+[TEST] S5-U58 PASS  reject the early, narrow or late crossing
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 116 mm since the stop
+   log: REJOIN FAIL: drove the whole window, no line accepted
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U58 PASS  no accepted crossing by move end, stop on REACQUIRE_FAIL
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 1 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+   log: AVOID step 1 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 2 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 3 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 4 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: REJOIN: line expected at 395 mm (accept 197..474 mm)
+   log: REJOIN: LINE_FOUND at 53 mm, width 17 mm (want 45)
+[TEST] S5-U58 PASS  reject the early, narrow or late crossing
+   log: REJOIN: LINE_FOUND at 89 mm, width 20 mm (want 45)
+[TEST] S5-U58 PASS  reject the early, narrow or late crossing
+   log: REJOIN: LINE_FOUND at 219 mm, width 14 mm (want 45)
+[TEST] S5-U58 PASS  reject the early, narrow or late crossing
+   log: REJOIN: LINE_FOUND at 511 mm, width 16 mm (want 45)
+[TEST] S5-U58 PASS  reject the early, narrow or late crossing
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 511 mm since the stop
+   log: REJOIN FAIL: drove the whole window, no line accepted
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U58 PASS  no accepted crossing by move end, stop on REACQUIRE_FAIL
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 1 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+   log: AVOID step 1 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 2 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 3 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 4 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: REJOIN: line expected at 412 mm (accept 206..494 mm)
+   log: REJOIN: LINE_FOUND at 54 mm, width 14 mm (want 45)
+[TEST] S5-U58 PASS  reject the early, narrow or late crossing
+   log: REJOIN: LINE_FOUND at 291 mm, width 13 mm (want 45)
+[TEST] S5-U58 PASS  reject the early, narrow or late crossing
+   log: REJOIN: LINE_FOUND at 333 mm, width 26 mm (want 45)
+   log: REJOIN accepted at 333 mm, width 26 mm
+[TEST] S5-U58 PASS  accept the later line crossing
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 333 mm since the stop
+   log: FR9 50 ms
+[TEST] S5-U58 PASS  a valid crossing returns to FOLLOW
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 1 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+   log: AVOID step 1 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 2 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 3 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 4 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 0 mm since the stop
+   log: REJOIN: line expected at 277 mm (accept 138..332 mm)
+   log: REJOIN: LINE_FOUND at 319 mm, width 59 mm (want 45)
+   log: REJOIN accepted at 319 mm, width 59 mm
+[TEST] S5-U58 PASS  accept the later line crossing
+   log: AVOID step 5 done: heading 0 cdeg from the stop (+ = right), 319 mm since the stop
+   log: FR9 30 ms
+[TEST] S5-U58 PASS  a valid crossing returns to FOLLOW
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: CREEP: obstacle at 400 mm, moving 150 mm closer to scan
+[TEST] S5-U54 PASS  stopped at 400 mm: ESTOP released, creep 150 mm to the 250 mm scan distance, no scan yet
+[TEST] S5-U54 PASS  creep logged
+   log: CREEP done: obstacle at 252 mm, scanning
+[TEST] S5-U54 PASS  creep done: ESTOP holds the car, scan requested
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 1 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+   log: NO_PATH: no bypass lane clears every scan return with margin: stopped
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U54 PASS  NO_PATH -> stopped (FAULT) with a console line, no reverse
+   log: STATE BOOT (white): waiting for task check-ins and radio init
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: CREEP: obstacle at 400 mm, moving 150 mm closer to scan
+[TEST] S5-U54 PASS  creep started again
+   log: CREEP done: obstacle at 400 mm, scanning
+[TEST] S5-U54 PASS  guard ESTOP at standstill ends the creep: move cancelled, scan requested
+   log: OBSTACLE width 140 mm, nearest 380 mm ahead, pass side 0 (0 = left, 1 = right; 1020 = clear)
+   log: OBSTACLE free gap left 0 mm, right 0 mm
+[TEST] S5-U54 PASS  PLAN after the creep: bypass as before
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+[TEST] S5-U54 PASS  268 mm (within tolerance): scan at once, no creep
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+[TEST] S5-U57 PASS  brake before rewinding
+[TEST] S5-U57 PASS  wait for both wheels to stop
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+[TEST] S5-U60 PASS  limit rewind to 150 mm
+[TEST] S5-U57 PASS  a stale completion cannot start the reread
+[TEST] S5-U60 PASS  old 72 mm endpoint is still black, keep reversing
+[TEST] S5-U60 PASS  a 14 mm white gap does not qualify
+[TEST] S5-U60 PASS  edges restart the quiet distance
+[TEST] S5-U63 PASS  white lead-in does not end the bounded reverse move early
+[TEST] S5-U63 PASS  wait for the reverse wheels to settle
+   log: BARCODE white lead-in 55 mm after rewinding 150 mm
+   log: BARCODE reread at 60 mm/s
+[TEST] S5-U57 PASS  resume line following at 60 mm/s and capture from the lead-in
+[TEST] S5-U57 PASS  no second rewind during the slow pass
+   log: BARCODE value 79: armed for the next cross-junction
+[TEST] S5-U57 PASS  mapped F is stored and cruise resumes
+   log: SIDE MARK detected (2: 2 = left, 3 = right)
+[TEST] S5-U57 PASS  ignore a side branch
+[TEST] S5-U57 PASS  keep the code until CROSS
+   log: CROSS: executing barcode char index 15, command 1
+   log: CROSS-JUNCTION detected
+[TEST] S5-U57 PASS  advance at the cross-junction
+[TEST] S5-U57 PASS  take F's mapped right turn
+[TEST] S5-U57 PASS  consume the action and resume cruise
+   log: BARCODE value 205: armed for the next cross-junction
+   log: LINE LOST while barcode is armed: searching, path 1735 mm
+[TEST] S5-U57 PASS  line loss searches with a U-turn still armed
+   log: LINE FOUND again after 10 ms of search
+   log: CROSS: executing barcode char index 13, command 3
+   log: CROSS-JUNCTION detected
+[TEST] S5-U57 PASS  perform a U-turn at CROSS
+   log: BARCODE value 14: armed for the next cross-junction
+   log: CROSS: executing barcode char index 14, command 0
+   log: CROSS-JUNCTION detected
+[TEST] S5-U57 PASS  take the mapped left at CROSS
+   log: BARCODE value 144: armed for the next cross-junction
+   log: CROSS: executing barcode char index 16, command 2
+   log: CROSS-JUNCTION detected
+[TEST] S5-U57 PASS  mapped straight crosses and disarms without a spin
+   log: BARCODE value 10: armed for the next cross-junction
+   log: CROSS: executing barcode char index 10, command 0
+   log: CROSS-JUNCTION detected
+[TEST] S5-U67 PASS  armed: the cross-junction advances for the turn
+[TEST] S5-U67 PASS  and A's mapped left is turned
+[TEST] S5-U67 PASS  the action is used up
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE start at 35 mm, no safe rewind
+[TEST] S5-U57 PASS  skip a rewind beyond the run start
+[TEST] S5-U66 PASS  a rewind may start during obstacle approach
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+[TEST] S5-U66 PASS  and backs up during approach
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE no safe rewind (75 mm needed)
+[TEST] S5-U66 PASS  no rewind while passing an obstacle
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+[TEST] S5-U65 PASS  a whole-strip rewind is accepted
+   log: BARCODE rewind: needs 336 mm, backing 406 mm
+[TEST] S5-U65 PASS  first reverse move is capped at 150 mm
+[TEST] S5-U65 PASS  second reverse move
+[TEST] S5-U65 PASS  last move backs past the strip: 336 + 70 mm in total
+   log: BARCODE white lead-in 66 mm after rewinding 406 mm
+   log: BARCODE reread at 60 mm/s
+[TEST] S5-U65 PASS  white lead-in found: slow reread of the whole strip
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+   log: BARCODE white lead-in 55 mm after rewinding 150 mm
+   log: BARCODE reread at 60 mm/s
+   log: BARCODE reread invalid (16 elements)
+   log: BARCODE reread failed: rewinding for retry 1
+[TEST] S5-U68 PASS  a failed slow pass brakes for a retry
+   log: BARCODE rewind: needs 310 mm, backing 380 mm
+[TEST] S5-U68 PASS  rewind to the pass start: 310 + 70 mm
+[TEST] S5-U68 PASS  second reverse move
+[TEST] S5-U68 PASS  last reverse move
+   log: BARCODE white lead-in 380 mm after rewinding 380 mm
+   log: BARCODE reread at 60 mm/s
+[TEST] S5-U68 PASS  second slow pass
+   log: BARCODE reread ended without decode after 400 mm
+   log: BARCODE reread failed: rewinding for retry 2
+   log: CROSS-JUNCTION detected
+[TEST] S5-U68 PASS  a pass that reaches the cross undecoded also retries
+   log: BARCODE rewind: needs 410 mm, backing 480 mm
+[TEST] S5-U68 PASS  the cross does not block the rewind
+[TEST] S5-U68 PASS  410 + 70 mm in 150 mm moves
+[TEST] S5-U68 PASS  third 150 mm move
+[TEST] S5-U68 PASS  last move
+   log: BARCODE white lead-in 480 mm after rewinding 480 mm
+   log: BARCODE reread at 60 mm/s
+[TEST] S5-U68 PASS  third slow pass
+[TEST] S5-U57 PASS  approach does not speed up the reread
+   log: BARCODE reread invalid (28 elements)
+[TEST] S5-U57 PASS  retries used up: no route, and approach speed is respected
+[TEST] S5-U57 PASS  clear road restores cruise
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+   log: BARCODE rewind ended after 55 mm without a white lead-in
+[TEST] S5-U60 PASS  a short rewind gives up even if its last sample is white
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+   log: BARCODE rewind ended after 150 mm without a white lead-in
+[TEST] S5-U60 PASS  150 mm without a quiet lead-in gives up without a slow pass
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+   log: BARCODE rewind ended after 150 mm without a white lead-in
+[TEST] S5-U60 PASS  black during turnaround invalidates the lead-in
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 95 mm
+[TEST] S5-U60 PASS  reverse cannot leave the prior follow segment plus brake margin
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: CROSS-JUNCTION detected
+   log: BARCODE start at 35 mm, no safe rewind
+[TEST] S5-U63 PASS  a rewind cannot cross a junction behind the car
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+[TEST] S5-U64 PASS  wait when the guard matches during a short both-white gap
+[TEST] S5-U64 PASS  brake after reacquiring the line and include the waiting distance
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE no safe rewind (111 mm needed)
+[TEST] S5-U64 PASS  ignore the retry once its wait expires
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE no safe rewind (592 mm needed)
+[TEST] S5-U64 PASS  keep brake room inside the rewind cap
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: CROSS-JUNCTION detected
+[TEST] S5-U64 PASS  a junction cancels the deferred rewind
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE value 79: armed for the next cross-junction
+[TEST] S5-U64 PASS  a successful first-pass decode supersedes the deferred rewind
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+   log: BARCODE white lead-in 55 mm after rewinding 150 mm
+   log: BARCODE reread at 60 mm/s
+   log: BARCODE reread ended without decode after 650 mm
+   log: BARCODE reread failed: rewinding for retry 1
+[TEST] S5-U57 PASS  unreadable scan has a distance limit, then a retry (S5-U68)
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+   log: BARCODE white lead-in 55 mm after rewinding 150 mm
+   log: BARCODE reread at 60 mm/s
+   log: BARCODE reread ended without decode after 0 mm
+   log: BARCODE reread failed: rewinding for retry 1
+[TEST] S5-U57 PASS  unreadable scan also has a time limit, then a retry (S5-U68)
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+   log: BARCODE white lead-in 55 mm after rewinding 150 mm
+   log: BARCODE reread at 60 mm/s
+[TEST] S5-U76 PASS  slow pass still reading after 10 s
+   log: BARCODE reread ended without decode after 0 mm
+   log: BARCODE reread failed: rewinding for retry 1
+[TEST] S5-U76 PASS  slow pass ends at 15 s, then the retry
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+   log: BARCODE white lead-in 55 mm after rewinding 150 mm
+   log: BARCODE reread at 60 mm/s
+[TEST] S5-U57 PASS  obstacle stop takes priority over a slow pass
+   log: STATE FINISHED (green blink)
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE RUN (blue): following the line
+   log: BARCODE rewind: needs 80 mm, backing 150 mm
+   log: BARCODE white lead-in 55 mm after rewinding 150 mm
+   log: BARCODE reread at 60 mm/s
+   log: STATE FINISHED (green blink)
+[TEST] S5-U57 PASS  STOP ends the reread with the motors disabled
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: STATE CAL_IMU (yellow blink): keep the car still, 2 s
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: CAL_IR sweep done: heading 0 cdeg from the start (+ = right) after 0 return turns
+   log: STATE READY (green): press and release RUN (GP20) to start
+   log: MAP stored char index 15, command 0
+[TEST] S5-U61 PASS  READY: the F -> LEFT update sends its MAP confirmation
+   log: STATE RUN (blue): following the line
+   log: MAP stored char index 15, command 1
+[TEST] S5-U61 PASS  RUN: F -> RIGHT confirms without issuing a motion command
+[TEST] S5-U61 PASS  a failed map update has no success event
+   log: CROSS-JUNCTION detected
+[TEST] S5-U62 PASS  an unarmed cross is reported and the car keeps following
+[TEST] S5-U69 PASS  the one junction type is logged as a cross-junction, no class
+   log: SIDE MARK detected (2: 2 = left, 3 = right)
+[TEST] S5-U69 PASS  a one-sided mark is logged as a side mark and not turned at
+[TEST] S5-U40 PASS  cruise 120 mm/s, 'slow' stays below cruise
+[TEST] S5-U07 mission simulation SUMMARY 193 passed, 0 failed
+[TEST] S5-U04 PASS  K4 holds 16 events (real capacity: 128 B / (4 + 4))
+[TEST] S5-U04 PASS  extra posts are refused
+[TEST] S5-U04 PASS  every post uses TMO_POL: a refused post returns at once
+[TEST] S5-U04 PASS  QUEUE_OVERFLOW fault set
+[TEST] S5-U04 PASS  high-water mark = whole buffer
+[TEST] S5-U75 PASS  K4 messages are 2 B, 16 entries take 128 B (was 12 B / 256 B)
+[TEST] S5-U75 PASS  type 0..25 and value 0..2047 round trip in FIFO order
+[TEST] S5-U75 PASS  a value above 2047 is clamped to 2047 and flagged, never wrapped
+[TEST] S5-U77 PASS  layout TYPE max = last event code (25) and fits 5 bits
+[TEST] S5-U04 PASS  unknown event type refused
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE CAL_IR (yellow blink): sweeping over the line
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE FINISHED (green blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE LINE_LOST_STOP (blue blink)
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FINISHED (green blink)
+   log: STATE FAULT (red blink): check the FAULT console lines
+   log: STATE FAULT (red blink): check the FAULT console lines
+[TEST] S5-U05 PASS  468 state/event combinations tried (18 states x 26 types)
+[TEST] S5-U05 PASS  every outcome is a defined state
+[TEST] S5-U04/U05 mission host tests SUMMARY 12 passed, 0 failed
+./sim_obstacle_host.out
+[TEST] S5-U14 PASS  580 us -> 100 mm
+[TEST] S5-U14 PASS  5800 us -> 1000 mm
+[TEST] S5-U14 PASS  40 000 us (saturated width) -> APP_DIST_NONE_MM
+[TEST] S5-U14 PASS  readings stored in 4 mm steps
+[TEST] S5-U30 PASS  5 silent pings after boot, then an echo: no NO_ECHO, grace ends
+[TEST] S5-U30 PASS  after the first echo, 3 silent pings raise NO_ECHO as before
+[TEST] S5-U30 PASS  sensor never answers: no NO_ECHO during the 34-ping grace (~2 s)
+[TEST] S5-U30 PASS  sensor never answers: NO_ECHO 3 pings after the grace
+   log: US dist 100 mm, lost 0
+[TEST] S5-U31 PASS  motors off: 100 mm for 8 pings -> no ESTOP, no events, MONITOR
+[TEST] S5-U31 PASS  motors off: distance still measured and published
+   log: OBSTACLE AHEAD: distance 100 mm, slowing down
+   log: OBSTACLE STOP (ESTOP): distance 100 mm, lost echoes 0
+[TEST] S5-U31 PASS  motors enabled (RUN): same 100 mm -> ESTOP, OBSTACLE, STOPPED
+[TEST] S5-U31 PASS  motors off again (run ended): back to MONITOR, servo centred
+[TEST] S5-U34 PASS  CAL_IR sweep: near echo then lost echoes -> no ESTOP, no events, MONITOR
+   log: OBSTACLE AHEAD: distance 100 mm, slowing down
+   log: OBSTACLE STOP (ESTOP): distance 100 mm, lost echoes 0
+[TEST] S5-U34 PASS  CAL_IR cleared (RUN): same 100 mm -> ESTOP, STOPPED
+   log: US dist 100 mm, lost 0
+   log: OBSTACLE AHEAD: distance 412 mm, slowing down
+   log: OBSTACLE STOP (ESTOP): distance 400 mm, lost echoes 0
+   S5-U37: stopped at 400 mm (0 = not stopped by 380)
+[TEST] S5-U37 PASS  obstacle approached from 420 mm: ESTOP + OBSTACLE by ~390 mm
+[TEST] S5-U37 PASS  stop ~400 mm, slow-down starts >= 150 mm earlier, scan 'near' covers it
+[TEST] S5-U08 PASS  far object: MONITOR, 1000 mm measured
+[TEST] S5-U08 PASS  452 mm, not yet confirmed
+   log: OBSTACLE AHEAD: distance 440 mm, slowing down
+[TEST] S5-U08 PASS  two agreeing readings < 600 -> OBSTACLE_AHEAD
+[TEST] S5-U08 PASS  395 right after 452 is not confirmed
+   log: OBSTACLE STOP (ESTOP): distance 392 mm, lost echoes 0
+[TEST] S5-U08 PASS  confirmed < ~401 -> OBSTACLE, STOPPED
+[TEST] S5-U08 PASS  ESTOP set before OBSTACLE was posted
+[TEST] S5-U08 PASS  RESCAN rise -> COARSE at 30 deg
+   log: SCAN 3840 ms out 1 inferred 0xdb0036
+   log: SCAN nearest 240 mm at 85 deg, near steps 0x7e00 (step n = 30 + 5n deg)
+   log: SCAN mm 30/35/40 deg: 1020 1020 1020
+   log: SCAN mm 45/50/55 deg: 1020 1020 1020
+   log: SCAN mm 60/65/70 deg: 1020 1020 1020
+   log: SCAN mm 75/80/85 deg: 248 244 240
+   log: SCAN mm 90/95/100 deg: 240 240 244
+   log: SCAN mm 105/110/115 deg: 1020 1020 1020
+   log: SCAN mm 120/125/130 deg: 1020 1020 1020
+   log: SCAN mm 135/140/145 deg: 1020 1020 1020
+   log: SCAN mm 150 deg: 1020
+   log: SCAN width estimate 100 mm (measured span 106 mm, kept within 100..200 mm)
+[TEST] S5-U38 PASS  scan log names the nearest point and its angle
+   S5-U52: scan took 3840 ms
+[TEST] S5-U52 PASS  scan of a 140 mm box in <= 4.0 s (was 5.4 s)
+   S5-U50: inferred 0xdb0036, near region 0x7f80
+[TEST] S5-U50 PASS  no inferred step beside a near coarse point
+[TEST] S5-U25 PASS  scan done -> WATCH_SETTLE, servo at watch angle, PLAN not posted yet
+[TEST] S5-U25 PASS  no PLAN before OBS_WATCH_SETTLE_PINGS cycles
+[TEST] S5-U25 PASS  PLAN(left) after exactly 4 cycles -> BYPASS_WATCH
+[TEST] S5-U08 PASS  legs on the board (4 mm steps) before PLAN
+   profile: width 100 nearest 240 legs 208/572 step 11 inferred 0xdb0036
+[TEST] S5-U08 PASS  width at 5 deg resolution (face -60..+80)
+[TEST] S5-U08 PASS  unmeasured steps marked inferred
+[TEST] S5-U08 PASS  side 200 mm: fine
+   log: OBSTACLE SIDE TOO CLOSE (ESTOP): distance 52 mm
+[TEST] S5-U08 PASS  side 50 mm: ESTOP, then SIDE_TOO_CLOSE once, STOPPED
+[TEST] S5-U08 PASS  RESUME rise -> MONITOR, servo 90
+   log: OBSTACLE AHEAD: distance 380 mm, slowing down
+   log: OBSTACLE STOP (ESTOP): distance 240 mm, lost echoes 0
+[TEST] S5-U08 PASS  second obstacle -> STOPPED
+   log: SCAN 4320 ms out 2 inferred 0xd80036
+   log: SCAN nearest 500 mm at 85 deg, near steps 0xfe00 (step n = 30 + 5n deg)
+   log: SCAN mm 30/35/40 deg: 1020 1020 1020
+   log: SCAN mm 45/50/55 deg: 1020 1020 1020
+   log: SCAN mm 60/65/70 deg: 1020 1020 1020
+   log: SCAN mm 75/80/85 deg: 516 508 500
+   log: SCAN mm 90/95/100 deg: 500 500 508
+   log: SCAN mm 105/110/115 deg: 516 1020 1020
+   log: SCAN mm 120/125/130 deg: 1020 1020 1020
+   log: SCAN mm 135/140/145 deg: 1020 1020 1020
+   log: SCAN mm 150 deg: 1020
+   log: SCAN width estimate 100 mm (measured span 266 mm, kept within 100..200 mm)
+[TEST] S5-U08 PASS  far obstacle -> NO_PATH, STOPPED, servo 90
+[TEST] S5-U08 PASS  clipped leg sets RANGE_CLAMP
+[TEST] S5-U26 PASS  good echo: 600 mm
+[TEST] S5-U26 PASS  5 silent pings all read APP_DIST_NONE_MM, never the cached 600 mm
+[TEST] S5-U26 PASS  silent sensor -> FAULT_NO_ECHO
+[TEST] S5-U24 PASS  ECHO held high: no measurement accepted
+[TEST] S5-U24 PASS  stuck sensor reported silent -> NO_ECHO
+[TEST] S5-U17 PASS  fall with the window closed is ignored
+[TEST] S5-U17 PASS  fall of an older ping (sequence moved on) is ignored
+[TEST] S5-U17 PASS  fall older than the 40 ms timeout is ignored
+[TEST] S5-U17 PASS  RISE+FALL in one entry, pin low: both discarded, no 0 mm echo
+[TEST] S5-U17 PASS  RISE+FALL in one entry, pin high: kept as a rise only
+[TEST] S5-U17 PASS  ... and its real fall then measures normally (100 mm)
+[TEST] S5-U38 PASS  open track: lost pings in MONITOR, no event, no fault
+   log: OBSTACLE AHEAD: distance 500 mm, slowing down
+[TEST] S5-U38 PASS  stray echo 500 mm -> APPROACH, logged
+[TEST] S5-U38 PASS  then 2 open-track lost pings: no ESTOP, CONTINUE, MONITOR
+   log: OBSTACLE AHEAD: distance 500 mm, slowing down
+[TEST] S5-U38 PASS  approach at 500 then 2 silent pings: no ESTOP
+   log: OBSTACLE AHEAD: distance 440 mm, slowing down
+[TEST] S5-U38 PASS  395 unconfirmed after 452: still approaching
+[TEST] S5-U38 PASS  1 lost ping after 395: keep approaching
+   log: OBSTACLE STOP (ESTOP): distance 2044 mm, lost echoes 2
+[TEST] S5-U38 PASS  2 lost pings after an echo under the stop distance -> ESTOP, OBSTACLE
+   log: OBSTACLE AHEAD: distance 500 mm, slowing down
+[TEST] S5-U42 PASS  ramp at 500 mm on flat -> APPROACH
+   log: RAMP: pitched, echo 352 mm ignored, stop below 251 mm
+[TEST] S5-U42 PASS  pitched onto the ramp, 350 mm: keep approaching (slow), no CONTINUE, no ESTOP
+[TEST] S5-U42 PASS  console says the ramp relaxed the stop distance
+[TEST] S5-U42 PASS  descending ramp (floor 300 mm ahead) -> no stop
+   log: OBSTACLE STOP (ESTOP): distance 240 mm, lost echoes 0
+[TEST] S5-U42 PASS  box at 240 mm while still pitched -> ESTOP, OBSTACLE (NFR6 minimum kept)
+   log: OBSTACLE AHEAD: distance 500 mm, slowing down
+[TEST] S5-U42 PASS  pitched, echo 500 mm -> APPROACH still entered (slow-down kept)
+   log: OBSTACLE STOP (ESTOP): distance 380 mm, lost echoes 0
+[TEST] S5-U42 PASS  after the ramp hold on flat ground, 380 mm stops at the normal distance
+   log: RAMP/GLINT in scan (width 0 mm, on_ramp 0): continuing
+   log: SCAN 3360 ms out 0 inferred 0xdb01b6
+   log: SCAN nearest 352 mm at 90 deg, near steps 0x1000 (step n = 30 + 5n deg)
+   log: SCAN mm 30/35/40 deg: 1020 1020 1020
+   log: SCAN mm 45/50/55 deg: 1020 1020 1020
+   log: SCAN mm 60/65/70 deg: 1020 1020 1020
+   log: SCAN mm 75/80/85 deg: 1020 1020 1020
+   log: SCAN mm 90/95/100 deg: 352 1020 1020
+   log: SCAN mm 105/110/115 deg: 1020 1020 1020
+   log: SCAN mm 120/125/130 deg: 1020 1020 1020
+   log: SCAN mm 135/140/145 deg: 1020 1020 1020
+   log: SCAN mm 150 deg: 1020
+   log: SCAN width estimate 100 mm (measured span 0 mm, kept within 100..200 mm)
+[TEST] S5-U42 PASS  narrow 90 deg ramp glint (< OBS_MIN_WIDTH_MM) -> CONTINUE, PASSING
+   log: OBSTACLE AHEAD: distance 240 mm, slowing down
+   log: OBSTACLE STOP (ESTOP): distance 240 mm, lost echoes 0
+[TEST] S5-U42 PASS  pitched, box at 240 mm -> STOPPED
+   log: SCAN 3840 ms out 1 inferred 0xdb0036
+   log: SCAN nearest 240 mm at 85 deg, near steps 0x7e00 (step n = 30 + 5n deg)
+   log: SCAN mm 30/35/40 deg: 1020 1020 1020
+   log: SCAN mm 45/50/55 deg: 1020 1020 1020
+   log: SCAN mm 60/65/70 deg: 1020 1020 1020
+   log: SCAN mm 75/80/85 deg: 248 244 240
+   log: SCAN mm 90/95/100 deg: 240 240 244
+   log: SCAN mm 105/110/115 deg: 1020 1020 1020
+   log: SCAN mm 120/125/130 deg: 1020 1020 1020
+   log: SCAN mm 135/140/145 deg: 1020 1020 1020
+   log: SCAN mm 150 deg: 1020
+   log: SCAN width estimate 100 mm (measured span 106 mm, kept within 100..200 mm)
+[TEST] S5-U42 PASS  real 140 mm box scanned while pitched -> PLAN or NO_PATH, never CONTINUE
+   log: OBSTACLE AHEAD: distance 380 mm, slowing down
+   log: OBSTACLE STOP (ESTOP): distance 380 mm, lost echoes 0
+[TEST] S5-U47 PASS  box at 380 mm -> STOPPED
+   log: SCAN 3840 ms out 1 inferred 0xdb0036
+   log: SCAN nearest 240 mm at 85 deg, near steps 0x7e00 (step n = 30 + 5n deg)
+   log: SCAN mm 30/35/40 deg: 1020 1020 1020
+   log: SCAN mm 45/50/55 deg: 1020 1020 1020
+   log: SCAN mm 60/65/70 deg: 1020 1020 1020
+   log: SCAN mm 75/80/85 deg: 248 244 240
+   log: SCAN mm 90/95/100 deg: 240 240 244
+   log: SCAN mm 105/110/115 deg: 1020 1020 1020
+   log: SCAN mm 120/125/130 deg: 1020 1020 1020
+   log: SCAN mm 135/140/145 deg: 1020 1020 1020
+   log: SCAN mm 150 deg: 1020
+   log: SCAN width estimate 100 mm (measured span 106 mm, kept within 100..200 mm)
+[TEST] S5-U47 PASS  one 120 mm spike per step: still PLAN
+[TEST] S5-U47 PASS  the spike never becomes the nearest point
+[TEST] S5-U47 PASS  per-step ranges are printed
+   log: OBSTACLE AHEAD: distance 396 mm, slowing down
+   log: OBSTACLE STOP (ESTOP): distance 396 mm, lost echoes 0
+[TEST] S5-U55 PASS  stopped at ~400 mm
+[TEST] S5-U55 PASS  creeping, agreeing readings > 250 mm: no brake
+   log: CREEP stop at 248 mm (lost 0, agrees 1)
+[TEST] S5-U55 PASS  confirmed 248 mm <= OBS_SCAN_MM: ESTOP, logged
+[TEST] S5-U55 PASS  echo lost while creeping: ESTOP
+[TEST] S5-U55 PASS  readings disagree (256 -> 320) while creeping: ESTOP
+[TEST] S5-U55 PASS  standing still: the guard does nothing
+[TEST] S5-U55 PASS  driving backwards: the guard does nothing
+[TEST] S5-U08 obstacle simulation SUMMARY 77 passed, 0 failed
+./test_status_board_host.out
+[TEST] S5-U74 PASS  initial board: nothing ahead, profile clear, every other field 0
+[TEST] S5-U74 PASS  snapshot is the 11 packed 32-bit words (44 B)
+[TEST] S5-U74 PASS  line part: steering -1000..1000, status, junction, calibrated
+[TEST] S5-U74 PASS  motion part: speeds +-127, state, positions +-131071, path 0..131071
+[TEST] S5-U74 PASS  IMU part: pitch +-450, hump 0..127, class, source, turn +-360
+[TEST] S5-U74 PASS  obstacle part: 4 mm steps, sentinels 2044 / 1020, legs 0..1020
+[TEST] S5-U74 PASS  mission part: every state, step, end reason and armed command
+[TEST] S5-U74 PASS  pitch beyond +-45 deg is stored as 45 deg (ramp check uses +-2 deg)
+[TEST] S5-U74 status board host tests SUMMARY 8 passed, 0 failed
+make: Leaving directory './testing/subsystem5/host'

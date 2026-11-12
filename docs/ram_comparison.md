@@ -80,3 +80,19 @@ save the `stack ...` lines and pass the file as argument 3)*
 Packed stack log: *not provided (flash the `w11-packed` image,
 save the `stack ...` lines and pass the file as argument 4)*
 
+## 4. Change Requirement 2 (lift-stop, 2026-11-12)
+
+Not part of the baseline-vs-packed comparison above (the baseline ELF is the
+pre-packing commit). Measured separately on the car image
+(`make NET=lwip MQTT=1`): `main` `14c3dc1` vs the lift-stop change.
+
+| Section | Before B | After B | Delta |
+|---------|---------:|--------:|------:|
+| .data | 340 | 256 | -84 |
+| .bss | 99508 | 99464 | -44 |
+| .text | 388332 | 387280 | -1052 |
+
+Removed: `g_imu_impact_seq` (1 B, the ISR byte SH_IMU), `g_imu_isr_us`,
+`g_imu_int1_glitches` and the INT1 diagnosis buffers. In PRV_IMU_A the 9 bits
+of IMPACT_HOLD + IMPACT_SEQ became the 3-bit LIFT_CNT inside the same word.
+Details: `docs/change_requirement_2_lift_stop.md`.

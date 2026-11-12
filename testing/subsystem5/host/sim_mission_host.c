@@ -94,7 +94,6 @@ bool barcode_map_set(uint32_t c, uint32_t m) {
   return g_map_stored;
 }
 void sys_health_service(void) {}
-void imu_diag_service(void) {}
 static uint32_t g_barcode_edges, g_barcode_level;
 uint32_t barcode_edge_count(void) { return g_barcode_edges; }
 uint32_t barcode_do_level(void) { return g_barcode_level; }
@@ -271,23 +270,23 @@ int main(void) {
   EV(APP_EVT_RESET, 0); idle_ms(110); CHECK("S5-U16", APP_SYS_BOOT == g_ctx.sys_state || APP_SYS_CAL_IMU == g_ctx.sys_state, "RESET from FAULT -> BOOT (recalibration), not READY");
   CHECK("S5-U16", 1 == g_wdt_enables, "watchdog startup window only on the first boot");
   NONE(); CHECK("S5-U16", APP_SYS_CAL_IMU == g_ctx.sys_state && !g_ctx.b_imu_valid, "recalibration starts, IMU not valid yet");
-  /* S5-U32 (on-car log 2026-10-29): a bump while the car is handled
-     latches IMPACT with the motors off; it must not end the next moving
-     state in FAULT. mission clears it when the motors are enabled. */
-  safety_set(SAFETY_IMPACT);                 /* bumped while being placed */
+  /* S5-U32 (on-car log 2026-10-29, then with IMPACT): a LIFT bit left set
+     while the motors are off must not end the next moving state in FAULT.
+     mission clears it when the motors are enabled. */
+  safety_set(SAFETY_LIFT);                 /* stale bit while being placed */
   EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); NONE();
-  CHECK("S5-U32", APP_SYS_CAL_IR == g_ctx.sys_state && 0u == (g_safety & SAFETY_IMPACT),
-        "IMPACT latched in CAL_IMU is cleared on entering CAL_IR: sweep runs, no FAULT");
+  CHECK("S5-U32", APP_SYS_CAL_IR == g_ctx.sys_state && 0u == (g_safety & SAFETY_LIFT),
+        "LIFT latched in CAL_IMU is cleared on entering CAL_IR: sweep runs, no FAULT");
   DONE(); DONE(); DONE(); EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IR);
   CHECK("S5-U16", APP_SYS_READY == g_ctx.sys_state, "recalibrated -> READY");
-  /* S5-U32: a second, real impact DURING the sweep still ends in FAULT */
+  /* S5-U32: a real lift DURING the sweep still ends in FAULT */
   g_fault = 0; g_safety = 0; status_board_read(&snap);
   mission_enter(&g_ctx, APP_SYS_CAL_IMU, &snap, g_now);
-  safety_set(SAFETY_IMPACT);                 /* stale bump, cleared at entry */
+  safety_set(SAFETY_LIFT);                 /* stale bit, cleared at entry */
   EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); NONE();
-  safety_set(SAFETY_IMPACT); NONE();         /* new impact while sweeping */
+  safety_set(SAFETY_LIFT); NONE();         /* lifted while sweeping */
   CHECK("S5-U32", APP_SYS_FAULT == g_ctx.sys_state,
-        "impact during the CAL_IR sweep (after the stale one was cleared) -> FAULT");
+        "LIFT during the CAL_IR sweep (after the stale one was cleared) -> FAULT");
   /* S5-U32: a set ESTOP is never cleared by the motor-enable step */
   g_fault = 0; g_safety = 0; EV(APP_EVT_RESET, 0); idle_ms(110); NONE();
   status_board_read(&snap); mission_enter(&g_ctx, APP_SYS_CAL_IMU, &snap, g_now);
@@ -299,12 +298,20 @@ int main(void) {
   status_board_read(&snap); mission_enter(&g_ctx, APP_SYS_CAL_IMU, &snap, g_now);
   EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU); DONE(); DONE(); DONE(); EV(APP_EVT_CAL_DONE, APP_CAL_SRC_IR);
   CHECK("S5-U32", APP_SYS_READY == g_ctx.sys_state, "clean recalibration -> READY");
-  safety_set(SAFETY_IMPACT);                 /* bumped while RUN is pressed */
+  safety_set(SAFETY_LIFT);                 /* stale bit while RUN is pressed */
   g_model_acks = 0; EV(APP_EVT_START, 0); mpass_ms(1250);
-  CHECK("S5-U32", APP_SYS_RUN == g_ctx.sys_state && 0u == (g_safety & SAFETY_IMPACT) && 1 == g_model_acks,
-        "IMPACT latched in READY is cleared before the ZERO; the motion model acks it: RUN, no FAULT");
-  /* S5-U16: IMPACT during RUN -> FAULT (still stops the car) */
-  safety_set(SAFETY_IMPACT); NONE(); CHECK("S5-U16", APP_SYS_FAULT == g_ctx.sys_state, "IMPACT during FOLLOW -> FAULT");
+  CHECK("S5-U32", APP_SYS_RUN == g_ctx.sys_state && 0u == (g_safety & SAFETY_LIFT) && 1 == g_model_acks,
+        "LIFT latched in READY is cleared before the ZERO; the motion model acks it: RUN, no FAULT");
+  /* S5-U78 (Change Requirement 2): lifting the car in RUN is the end-of-run
+     signal: FINISHED with end reason STOP, motors off, LIFT kept until RESET */
+  safety_set(SAFETY_LIFT); NONE();
+  CHECK("S5-U78", APP_SYS_FINISHED == g_ctx.sys_state && APP_END_STOP == g_ctx.end_reason && !MODE(APP_MODE_MOTOR_EN),
+        "LIFT during FOLLOW -> FINISHED (end STOP), MOTOR_EN off");
+  CHECK("S5-U78", 0u != (g_safety & SAFETY_LIFT),
+        "LIFT stays set (motion stays braked) until RESET");
+  /* a stop fault while FINISHED -> FAULT, for the recovery checks below */
+  fault_set(APP_FAULT_ENCODER); NONE();
+  CHECK("S5-U16", APP_SYS_FAULT == g_ctx.sys_state, "stop fault in FINISHED -> FAULT");
   /* persistent fault comes back during recovery -> stay in FAULT */
   g_safety = 0; EV(APP_EVT_RESET, 0); fault_set(APP_FAULT_PIO_LOAD); idle_ms(110);
   CHECK("S5-U18", APP_SYS_FAULT == g_ctx.sys_state && (g_safety & SAFETY_FAULT), "stop fault set again during recovery -> stay in FAULT");
@@ -326,27 +333,27 @@ int main(void) {
   /* S5-U33: run start against the motion model (no injected MOVE_DONE) */
   to_ready(); CHECK("S5-U33", APP_SYS_READY == g_ctx.sys_state, "clean READY");
   g_model_acks = 0; EV(APP_EVT_START, 0); mpass_ms(500);
-  safety_set(SAFETY_IMPACT);                 /* bump during the 1 s warning */
+  safety_set(SAFETY_LIFT);                 /* stale bit during the 1 s warning */
   alog[0] = 0; mpass_ms(510);
   CHECK("S5-U33", MODE(APP_MODE_RUN_START) && strstr(alog, "ZERO0") && 0u == g_safety && 1 == g_model_acks,
-        "IMPACT during the warning: cleared before ZERO, the model acknowledges it");
+        "LIFT during the warning: cleared before ZERO, the model acknowledges it");
   mpass_ms(40);
   CHECK("S5-U33", APP_SYS_RUN == g_ctx.sys_state && MODE(APP_MODE_MOTOR_EN), "-> RUN");
-  /* a fresh impact while the ZERO is pending -> FAULT IMPACT at once */
+  /* a fresh LIFT while the ZERO is pending -> FAULT LIFT at once */
   to_ready(); g_model_acks = 0; EV(APP_EVT_START, 0); mpass_ms(1000);
   while (!g_ctx.b_run_starting) { mpass(); }  /* the pass that sent ZERO */
   CHECK("S5-U33", g_zero_latched && g_ctx.b_move_pending, "ZERO sent, not yet acknowledged");
-  safety_set(SAFETY_IMPACT); mpass();
+  safety_set(SAFETY_LIFT); mpass();
   CHECK("S5-U33", APP_SYS_FAULT == g_ctx.sys_state && 0 == g_model_acks && !g_zero_latched,
-        "fresh IMPACT with the ZERO pending -> FAULT IMPACT now (not the 200 ms deadline); STOP drops the ZERO");
+        "fresh LIFT with the ZERO pending -> FAULT LIFT now (not the 200 ms deadline); STOP drops the ZERO");
   CHECK("S5-U33", !MODE(APP_MODE_MOTOR_EN), "motors never enabled");
-  /* a fresh impact after the ack, in the 30 ms hold -> FAULT, not cleared */
+  /* a fresh LIFT after the ack, in the 30 ms hold -> FAULT, not cleared */
   to_ready(); g_model_acks = 0; EV(APP_EVT_START, 0);
   while (0 == g_model_acks) { mpass(); }
   CHECK("S5-U33", APP_SYS_READY == g_ctx.sys_state && g_ctx.b_zero_done, "ZERO acknowledged, holding RUN_START");
-  safety_set(SAFETY_IMPACT); mpass();
+  safety_set(SAFETY_LIFT); mpass();
   CHECK("S5-U33", APP_SYS_FAULT == g_ctx.sys_state && !MODE(APP_MODE_MOTOR_EN),
-        "fresh IMPACT in the run-start hold -> FAULT, motors never enabled");
+        "fresh LIFT in the run-start hold -> FAULT, motors never enabled");
   /* S5-U27: deadline helper */
   CHECK("S5-U27", mission_move_deadline_ms(MISSION_MV_FWD, 800) >= 8900u && mission_move_deadline_ms(MISSION_MV_FWD, 800) <= 9100u, "800 mm at 150 mm/s -> ~9 000 ms");
   CHECK("S5-U27", mission_move_deadline_ms(MISSION_MV_FWD, 2047) > 20000u, "2 047 mm move gets > 20 s");

@@ -52,12 +52,16 @@ int main(void)
     HOST_CHECK("S2-U14", !safety_is_active(), "not active after init");
     safety_set(SAFETY_ESTOP);
     HOST_CHECK("S2-U14", safety_is_active(), "set from a task -> active");
-    safety_set_from_isr(SAFETY_IMPACT);
-    HOST_CHECK("S2-U14", (SAFETY_ESTOP | SAFETY_IMPACT) == safety_get(),
-               "ISR set adds IMPACT, ESTOP kept");
+    safety_set(SAFETY_LIFT);
+    HOST_CHECK("S2-U14", (SAFETY_ESTOP | SAFETY_LIFT) == safety_get(),
+               "imu_task sets LIFT (lift-stop), ESTOP kept");
     safety_clear(SAFETY_ESTOP);
-    HOST_CHECK("S2-U14", SAFETY_IMPACT == safety_get(),
-               "clear ESTOP leaves IMPACT: still active");
+    HOST_CHECK("S2-U14", SAFETY_LIFT == safety_get(),
+               "clear ESTOP leaves LIFT: still active");
+    safety_clear(SAFETY_LIFT);
+    safety_set_from_isr(SAFETY_ESTOP);
+    HOST_CHECK("S2-U14", SAFETY_ESTOP == safety_get(),
+               "the ISR-callable set still works (R1 callbacks)");
     safety_clear(SAFETY_ALL);
     HOST_CHECK("S2-U14", !safety_is_active(),
                "clear -> safety_is_active() false");

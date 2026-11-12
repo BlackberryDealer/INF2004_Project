@@ -1006,19 +1006,13 @@
 #define PRV_IMU_A_MAG_DIV_MAX           (4)
 #define PRV_IMU_A_MAG_DIV_OFFSET        (0)
 #define PRV_IMU_A_MAG_DIV_KIND          (APP_KIND_RNG)
-#define PRV_IMU_A_IMPACT_HOLD_POS       (PRV_IMU_A_MAG_DIV_POS + PRV_IMU_A_MAG_DIV_BITS)
-#define PRV_IMU_A_IMPACT_HOLD_BITS      (5u)
-#define PRV_IMU_A_IMPACT_HOLD_MIN       (0)
-#define PRV_IMU_A_IMPACT_HOLD_MAX       (31)
-#define PRV_IMU_A_IMPACT_HOLD_OFFSET    (0)
-#define PRV_IMU_A_IMPACT_HOLD_KIND      (APP_KIND_SAT)
-#define PRV_IMU_A_IMPACT_SEQ_POS        (PRV_IMU_A_IMPACT_HOLD_POS + PRV_IMU_A_IMPACT_HOLD_BITS)
-#define PRV_IMU_A_IMPACT_SEQ_BITS       (4u)
-#define PRV_IMU_A_IMPACT_SEQ_MIN        (0)
-#define PRV_IMU_A_IMPACT_SEQ_MAX        (15)
-#define PRV_IMU_A_IMPACT_SEQ_OFFSET     (0)
-#define PRV_IMU_A_IMPACT_SEQ_KIND       (APP_KIND_RAW)
-#define PRV_IMU_A_NEED_CFG_POS          (PRV_IMU_A_IMPACT_SEQ_POS + PRV_IMU_A_IMPACT_SEQ_BITS)
+#define PRV_IMU_A_LIFT_CNT_POS          (PRV_IMU_A_MAG_DIV_POS + PRV_IMU_A_MAG_DIV_BITS)
+#define PRV_IMU_A_LIFT_CNT_BITS         (3u)
+#define PRV_IMU_A_LIFT_CNT_MIN          (0)
+#define PRV_IMU_A_LIFT_CNT_MAX          (5)
+#define PRV_IMU_A_LIFT_CNT_OFFSET       (0)
+#define PRV_IMU_A_LIFT_CNT_KIND         (APP_KIND_SAT)
+#define PRV_IMU_A_NEED_CFG_POS          (PRV_IMU_A_LIFT_CNT_POS + PRV_IMU_A_LIFT_CNT_BITS)
 #define PRV_IMU_A_NEED_CFG_BITS         (1u)
 #define PRV_IMU_A_NEED_CFG_MIN          (0)
 #define PRV_IMU_A_NEED_CFG_MAX          (1)
@@ -1201,18 +1195,6 @@
 #define PRV_OFS_B_USED_BITS             (PRV_OFS_B_FIFO_OVR_POS + PRV_OFS_B_FIFO_OVR_BITS)
 #if (PRV_OFS_B_USED_BITS > 32u)
 #error "Group PRV_OFS_B no longer fits in 32 bits"
-#endif
-
-/* SH_IMU: 8-bit word */
-#define SH_IMU_IMPACT_SEQ_POS           (0u)
-#define SH_IMU_IMPACT_SEQ_BITS          (8u)
-#define SH_IMU_IMPACT_SEQ_MIN           (0)
-#define SH_IMU_IMPACT_SEQ_MAX           (255)
-#define SH_IMU_IMPACT_SEQ_OFFSET        (0)
-#define SH_IMU_IMPACT_SEQ_KIND          (APP_KIND_RAW)
-#define SH_IMU_USED_BITS                (SH_IMU_IMPACT_SEQ_POS + SH_IMU_IMPACT_SEQ_BITS)
-#if (SH_IMU_USED_BITS > 8u)
-#error "Group SH_IMU no longer fits in 8 bits"
 #endif
 
 /* PRV_TEL: 32-bit word */

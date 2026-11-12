@@ -2,18 +2,27 @@
  * @file    imu.c
  * @brief   imu_task (10 ms, R2): accelerometer FIFO + magnetometer on
  *          I2C1, calibration, hump detection, motion classification,
- *          turn rate and the INT1 impact callback (SAFETY_IMPACT).
+ *          turn rate and the lift-stop (SAFETY_LIFT).
  * @owner   Buddy 4 (IMU, terrain)
  * @kind    task
- * @reqs    FR4, FR5, FR13 (detection), FR18, NFR7, NFR11
+ * @reqs    FR4, FR5, FR13 (lift-stop, Change Requirement 2), FR18, NFR7,
+ *          NFR11
+ *
+ * Change Requirement 2 (lecturer, 11 Nov 2026) removed IMU collision
+ * detection: the INT1 impact interrupt, its R1 callback and the IMPACT
+ * class are gone. The only replacement is the lift-stop: while the motors
+ * are enabled, a car lifted or overturned for IMU_LIFT_CONFIRM_CYCLES
+ * cycles sets SAFETY_LIFT, and motion_task brakes at its next cycle. It
+ * runs in this task on the calibrated averages already read every cycle,
+ * so no ISR shares data with imu_task any more.
  *
  * Cycle order is fixed by B4.2.2: check-in, sensor reads, board read,
  * calibration / run start, forward acceleration, terrain step, turn
- * rate, class, board write.
+ * rate, class, board write. The lift-stop check runs right after the
+ * calibration / run-start step.
  *
  * Phase 2 (baseline) representation: plain static variables, all
- * written only by imu_task, except g_imu_impact_seq which is written
- * only by the INT1 callback (R1). Phase 4 packs the statics into the
+ * written only by imu_task. Phase 4 packs the statics into the
  * PRV_IMU_* / PRV_HIST_* / PRV_OFS_* layout rows without changing
  * behaviour.
  *
@@ -29,7 +38,6 @@
 #include "drv_lsm303.h"
 #include "../app_bits.h"
 #include "../app_layout.h"
-#include "../board_pins.h"
 #include "../subsystem2/odometry.h"
 #include "../subsystem2/safety.h"
 #include "../subsystem2/fault.h"
@@ -37,8 +45,6 @@
 #include "../subsystem5/mission.h"
 #include "../subsystem5/sys_tick.h"
 #include "../subsystem5/sys_health.h"
-#include "../subsystem5/drv_gpio_irq.h"
-#include <bsp/libbsp.h> /* gpio_get_val(): INT1 level in R1 */
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -52,8 +58,6 @@
 #define IMU_CLASS_GAP_MAX      (31u)
 #define IMU_TURN_WINDOW_CYCLES (5)     /* magnetometer cycle = 50 ms      */
 #define IMU_DPS_PER_WINDOW     (2)     /* 0.1 deg / 50 ms -> deg/s        */
-#define IMU_REST_AZ_MG         (1000)  /* at rest az reads +1000 mg     */
-#define IMU_IMPACT_SEQ_MASK    (0x0Fu) /* packed IMPACT_SEQ field width */
 #define IMU_OFFSET_LSB_MG      (2)     /* PRV_OFS_* rows: 2 mg per step   */
 
 /* ---- private data ---------------------------------------------------- */
@@ -67,18 +71,15 @@ static int32_t const g_recip_q15[IMU_ACC_SAMPLES_MAX + 1u] = {0, 32768, 16384,
 static terrain_t            g_terrain;
 static terrain_speed_hist_t g_speed_hist;
 
-/* Written only by the INT1 callback (R1), read by imu_task. */
-static volatile uint8_t g_imu_impact_seq = 0;
-
 static int16_t g_mag_mx = 0;
 static int16_t g_mag_my = 0;
 static int16_t g_mag_mz = 0;
 
-/* Packed private state (Phase 4, B4.4). One writer context (imu_task)
-   per word; the ISR-owned SH_IMU byte stays separate (rule 1). */
+/* Packed private state (Phase 4, B4.4). imu_task is the only writer of
+   every word: no ISR writes IMU data since the INT1 callback was removed
+   (Change Requirement 2). */
 static uint32_t g_imu_prv_a; /* I2C_ERR, GOOD_CNT, CLASS_GAP,
-                                LAST_CLASS, MAG_DIV, IMPACT_HOLD,
-                                IMPACT_SEQ (low 4 bits), NEED_CFG */
+                                LAST_CLASS, MAG_DIV, LIFT_CNT, NEED_CFG */
 static uint32_t g_imu_prv_b; /* CAL_CNT (HIST_IDX lives in the history
                                 word inside terrain.c) */
 static uint32_t g_imu_prv_c; /* PREV_HDG, PREV_HDG_VALID, RUN_PEAK */
@@ -109,43 +110,6 @@ static int32_t  g_avg_az_mg         = 1000; /* flat rest: az = +1000 mg */
    telemetry; imu_task stores the whole word at once (single writer). */
 static volatile uint32_t g_sh_imu_acc = 0u;
 static int32_t  g_a_fwd_mg          = 0;
-static volatile uint32_t g_imu_isr_us = 0u; /* last INT1 edge, R1 time;
-                                               ISR is the only writer   */
-/* Rising edges on GP19 with the pin already low again in R1 (noise, not
-   an impact). Written only by the INT1 callback (R1). */
-static volatile uint32_t g_imu_int1_glitches = 0u;
-#if (IMU_DIAG_IMPACT != 0)
-/* Bring-up diagnosis (S4-I03, IG_THS1 weight not yet measured). One FIFO
-   read: sample count (-1 = failed read), largest single raw (pre-offset)
-   X and Y sample in LSB, sensor axes as INT1 sees them, and the read
-   time. Kept for the read before and at the handling of an INT1, then
-   printed with the next successful read, so the trip sample is in one
-   of the three unless the FIFO overran or kept a backlog. */
-typedef struct
-{
-    int32_t  n_samples;
-    int32_t  peak_x;
-    int32_t  peak_y;
-    uint32_t read_us;
-} imu_dbg_read_t;
-
-static imu_dbg_read_t g_dbg_prev = {-1, 0, 0, 0u};
-static imu_dbg_read_t g_dbg_now  = {-1, 0, 0, 0u};
-static imu_dbg_read_t g_dbg_snap_prev = {-1, 0, 0, 0u};
-static imu_dbg_read_t g_dbg_snap_now  = {-1, 0, 0, 0u};
-static imu_dbg_read_t g_dbg_snap_next = {-1, 0, 0, 0u};
-static uint32_t       g_dbg_isr_us     = 0u;
-static uint32_t       g_dbg_handled_us = 0u;
-static int32_t        g_dbg_src        = 0;
-static int32_t        g_dbg_speed      = 0;
-static uint32_t       g_dbg_wait       = 0u; /* reads left; 0 = idle */
-static uint32_t       g_dbg_line       = 0u; /* mission_task: lines done */
-/* 1 = a report is complete and mission_task owns the snapshots until it
-   has printed them; imu_task writes them first and sets this last. */
-static volatile uint32_t g_dbg_ready   = 0u;
-#define IMU_DBG_LINES (8u) /* lines in one INT1 report */
-#define IMU_GLITCH_LOG_US (1000000u) /* noise-edge line at most 1/s */
-#endif
 static int32_t  g_turn_dps          = 0;
 static bool     gb_is_turn_from_enc = false;
 static int32_t  g_pitch_ddeg        = 0;
@@ -155,7 +119,6 @@ static int32_t  g_enc_hdg_prev_cdeg = 0;
 /* ---- private function prototypes ------------------------------------- */
 
 static void imu_task(INT stacd, void * p_exinf);
-static void imu_int1_isr(uint32_t events, uint32_t now_us);
 static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
                              bool * pb_mag_read);
 static bool imu_read_acc(uint32_t * p_n_samples);
@@ -168,18 +131,13 @@ static bool     imu_configure_if_needed(void);
 static void     imu_need_cfg_set(bool b_need);
 static void     imu_acc_publish(void);
 static uint32_t imu_acc_code(int32_t mg);
-#if (IMU_DIAG_IMPACT != 0)
-static void     imu_dbg_peak(int32_t * p_peak, int32_t value);
-static void     imu_dbg_after_read(void);
-static int32_t  imu_dbg_age_us(imu_dbg_read_t const * p_read);
-static void     imu_dbg_print_peak(imu_dbg_read_t const * p_read);
-#endif
 static void     imu_calibrate(bool b_mode_set, bool b_read_ok);
 static void     imu_run_start(int32_t pos_l, int32_t pos_r);
 static void     imu_turn_rate(bool b_mag_cycle, bool b_mag_read, int32_t pos_l,
                               int32_t pos_r);
 static int32_t  imu_mag_rate(bool b_mag_read, bool * pb_use_enc);
 static bool     imu_turn_disagrees(int32_t imu_dps, int32_t enc_dps);
+static void     imu_lift_check(bool b_has_data);
 static void     imu_classify(int32_t speed_cpw);
 static void     imu_write_board(uint32_t motion_class);
 static uint32_t imu_terrain_state_get(void);
@@ -227,21 +185,15 @@ ER imu_init(void)
 
 /**
  * imu_start
- * @brief   Registers the INT1 callback with R1 and starts imu_task on
- *          its static stack.
- * @return  E_OK or the first kernel error
+ * @brief   Starts imu_task on its static stack. No R1 callback: the INT1
+ *          impact interrupt was removed (Change Requirement 2).
+ * @return  E_OK or the kernel error
  * @context usermain
  */
 ER imu_start(void)
 {
     ER ercd = E_OK;
     ID tid  = 0;
-
-    ercd = drv_gpio_irq_attach(PIN_IMU_INT1, DRV_GPIO_IRQ_RISE, imu_int1_isr);
-    if (E_OK != ercd)
-    {
-        return ercd;
-    }
 
     tid = app_start_task((FP)imu_task, /* cast: kernel entry type */
                          APP_PRI_IMU, g_imu_stack, APP_STACK_IMU_BYTES,
@@ -252,84 +204,6 @@ ER imu_start(void)
     }
 
     return ercd;
-}
-
-/**
- * imu_diag_service
- * @brief   Bring-up diagnosis (S4-I03): prints one line of a completed
- *          INT1 report per call (IMU_DBG_LINES lines), then releases the
- *          snapshots back to imu_task. Does nothing when IMU_DIAG_IMPACT
- *          is 0 or no report is waiting.
- * @return  none
- * @context mission_task, once per pass (the console print costs the
- *          watchdog feeder only its own time)
- */
-void imu_diag_service(void)
-{
-#if (IMU_DIAG_IMPACT != 0)
-    static uint32_t s_glitch_seen    = 0u;
-    static uint32_t s_glitch_last_us = 0u;
-    uint32_t const  glitches         = g_imu_int1_glitches;
-    uint32_t const  now_us           = sys_tick_now_us();
-
-    /* Bring-up diagnosis: report ignored INT1 noise edges, at most once
-       per IMU_GLITCH_LOG_US so a noisy wire cannot flood the console. */
-    if ((glitches != s_glitch_seen)
-        && ((now_us - s_glitch_last_us) >= IMU_GLITCH_LOG_US))
-    {
-        /* casts: counts stay far below INT32_MAX in a run */
-        app_log("INT1 noise edge ignored (GP19 low in R1): %d new, %d total\n",
-                (int32_t)(glitches - s_glitch_seen), (int32_t)glitches, 0);
-        s_glitch_seen    = glitches;
-        s_glitch_last_us = now_us;
-    }
-
-    if (0u == g_dbg_ready)
-    {
-        return;
-    }
-    g_dbg_line++;
-    switch (g_dbg_line)
-    {
-        case 1u:
-            /* casts: times and counts are far below INT32_MAX here */
-            app_log("IMPACT INT1: edge at %d ms, handled %d us later,"
-                    " IG_SRC1 %d (66 = X high, 72 = Y high)\n",
-                    (int32_t)(g_dbg_isr_us / 1000u),
-                    (int32_t)(g_dbg_handled_us - g_dbg_isr_us), g_dbg_src);
-            break;
-        case 2u:
-            app_log("  speed %d counts per 50 ms, FIFO overruns so far %d\n",
-                    g_dbg_speed, (int32_t)drv_lsm303_fifo_overruns(), 0);
-            break;
-        case 3u:
-            app_log("  read before: %d samples (-1 = failed), at %d us"
-                    " after the edge\n", g_dbg_snap_prev.n_samples,
-                    imu_dbg_age_us(&g_dbg_snap_prev), 0);
-            break;
-        case 4u:
-            imu_dbg_print_peak(&g_dbg_snap_prev);
-            break;
-        case 5u:
-            app_log("  read at handling: %d samples (-1 = failed), at %d us"
-                    " after the edge\n", g_dbg_snap_now.n_samples,
-                    imu_dbg_age_us(&g_dbg_snap_now), 0);
-            break;
-        case 6u:
-            imu_dbg_print_peak(&g_dbg_snap_now);
-            break;
-        case 7u:
-            app_log("  next read: %d samples (-1 = failed), at %d us"
-                    " after the edge\n", g_dbg_snap_next.n_samples,
-                    imu_dbg_age_us(&g_dbg_snap_next), 0);
-            break;
-        default:
-            imu_dbg_print_peak(&g_dbg_snap_next);
-            g_dbg_line  = 0u;
-            g_dbg_ready = 0u; /* snapshots back to imu_task */
-            break;
-    }
-#endif
 }
 
 /**
@@ -404,6 +278,9 @@ static void imu_task(INT stacd, void * p_exinf)
         {
             imu_run_start(pos_l, pos_r);
         }
+
+        /* 4a. Lift-stop (Change Requirement 2). */
+        imu_lift_check(b_read_ok && !b_mode_cal);
 
         if (TERRAIN_FAULT == imu_terrain_state_get())
         {
@@ -517,36 +394,6 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
 }
 
 /**
- * imu_int1_isr
- * @brief   R1 callback on GP19 rising: sets SAFETY_IMPACT and bumps the
- *          impact sequence. Nothing else happens here (B4.6).
- * @param   events  edge mask (unused: only rising edges are enabled)
- * @param   now_us  R1 entry time (unused)
- * @return  none
- * @context R1 (interrupt)
- */
-static void imu_int1_isr(uint32_t events, uint32_t now_us)
-{
-    (void)events; /* only rising edges are enabled */
-
-    /* INT1 is latched (CTRL5 LIR1): a real impact holds GP19 high until
-       imu_task reads IG_SRC1, milliseconds later. Motor switching noise
-       on the wire gives rising edges that are over before R1 runs
-       (on-car logs 2026-11-03: two FAULT IMPACTs in RUN with IG_SRC1 21,
-       IA clear, peaks under 1.2 g). Such an edge is counted, not used. */
-    if (0u == gpio_get_val(PIN_IMU_INT1))
-    {
-        g_imu_int1_glitches++; /* aligned 32-bit, ISR is the only writer */
-    }
-    else
-    {
-        g_imu_isr_us = now_us; /* aligned 32-bit store: atomic on M0+ */
-        safety_set_from_isr(SAFETY_IMPACT);
-        g_imu_impact_seq++; /* volatile uint8_t, ISR is the only writer */
-    }
-}
-
-/**
  * imu_read_sensors
  * @brief   One accelerometer FIFO read (<= 4 samples, averaged with the
  *          reciprocal table) and, every IMU_MAG_EVERY_N-th cycle, one
@@ -568,9 +415,6 @@ static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
 
     bool b_acc_ok = imu_read_acc(&n_samples);
 
-#if (IMU_DIAG_IMPACT != 0)
-    imu_dbg_after_read();
-#endif
 
     /* Calibration may only sum a cycle that brought new samples: on an
        empty FIFO g_avg_raw_* still holds last cycle's average, which
@@ -596,13 +440,6 @@ static bool imu_read_acc(uint32_t * p_n_samples)
     uint32_t         n_samples = 0u;
 
     *p_n_samples = 0u;
-#if (IMU_DIAG_IMPACT != 0)
-    g_dbg_prev = g_dbg_now;
-    g_dbg_now.n_samples = -1; /* until the transfer succeeds */
-    g_dbg_now.peak_x    = 0;
-    g_dbg_now.peak_y    = 0;
-    g_dbg_now.read_us   = sys_tick_now_us();
-#endif
 
     ercd = drv_lsm303_read_acc(samples, IMU_ACC_SAMPLES_MAX);
     if (ercd < 0)
@@ -640,9 +477,6 @@ static bool imu_read_acc(uint32_t * p_n_samples)
 
         imu_i2c_result(true, true);
         n_samples = (uint32_t)ercd; /* cast: count >= 0 here */
-#if (IMU_DIAG_IMPACT != 0)
-        g_dbg_now.n_samples = ercd; /* 0..4 */
-#endif
         if (n_samples > 0u)
         {
             for (idx = 0u; idx < n_samples; idx++)
@@ -650,10 +484,6 @@ static bool imu_read_acc(uint32_t * p_n_samples)
                 sum_x += (int32_t)samples[idx].acc_x;
                 sum_y += (int32_t)samples[idx].acc_y;
                 sum_z += (int32_t)samples[idx].acc_z;
-#if (IMU_DIAG_IMPACT != 0)
-                imu_dbg_peak(&g_dbg_now.peak_x, (int32_t)samples[idx].acc_x);
-                imu_dbg_peak(&g_dbg_now.peak_y, (int32_t)samples[idx].acc_y);
-#endif
             }
             /* Signed average: (sum x recip[n]) / 32768, never >> on a
                signed value (review F-07). |sum| <= 4 x 32768, so the
@@ -835,81 +665,6 @@ static void imu_need_cfg_set(bool b_need)
                                PRV_IMU_A_NEED_CFG_BITS, b_need ? 1u : 0u);
 }
 
-#if (IMU_DIAG_IMPACT != 0)
-/**
- * imu_dbg_peak
- * @brief   Keeps the sample of largest magnitude (bring-up diagnosis).
- * @param   p_peak  running peak, raw LSB, sign kept
- * @param   value   new raw sample
- * @return  none
- * @context imu_task
- */
-static void imu_dbg_peak(int32_t * p_peak, int32_t value)
-{
-    int32_t const mag_new  = (value < 0) ? -value : value;
-    int32_t const mag_peak = (*p_peak < 0) ? -*p_peak : *p_peak;
-
-    if (mag_new > mag_peak)
-    {
-        *p_peak = value;
-    }
-}
-
-/**
- * imu_dbg_after_read
- * @brief   After each FIFO read: if an INT1 was handled, waits for the
- *          next successful read (at most IMU_DIAG_WAIT_READS reads), then
- *          hands the report to mission_task (imu_diag_service), which
- *          prints it. Printing from imu_task starved mission_task, the
- *          watchdog feeder (emulator, 2026-10-29). An INT1 while a report
- *          is still being printed is not reported.
- * @return  none
- * @context imu_task
- */
-static void imu_dbg_after_read(void)
-{
-    if (0u == g_dbg_wait)
-    {
-        return;
-    }
-    if ((g_dbg_now.n_samples <= 0) && (g_dbg_wait > 1u))
-    {
-        g_dbg_wait--; /* empty or failed: try the next read */
-        return;
-    }
-    g_dbg_wait      = 0u;
-    g_dbg_snap_next = g_dbg_now;
-    g_dbg_ready     = 1u; /* last: hands the snapshots to mission_task */
-}
-
-/**
- * imu_dbg_age_us
- * @brief   Read time relative to the INT1 edge. The samples of a read were
- *          taken in the up to 20 ms before it (200 Hz, at most 4 a read).
- * @param   p_read  the read
- * @return  us after the edge (negative = before it)
- * @context imu_task
- */
-static int32_t imu_dbg_age_us(imu_dbg_read_t const * p_read)
-{
-    /* cast: signed difference of two wrapping 32-bit times */
-    return (int32_t)(p_read->read_us - g_dbg_isr_us);
-}
-
-/**
- * imu_dbg_print_peak
- * @brief   Raw peaks of one read in mg (0.122 mg per LSB, sensor axes).
- * @param   p_read  the read
- * @return  none
- * @context imu_task
- */
-static void imu_dbg_print_peak(imu_dbg_read_t const * p_read)
-{
-    app_log("    raw peak X %d Y %d mg\n",
-            (p_read->peak_x * IMU_MG_NUM) / IMU_MG_DEN,
-            (p_read->peak_y * IMU_MG_NUM) / IMU_MG_DEN, 0);
-}
-#endif
 
 /**
  * imu_calibrate
@@ -1007,8 +762,8 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
                             PRV_OFS_B_AZ_MAX, PRV_OFS_B_AZ_OFFSET, &b_clamped));
         imu_clamp_fault(b_clamped);
 
-        /* Bring-up diagnosis: gravity at rest on each axis. INT1 compares
-           raw X/Y, so any tilt here is taken off the impact margin. */
+        /* Bring-up diagnosis: gravity at rest on each axis. A tilt here
+           moves az away from +1000 mg before the offsets are applied. */
         app_log("IMU at rest, raw before offsets: ax %d ay %d az %d mg\n",
                 ofs_ax, ofs_ay,
                 ofs_az + IMU_REST_AZ_MG);
@@ -1069,8 +824,8 @@ static void imu_run_start(int32_t pos_l, int32_t pos_r)
     gb_is_turn_from_enc = false;
     g_pitch_ddeg        = 0;
     g_hump_now_mm       = 0u;
-    g_imu_prv_a         = app_bits_put(g_imu_prv_a, PRV_IMU_A_IMPACT_HOLD_POS,
-                                       PRV_IMU_A_IMPACT_HOLD_BITS, 0u);
+    g_imu_prv_a         = app_bits_put(g_imu_prv_a, PRV_IMU_A_LIFT_CNT_POS,
+                                       PRV_IMU_A_LIFT_CNT_BITS, 0u);
     g_imu_prv_a =
         app_bits_put(g_imu_prv_a, PRV_IMU_A_LAST_CLASS_POS,
                      PRV_IMU_A_LAST_CLASS_BITS, APP_MCLASS_STATIONARY);
@@ -1249,69 +1004,70 @@ static bool imu_turn_disagrees(int32_t imu_dps, int32_t enc_dps)
 }
 
 /**
+ * imu_lift_check
+ * @brief   Lift-stop (Change Requirement 2). Armed only while
+ *          APP_MODE_MOTOR_EN is set (the CAL_IR sweep and RUN): handling
+ *          or carrying the car with the motors off never latches a stop.
+ *          On a cycle with new samples, terrain_lift_step() counts the
+ *          cycles in a row the car is lifted or overturned; at
+ *          IMU_LIFT_CONFIRM_CYCLES SAFETY_LIFT is set and motion_task
+ *          brakes at its next cycle. Only mission_task clears the bit.
+ * @param   b_has_data  true when this cycle brought new calibrated
+ *                      samples (and the IMU is not calibrating)
+ * @return  none
+ * @context imu_task
+ */
+static void imu_lift_check(bool b_has_data)
+{
+    uint32_t lift_cnt     = app_bits_get(g_imu_prv_a, PRV_IMU_A_LIFT_CNT_POS,
+                                         PRV_IMU_A_LIFT_CNT_BITS);
+    bool     b_is_lifted  = false;
+
+    if (!mission_mode_is_set(APP_MODE_MOTOR_EN)
+        || (TERRAIN_FAULT == imu_terrain_state_get()))
+    {
+        lift_cnt = 0u; /* disarmed: start again from zero */
+    }
+    else if (b_has_data)
+    {
+        lift_cnt = terrain_lift_step(lift_cnt, g_avg_ax_mg, g_avg_ay_mg,
+                                     g_avg_az_mg, &b_is_lifted);
+        if (b_is_lifted && (0u == (safety_get() & SAFETY_LIFT)))
+        {
+            safety_set(SAFETY_LIFT); /* brake first, then report */
+            app_log("LIFT STOP: robot lifted or overturned (az %d mg)\n",
+                    g_avg_az_mg, 0, 0);
+        }
+    }
+    else
+    {
+        /* no new samples: keep the count */
+    }
+    g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_LIFT_CNT_POS,
+                               PRV_IMU_A_LIFT_CNT_BITS, lift_cnt);
+}
+
+/**
  * imu_classify
- * @brief   Impact hold from the INT1 sequence, then the classifier.
- *          Posts APP_EVT_MOTION_CLASS when the class changed and at
- *          least IMU_CLASS_MIN_GAP_TICKS passed since the last post
- *          (D.13, B4.2.2 step 8).
+ * @brief   Classifier, then posts APP_EVT_MOTION_CLASS when the class
+ *          changed and at least IMU_CLASS_MIN_GAP_TICKS passed since the
+ *          last post (D.13, B4.2.2 step 8). LIFTED is shown while
+ *          SAFETY_LIFT is set.
  * @param   speed_cpw  this cycle's speed
  * @return  none
  * @context imu_task
  */
 static void imu_classify(int32_t speed_cpw)
 {
-    uint32_t seq_now = (uint32_t)g_imu_impact_seq; /* 8-bit load,
-                                                      atomic */
-    uint32_t cls             = 0u;
-    uint32_t impact_seq_seen = app_bits_get(
-        g_imu_prv_a, PRV_IMU_A_IMPACT_SEQ_POS, PRV_IMU_A_IMPACT_SEQ_BITS);
-    uint32_t impact_hold = app_bits_get(g_imu_prv_a, PRV_IMU_A_IMPACT_HOLD_POS,
-                                        PRV_IMU_A_IMPACT_HOLD_BITS);
-    uint32_t last_class  = app_bits_get(g_imu_prv_a, PRV_IMU_A_LAST_CLASS_POS,
-                                        PRV_IMU_A_LAST_CLASS_BITS);
-    uint32_t class_gap   = app_bits_get(g_imu_prv_a, PRV_IMU_A_CLASS_GAP_POS,
-                                        PRV_IMU_A_CLASS_GAP_BITS);
+    uint32_t cls        = 0u;
+    uint32_t last_class = app_bits_get(g_imu_prv_a, PRV_IMU_A_LAST_CLASS_POS,
+                                       PRV_IMU_A_LAST_CLASS_BITS);
+    uint32_t class_gap  = app_bits_get(g_imu_prv_a, PRV_IMU_A_CLASS_GAP_POS,
+                                       PRV_IMU_A_CLASS_GAP_BITS);
 
-    if ((seq_now & IMU_IMPACT_SEQ_MASK) != impact_seq_seen)
-    {
-        /* Read INT1_SRC_A: it clears the latched interrupt so a repeated
-           tap can raise a new rising edge (B4.1.1, S4-I03). A read error
-           is not counted here; the next accelerometer transfer reports
-           the bus fault itself. The sequence is only marked as seen when
-           the read succeeded: otherwise INT1 would stay latched high and
-           no later impact could raise a new edge. A failed read is
-           simply tried again next cycle. */
-        int32_t src_byte = drv_lsm303_read_int1_src();
-
-        if (src_byte >= 0)
-        {
-            g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_IMPACT_SEQ_POS,
-                                       PRV_IMU_A_IMPACT_SEQ_BITS,
-                                       seq_now & IMU_IMPACT_SEQ_MASK);
-#if (IMU_DIAG_IMPACT != 0)
-            if (0u == g_dbg_ready) /* mission_task is not printing one */
-            {
-                g_dbg_snap_prev  = g_dbg_prev;
-                g_dbg_snap_now   = g_dbg_now;
-                g_dbg_isr_us     = g_imu_isr_us;
-                g_dbg_handled_us = sys_tick_now_us();
-                g_dbg_src        = src_byte;
-                g_dbg_speed      = speed_cpw;
-                g_dbg_wait       = IMU_DIAG_WAIT_READS;
-            }
-#endif
-        }
-        impact_hold = IMU_IMPACT_HOLD_TICKS;
-    }
-    else if (impact_hold > 0u)
-    {
-        impact_hold--;
-    }
-    g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_IMPACT_HOLD_POS,
-                               PRV_IMU_A_IMPACT_HOLD_BITS, impact_hold);
-
-    cls = terrain_classify(imu_terrain_state_get(), (impact_hold > 0u),
-                           g_turn_dps, g_a_fwd_mg, speed_cpw);
+    cls = terrain_classify(imu_terrain_state_get(),
+                           (0u != (safety_get() & SAFETY_LIFT)), g_turn_dps,
+                           g_a_fwd_mg, speed_cpw);
 
     if (cls != last_class)
     {

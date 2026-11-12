@@ -1,10 +1,10 @@
 /**
  * @file    drv_lsm303.c
  * @brief   Register-level LSM303D driver on I2C1 (400 kHz): accelerometer
- *          FIFO stream, magnetometer, impact interrupt (INT1), bus reset.
+ *          FIFO stream, magnetometer, bus reset.
  * @owner   Buddy 4 (IMU, terrain)
  * @kind    drv
- * @reqs    FR4, FR5, FR13, FR18, NFR7
+ * @reqs    FR4, FR5, FR13 (lift-stop data), FR18, NFR7
  *
  * SPEC-QUESTION SQ-B4-2: spec B4.1.1 targets the LSM303DLHC (accelerometer
  * at 0x19, magnetometer at 0x1E, identity 'H','4','3'). The GY-511 board
@@ -13,11 +13,15 @@
  * was ported to that part instead of guessing. Differences from B4.1.1:
  * one I2C address for both sensors; the LSM303D control bit layouts in
  * CTRL0..CTRL7; 16-bit acceleration at 0.122 mg/LSB for +-4 g (B4.1.1
- * assumed 12-bit left-justified at 2 mg/LSB after /16); the impact
- * interrupt is interrupt generator 1 (IG_CFG1/IG_SRC1/IG_THS1/IG_DUR1);
- * the magnetometer reads 0x08..0x0D as plain little-endian X, Y, Z. The
+ * assumed 12-bit left-justified at 2 mg/LSB after /16); the
+ * magnetometer reads 0x08..0x0D as plain little-endian X, Y, Z. The
  * FIFO_SRC bit layout happens to be identical, so the FIFO planner and
  * its host test are unchanged. Pending team decision before merge.
+ *
+ * Change Requirement 2 (lecturer, 11 Nov 2026): IMU collision detection
+ * is removed, so interrupt generator 1 is no longer routed to INT1
+ * (CTRL3 = 0, LIR1 off) and IG_CFG1 is written 0 (no event). The
+ * lift-stop uses the FIFO samples imu_task already reads.
  *
  * The template cannot link the SDK's i2c.c (see build_make/pico_rp2040.mk,
  * CSC28 note C2), so every bus transaction is done here against the
@@ -47,7 +51,6 @@
 
 #include "drv_lsm303.h" /* own header first (BARR-C 4.3.c) */
 #include "../board_pins.h"
-#include "cfg_imu.h"
 #include "hardware/gpio.h"
 #include "hardware/structs/i2c.h"
 
@@ -74,9 +77,6 @@ extern uint32_t sys_tick_now_us(void);
 #define LSM303_REG_FIFO_CTRL (0x2Eu)
 #define LSM303_REG_FIFO_SRC  (0x2Fu)
 #define LSM303_REG_IG_CFG1   (0x30u)
-#define LSM303_REG_IG_SRC1   (0x31u)
-#define LSM303_REG_IG_THS1   (0x32u)
-#define LSM303_REG_IG_DUR1   (0x33u)
 
 /* Magnetometer data and identity */
 #define LSM303_REG_OUT_X_L_M (0x08u)
@@ -92,19 +92,15 @@ extern uint32_t sys_tick_now_us(void);
 #define LSM303_VAL_CTRL0     (0x40u) /* FIFO_EN, bit 6                  */
 #define LSM303_VAL_CTRL1     (0x7Fu) /* AODR 200 Hz, BDU, X/Y/Z on      */
 #define LSM303_VAL_CTRL2     (0x08u) /* AFS = +-4 g, ABW 773 Hz         */
-#define LSM303_VAL_CTRL3     (0x20u) /* INT1_IG1, bit 5                 */
-#define LSM303_VAL_CTRL5     (0x71u) /* M_RES high, M_ODR 100 = 50 Hz,
-                                         LIR1 (bits 6-5, 4-2, 0)         */
+#define LSM303_VAL_CTRL3     (0x00u) /* nothing routed to INT1 (CR 2)   */
+#define LSM303_VAL_CTRL5     (0x70u) /* M_RES high, M_ODR 100 = 50 Hz
+                                         (bits 6-5, 4-2), no latch       */
 #define LSM303_VAL_CTRL6     (0x00u) /* MFS = +-2 gauss                 */
 #define LSM303_VAL_CTRL7     (0x00u) /* MD = continuous conversion      */
 #define LSM303_VAL_FIFO_CTRL (0x40u) /* FM = stream mode                */
-#define LSM303_VAL_IG_CFG1   (0x0Au) /* OR, X-high or Y-high event      */
-/* IG_DUR1: samples (1/ODR, 5 ms at 200 Hz) the X/Y-high event must last
-   before INT1 fires. 0 let a single 5 ms motor-vibration spike trip
-   IMPACT ~150 ms into RUN (on-car log 2026-11-03: X -1160 mg, nothing
-   hit). 2 = 10 ms: a real collision at run speed lasts longer. TUNE:
-   S4-I03 (taps) must still trip with this value.                    */
-#define LSM303_VAL_IG_DUR1   (0x02u)
+#define LSM303_VAL_IG_CFG1   (0x00u) /* interrupt generator 1 off: a
+                                         warm restart may find the old
+                                         impact setup in the sensor     */
 
 /* Identity byte expected from WHO_AM_I (0x0F) */
 #define LSM303_WHO_AM_I_D (DRV_LSM303_WHO_AM_I)
@@ -315,27 +311,6 @@ int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my, int16_t * p_mz)
 }
 
 /**
- * drv_lsm303_read_int1_src
- * @brief   Reads IG_SRC1. Reading it clears the IA bit and the interrupt
- *          line, and (with LIR1 set in CTRL5) releases the latch, so
- *          calling it after every impact is what lets a repeated tap
- *          generate a new edge on INT1 (LSM303D datasheet 8.31, S4-I03).
- * @return  the IG_SRC1 byte, or <0 on an I2C error
- * @context imu_task
- */
-int32_t drv_lsm303_read_int1_src(void)
-{
-    uint8_t src  = 0u;
-    int32_t ercd = lsm303_rx(LSM303_REG_IG_SRC1, &src, 1u);
-
-    if (0 != ercd)
-    {
-        return ercd;
-    }
-    return (int32_t)src; /* cast: byte, zero-extended */
-}
-
-/**
  * drv_lsm303_identity_ok
  * @brief   Reads WHO_AM_I and compares it with the LSM303D value 0x49.
  * @return  1 when 0x49 is found, 0 on a mismatch, <0 on an I2C error
@@ -454,10 +429,9 @@ static void lsm303_hw_setup(void)
 /**
  * lsm303_hw_write_config
  * @brief   Writes the LSM303D control registers: accelerometer 200 Hz at
- *          +-4 g with the FIFO in stream mode, interrupt generator 1 on
- *          INT1 for the impact threshold, magnetometer at 50 Hz high
- *          resolution. Register and value choices are in the define
- *          block above.
+ *          +-4 g with the FIFO in stream mode, INT1 and interrupt
+ *          generator 1 off, magnetometer at 50 Hz high resolution.
+ *          Register and value choices are in the define block above.
  * @return  0 or the first I2C error
  * @context imu_task or usermain
  */
@@ -498,16 +472,6 @@ static int32_t lsm303_hw_write_config(void)
     if (0 == ercd)
     {
         ercd = lsm303_tx2(LSM303_REG_IG_CFG1, LSM303_VAL_IG_CFG1);
-    }
-    if (0 == ercd)
-    {
-        ercd = lsm303_tx2(LSM303_REG_IG_THS1,
-                          (uint8_t)IMU_IMPACT_THS);
-        /* cast: threshold is 0..127 */
-    }
-    if (0 == ercd)
-    {
-        ercd = lsm303_tx2(LSM303_REG_IG_DUR1, LSM303_VAL_IG_DUR1);
     }
 
     return ercd;

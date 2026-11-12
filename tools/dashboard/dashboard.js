@@ -39,7 +39,7 @@
     var BAR_FRAME_ELEMENTS = 29;  /* one Code 39 character, two guards and two gaps */
     var QUIET_RE = /^(US dist|IR raw|ENC pos|BAR DO|BAR edges|WDT longest)/;
     var BAD_RE = /FAULT|ERROR|FAIL|ESTOP|TOO CLOSE|impossible/;
-    var WARN_RE = /OBSTACLE|LINE LOST|LINE END|RAMP|REJOIN|SCAN|AVOID|BARCODE|BAR capture|JUNCTION|IMPACT|MOVE FAILED|dropped/;
+    var WARN_RE = /OBSTACLE|LINE LOST|LINE END|RAMP|REJOIN|SCAN|AVOID|BARCODE|BAR capture|JUNCTION|LIFT|MOVE FAILED|dropped/;
 
     /* What each state looks like (car LED) and what to do next. */
     var STATE_UI = {

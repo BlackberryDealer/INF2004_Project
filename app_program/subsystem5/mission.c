@@ -18,7 +18,6 @@
 #include "../subsystem2/motion.h"
 #include "../subsystem2/odometry.h"
 #include "../subsystem3/barcode.h"
-#include "../subsystem4/imu.h"
 #include "cfg_mission.h"
 #include "mission_run.h"
 #include "status_board.h"
@@ -432,7 +431,6 @@ static void mission_task(INT stacd, void * p_exinf)
             {
                 fault_set(APP_FAULT_PIO_LOAD); /* every pass (D.13) */
             }
-            imu_diag_service();  /* bring-up: one INT1 report line, if any */
             sys_health_service();
 #if (MISSION_WDT_LOG_MS != 0u)
             /* Bring-up diagnosis: watchdog margin (window 30 ms) */
@@ -562,7 +560,7 @@ static void mission_pass(mission_ctx_t * p_ctx,
            casts: motion state 0..7 and safety bits 0..7 fit int32_t   */
         app_log("MOVE FAILED (no MOVE_DONE in time, or refused twice):"
                 " motion state %d (6 = ESTOP), safety bits %d"
-                " (1 = ESTOP, 2 = IMPACT)\n",
+                " (1 = ESTOP, 2 = LIFT)\n",
                 (int32_t) status_board_motion_state(p_snap),
                 (int32_t) safety_get(), 0);
         mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
@@ -894,9 +892,9 @@ static void mission_cal_settle(mission_ctx_t * p_ctx,
 /**
  * mission_st_ready
  * @brief   READY: START -> 1 s warning (buzzer + LED) -> run start: set
- *          clear a stale IMPACT, set RUN_START, ZERO the odometry and wait
- *          for its tagged MOVE_DONE (deadline 200 ms -> FAULT; an IMPACT
- *          from here on -> FAULT IMPACT), hold RUN_START >= 30 ms so line,
+ *          clear a stale LIFT, set RUN_START, ZERO the odometry and wait
+ *          for its tagged MOVE_DONE (deadline 200 ms -> FAULT; a LIFT
+ *          from here on -> FAULT LIFT), hold RUN_START >= 30 ms so line,
  *          barcode and IMU reset their per-run state, then clear it, set
  *          MOTOR_EN and enter RUN with run_start_path = 0.
  * @context mission_task
@@ -922,7 +920,7 @@ static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
         p_ctx->b_run_starting   = true;
         p_ctx->b_zero_done      = false;
         p_ctx->run_start_set_us = now_us;
-        /* Before the ZERO: with IMPACT set, motion_task sits in ESTOP and
+        /* Before the ZERO: with LIFT set, motion_task sits in ESTOP and
            only latches the ZERO, so no MOVE_DONE would come back and the
            200 ms deadline would end the start in FAULT (S5-U33). */
         mission_clear_stale_safety();
@@ -1030,20 +1028,24 @@ static void mission_recover_done(mission_ctx_t * p_ctx, bool b_again,
 /**
  * mission_faults
  * @brief   Reports newly set fault bits to telemetry; enters FAULT on any
- *          stop fault, and on an IMPACT during CAL_IR, the run start or RUN
- *          (review R07). In the run start the IMPACT was already cleared
+ *          stop fault. Lift-stop (Change Requirement 2): SAFETY_LIFT has
+ *          already braked the motors; in RUN it ends the run normally
+ *          (FINISHED, end reason STOP: lifting the car is the end-of-run
+ *          signal in the demonstration), and in the CAL_IR sweep or the
+ *          run start it is a FAULT, as the calibration or the start did
+ *          not complete. In the run start the LIFT was already cleared
  *          once (mission_clear_stale_safety), so a new one is real.
  * @context mission_task
  */
 static void mission_faults(mission_ctx_t * p_ctx,
                            status_board_t const * p_snap, uint32_t now_us)
 {
-    uint32_t const faults = fault_get();
-    uint32_t const fresh  = faults & ~p_ctx->last_faults;
-    bool const     b_move = (APP_SYS_CAL_IR == p_ctx->sys_state)
-                            || (APP_SYS_RUN == p_ctx->sys_state)
-                            || ((APP_SYS_READY == p_ctx->sys_state)
-                                && p_ctx->b_run_starting);
+    uint32_t const faults  = fault_get();
+    uint32_t const fresh   = faults & ~p_ctx->last_faults;
+    bool const     b_lift  = (0u != (safety_get() & SAFETY_LIFT));
+    bool const     b_start = (APP_SYS_CAL_IR == p_ctx->sys_state)
+                             || ((APP_SYS_READY == p_ctx->sys_state)
+                                 && p_ctx->b_run_starting);
 
     for (uint32_t idx = 0u; idx < APP_FAULT_COUNT; idx++)
     {
@@ -1060,9 +1062,16 @@ static void mission_faults(mission_ctx_t * p_ctx,
     {
         mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
     }
-    else if (b_move && (0u != (safety_get() & SAFETY_IMPACT)))
+    else if (b_lift && (APP_SYS_RUN == p_ctx->sys_state))
     {
-        app_log("FAULT IMPACT (IMU INT1 while moving or starting)\n",
+        app_log("RUN END: robot lifted (lift-stop)\n", 0, 0, 0);
+        p_ctx->end_reason      = APP_END_STOP;
+        p_ctx->b_motion_failed = false; /* a move cut short by the brake */
+        mission_enter(p_ctx, APP_SYS_FINISHED, p_snap, now_us);
+    }
+    else if (b_lift && b_start)
+    {
+        app_log("FAULT LIFT (lifted during the sweep or the run start)\n",
                 0, 0, 0);
         mission_enter(p_ctx, APP_SYS_FAULT, p_snap, now_us);
     }
@@ -1157,32 +1166,29 @@ bool mission_send_move(mission_ctx_t * p_ctx, uint32_t kind, int32_t param,
 
 /**
  * mission_clear_stale_safety
- * @brief   Clears an IMPACT latched while the motors were not enabled,
+ * @brief   Clears a LIFT left set while the motors were not enabled,
  *          before the motors are used: on CAL_IR entry (before MOTOR_EN)
  *          and at the end of the READY warning (before the run-start ZERO,
- *          which motion_task only latches while it is in ESTOP). A bump
- *          while the car is handled or the RUN button is pressed is not a
- *          collision, and nothing else clears IMPACT before RUN (on-car
- *          log 2026-10-29, tests S5-U32 and S5-U33). An IMPACT after this
- *          point, in CAL_IR, the run start or RUN, is a FAULT
- *          (mission_faults).
- *          Only the IMPACT bit is cleared. ESTOP is NOT cleared:
+ *          which motion_task only latches while it is in ESTOP). imu_task
+ *          only arms the lift-stop while MOTOR_EN is set, so this is a
+ *          guard, not a normal path (tests S5-U32 and S5-U33). A LIFT
+ *          after this point, in CAL_IR, the run start or RUN, is acted on
+ *          by mission_faults.
+ *          Only the LIFT bit is cleared. ESTOP is NOT cleared:
  *          obstacle_task does not set it while MOTOR_EN is clear, and an
  *          ESTOP that is set means a hazard that only obstacle_task or a
- *          RESET may release. Clearing the bit does not re-arm the
- *          LSM303D: imu_task reads IG_SRC1 (outside CAL_IMU and RUN_START)
- *          to release the latched INT1. mission_task stays the only task
- *          that clears safety bits.
+ *          RESET may release. mission_task stays the only task that
+ *          clears safety bits.
  * @context mission_task
  */
 static void mission_clear_stale_safety(void)
 {
-    if (0u != (safety_get() & SAFETY_IMPACT))
+    if (0u != (safety_get() & SAFETY_LIFT))
     {
         /* Bring-up diagnosis */
-        app_log("SAFETY IMPACT latched before the motors were enabled:"
+        app_log("SAFETY LIFT latched before the motors were enabled:"
                 " cleared\n", 0, 0, 0);
-        safety_clear(SAFETY_IMPACT);
+        safety_clear(SAFETY_LIFT);
     }
 }
 

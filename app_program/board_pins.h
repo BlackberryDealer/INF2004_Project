@@ -30,7 +30,7 @@
 #define PIN_ENC_R_A        (16u)
 #define PIN_ENC_R_B        (17u)
 #define PIN_RGB            (18u)
-#define PIN_IMU_INT1       (19u)
+#define PIN_SPARE_19       (19u)  /* was LSM303 INT1: impact removed (CR 2) */
 #define PIN_BTN_RUN        (20u)
 #define PIN_BTN_RESET      (21u)
 #define PIN_BUZZER         (22u)

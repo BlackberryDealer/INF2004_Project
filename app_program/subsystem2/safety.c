@@ -4,12 +4,14 @@
  *          motion_task brakes at its next cycle (<= 10 ms + 1 ms).
  * @owner   Buddy 2 (motion)
  * @kind    task
- * @reqs    FR13 (brake on impact), NFR10a (flag -> motors low <= 15 ms)
+ * @reqs    FR13 (stop when lifted or overturned; Change Requirement 2),
+ *          NFR10a (flag -> motors low <= 15 ms)
  *
- * Writers: obstacle_task (ESTOP), the IMU INT1 callback in R1 (IMPACT),
- * mission_task (FAULT). Only mission_task clears bits. Readers: any task.
- * The kernel event flag makes every set/clear/read atomic, so the bits need
- * no extra locking and can be set from interrupt context.
+ * Writers: obstacle_task (ESTOP), imu_task (LIFT: the car was lifted or
+ * overturned), mission_task (FAULT). Only mission_task clears bits.
+ * Readers: any task. The kernel event flag makes every set/clear/read
+ * atomic, so the bits need no extra locking and can be set from interrupt
+ * context.
  */
 
 #include "safety.h"            /* own header first (BARR-C 4.3.c) */

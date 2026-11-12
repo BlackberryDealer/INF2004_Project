@@ -750,7 +750,7 @@
        "TURNING",
        "CLIMBING",
        "DESCENDING",
-       "IMPACT",
+       "LIFTED",
        "CRUISING"
       ],
       "AVOID": [

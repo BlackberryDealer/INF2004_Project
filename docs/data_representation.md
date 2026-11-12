@@ -164,8 +164,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | CLASS_GAP | PRV_IMU_A | 0..31 × 1 tick | 1 | 5 | 5 | SAT | P | Ticks since MOTION_CLASS |
 | LAST_CLASS | PRV_IMU_A | 0..6 × 1 code | 1 | 3 | 3 | ENUM | P | Last posted class |
 | MAG_DIV | PRV_IMU_A | 0..4 × 1 tick | 1 | 3 | 3 | RNG | P | Cycles to next magnetometer read |
-| IMPACT_HOLD | PRV_IMU_A | 0..31 × 1 tick | 1 | 5 | 5 | SAT | P | Impact class hold |
-| IMPACT_SEQ | PRV_IMU_A | 0..15 × 1 count | 1 | 4 | 4 | RAW | P | Last seen INT1 sequence (low bits) |
+| LIFT_CNT | PRV_IMU_A | 0..5 × 1 tick | 1 | 3 | 3 | SAT | P | Lift-stop: cycles in a row lifted or overturned (CR2) |
 | NEED_CFG | PRV_IMU_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | LSM303D registers must be (re)written |
 | CAL_CNT | PRV_IMU_B | 0..200 × 1 sample | 1 | 8 | 8 | RNG | P | Calibration samples |
 | CLIMB_CNT | PRV_IMU_B | 0..2047 × 1 count | 1 | 11 | 11 | SAT | P | Climb distance |
@@ -190,7 +189,6 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | ACC | E_IMU | 0..0 × 1 um x mg | 1 | 0 | 32 | RAW | E | E2 height accumulator: arithmetic headroom |
 | CAL_SUM | E_IMU | 0..0 × 1 code | 1 | 0 | 32 | RAW | E | E2 calibration sums x3 (live 2 s only) |
 | RAW_SAMPLE | E_IMU_SAMPLE | 0..0 × 1 code | 1 | 0 | 16 | RAW | E | E4 accelerometer register image (own E group; SPEC-QUESTION in TEST_LOG) |
-| IMPACT_SEQ | SH_IMU | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | R1 callback -> imu_task; wraps |
 | AX | SH_IMU_ACC | -511..511 × 4 mg | 4 | 10 | 10 | SAT | S | Accel X after offsets; imu_task writes the whole word each cycle |
 | AY | SH_IMU_ACC | -511..511 × 4 mg | 4 | 10 | 10 | SAT | S | Accel Y after offsets |
 | AZ | SH_IMU_ACC | -511..511 × 4 mg | 4 | 10 | 10 | SAT | S | Accel Z after offsets |
@@ -291,7 +289,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | MQ_HB | 40 | 40 |
 | MQ_SENS | 88 | 88 |
 | MQ_MAP | 8 | 8 |
-| PRV_IMU_A | 32 | 32 |
+| PRV_IMU_A | 26 | 32 |
 | PRV_IMU_B | 29 | 32 |
 | PRV_IMU_C | 30 | 32 |
 | PRV_IMU_D | 19 | 32 |
@@ -301,7 +299,6 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_HIST_B | 8 | 32 |
 | PRV_OFS_A | 24 | 32 |
 | PRV_OFS_B | 20 | 32 |
-| SH_IMU | 8 | 8 |
 | PRV_TEL | 27 | 32 |
 | PRV_TEL_K7 | 8 | 8 |
 | PRV_BRIDGE | 21 | 32 |

@@ -3,7 +3,7 @@
 # Run alone with "make -C testing/subsystem4/host", or all buddies' tests
 # with "make -C testing/host". Any FAIL fails make.
 #
-#   S4-U01 U02 U03 U06 U07 U12 U13   test_terrain_host.c   (terrain.c)
+#   S4-U01 U02 U03 U06 U07 U12 U13 U16  test_terrain_host.c (terrain.c)
 #   S4-U14                           test_drv_lsm303_host.c (fifo planner)
 ################################################################################
 

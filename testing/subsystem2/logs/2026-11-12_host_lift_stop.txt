@@ -1,0 +1,135 @@
+make: Entering directory './testing/subsystem2/host'
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -Wconversion -Wsign-conversion -I../../host -I../../../app_program -I../../../app_program/subsystem2 -o test_odometry_host.out test_odometry_host.c ../../../app_program/subsystem2/odometry.c
+./test_odometry_host.out
+[TEST] S2-U01 PASS  um per count is 324 (hand calc basis)
+[TEST] S2-U01 PASS  0 counts = 0 mm
+[TEST] S2-U01 PASS  640 counts (one rev) = (640x324+500)/1000 = 207 mm
+[TEST] S2-U01 PASS  131071 counts = 42467 mm
+[TEST] S2-U01 PASS  1000 mm = (1000000+162)/324 = 3086 counts
+[TEST] S2-U01 PASS  2047 mm (longest move) = 6318 counts
+[TEST] S2-U01 PASS  46 cpw = 46x324/50 = 298 mm/s
+[TEST] S2-U01 PASS  -46 cpw = -298 mm/s (truncates toward zero)
+[TEST] S2-U01 PASS  250 mm/s = (12500+162)/324 = 39 cpw
+[TEST] S2-U01 PASS  -250 mm/s = -39 cpw (rounded, sign kept)
+[TEST] S2-U01 PASS  150 mm/s = 7500/324 = 23.1 -> 23 cpw
+[TEST] S2-U01 PASS  90 deg = (90x3366+500)/1000 = 303 counts per wheel
+[TEST] S2-U01 PASS  360 deg = 1212 counts per wheel
+[TEST] S2-U01 PASS  heading(+303, -303) ~= +8999 cdeg (+-1 %)
+[TEST] S2-U01 PASS  heading(-303, +303) ~= -8999 cdeg (+-1 %), sign kept
+[TEST] S2-U01 PASS  heading(0, 0) = 0
+[TEST] S2-U01 PASS  heading(-1, 0) = -1485/100 = -14 cdeg: stays negative
+[TEST] S2-U21 PASS  -16..+16 edges: rises by exactly 1 every 4 edges, also through 0
+[TEST] S2-U21 PASS  edge -1 -> 0 crosses a count boundary (floor, not truncation)
+[TEST] S2-U21 PASS  10 wheel turns x 2560 edges = 6400 counts (640 per turn)
+[TEST] S2-U21 PASS  same 10 turns backward: 6400 counts the other way
+[TEST] S2-U22 PASS  physical speed ceiling is 500 mm/s
+[TEST] S2-U22 PASS  40 ms read span at 500 mm/s = 62 counts (<= 63: 7-bit delta)
+[TEST] S2-U22 PASS  one 10 ms tick at 500 mm/s = 16 counts
+[TEST] S2-U22 PASS  50 ms window at 500 mm/s = 78 counts (<= 127: 8-bit speed)
+[TEST] S2-U11 PASS  deltas +-63 stored unchanged
+[TEST] S2-U11 PASS  deltas +-64 clamped to +-63
+[TEST] S2-U11 PASS  normal 50 ms window: speed = sum (50, -35)
+[TEST] S2-U11 PASS  index wraps 4 -> 0 without %
+[TEST] S2-U11 PASS  3 late ticks (span 140 ms): 50 x 50 / 140 = 17 cpw
+[TEST] S2-U11 PASS  empty window (span 0) = speed 0
+[TEST] S2-U11 PASS  dt 200 ms clamped to 63
+[TEST] odometry SUMMARY 32 passed, 0 failed
+./test_speed_pid_host.out
+  sp 36: final speed x16 3 after the stop step
+[TEST] S2-U02 PASS  step to 36 cpw (250 mm/s)
+  sp 21: final speed x16 3 after the stop step
+[TEST] S2-U02 PASS  step to 21 cpw (150 mm/s)
+  sp -14: final speed x16 -3 after the stop step
+[TEST] S2-U02 PASS  step to -14 cpw (reverse)
+  sp 43: final speed x16 3 after the stop step
+[TEST] S2-U02 PASS  step to 43 cpw (300 mm/s)
+[TEST] speed_pid SUMMARY 4 passed, 0 failed
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -Wconversion -Wsign-conversion -I../../host -I../../../app_program -I../../../app_program/subsystem2 -Imock -o test_flags_host.out test_flags_host.c mock_kernel.c \
+    ../../../app_program/subsystem2/safety.c ../../../app_program/subsystem2/fault.c
+./test_flags_host.out
+[TEST] S2-U13 PASS  fault_init creates K12
+[TEST] S2-U13 PASS  no fault after init
+[TEST] S2-U13 PASS  ENCODER and STALL set
+[TEST] S2-U13 PASS  clear STALL -> only ENCODER left (inverted-mask clear)
+[TEST] S2-U13 PASS  bits outside the 10-bit mask are ignored
+[TEST] S2-U13 PASS  clear all -> 0
+[TEST] S2-U14 PASS  safety_init creates K3
+[TEST] S2-U14 PASS  not active after init
+[TEST] S2-U14 PASS  set from a task -> active
+[TEST] S2-U14 PASS  imu_task sets LIFT (lift-stop), ESTOP kept
+[TEST] S2-U14 PASS  clear ESTOP leaves LIFT: still active
+[TEST] S2-U14 PASS  the ISR-callable set still works (R1 callbacks)
+[TEST] S2-U14 PASS  clear -> safety_is_active() false
+[TEST] S2-U14 PASS  bits outside SAFETY_ALL are ignored
+[TEST] S2-U13 PASS  K3 and K12 are separate objects
+[TEST] flags SUMMARY 15 passed, 0 failed
+./test_motion_task_host.out
+[TEST] S2-U03 PASS  MOVE_FWD started
+[TEST] S2-U03 PASS  LEFT while moving waits in the latch
+[TEST] S2-U03 PASS  STOP brakes in the cycle it arrives and clears the latch
+[TEST] S2-U12 PASS  FOLLOW drives the wheels
+[TEST] S2-U12 PASS  STOP during FOLLOW: braked after one cycle
+[TEST] S2-U12 PASS  STOP during MOVE: braked after one cycle
+[TEST] S2-U15 PASS  1000 mm MOVE near path saturation completes, MOVE_DONE tag 2
+[TEST] S2-U15 PASS  path saturates at 2 x 131071 and reports RANGE_CLAMP
+[TEST] S2-U15 PASS  left wheel travelled the 3086 counts of 1000 mm
+[TEST] S2-U16 PASS  run 1 moved the wheels
+[TEST] S2-U16 PASS  ZERO in BRAKE: positions and path 0, MOVE_DONE tag 2
+[TEST] S2-U16 PASS  ZERO during FOLLOW waits in the latch
+[TEST] S2-U17 PASS  FOLLOW with MOTOR_EN clear: never drives
+[TEST] S2-U17 PASS  setting MOTOR_EN later does not start the dropped command
+[TEST] S2-U17 PASS  clearing MOTOR_EN brakes
+[TEST] S2-U18 PASS  no MOVE_DONE for the cancelled MOVE; next one carries tag 3
+[TEST] S2-U19 PASS  5000-count glitch does not complete the 1 m MOVE
+[TEST] S2-U19 PASS  rejected read adds nothing to progress or position
+[TEST] S2-U19 PASS  a single glitch raises no ENCODER fault
+[TEST] S2-U19 PASS  MOVE then completes at the real distance (3086 counts)
+[TEST] S2-U19 PASS  jump that persists: ENCODER fault on the 2nd read
+[TEST] S2-U19 PASS  no premature MOVE_DONE; the jump is left out of position
+[TEST] S2-U19 PASS  late (30 ms) glitched read is rejected
+[TEST] S2-U19 PASS  valid recovery read after a late tick: no ENCODER fault
+[TEST] S2-U19 PASS  recovery read accepted with its 40 ms of movement
+[TEST] S2-U19 PASS  no resync; position equals the counter read: nothing lost
+[TEST] S2-U20 PASS  first calibration turn starts when MOTOR_EN was set late
+[TEST] S2-U20 PASS  that turn completes with its MOVE_DONE
+[TEST] S2-U20 PASS  first FOLLOW starts and drives when MOTOR_EN was set late
+[TEST] S2-U20 PASS  command after MOTOR_EN cleared late is rejected, braked
+[TEST] S2-U20 PASS  rejected command is not started when MOTOR_EN returns
+[TEST] S2-U23 PASS  90 deg turn starts at the full turn speed
+[TEST] S2-U23 PASS  last 20 mm of the turn: base set-point drops to creep
+[TEST] S2-U23 PASS  turn still completes on its own count with MOVE_DONE
+[TEST] S2-U23 PASS  MOVE_BACK: creep keeps the negative sign, smaller magnitude
+[TEST] S2-U23 PASS  held in the zone: not ended before MOTION_CREEP_STUCK_TICKS
+[TEST] S2-U23 PASS  held in the zone: ends with MOVE_DONE short of the target
+[TEST] S2-U23 PASS  short move not yet moving: not ended by the creep rule
+[TEST] S2-U23 PASS  short move completes on its count once the wheels turn
+[TEST] S2-U24 PASS  on the line (steering 0): both wheels at cruise
+[TEST] S2-U24 PASS  full left error: turn left at about half speed
+[TEST] S2-U24 PASS  small right error: turn right, only a little slower
+[TEST] S2-U26 PASS  task held up between count and clock reads: no ENCODER fault
+[TEST] S2-U26 PASS  ... and FOLLOW goes on
+[TEST] S2-U26 PASS  two impossible jumps in a row still fault
+[TEST] S2-U25 PASS  full left error: wheel difference <= 16 cpw (was 22)
+[TEST] S2-U25 PASS  small right error: still a correction, <= 6 cpw
+[TEST] S2-U27 PASS  ordinary curve keeps its wheel-speed difference
+[TEST] S2-U27 PASS  full correction keeps one third of base inside
+[TEST] S2-U27 PASS  full correction is symmetric on the other side
+[TEST] S2-U27 PASS  zero-speed FOLLOW stays still with a steering error
+[TEST] S2-U28 PASS  70 mm/s: steering split scaled to 70 / 100 of slow speed
+[TEST] S2-U30 PASS  60 mm/s: split = (steer x gain) x 60/100 rounded, both sides
+[TEST] S2-U30 PASS  60 mm/s: steer 200 already turns (was 0 below 256)
+[TEST] S2-U30 PASS  cruise: split unchanged (steer x gain / 256) for every steer
+[TEST] motion_task SUMMARY 55 passed, 0 failed
+./test_motion_cmd_host.out
+[TEST] S2-U29 PASS  K5 created with 2-byte messages and a 32 B buffer (was 12 B / 64 B)
+[TEST] S2-U29 PASS  FOLLOW 0 and 300 mm/s round trip
+[TEST] S2-U29 PASS  FWD 1 and 2047 mm round trip; tag wraps 3 -> 0
+[TEST] S2-U29 PASS  BACK 1 and 150 mm round trip
+[TEST] S2-U29 PASS  LEFT and RIGHT 1 and 360 deg round trip
+[TEST] S2-U29 PASS  STOP and ZERO round trip; last tag reported
+[TEST] S2-U29 PASS  out-of-range commands refused, tag unchanged
+[TEST] S2-U29 PASS  four commands fill K5, the fifth is refused (depth 4 as before)
+[TEST] S2-U29 PASS  FIFO order kept; the refused command never arrives
+[TEST] S2-U29 PASS  every K5 message sent was one 2-byte MSG_CMD word (was 12 B)
+[TEST] motion_cmd SUMMARY 10 passed, 0 failed
+make: Leaving directory './testing/subsystem2/host'
