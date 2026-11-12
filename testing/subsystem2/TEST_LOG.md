@@ -112,3 +112,4 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-12 | S2-U29 | `pack-motion-command-word` | Dylan | PASS | K5 command host test | 10 checks pass. Full subsystem 2 run: 32 + 4 + 14 + 52 + 10 pass. |
 | 2026-11-12 | S2-U30 | before fix (`745abc0`) | Dylan | FAIL | Motion task host simulation | At 60 mm/s steer 150/250 gave no split and 420 gave 2 instead of 4 cpw (2 checks failed); the cruise check passes on both. |
 | 2026-11-12 | S2-U28, S2-U30 | `follow-split-rounded` | Dylan | PASS | Motion task host simulation | Motion task 55 pass (was 52). |
+| 2026-11-12 | S2-U29, S2-U30 | `shared-event-type-range` (patches 6–15) | Dylan | PASS | Car run on the track | 16:37: line following, MAP sent in RUN, barcode A decoded, U-turn at the cross, obstacle slow-down, ramp, STOP; K5 commands (follow, reverse, turns) behave as before. S2-U30: the 60 mm/s rereads at 15:41 and 15:49 (patches 6–13) decoded A in 8.2 s. |

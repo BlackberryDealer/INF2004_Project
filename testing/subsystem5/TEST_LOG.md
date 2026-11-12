@@ -129,6 +129,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-12 | S5-U57, S5-U68, S5-U76 | `barcode-reread-time-limit` | Dylan | PASS | Mission host simulation | Mission simulation 191 pass. |
 | 2026-11-12 | S5-U77 | before fix (`745abc0`) | Dylan | FAIL | Mission host simulation | Layout max 24 below code 25 (1 check failed; with the new build check `mission.c` does not compile). |
 | 2026-11-12 | S5-U75, S5-U77 | `shared-event-type-range` | Dylan | PASS | Mission host simulation | Mission simulation 191 pass, mission host tests pass; generated `app_layout.h` and `docs/data_representation.md` differ only in the TYPE max. |
+| 2026-11-12 | S5-U74, S5-U75, S5-U76, S5-U77 | `shared-event-type-range` (patches 6–15) | Dylan | PASS | Car run on the track | 16:37: states READY → RUN → FINISHED (STOP), MAP in RUN, barcode event → armed → CROSS executed, obstacle ahead, ramp echo ignored; dashboard events and sensor values as on the track-tested image. 14:15 (patches 6–8): obstacle stop, creep, scan (width 100 mm, pass right), bypass and rejoin. S5-U76: slow passes 8.2–8.4 s, inside 15 s. Open, not from these changes: creep stopped 40 mm from the box at 15:50. |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 

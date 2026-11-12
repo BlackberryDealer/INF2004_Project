@@ -120,6 +120,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-12 | S3-U23, S3-U27, S3-U29, S3-U34, S3-U45 | `barcode-reread-any-bars` | Dylan | PASS | Barcode host simulation | Simulation 79 pass. |
 | 2026-11-12 | S3-U46 | before fix (`745abc0`) | Dylan | FAIL | Barcode host simulation | After the drop the capture carried on with 63 queued edges across the gap (1 check failed). |
 | 2026-11-12 | S3-U46 | `barcode-edge-ring-drop-barrier` | Dylan | PASS | Barcode host simulation, ARM disassembly | Simulation 83 pass. ARM build: `dmb ish` in `barcode_edge_isr` between the entry store (`strh`) and the head store (`strb`); 4 `dmb ish` in `barcode_task` (inlined drain: after the head load, after each entry load, after each head re-read). |
+| 2026-11-12 | S3-U43, S3-U44, S3-U45, S3-U46 | `shared-event-type-range` (patches 6–15) | Dylan | PASS | Car run on the track | 16:37: first pass decoded A and the car U-turned at the cross. 15:23–15:49 (patches 6–13): no LINE LOST during any slow reread (S3-U44); reverse after 4 bar-like elements (rewind 152 mm) and A decoded (S3-U45); 15:37 decoded on a first pass that never matched a clean guard. S3-U46: no ring overflow on the car (discard path not reached). |
 
 ## SPEC-QUESTION
 
