@@ -12,7 +12,7 @@ GROUPS = {
     'SB_LINE0': [
         ('STEERING', 11, 1024, 1, 'permille'),
         ('STATUS', 2, 0, 1, 'code'),
-        ('JUNCTION', 3, 0, 1, 'code'),
+        ('JUNCTION', 2, 0, 1, 'code'),
         ('CALIBRATED', 1, 0, 1, 'flag'),
     ],
     'SB_MOT0': [
@@ -84,7 +84,7 @@ GROUPS = {
         ('LEVEL', 1, 0, 1, 'flag'),
     ],
     'EVT_JUNCTION': [
-        ('CLASS', 3, 0, 1, 'code'),
+        ('CLASS', 2, 0, 1, 'code'),
     ],
     'EVT_LINE_FOUND': [
         ('CROSS_MM', 8, 0, 1, 'mm'),
@@ -95,6 +95,12 @@ GROUPS = {
     ],
     'EVT_UNMAPPED': [
         ('CHAR', 6, 0, 1, 'code'),
+    ],
+    'EVT_INVALID': [
+        ('N_ELEM', 6, 0, 1, 'count'),
+    ],
+    'EVT_BARCODE_PROBE': [
+        ('MM', 11, 0, 1, 'mm'),
     ],
     'EVT_PLAN': [
         ('SIDE', 1, 0, 1, 'flag'),

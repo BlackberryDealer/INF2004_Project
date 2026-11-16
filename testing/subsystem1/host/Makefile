@@ -14,7 +14,8 @@
 #   S1-U13, U15, U36, U37, U39, U48, U49  test_mqtt_utk_host.c (radio-task mqtt_utk.c +
 #                mock lwIP in mock_lwip/ + mock bridge)
 #   S1-U38       test_lwip_sizing_host.c (real lwipopts.h: MQTT request
-#                slots and output ring hold 4 s of telemetry)
+#                slots and output ring hold 4 s of telemetry); run for
+#                the normal image and again with DEBUG_MQTT=1 (SENSORS too)
 #   S1-U43       tools/telem_cmd.py --self-test (laptop command bytes agree
 #                with app_types.h; a SNAPSHOT reply decodes)
 #   S1-U44       tools/dashboard/test_dashboard.py (the web dashboard's
@@ -43,9 +44,10 @@ B       := build/app_program
 SB_MSG_FIELDS := $(shell grep -cE '^\#define (SB|MSG)_[A-Z0-9_]+_POS ' $(LAYOUT))
 
 .PHONY: all app_bits gen_layout_reject gen_layout_reject_mq mqtt_bridge \
-        mqtt_utk lwip_sizing telem_cmd dashboard tree telem_bin clean
+        mqtt_utk lwip_sizing lwip_sizing_dbg telem_cmd dashboard tree \
+        telem_bin clean
 all: app_bits gen_layout_reject gen_layout_reject_mq telem_bin mqtt_bridge \
-     mqtt_utk lwip_sizing telem_cmd dashboard
+     mqtt_utk lwip_sizing lwip_sizing_dbg telem_cmd dashboard
 
 test_app_bits_host.out: test_app_bits_host.c $(APP_DIR)/app_bits.c \
                         $(APP_DIR)/app_bits.h $(LAYOUT) ../../host/host_test.h
@@ -137,6 +139,14 @@ test_lwip_sizing_host.out: test_lwip_sizing_host.c $(LWIPOPTS) \
 
 lwip_sizing: test_lwip_sizing_host.out
 	./test_lwip_sizing_host.out
+
+# Same check for a "make ... DEBUG_MQTT=1" image (the worst case).
+test_lwip_sizing_dbg_host.out: test_lwip_sizing_host.c $(LWIPOPTS) \
+                               $(S1)/cfg_telem.h $(APP_DIR)/app_types.h
+	$(CC) $(CFLAGS) -DTELEM_DEBUG_MQTT=1u -o $@ test_lwip_sizing_host.c
+
+lwip_sizing_dbg: test_lwip_sizing_dbg_host.out
+	./test_lwip_sizing_dbg_host.out
 
 telem_cmd:
 	$(PYTHON) $(TOOLS)/telem_cmd.py --self-test

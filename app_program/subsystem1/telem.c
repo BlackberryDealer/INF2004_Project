@@ -54,16 +54,16 @@
 #define TELEM_TIME_HALF_RANGE (0x80000000u)  /* wrap-safe "has reached" */
 #define TELEM_MM_STEP_SHIFT   (2u)           /* 4 mm fields             */
 
-/* K12: mirrored console lines (format pointer + 3 arguments). Only in
+/* K13: mirrored console lines (format pointer + 3 arguments). Only in
    images with MQTT and TELEM_DEBUG_MQTT = 1.                          */
 #if defined(TM_MQTT) && (TELEM_DEBUG_MQTT != 0u)
 #define TELEM_LOG_MIRROR      (1u)
 #else
 #define TELEM_LOG_MIRROR      (0u)
 #endif
-#define TELEM_K12_MSG_BYTES   (sizeof(telem_log_rec_t))
-#define TELEM_K12_MBF_WORDS   ((TELEM_K12_ENTRIES \
-                                * (TELEM_MBF_HDR_BYTES + TELEM_K12_MSG_BYTES)) \
+#define TELEM_K13_MSG_BYTES   (sizeof(telem_log_rec_t))
+#define TELEM_K13_MBF_WORDS   ((TELEM_K13_ENTRIES \
+                                * (TELEM_MBF_HDR_BYTES + TELEM_K13_MSG_BYTES)) \
                                / 4u)
 #define TELEM_ACC_MG_STEP     (4)      /* SH_IMU_ACC lsb, mg */
 
@@ -91,13 +91,13 @@ static uint32_t g_telem_k11_mbf_buf[TELEM_K11_MBF_BYTES / 4u];
 
 static ID gh_telem_k7  = 0;
 static ID gh_telem_k11 = 0;
-static ID gh_telem_k12 = 0;   /* 0 = no console mirror in this image */
+static ID gh_telem_k13 = 0;   /* 0 = no console mirror in this image */
 
 #if (TELEM_LOG_MIRROR != 0u)
 /* sizeof() of a 16 B (RP2040) record: a multiple of 4 on every target */
-static uint32_t g_telem_k12_mbf_buf[TELEM_K12_MBF_WORDS];
+static uint32_t g_telem_k13_mbf_buf[TELEM_K13_MBF_WORDS];
 #endif
-/* K12 drops: every app_log() caller may write it, so it is only an
+/* K13 drops: every app_log() caller may write it, so it is only an
    indication (a lost increment under contention is harmless); the
    radio task reads it to say "N console lines dropped".              */
 static volatile uint8_t g_tel_log_drops = 0u;
@@ -117,8 +117,10 @@ static TMO      telem_wait_ms(uint32_t next_us, uint32_t now_us);
 static void     telem_forward(uint8_t const * p_msg, uint32_t len);
 static void     telem_send_state(void);
 static void     telem_send_heartbeat(void);
+#if (TELEM_DEBUG_MQTT != 0u)
 static void     telem_send_sensors(void);
 static int32_t  telem_acc_mg(uint32_t word, uint32_t pos, uint32_t bits);
+#endif
 static uint32_t telem_evt_word(uint32_t type, uint32_t value);
 static uint32_t telem_evt_value_max(uint32_t type);
 static void     telem_k7_put_u(app_bits_writer_t * p_wr, uint32_t value,
@@ -167,14 +169,14 @@ ER telem_init(void)
 #if (TELEM_LOG_MIRROR != 0u)
     if (E_OK == ercd)
     {
-        cmbf.bufsz   = (SZ) sizeof(g_telem_k12_mbf_buf); /* cast: kernel */
-        cmbf.maxmsz  = (INT) TELEM_K12_MSG_BYTES;        /* cast: kernel */
-        cmbf.bufptr  = g_telem_k12_mbf_buf;
-        gh_telem_k12 = tk_cre_mbf(&cmbf);
-        if (gh_telem_k12 < E_OK)
+        cmbf.bufsz   = (SZ) sizeof(g_telem_k13_mbf_buf); /* cast: kernel */
+        cmbf.maxmsz  = (INT) TELEM_K13_MSG_BYTES;        /* cast: kernel */
+        cmbf.bufptr  = g_telem_k13_mbf_buf;
+        gh_telem_k13 = tk_cre_mbf(&cmbf);
+        if (gh_telem_k13 < E_OK)
         {
-            ercd         = (ER) gh_telem_k12;  /* cast: error code */
-            gh_telem_k12 = 0;
+            ercd         = (ER) gh_telem_k13;  /* cast: error code */
+            gh_telem_k13 = 0;
         }
     }
 #endif
@@ -371,7 +373,7 @@ ID telem_k11_id(void)
  * telem_log_post
  * @brief   Queues one console line for the MQTT mirror without waiting
  *          (only the format pointer and the arguments; the radio task
- *          formats it). A full K12 drops the line and counts it.
+ *          formats it). A full K13 drops the line and counts it.
  * @param   p_format  app_log() format (string literal / constant table)
  * @param   arg_a     first argument
  * @param   arg_b     second argument
@@ -384,13 +386,13 @@ void telem_log_post(char const * p_format, int32_t arg_a, int32_t arg_b,
 {
     telem_log_rec_t rec = {NULL, 0, 0, 0};
 
-    if ((0 < gh_telem_k12) && (NULL != p_format))
+    if ((0 < gh_telem_k13) && (NULL != p_format))
     {
         rec.p_format = p_format;
         rec.arg_a    = arg_a;
         rec.arg_b    = arg_b;
         rec.arg_c    = arg_c;
-        if (E_OK != tk_snd_mbf(gh_telem_k12, &rec,
+        if (E_OK != tk_snd_mbf(gh_telem_k13, &rec,
                                (INT) sizeof(rec),  /* cast: 16 or 24 */
                                TMO_POL))
         {
@@ -403,19 +405,19 @@ void telem_log_post(char const * p_format, int32_t arg_a, int32_t arg_b,
 }
 
 /**
- * telem_k12_id
- * @brief   ID of K12 (mirrored console lines) for mqtt_bridge.c.
- * @return  K12 ID, 0 when the image has no console mirror
+ * telem_k13_id
+ * @brief   ID of K13 (mirrored console lines) for mqtt_bridge.c.
+ * @return  K13 ID, 0 when the image has no console mirror
  * @context radio task
  */
-ID telem_k12_id(void)
+ID telem_k13_id(void)
 {
-    return gh_telem_k12;
+    return gh_telem_k13;
 }
 
 /**
  * telem_log_drops
- * @brief   Console lines dropped because K12 was full (saturates at 255).
+ * @brief   Console lines dropped because K13 was full (saturates at 255).
  * @return  0..255
  * @context any task
  */
@@ -680,6 +682,7 @@ static void telem_send_state(void)
     telem_k11_put(out, len);
 }
 
+#if (TELEM_DEBUG_MQTT != 0u)  /* debug SENSORS payload only */
 /**
  * telem_send_sensors
  * @brief   Raw sensor readings for debugging without the USB cable: the
@@ -732,6 +735,7 @@ static int32_t telem_acc_mg(uint32_t word, uint32_t pos, uint32_t bits)
 
     return (code - SH_IMU_ACC_AX_OFFSET) * TELEM_ACC_MG_STEP;
 }
+#endif
 
 /**
  * telem_send_heartbeat
@@ -823,6 +827,14 @@ static uint32_t telem_evt_value_max(uint32_t type)
 
         case APP_EVT_UNMAPPED:
             bits = EVT_UNMAPPED_USED_BITS;
+            break;
+
+        case APP_EVT_INVALID:
+            bits = EVT_INVALID_USED_BITS;
+            break;
+
+        case APP_EVT_BARCODE_PROBE:
+            bits = EVT_BARCODE_PROBE_USED_BITS;
             break;
 
         case APP_EVT_PLAN:

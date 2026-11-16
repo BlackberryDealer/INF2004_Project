@@ -27,9 +27,9 @@
 #define SB_LINE0_STATUS_OFFSET          (0)
 #define SB_LINE0_STATUS_KIND            (APP_KIND_ENUM)
 #define SB_LINE0_JUNCTION_POS           (SB_LINE0_STATUS_POS + SB_LINE0_STATUS_BITS)
-#define SB_LINE0_JUNCTION_BITS          (3u)
+#define SB_LINE0_JUNCTION_BITS          (2u)
 #define SB_LINE0_JUNCTION_MIN           (0)
-#define SB_LINE0_JUNCTION_MAX           (4)
+#define SB_LINE0_JUNCTION_MAX           (3)
 #define SB_LINE0_JUNCTION_OFFSET        (0)
 #define SB_LINE0_JUNCTION_KIND          (APP_KIND_ENUM)
 #define SB_LINE0_CALIBRATED_POS         (SB_LINE0_JUNCTION_POS + SB_LINE0_JUNCTION_BITS)
@@ -369,9 +369,9 @@
 
 /* EVT_JUNCTION: 11-bit word */
 #define EVT_JUNCTION_CLASS_POS          (0u)
-#define EVT_JUNCTION_CLASS_BITS         (3u)
+#define EVT_JUNCTION_CLASS_BITS         (2u)
 #define EVT_JUNCTION_CLASS_MIN          (0)
-#define EVT_JUNCTION_CLASS_MAX          (4)
+#define EVT_JUNCTION_CLASS_MAX          (3)
 #define EVT_JUNCTION_CLASS_OFFSET       (0)
 #define EVT_JUNCTION_CLASS_KIND         (APP_KIND_ENUM)
 #define EVT_JUNCTION_USED_BITS          (EVT_JUNCTION_CLASS_POS + EVT_JUNCTION_CLASS_BITS)
@@ -419,6 +419,30 @@
 #define EVT_UNMAPPED_USED_BITS          (EVT_UNMAPPED_CHAR_POS + EVT_UNMAPPED_CHAR_BITS)
 #if (EVT_UNMAPPED_USED_BITS > 11u)
 #error "Group EVT_UNMAPPED no longer fits in 11 bits"
+#endif
+
+/* EVT_INVALID: 11-bit word */
+#define EVT_INVALID_N_ELEM_POS          (0u)
+#define EVT_INVALID_N_ELEM_BITS         (6u)
+#define EVT_INVALID_N_ELEM_MIN          (0)
+#define EVT_INVALID_N_ELEM_MAX          (63)
+#define EVT_INVALID_N_ELEM_OFFSET       (0)
+#define EVT_INVALID_N_ELEM_KIND         (APP_KIND_SAT)
+#define EVT_INVALID_USED_BITS           (EVT_INVALID_N_ELEM_POS + EVT_INVALID_N_ELEM_BITS)
+#if (EVT_INVALID_USED_BITS > 11u)
+#error "Group EVT_INVALID no longer fits in 11 bits"
+#endif
+
+/* EVT_BARCODE_PROBE: 11-bit word */
+#define EVT_BARCODE_PROBE_MM_POS        (0u)
+#define EVT_BARCODE_PROBE_MM_BITS       (11u)
+#define EVT_BARCODE_PROBE_MM_MIN        (0)
+#define EVT_BARCODE_PROBE_MM_MAX        (2047)
+#define EVT_BARCODE_PROBE_MM_OFFSET     (0)
+#define EVT_BARCODE_PROBE_MM_KIND       (APP_KIND_RNG)
+#define EVT_BARCODE_PROBE_USED_BITS     (EVT_BARCODE_PROBE_MM_POS + EVT_BARCODE_PROBE_MM_BITS)
+#if (EVT_BARCODE_PROBE_USED_BITS > 11u)
+#error "Group EVT_BARCODE_PROBE no longer fits in 11 bits"
 #endif
 
 /* EVT_PLAN: 11-bit word */

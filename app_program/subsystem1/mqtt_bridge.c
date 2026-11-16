@@ -61,7 +61,7 @@ static uint16_t          g_cmd_last_10ms[BRIDGE_CMD_COUNT] =
     0u, 0u, 0u, 0u, 0u
 };
 static volatile uint32_t g_bridge_word = 0u;
-/* K12 drops already reported in a LOG line; radio task only. */
+/* K13 drops already reported in a LOG line; radio task only. */
 static uint32_t          g_log_drops_told = 0u;
 
 /* ---- private function prototypes ------------------------------------- */
@@ -332,9 +332,9 @@ uint32_t mqtt_bridge_publish_drops(void)
 
 /**
  * mqtt_bridge_take_log
- * @brief   Takes the next mirrored console line from K12 and formats it
+ * @brief   Takes the next mirrored console line from K13 and formats it
  *          as a LOG payload: the MQ_HDR byte, then the text (newlines
- *          removed, no NUL). When K12 overflowed since the last call, a
+ *          removed, no NUL). When K13 overflowed since the last call, a
  *          line "N console lines dropped" is returned first.
  * @param   p_buf  output buffer
  * @param   size   size of p_buf (at least 2 bytes to carry any text)
@@ -360,9 +360,9 @@ uint32_t mqtt_bridge_take_log(uint8_t * p_buf, uint32_t size)
         rec.arg_a        = (int32_t) ((drops - g_log_drops_told) & 0xFFu);
         g_log_drops_told = drops;
     }
-    else if (0 < telem_k12_id())
+    else if (0 < telem_k13_id())
     {
-        rcv = tk_rcv_mbf(telem_k12_id(), &rec, TMO_POL);
+        rcv = tk_rcv_mbf(telem_k13_id(), &rec, TMO_POL);
         if (rcv != (INT) sizeof(rec))   /* cast: 16 or 24 */
         {
             rec.p_format = NULL;        /* nothing queued (or corrupt) */

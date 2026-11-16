@@ -29,6 +29,12 @@
 #define LINE_RAW_LOG_CYCLES   (50u)        /* bring-up raw print: every 0.5 s */
 #define LINE_LOG_CNT_MASK     (0x7FFFFFFFu)
 
+/* Every junction code must fit the 2-bit fields that carry it. */
+#if (APP_JCT_SIDE_R > SB_LINE0_JUNCTION_MAX) \
+    || (APP_JCT_SIDE_R > EVT_JUNCTION_CLASS_MAX)
+#error "APP_JCT_* codes no longer fit the junction fields in tools/layout.csv"
+#endif
+
 /* ---- private data ---------------------------------------------------- */
 
 static uint64_t           g_line_stack[LINE_STACK_WORDS];
