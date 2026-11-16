@@ -136,6 +136,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-12 | S5-U07, S5-U16, S5-U32, S5-U33, S5-U78 | `imu-lift-stop` | Hanz | PASS | `logs/2026-11-12_host_lift_stop.txt` | Change Requirement 2: mission simulation 193/193 with LIFT in place of IMPACT; S5-U78 new; all subsystem 5 host suites pass (350 checks) |
 | 2026-11-16 | S5-U79, S5-U80 | before fix (`ae78cf5`) | Dylan | FAIL | Mission host simulation | The odometer read the wrapped path; the probe after the wrap gave "no safe rewind" (4 checks failed). |
 | 2026-11-16 | S5-U20, S5-U79, S5-U80 | `path-wraps` | Dylan | PASS | Mission host simulation | Mission simulation 197 pass (was 193); S5-U20 now checks the run odometer at 0 on entering RUN. Other subsystem 5 suites unchanged. |
+| 2026-11-16 | S5-U74 | `tribunal1-safe-gaps` | Lucas | PASS | [`2026-11-16_host_all_safe_gaps.txt`](../subsystem1/logs/2026-11-16_host_all_safe_gaps.txt) | Junction field narrowed to 2 bits (codes 0..3 since `b3c4505`): the line-part check now uses `APP_JCT_SIDE_R` (3) as the largest code instead of 4. `status_board.o` disassembly differs from `main` only in the junction and calibrated bit positions. Status board 8/8, mission simulation 193/193, obstacle simulation 77/77. Host only. |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 

@@ -124,6 +124,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-12 | S3-U43, S3-U44, S3-U45, S3-U46 | `shared-event-type-range` (patches 6–15) | Dylan | PASS | Car run on the track | 16:37: first pass decoded A and the car U-turned at the cross. 15:23–15:49 (patches 6–13): no LINE LOST during any slow reread (S3-U44); reverse after 4 bar-like elements (rewind 152 mm) and A decoded (S3-U45); 15:37 decoded on a first pass that never matched a clean guard. S3-U46: no ring overflow on the car (discard path not reached). |
 | 2026-11-16 | S3-U50 | before fix (`ae78cf5`) | Dylan | FAIL | Line and barcode host simulation | The capture was dropped when the path wrapped between two edges, and LINE_LOST came after 300 ms but only 30 mm (2 checks failed). |
 | 2026-11-16 | S3-U50 | `path-wraps` | Dylan | PASS | Line and barcode host simulation | Simulation 86 pass; line_track 50 pass. |
+| 2026-11-16 | S3-U02, S3-U14, S3-U41 | `tribunal1-safe-gaps` | Lucas | PASS | [`2026-11-16_host_all_safe_gaps.txt`](../subsystem1/logs/2026-11-16_host_all_safe_gaps.txt) | Layout only: `SB_LINE0.JUNCTION` and `EVT_JUNCTION.CLASS` 3 -> 2 bits; new rows `EVT_INVALID.N_ELEM` (6 bits) and `EVT_BARCODE_PROBE.MM` (11 bits); `line.c` stops the build if an `APP_JCT_*` code no longer fits. `line.o`, `line_track.o`, `barcode.o` and `code39.o` are identical to `main` in the car image. Line track 50/50, Code 39 22/22, barcode simulation 83/83. |
 
 ## SPEC-QUESTION
 
