@@ -117,6 +117,7 @@ static void     barcode_process_edge(uint32_t gap_16us, uint32_t level,
 static void     barcode_edge_idle(uint32_t level, uint32_t path);
 static void     barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
                                        uint32_t cpw, uint32_t path);
+static void     barcode_drop_clamped(uint32_t n_elem, uint32_t path);
 static void     barcode_store_width(uint32_t n_elem, uint8_t width);
 static void     barcode_probe(uint32_t path);
 static void     barcode_request_rewind(uint32_t path);
@@ -835,8 +836,9 @@ static void barcode_store_width(uint32_t n_elem, uint8_t width)
 /**
  * barcode_edge_capturing
  * @brief   CAPTURING state handler: converts gap_16us to 0.1 mm width, checks
- *          for LM393 chatter/dropped edges, 14 mm branch lines (F-03), and
- *          29-element sliding-window immediate decode (R08).
+ *          for a clamped gap (S3-U47), LM393 chatter/dropped edges, 14 mm
+ *          branch lines (F-03), and 29-element sliding-window immediate
+ *          decode (R08).
  * @param   gap_16us  Duration of the completed element (16 us units).
  * @param   level     DO level after the edge (1 = black, 0 = white).
  * @param   cpw       Current average wheel speed in cpw.
@@ -854,7 +856,14 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
     uint32_t lvl = level; /* DO level after the edge, maybe fixed */
     uint32_t const gap_all = barcode_gap_add(gap_16us, g_bar_carry_16us);
 
-    if (barcode_width_01mm(gap_16us, cpw) < BAR_GLITCH_01MM)
+    if ((n_elem > 0u) && (gap_all >= (uint32_t) MSG_EDGE_GAP_MAX))
+    {
+        /* The element's time reached the stored clamp: length unknown.
+           The first bar is left to the rules below: a long one ends the
+           capture as a branch line, and the decoder caps it (S3-U43). */
+        barcode_drop_clamped(n_elem, path);
+    }
+    else if (barcode_width_01mm(gap_16us, cpw) < BAR_GLITCH_01MM)
     {
         /* Flicker at a bar edge: no element; its time joins the next. */
         g_bar_carry_16us = gap_all;
@@ -940,6 +949,48 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
             }
         }
     }
+}
+
+/**
+ * barcode_drop_clamped
+ * @brief   The time of an element reached the MSG_EDGE gap clamp (32767 x
+ *          16 us, about 524 ms: the car stopped or crawled on the strip),
+ *          so its real length is unknown and clamp x speed is not a
+ *          width. The capture is dropped like one that ends early: rewind
+ *          request if bars were seen, INVALID on a slow reread so mission
+ *          can retry (Tribunal 1 row 2, S3-U47). The caller's settle step
+ *          then waits for a new quiet zone. Not used for the first bar
+ *          (see barcode_edge_capturing).
+ * @param   n_elem  Elements captured before this gap (1..63).
+ * @param   path    Current odometry path in counts.
+ * @return  none
+ * @context barcode_task
+ */
+static void barcode_drop_clamped(uint32_t n_elem, uint32_t path)
+{
+    g_bar_carry_16us = 0u;
+    if (n_elem >= BAR_LOG_MIN_ELEM)
+    {
+        bool const b_reread = mission_mode_is_set(APP_MODE_BARCODE_REREAD);
+
+        if (gb_bar_probe_ok)
+        {
+            barcode_request_rewind(path);
+        }
+        /* cast: count <= 63 */
+        app_log("BAR capture dropped: gap clamped after %d elements\n",
+                (int32_t) n_elem, 0, 0);
+        barcode_log_widths(n_elem);
+        if (b_reread)
+        {
+            (void) mission_post_event(APP_EVT_INVALID, n_elem);
+        }
+    }
+    else
+    {
+        /* Fewer than 4 elements: edge noise or a line crossing. */
+    }
+    barcode_state_set(BAR_STATE_IDLE, 0u);
 }
 
 /**

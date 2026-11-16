@@ -1194,6 +1194,146 @@ int main(void)
                    "the next edge is read normally (no repeated discard)");
     }
 
+    /* ---- S3-U47 (Tribunal 1 row 2: reject a clamped gap) ----------- */
+    /* A gap is stored in 16 us units and clamps at 32767 (about 524 ms).
+       A clamped gap has no known length, but clamp x speed still gave a
+       width that looks like a bar when the car crawls on (6.7 mm at 2
+       counts per window), so the element was kept. A capture is now
+       dropped when a gap reaches the clamp, like one that ends early.  */
+    {
+        uint8_t const first[]  = {75u, 160u, 75u, 50u};
+        uint32_t const clamp_us = 600000u;   /* > 32767 x 16 us */
+        uint32_t const below_us = 500000u;   /* 31250 x 16 us   */
+        uint32_t      n_elem   = 0u;
+        uint32_t      state    = 0u;
+
+        /* (a) cruise: four good elements, then the car stops on the strip */
+        sim_reset();
+        g_sim_log_len   = 0u;
+        g_sim_log[0]    = '\0';
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l   = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r   = g_sim_speed_l;
+        sim_bar_widths(first, sizeof(first), 50000u, true);
+        n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                              PRV_BAR_A_N_ELEM_BITS);
+        HOST_CHECK("S3-U47", (4u == n_elem) && (0u == g_sim_evt_cnt),
+                   "a capture is in progress (4 elements, no event yet)");
+        g_sim_speed_l  = 2;                  /* crawling on again */
+        g_sim_speed_r  = 2;
+        g_sim_path    += odometry_mm_to_counts(3u);
+        gb_sim_bar_pin = !gb_sim_bar_pin;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, g_bar_last_us + clamp_us);
+        barcode_cycle();
+        n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                              PRV_BAR_A_N_ELEM_BITS);
+        state  = app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                              PRV_BAR_A_STATE_BITS);
+        HOST_CHECK("S3-U47", (0u == n_elem) && (BAR_STATE_IDLE == state),
+                   "clamped gap: the capture is dropped, not extended");
+        HOST_CHECK("S3-U47", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE_PROBE == g_sim_evts[0].type),
+                   "bars were seen before the clamp: rewind requested");
+        HOST_CHECK("S3-U47", NULL != strstr(g_sim_log,
+                   "BAR capture dropped: gap clamped after 4 elements"),
+                   "the drop and its reason are logged");
+
+        /* (b) after the drop a barcode behind a quiet zone still decodes */
+        g_sim_evt_cnt = 0u;
+        g_sim_speed_l = 36;
+        g_sim_speed_r = 36;
+        g_sim_path   += odometry_mm_to_counts(BAR_QUIET_MM + 5u);
+        (void) sim_feed_barcode_edges(10u, g_bar_last_us + 2000000u);
+        barcode_cycle();
+        HOST_CHECK("S3-U47", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_BARCODE == g_sim_evts[0].type)
+                   && (mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u)
+                       == g_sim_evts[0].value),
+                   "the next barcode after a quiet zone decodes normally");
+
+        /* (c) a long gap below the clamp is still an element */
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l   = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r   = g_sim_speed_l;
+        sim_bar_widths(first, sizeof(first), 50000u, true);
+        g_sim_speed_l  = 2;
+        g_sim_speed_r  = 2;
+        g_sim_path    += odometry_mm_to_counts(3u);
+        gb_sim_bar_pin = !gb_sim_bar_pin;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, g_bar_last_us + below_us);
+        barcode_cycle();
+        n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                              PRV_BAR_A_N_ELEM_BITS);
+        state  = app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                              PRV_BAR_A_STATE_BITS);
+        HOST_CHECK("S3-U47", (5u == n_elem) && (BAR_STATE_CAPTURING == state)
+                   && (0u == g_sim_evt_cnt),
+                   "500 ms gap (below the clamp): the capture goes on");
+
+        /* (d) slow reread: mission is told at once, so it can retry */
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD;
+        g_sim_speed_l   = odometry_mm_s_to_cpw(70);
+        g_sim_speed_r   = g_sim_speed_l;
+        sim_bar_widths(first, sizeof(first), 50000u, true);
+        g_sim_speed_l  = 2;
+        g_sim_speed_r  = 2;
+        g_sim_path    += odometry_mm_to_counts(3u);
+        gb_sim_bar_pin = !gb_sim_bar_pin;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, g_bar_last_us + clamp_us);
+        barcode_cycle();
+        state = app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                             PRV_BAR_A_STATE_BITS);
+        HOST_CHECK("S3-U47", (BAR_STATE_IDLE == state)
+                   && (1u == g_sim_evt_cnt)
+                   && (APP_EVT_INVALID == g_sim_evts[0].type)
+                   && (4u == g_sim_evts[0].value),
+                   "clamped gap on a slow reread: INVALID, no second rewind");
+
+        /* (e) fewer than four elements: dropped without an event */
+        sim_reset();
+        g_sim_log_len   = 0u;
+        g_sim_log[0]    = '\0';
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l   = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r   = g_sim_speed_l;
+        sim_bar_widths(first, 2u, 50000u, true);
+        g_sim_speed_l  = 2;
+        g_sim_speed_r  = 2;
+        g_sim_path    += odometry_mm_to_counts(3u);
+        gb_sim_bar_pin = !gb_sim_bar_pin;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, g_bar_last_us + clamp_us);
+        barcode_cycle();
+        n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
+                              PRV_BAR_A_N_ELEM_BITS);
+        state  = app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                              PRV_BAR_A_STATE_BITS);
+        HOST_CHECK("S3-U47", (0u == n_elem) && (BAR_STATE_IDLE == state)
+                   && (0u == g_sim_evt_cnt)
+                   && (NULL == strstr(g_sim_log, "gap clamped")),
+                   "clamped gap after 2 elements: dropped, nothing reported");
+
+        /* (f) the first bar keeps its own rules: a long black first
+           element is a branch line for line_task, as before */
+        sim_reset();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        g_sim_speed_l   = odometry_mm_s_to_cpw(120);
+        g_sim_speed_r   = g_sim_speed_l;
+        gb_sim_bar_pin  = true;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, 50000u);
+        barcode_cycle();
+        g_sim_path    += odometry_mm_to_counts(20u);
+        gb_sim_bar_pin = false;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, g_bar_last_us + clamp_us);
+        barcode_cycle();
+        state = app_bits_get(g_bar_prv_a, PRV_BAR_A_STATE_POS,
+                             PRV_BAR_A_STATE_BITS);
+        HOST_CHECK("S3-U47", (1u == g_bar_branch_seq)
+                   && (BAR_STATE_IDLE == state) && (0u == g_sim_evt_cnt),
+                   "clamped first bar: still counted as a branch line");
+    }
+
     /* ---- S3-U22 (on-car 2026-11-06 14:49: barcodes never decoded) --- */
     /* Captures ended with 26 / 15 elements and nothing said which bars
        or spaces were missing. A dropped or invalid capture now prints
