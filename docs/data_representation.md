@@ -135,15 +135,17 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 |---|---|---|---|---|---|---|---|---|
 | STEERING | SB_LINE0 | -1000..1000 × 1 permille | 1 | 11 | 11 | RNG | S | Steering error L-R; + = line left |
 | STATUS | SB_LINE0 | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | APP_LINE_* |
-| JUNCTION | SB_LINE0 | 0..4 × 1 code | 1 | 3 | 3 | ENUM | S | APP_JCT_* last junction class |
+| JUNCTION | SB_LINE0 | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | APP_JCT_* last junction class |
 | CALIBRATED | SB_LINE0 | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | IR calibration done |
 | GAP | MSG_EDGE | 0..32767 × 16 us | 16 | 15 | 15 | SAT | S | Gap since previous accepted edge; 32767 = stopped |
 | LEVEL | MSG_EDGE | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | DO level after the edge (1 = black) |
-| CLASS | EVT_JUNCTION | 0..4 × 1 code | 1 | 3 | 3 | ENUM | S | APP_JCT_* |
+| CLASS | EVT_JUNCTION | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | APP_JCT_* |
 | CROSS_MM | EVT_LINE_FOUND | 0..255 × 1 mm | 1 | 8 | 8 | SAT | S | Black crossing length |
 | CHAR | EVT_BARCODE | 0..42 × 1 code | 1 | 6 | 6 | ENUM | S | Code 39 character index |
 | CMD | EVT_BARCODE | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | APP_BAR_CMD_* |
 | CHAR | EVT_UNMAPPED | 0..42 × 1 code | 1 | 6 | 6 | ENUM | S | Code 39 character index |
+| N_ELEM | EVT_INVALID | 0..63 × 1 count | 1 | 6 | 6 | SAT | S | Elements in the failed capture (a barcode has 29); PRV_BAR_A.N_ELEM |
+| MM | EVT_BARCODE_PROBE | 0..2047 × 1 mm | 1 | 11 | 11 | RNG | S | Travel since the capture started (rewind length) |
 | WHITE | PRV_CAL_L | 0..4095 × 1 code | 1 | 12 | 12 | RNG | P | Left white level |
 | BLACK | PRV_CAL_L | 0..4095 × 1 code | 1 | 12 | 12 | RNG | P | Left black level |
 | WHITE | PRV_CAL_R | 0..4095 × 1 code | 1 | 12 | 12 | RNG | P | Right white level |
@@ -280,7 +282,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 
 | Group | Used bits | Storage bits |
 |---|---|---|
-| SB_LINE0 | 17 | 32 |
+| SB_LINE0 | 16 | 32 |
 | SB_MOT0 | 19 | 32 |
 | SB_MOT1 | 18 | 32 |
 | SB_MOT2 | 18 | 32 |
@@ -295,10 +297,12 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | MSG_EVT | 16 | 16 |
 | MSG_ECHO | 16 | 16 |
 | MSG_EDGE | 16 | 16 |
-| EVT_JUNCTION | 3 | 11 |
+| EVT_JUNCTION | 2 | 11 |
 | EVT_LINE_FOUND | 8 | 11 |
 | EVT_BARCODE | 8 | 11 |
 | EVT_UNMAPPED | 6 | 11 |
+| EVT_INVALID | 6 | 11 |
+| EVT_BARCODE_PROBE | 11 | 11 |
 | EVT_PLAN | 1 | 11 |
 | EVT_MOVE_DONE | 2 | 11 |
 | EVT_STALL | 2 | 11 |

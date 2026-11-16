@@ -31,12 +31,12 @@ static uint32_t g_posts;
 static uint32_t g_post_type[16];
 static uint32_t g_post_value[16];
 
-#define MOCK_K12_ID     (9)
+#define MOCK_K13_ID     (9)
 #define MOCK_LOG_MAX    (4u)
 static telem_log_rec_t g_log_q[MOCK_LOG_MAX];
 static uint32_t        g_log_n;
 static uint32_t        g_log_drops;
-static ID              g_k12_id = MOCK_K12_ID;
+static ID              g_k13_id = MOCK_K13_ID;
 
 INT tk_rcv_mbf(ID id, void * p_msg, TMO tmout)
 {
@@ -44,7 +44,7 @@ INT tk_rcv_mbf(ID id, void * p_msg, TMO tmout)
     uint32_t idx = 0u;
 
     (void) tmout;
-    if ((MOCK_K12_ID == id) && (g_log_n > 0u))
+    if ((MOCK_K13_ID == id) && (g_log_n > 0u))
     {
         (void) memcpy(p_msg, &g_log_q[0], sizeof(telem_log_rec_t));
         for (idx = 1u; idx < g_log_n; idx++)
@@ -91,9 +91,9 @@ ID telem_k11_id(void)
     return MOCK_K11_ID;
 }
 
-ID telem_k12_id(void)
+ID telem_k13_id(void)
 {
-    return g_k12_id;
+    return g_k13_id;
 }
 
 uint32_t telem_log_drops(void)
@@ -414,14 +414,14 @@ int main(void)
     (void) take_log_text(sizeof(buf));
     HOST_CHECK("S1-U46", 0 == strcmp(g_text,
                                      "(5 console lines dropped: queue full)"),
-               "K12 overflow reported first");
+               "K13 overflow reported first");
     (void) take_log_text(sizeof(buf));
     HOST_CHECK("S1-U46", 0 == strcmp(g_text, "next"),
                "then the queued line; the drop count is told once");
-    g_k12_id = 0;
+    g_k13_id = 0;
     log_push("hidden\n", 0, 0, 0);
     HOST_CHECK("S1-U46", 0u == take_log_text(sizeof(buf)),
-               "no K12 (image without the mirror): nothing");
+               "no K13 (image without the mirror): nothing");
 
     return (0 == HOST_SUMMARY("mqtt_bridge")) ? 0 : 1;
 }

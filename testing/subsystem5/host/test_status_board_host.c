@@ -76,7 +76,7 @@ int main(void) {
         "initial board: nothing ahead, profile clear, every other field 0");
   CHECK("S5-U74", sizeof(status_board_t) == 44u,
         "snapshot is the 11 packed 32-bit words (44 B)");
-  CHECK("S5-U74", line_ok(-1000, 3u, 4u, true) && line_ok(1000, 0u, 0u, false)
+  CHECK("S5-U74", line_ok(-1000, 3u, APP_JCT_SIDE_R, true) && line_ok(1000, 0u, 0u, false)
         && line_ok(0, 1u, 1u, true) && line_ok(-1, 2u, 3u, false),
         "line part: steering -1000..1000, status, junction, calibrated");
   CHECK("S5-U74", mot_ok(-127, 127, 7u, -131071, 131071, 131071)

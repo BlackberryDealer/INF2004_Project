@@ -1,7 +1,7 @@
 group,group_bits,field,bits,lsb,unit,min,max,offset,kind,class,owner,description
 SB_LINE0,32,STEERING,11,1,permille,-1000,1000,1024,RNG,S,B3,Steering error L-R; + = line left
 SB_LINE0,32,STATUS,2,1,code,0,3,0,ENUM,S,B3,APP_LINE_*
-SB_LINE0,32,JUNCTION,3,1,code,0,4,0,ENUM,S,B3,APP_JCT_* last junction class
+SB_LINE0,32,JUNCTION,2,1,code,0,3,0,ENUM,S,B3,APP_JCT_* last junction class
 SB_LINE0,32,CALIBRATED,1,1,flag,0,1,0,FLAG,S,B3,IR calibration done
 SB_MOT0,32,SPEED_L,8,1,count/50ms,-127,127,128,RNG,S,B2,Left wheel speed (approx 7 mm/s per LSB)
 SB_MOT0,32,SPEED_R,8,1,count/50ms,-127,127,128,RNG,S,B2,Right wheel speed
@@ -43,11 +43,13 @@ MSG_ECHO,16,VALID,1,1,flag,0,1,0,FLAG,S,B5,Width is a complete measurement
 MSG_ECHO,16,PAD,1,1,-,0,0,0,PAD,S,B5,Zero
 MSG_EDGE,16,GAP,15,16,us,0,32767,0,SAT,S,B3,Gap since previous accepted edge; 32767 = stopped
 MSG_EDGE,16,LEVEL,1,1,flag,0,1,0,FLAG,S,B3,DO level after the edge (1 = black)
-EVT_JUNCTION,11,CLASS,3,1,code,0,4,0,ENUM,S,B3,APP_JCT_*
+EVT_JUNCTION,11,CLASS,2,1,code,0,3,0,ENUM,S,B3,APP_JCT_*
 EVT_LINE_FOUND,11,CROSS_MM,8,1,mm,0,255,0,SAT,S,B3,Black crossing length
 EVT_BARCODE,11,CHAR,6,1,code,0,42,0,ENUM,S,B3,Code 39 character index
 EVT_BARCODE,11,CMD,2,1,code,0,3,0,ENUM,S,B3,APP_BAR_CMD_*
 EVT_UNMAPPED,11,CHAR,6,1,code,0,42,0,ENUM,S,B3,Code 39 character index
+EVT_INVALID,11,N_ELEM,6,1,count,0,63,0,SAT,S,B3,Elements in the failed capture (a barcode has 29); PRV_BAR_A.N_ELEM
+EVT_BARCODE_PROBE,11,MM,11,1,mm,0,2047,0,RNG,S,B3,Travel since the capture started (rewind length)
 EVT_PLAN,11,SIDE,1,1,flag,0,1,0,FLAG,S,B5,APP_SIDE_*
 EVT_MOVE_DONE,11,TAG,2,1,count,0,3,0,RAW,S,B2,Tag of the finished command
 EVT_STALL,11,LEFT,1,1,flag,0,1,0,FLAG,S,B2,Left wheel stalled

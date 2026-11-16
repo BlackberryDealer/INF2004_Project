@@ -145,6 +145,7 @@ access API (the headers in Part D of the spec, already in the repo).
 | K10 | S5 mission_task → all | event flag | `FLG_MODE` (`mission.c`) | `mission_mode_*()` | `APP_MODE_*` requests |
 | K11 | S1 telem_task → radio task | message buffer | `MBF_TELEM` (`telem.c`) | `mqtt_bridge_take()` | ready-to-publish payloads |
 | K12 | all → S5 mission, S1 | event flag | `FLG_FAULT` (`fault.c`) | `fault_*()` | shared fault bitmask `APP_FAULT_*` (10 bits) |
+| K13 | all (`app_log()`) → radio task | message buffer | console mirror (`telem.c`) | `telem_log_post()`, `mqtt_bridge_take_log()` | console lines as format + 3 arguments; only in `DEBUG_MQTT=1` images |
 
 Each interface is tested by at least one integration test
 (`testing/integration/TEST_LOG.md`).
@@ -161,7 +162,7 @@ complete (the Phase 0 skeleton creates only the seven tasks):
 | Event flag | 16 | | 2 (K3, K12) | | | 2 (K8, K10) | 4 |
 | Mailbox | 12 | | | | | | 0 |
 | Mutex | 12 | | | | | 1 (K6) | 1 |
-| Message buffer | 12 | 2 (K7, K11) | 1 (K5) | | | 1 (K4) | 4 |
+| Message buffer | 12 | 2 (K7, K11) + 1 (K13, `DEBUG_MQTT=1` only) | 1 (K5) | | | 1 (K4) | 4 (5) |
 | Fixed memory pool | 12 | | | | | | 0 |
 | Variable memory pool | 12 | | | | | | 0 |
 | Cyclic handler | 12 | | | | | 2 (R2, R3) | 2 |

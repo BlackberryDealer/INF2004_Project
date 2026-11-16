@@ -16,16 +16,18 @@ apart.
 
 ## Debug payloads added 2026-11-06 (not part of the comparison)
 
-The MQTT image now also sends two bring-up diagnostics, switched by
-`TELEM_DEBUG_MQTT` in `app_program/subsystem1/cfg_telem.h` (1 = on):
-SENSORS on `c28/d` (12 B, `MQ_SENS`, 5 Hz, packed like every other
-payload) and LOG on `c28/l` (header byte + one console line of up to 120
-ASCII characters). They have no baseline counterpart, so build the Week 13
-evidence with `TELEM_DEBUG_MQTT 0` (or leave both topics out of the
-capture); the tables below cover only the original payloads. With the
-diagnostics on, K11 has 12 entries instead of 8 and K12 (console lines,
-48 x 20 B = 960 B) exists; the lwIP output ring is 2048 B and 64 request
-slots (S1-U38).
+An MQTT image can also send two bring-up diagnostics: SENSORS on `c28/d`
+(12 B, `MQ_SENS`, 5 Hz, packed like every other payload) and LOG on
+`c28/l` (header byte + one console line of up to 120 ASCII characters).
+Since 2026-11-16 they are off unless the image is built with
+`make NET=lwip MQTT=1 DEBUG_MQTT=1` (image name ends in `_dbg`;
+`TELEM_DEBUG_MQTT` in `app_program/subsystem1/cfg_telem.h`). The normal
+image sends no text over MQTT (Change Requirement 1). They have no
+baseline counterpart, so build the Week 13 evidence without `DEBUG_MQTT`;
+the tables below cover only the original payloads. With the diagnostics
+on, K11 has 12 entries instead of 8 and K13 (console lines, 48 x 20 B =
+960 B) exists; the lwIP output ring is 2048 B and 64 request slots
+(S1-U38, checked for both builds).
 
 ## How the numbers were obtained
 

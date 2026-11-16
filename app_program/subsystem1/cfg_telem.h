@@ -19,19 +19,23 @@
 /* ---- debug telemetry (2026-11-06: track sensors without the USB cable) */
 /* 1: every app_log() console line is also published as text on
    TELEM_TOPIC_LOG, and a SENSORS payload follows every STATE. Bring-up
-   diagnostic like the console prints themselves: set 0 for the Week 13
-   message-size evidence (only the binary payloads are then sent).     */
-#define TELEM_DEBUG_MQTT        (1u)
+   diagnostic like the console prints themselves. Default 0, so a normal
+   image sends only the binary payloads (Change Requirement 1: no text
+   values over MQTT). Turn it on for bring-up with
+   "make NET=lwip MQTT=1 DEBUG_MQTT=1" (image name ends in _dbg).      */
+#ifndef TELEM_DEBUG_MQTT
+#define TELEM_DEBUG_MQTT        (0u)
+#endif
 #define TELEM_LOG_TEXT_MAX      (120u)     /* text bytes per LOG payload */
 
 /* ---- queue sizes -------------------------------------------------------- */
 #define TELEM_K7_ENTRIES        (8u)
 /* 8 entries for STATE, heartbeat and events; 12 with SENSORS */
 #define TELEM_K11_ENTRIES       ((TELEM_DEBUG_MQTT != 0u) ? 12u : 8u)
-/* K12: console lines mirrored to MQTT (format pointer + 3 arguments,
+/* K13: console lines mirrored to MQTT (format pointer + 3 arguments,
    16 B each); formatted later by the radio task, so app_log() costs its
    caller one non-blocking tk_snd_mbf(). Lines are dropped while full.  */
-#define TELEM_K12_ENTRIES       (48u)
+#define TELEM_K13_ENTRIES       (48u)
 
 /* ---- remote commands ---------------------------------------------------- */
 #define TELEM_CMD_MIN_GAP_MS    (100u)     /* one command per type per 100 ms */
