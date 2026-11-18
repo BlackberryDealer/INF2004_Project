@@ -44,7 +44,7 @@ tree:
 	cp mock/hardware/gpio.h build/hardware/gpio.h
 	cp $(APP)/app_types.h $(APP)/board_pins.h $(B)/
 	cp $(APP)/app_bits.h $(APP)/app_bits.c $(APP)/app_layout.h $(B)/
-	cp $(APP)/subsystem1/telem.h $(APP)/subsystem1/telem_bin.h $(B)/subsystem1/
+	cp $(APP)/subsystem1/telem.h $(APP)/subsystem1/telem_bin.h $(APP)/subsystem1/cfg_telem.h $(B)/subsystem1/
 	cp $(APP)/subsystem2/safety.h $(APP)/subsystem2/fault.h \
 	   $(APP)/subsystem2/motion.h $(APP)/subsystem2/odometry.h \
 	   $(APP)/subsystem2/cfg_motion.h $(B)/subsystem2/
