@@ -132,6 +132,37 @@ MQ_SENS,0,SCAN,3,1,code,0,7,0,ENUM,S,B1,APP_SCAN_* obstacle scanner state
 MQ_SENS,0,PAD,5,1,-,0,0,0,PAD,S,B1,Zero
 MQ_MAP,8,CHAR,6,1,code,0,42,0,ENUM,S,B1,Byte 1 of a MAP command
 MQ_MAP,8,CMD,2,1,code,0,3,0,ENUM,S,B1,Byte 1 of a MAP command
+PRV_MOT_A,32,STATE,3,1,code,0,7,0,ENUM,P,B2,APP_MOT_* state of the Motion Executor
+PRV_MOT_A,32,ENC_OK,1,1,flag,0,1,0,FLAG,P,B2,Encoder PIO program loaded
+PRV_MOT_A,32,ACT_TYPE,3,1,code,0,6,0,ENUM,P,B2,APP_CMD_* of the running command (0 = none)
+PRV_MOT_A,32,ACT_TAG,2,1,count,0,3,0,RAW,P,B2,Tag of the running command; echoed in MOVE_DONE
+PRV_MOT_A,32,PEND_VALID,1,1,flag,0,1,0,FLAG,P,B2,A command waits in the one-slot latch
+PRV_MOT_A,32,PEND_TYPE,3,1,code,0,6,0,ENUM,P,B2,APP_CMD_* of the latched command
+PRV_MOT_A,32,PEND_TAG,2,1,count,0,3,0,RAW,P,B2,Tag of the latched command
+PRV_MOT_A,32,PEND_PARAM,11,1,mm|deg|mm/s,0,2047,0,RNG,P,B2,Parameter of the latched command (K5 PARAM width)
+PRV_MOT_A,32,CREEP_STILL,4,1,tick,0,15,0,SAT,P,B2,Still cycles inside the creep zone (MOTION_CREEP_STUCK_TICKS)
+PRV_MOT_B,32,BASE_CPW,7,1,count/50ms,-63,63,64,RNG,P,B2,Base set-point; FOLLOW max 300 mm/s = 46
+PRV_MOT_B,32,CREEP_CPW,5,1,count/50ms,-15,15,16,RNG,P,B2,Creep set-point with the sign of the base; 80 mm/s = 12
+PRV_MOT_B,32,STALL_L,5,1,tick,0,30,0,SAT,P,B2,Left wheel: cycles driven hard without a count (MOTION_STALL_TICKS)
+PRV_MOT_B,32,STALL_R,5,1,tick,0,30,0,SAT,P,B2,Right wheel: cycles driven hard without a count
+PRV_MOT_B,32,LOG_PEND,1,1,flag,0,1,0,FLAG,P,B2,Impossible encoder read recorded; printed after step 9
+PRV_MOT_B,32,LOG_WHEEL,1,1,code,0,1,0,ENUM,P,B2,Wheel of the recorded read (0 = L 1 = R)
+PRV_MOT_C,32,TARGET2,14,1,half count,0,16383,0,RNG,P,B2,2 x counts of the running MOVE or TURN (2047 mm = 12636)
+PRV_MOT_C,32,PROG2,14,1,half count,0,16383,0,SAT,P,B2,Progress of the running MOVE or TURN; saturates above every target
+PRV_MOT_C,32,STRK_L,2,1,count,0,3,0,SAT,P,B2,Left wheel: impossible encoder reads in a row
+PRV_MOT_C,32,STRK_R,2,1,count,0,3,0,SAT,P,B2,Right wheel: impossible encoder reads in a row
+PRV_MOT_D,32,PATH2,18,1,half count,0,262143,0,RAW,P,B2,2 x PATH; wraps with the 17-bit PATH
+PRV_MOT_E,16,DIFF_START,16,1,count,0,65535,0,RAW,P,B2,Low 16 bits of pos_l - pos_r when the MOVE started; the drift is taken modulo 2^16
+PRV_MOT_F,32,LOG_DT,20,1,us,0,1000000,0,RNG,P,B2,Time since the trusted read of the recorded read (capped at 1 s)
+PRV_MOT_PI,32,INTEG,18,1,permille/256,-76800,76800,131072,RNG,P,B2,PI integrator per wheel x2 (MOTION_I_CLAMP)
+PRV_MOT_PI,32,DUTY,11,1,permille,-1000,1000,1024,RNG,P,B2,Duty applied last cycle per wheel x2
+PRV_WIN_L,8,DELTA,7,1,count,-63,63,64,RNG,P,B2,Speed window: left counts per tick x5
+PRV_WIN_R,8,DELTA,7,1,count,-63,63,64,RNG,P,B2,Speed window: right counts per tick x5
+PRV_WIN_T,8,DT_MS,6,1,ms,0,63,0,SAT,P,B2,Speed window: tick length x5
+PRV_WIN_I,8,IDX,3,1,slot,0,4,0,RNG,P,B2,Speed window: next slot
+E_MOT_RAW,32,COUNT,31,1,count,0,0,0,RAW,E,B2,E3 encoder images x4 (at ZERO and last trusted; L and R): the PIO counter is 32 bits and wraps and a jump is judged on its full width (bits=31 for gen_layout.py)
+E_MOT_US,32,TIME,31,1,us,0,0,0,RAW,E,B2,E5 times x3 (last read; last trusted read L and R): the 1 us timer is 32 bits and wraps and only differences are used (bits=31 for gen_layout.py)
+E_MOT_LOG,32,DELTA,31,1,count,0,0,0,RAW,E,B2,Counts of the recorded impossible encoder read: any 32-bit jump; console only (bits=31 for gen_layout.py)
 PRV_IMU_A,32,STATE,3,1,code,0,4,0,ENUM,P,B4,Terrain state
 PRV_IMU_A,32,HYST,4,1,sample,0,15,0,SAT,P,B4,Hysteresis count
 PRV_IMU_A,32,I2C_ERR,2,1,count,0,3,0,SAT,P,B4,I2C errors in a row

@@ -97,6 +97,37 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | TAG | EVT_MOVE_DONE | 0..3 × 1 count | 1 | 2 | 2 | RAW | S | Tag of the finished command |
 | LEFT | EVT_STALL | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | Left wheel stalled |
 | RIGHT | EVT_STALL | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | Right wheel stalled |
+| STATE | PRV_MOT_A | 0..7 × 1 code | 1 | 3 | 3 | ENUM | P | APP_MOT_* state of the Motion Executor |
+| ENC_OK | PRV_MOT_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Encoder PIO program loaded |
+| ACT_TYPE | PRV_MOT_A | 0..6 × 1 code | 1 | 3 | 3 | ENUM | P | APP_CMD_* of the running command (0 = none) |
+| ACT_TAG | PRV_MOT_A | 0..3 × 1 count | 1 | 2 | 2 | RAW | P | Tag of the running command; echoed in MOVE_DONE |
+| PEND_VALID | PRV_MOT_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | A command waits in the one-slot latch |
+| PEND_TYPE | PRV_MOT_A | 0..6 × 1 code | 1 | 3 | 3 | ENUM | P | APP_CMD_* of the latched command |
+| PEND_TAG | PRV_MOT_A | 0..3 × 1 count | 1 | 2 | 2 | RAW | P | Tag of the latched command |
+| PEND_PARAM | PRV_MOT_A | 0..2047 × 1 mm\|deg\|mm/s | 1 | 11 | 11 | RNG | P | Parameter of the latched command (K5 PARAM width) |
+| CREEP_STILL | PRV_MOT_A | 0..15 × 1 tick | 1 | 4 | 4 | SAT | P | Still cycles inside the creep zone (MOTION_CREEP_STUCK_TICKS) |
+| BASE_CPW | PRV_MOT_B | -63..63 × 1 count/50ms | 1 | 7 | 7 | RNG | P | Base set-point; FOLLOW max 300 mm/s = 46 |
+| CREEP_CPW | PRV_MOT_B | -15..15 × 1 count/50ms | 1 | 5 | 5 | RNG | P | Creep set-point with the sign of the base; 80 mm/s = 12 |
+| STALL_L | PRV_MOT_B | 0..30 × 1 tick | 1 | 5 | 5 | SAT | P | Left wheel: cycles driven hard without a count (MOTION_STALL_TICKS) |
+| STALL_R | PRV_MOT_B | 0..30 × 1 tick | 1 | 5 | 5 | SAT | P | Right wheel: cycles driven hard without a count |
+| LOG_PEND | PRV_MOT_B | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Impossible encoder read recorded; printed after step 9 |
+| LOG_WHEEL | PRV_MOT_B | 0..1 × 1 code | 1 | 1 | 1 | ENUM | P | Wheel of the recorded read (0 = L 1 = R) |
+| TARGET2 | PRV_MOT_C | 0..16383 × 1 half count | 1 | 14 | 14 | RNG | P | 2 x counts of the running MOVE or TURN (2047 mm = 12636) |
+| PROG2 | PRV_MOT_C | 0..16383 × 1 half count | 1 | 14 | 14 | SAT | P | Progress of the running MOVE or TURN; saturates above every target |
+| STRK_L | PRV_MOT_C | 0..3 × 1 count | 1 | 2 | 2 | SAT | P | Left wheel: impossible encoder reads in a row |
+| STRK_R | PRV_MOT_C | 0..3 × 1 count | 1 | 2 | 2 | SAT | P | Right wheel: impossible encoder reads in a row |
+| PATH2 | PRV_MOT_D | 0..262143 × 1 half count | 1 | 18 | 18 | RAW | P | 2 x PATH; wraps with the 17-bit PATH |
+| DIFF_START | PRV_MOT_E | 0..65535 × 1 count | 1 | 16 | 16 | RAW | P | Low 16 bits of pos_l - pos_r when the MOVE started; the drift is taken modulo 2^16 |
+| LOG_DT | PRV_MOT_F | 0..1000000 × 1 us | 1 | 20 | 20 | RNG | P | Time since the trusted read of the recorded read (capped at 1 s) |
+| INTEG | PRV_MOT_PI | -76800..76800 × 1 permille/256 | 1 | 18 | 18 | RNG | P | PI integrator per wheel x2 (MOTION_I_CLAMP) |
+| DUTY | PRV_MOT_PI | -1000..1000 × 1 permille | 1 | 11 | 11 | RNG | P | Duty applied last cycle per wheel x2 |
+| DELTA | PRV_WIN_L | -63..63 × 1 count | 1 | 7 | 7 | RNG | P | Speed window: left counts per tick x5 |
+| DELTA | PRV_WIN_R | -63..63 × 1 count | 1 | 7 | 7 | RNG | P | Speed window: right counts per tick x5 |
+| DT_MS | PRV_WIN_T | 0..63 × 1 ms | 1 | 6 | 6 | SAT | P | Speed window: tick length x5 |
+| IDX | PRV_WIN_I | 0..4 × 1 slot | 1 | 3 | 3 | RNG | P | Speed window: next slot |
+| COUNT | E_MOT_RAW | 0..0 × 1 count | 1 | 0 | 32 | RAW | E | E3 encoder images x4 (at ZERO and last trusted; L and R): the PIO counter is 32 bits and wraps and a jump is judged on its full width (bits=31 for gen_layout.py) |
+| TIME | E_MOT_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 times x3 (last read; last trusted read L and R): the 1 us timer is 32 bits and wraps and only differences are used (bits=31 for gen_layout.py) |
+| DELTA | E_MOT_LOG | 0..0 × 1 count | 1 | 0 | 32 | RAW | E | Counts of the recorded impossible encoder read: any 32-bit jump; console only (bits=31 for gen_layout.py) |
 
 ## B3
 
@@ -289,6 +320,17 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | MQ_HB | 40 | 40 |
 | MQ_SENS | 88 | 88 |
 | MQ_MAP | 8 | 8 |
+| PRV_MOT_A | 30 | 32 |
+| PRV_MOT_B | 24 | 32 |
+| PRV_MOT_C | 32 | 32 |
+| PRV_MOT_D | 18 | 32 |
+| PRV_MOT_E | 16 | 16 |
+| PRV_MOT_F | 20 | 32 |
+| PRV_MOT_PI | 29 | 32 |
+| PRV_WIN_L | 7 | 8 |
+| PRV_WIN_R | 7 | 8 |
+| PRV_WIN_T | 6 | 8 |
+| PRV_WIN_I | 3 | 8 |
 | PRV_IMU_A | 26 | 32 |
 | PRV_IMU_B | 29 | 32 |
 | PRV_IMU_C | 30 | 32 |

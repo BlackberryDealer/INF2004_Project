@@ -222,6 +222,56 @@ GROUPS = {
         ('CHAR', 6, 0, 1, 'code'),
         ('CMD', 2, 0, 1, 'code'),
     ],
+    'PRV_MOT_A': [
+        ('STATE', 3, 0, 1, 'code'),
+        ('ENC_OK', 1, 0, 1, 'flag'),
+        ('ACT_TYPE', 3, 0, 1, 'code'),
+        ('ACT_TAG', 2, 0, 1, 'count'),
+        ('PEND_VALID', 1, 0, 1, 'flag'),
+        ('PEND_TYPE', 3, 0, 1, 'code'),
+        ('PEND_TAG', 2, 0, 1, 'count'),
+        ('PEND_PARAM', 11, 0, 1, 'mm|deg|mm/s'),
+        ('CREEP_STILL', 4, 0, 1, 'tick'),
+    ],
+    'PRV_MOT_B': [
+        ('BASE_CPW', 7, 64, 1, 'count/50ms'),
+        ('CREEP_CPW', 5, 16, 1, 'count/50ms'),
+        ('STALL_L', 5, 0, 1, 'tick'),
+        ('STALL_R', 5, 0, 1, 'tick'),
+        ('LOG_PEND', 1, 0, 1, 'flag'),
+        ('LOG_WHEEL', 1, 0, 1, 'code'),
+    ],
+    'PRV_MOT_C': [
+        ('TARGET2', 14, 0, 1, 'half count'),
+        ('PROG2', 14, 0, 1, 'half count'),
+        ('STRK_L', 2, 0, 1, 'count'),
+        ('STRK_R', 2, 0, 1, 'count'),
+    ],
+    'PRV_MOT_D': [
+        ('PATH2', 18, 0, 1, 'half count'),
+    ],
+    'PRV_MOT_E': [
+        ('DIFF_START', 16, 0, 1, 'count'),
+    ],
+    'PRV_MOT_F': [
+        ('LOG_DT', 20, 0, 1, 'us'),
+    ],
+    'PRV_MOT_PI': [
+        ('INTEG', 18, 131072, 1, 'permille/256'),
+        ('DUTY', 11, 1024, 1, 'permille'),
+    ],
+    'PRV_WIN_L': [
+        ('DELTA', 7, 64, 1, 'count'),
+    ],
+    'PRV_WIN_R': [
+        ('DELTA', 7, 64, 1, 'count'),
+    ],
+    'PRV_WIN_T': [
+        ('DT_MS', 6, 0, 1, 'ms'),
+    ],
+    'PRV_WIN_I': [
+        ('IDX', 3, 0, 1, 'slot'),
+    ],
     'PRV_IMU_A': [
         ('STATE', 3, 0, 1, 'code'),
         ('HYST', 4, 0, 1, 'sample'),

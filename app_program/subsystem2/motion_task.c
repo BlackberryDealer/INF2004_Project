@@ -21,14 +21,18 @@
  * A safety flag set at any time is acted on at the next cycle start:
  * <= 10 ms + <= 1 ms higher-priority work, inside NFR10a's 15 ms.
  *
- * Phase 2 (baseline) representation: plain static variables, all written
- * only by motion_task. Phase 4 packs them into the PRV_MOT_* / PRV_WIN_*
- * layout rows without changing behaviour.
+ * Representation: the private state, written only by motion_task, is
+ * packed into the PRV_MOT_* / PRV_WIN_* rows of tools/layout.csv (minimum
+ * bits per field). What step 2 senses in a cycle is passed on the stack
+ * (motion_sense_t); a wheel position is the difference of two encoder
+ * images and is not stored. Behaviour is that of the unpacked code.
  */
 
 #include "motion_task.h"       /* own header first (BARR-C 4.3.c) */
 #include "../app.h"
 #include "../app_types.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "cfg_motion.h"
 #include "motion.h"
 #include "odometry.h"
@@ -56,8 +60,20 @@
 #define MOTION_READ_SKEW_US    (500u)
 /* path2 = 2 x path; wraps with the 17-bit PATH (odometry.h).         */
 #define MOTION_PATH2_MASK      ((ODOMETRY_PATH_MASK << 1u) | 1u)
-#define MOTION_STREAK_MAX      (3u)         /* 2-bit streak counter        */
+#define MOTION_STREAK_MAX      ((uint32_t) PRV_MOT_C_STRK_L_MAX) /* saturates */
 #define MOTION_HALF_SHIFT      (1u)         /* path = path2 / 2            */
+#define MOTION_WHEEL_L         (0u)         /* index of the left wheel     */
+#define MOTION_WHEEL_R         (1u)
+#define MOTION_WHEELS          (2u)
+#define MOTION_UM_PER_MM       (1000u)
+/* 2 x the counts of the creep zone, as odometry_mm_to_counts() rounds it
+   (checked by S2-U32); a constant, so it is not stored.                */
+#define MOTION_CREEP_ZONE2                                                 \
+    (2u * (((MOTION_CREEP_ZONE_MM * MOTION_UM_PER_MM)                      \
+            + (APP_UM_PER_COUNT / 2u)) / APP_UM_PER_COUNT))
+#define MOTION_PROG2_MAX       ((uint32_t) PRV_MOT_C_PROG2_MAX)
+#define MOTION_DIFF_MASK       ((uint32_t) PRV_MOT_E_DIFF_START_MAX)
+#define MOTION_DIFF_SIGN       ((MOTION_DIFF_MASK + 1u) >> 1u)
 
 #if ((MOTION_DELTA_ABS_MAX * MOTION_RATE_SCALE_US) > 0xFFFFFFFFu)
 #error "Plausibility product no longer fits 32 bits"
@@ -68,82 +84,84 @@
 #if ((MOTION_DT_US_MAX * MOTION_US_TO_MS_Q20) > 0xFFFFFFFFu)
 #error "dt conversion no longer fits 32 bits"
 #endif
+/* The packed private fields (layout groups PRV_MOT_*) must hold the full
+   range of what is stored in them.                                      */
+#if (MOTION_I_CLAMP > PRV_MOT_PI_INTEG_MAX) \
+    || (MOTION_DUTY_MAX_PERMILLE > PRV_MOT_PI_DUTY_MAX)
+#error "PRV_MOT_PI is too narrow for the integrator clamp or the duty"
+#endif
+#if (MOTION_STALL_TICKS > PRV_MOT_B_STALL_L_MAX) \
+    || (MOTION_STALL_TICKS > PRV_MOT_B_STALL_R_MAX) \
+    || (MOTION_CREEP_STUCK_TICKS > PRV_MOT_A_CREEP_STILL_MAX)
+#error "A PRV_MOT tick counter is too narrow for its limit"
+#endif
+#if (MOTION_ENC_FAULT_STREAK > PRV_MOT_C_STRK_L_MAX) \
+    || (PRV_MOT_C_STRK_L_MAX != PRV_MOT_C_STRK_R_MAX)
+#error "PRV_MOT_C streak fields do not hold MOTION_ENC_FAULT_STREAK"
+#endif
+#if (PRV_MOT_C_PROG2_MAX < PRV_MOT_C_TARGET2_MAX)
+#error "PROG2 must saturate at or above every TARGET2"
+#endif
+#if (MOTION_RATE_DT_MAX_US > PRV_MOT_F_LOG_DT_MAX) \
+    || (APP_CMD_ZERO > PRV_MOT_A_PEND_TYPE_MAX) \
+    || (APP_MOT_STALLED > PRV_MOT_A_STATE_MAX)
+#error "A PRV_MOT field is too narrow for its source"
+#endif
+#if (PRV_MOT_D_PATH2_MAX != ((2 * SB_MOT3_PATH_MAX) + 1))
+#error "PATH2 must be one bit wider than the 17-bit PATH"
+#endif
 
-/* One wheel's sensed values for this cycle. */
+/* Words with every field at its reset value (signed fields hold their
+   offset, which stands for 0).                                         */
+#define MOTION_B_RESET                                                     \
+    ((((uint32_t) PRV_MOT_B_BASE_CPW_OFFSET) << PRV_MOT_B_BASE_CPW_POS)    \
+     | (((uint32_t) PRV_MOT_B_CREEP_CPW_OFFSET) << PRV_MOT_B_CREEP_CPW_POS))
+#define MOTION_PI_RESET                                                    \
+    ((((uint32_t) PRV_MOT_PI_INTEG_OFFSET) << PRV_MOT_PI_INTEG_POS)        \
+     | (((uint32_t) PRV_MOT_PI_DUTY_OFFSET) << PRV_MOT_PI_DUTY_POS))
+
+/* What step 2 sensed in this cycle; lives on the stack of motion_cycle. */
 typedef struct
 {
-    uint32_t raw;        /* last trusted E3 raw image                */
-    int32_t  delta;      /* counts since last cycle (modular)        */
-    uint32_t abs_delta;  /* min(|delta|, 0xFFFF)                     */
-    int32_t  pos;        /* counts since the last ZERO (modular)     */
-    int32_t  speed_cpw;  /* window speed, counts per 50 ms           */
-} motion_wheel_t;
+    int32_t delta_l;      /* trusted counts since the last cycle      */
+    int32_t delta_r;
+    int32_t speed_l_cpw;  /* window speed, counts per 50 ms           */
+    int32_t speed_r_cpw;
+} motion_sense_t;
 
 /* ---- private data (written only by motion_task) ---------------------- */
 
-static uint32_t g_state       = APP_MOT_BRAKE;   /* APP_MOT_*            */
-static bool     gb_is_enc_ok  = false;           /* PIO program loaded   */
-static bool     gb_is_motor_en = false;          /* APP_MODE_MOTOR_EN    */
+/* Packed private state: one row per field in tools/layout.csv, read and
+   written only through app_bits_get / app_bits_put with the generated
+   PRV_MOT_* macros (BARR-C 5.4: no bit-fields, no casts into words).   */
+static uint32_t g_mot_a = 0u;              /* PRV_MOT_A: state, command */
+static uint32_t g_mot_b = MOTION_B_RESET;  /* PRV_MOT_B: set-points     */
+static uint32_t g_mot_c = 0u;              /* PRV_MOT_C: target, streak */
+static uint32_t g_path2 = 0u;              /* PRV_MOT_D: 2 x path, wraps */
+static uint16_t g_diff_start = 0u;         /* PRV_MOT_E: modulo 2^16    */
+static uint32_t g_enc_log_dt_us = 0u;      /* PRV_MOT_F: <= 1 s         */
+static uint32_t g_pi[MOTION_WHEELS] =      /* PRV_MOT_PI: integ, duty   */
+{
+    MOTION_PI_RESET, MOTION_PI_RESET
+};
+static odometry_window_t g_window = ODOMETRY_WINDOW_EMPTY; /* PRV_WIN_* */
 
-/* Active command */
-static uint32_t g_act_type    = APP_CMD_STOP;
-static uint32_t g_act_tag     = 0u;
-static int32_t  g_base_cpw    = 0;     /* base set-point, cpw          */
-static uint32_t g_target2     = 0u;    /* 2 x target counts            */
-static uint32_t g_prog2       = 0u;    /* this command's own progress  */
-static int32_t  g_diff_start  = 0;     /* pos_l - pos_r at the start   */
-static int32_t  g_creep_cpw   = 0;     /* creep set-point, base's sign */
-static uint32_t g_creep_zone2 = 0u;    /* 2 x creep zone counts        */
-static uint32_t g_creep_still = 0u;    /* still ticks inside the zone  */
-
-/* One-slot latch for a command that arrives while moving */
-static bool     gb_is_pend_valid = false;
-static uint32_t g_pend_type   = APP_CMD_STOP;
-static uint32_t g_pend_param  = 0u;
-static uint32_t g_pend_tag    = 0u;
-
-/* Control */
-static speed_pid_t       g_pid_l     = {0};   /* E1 integrators */
-static speed_pid_t       g_pid_r     = {0};
-static int32_t           g_duty_l    = 0;     /* permille       */
-static int32_t           g_duty_r    = 0;
-static uint32_t          g_stall_l   = 0u;    /* ticks          */
-static uint32_t          g_stall_r   = 0u;
-static uint32_t          g_strk_l    = 0u;    /* impossible reads in a row */
-static uint32_t          g_strk_r    = 0u;
-static odometry_window_t g_window    = {{0}, {0}, {0}, 0u};
-static uint32_t          g_path2     = 0u;    /* 2 x path length, half counts */
-
-/* Encoder images (E3) and time (E5) */
-static uint32_t g_raw0_l   = 0u;     /* raw counts at the last ZERO */
-static uint32_t g_raw0_r   = 0u;
-static uint32_t g_prev_l   = 0u;     /* last trusted raw counts     */
-static uint32_t g_prev_r   = 0u;
-static uint32_t g_prev_l_us = 0u;    /* time of each trusted count  */
-static uint32_t g_prev_r_us = 0u;
-static uint32_t g_prev_us  = 0u;     /* time of the last read (window) */
-
-/* Bring-up diagnosis: the first impossible read of an episode is recorded
-   in step 2 and printed only after step 9, so the console write can never
-   delay the fault or the motor command of that cycle.                    */
-static bool     gb_enc_log_pending = false;
-static int32_t  g_enc_log_wheel    = 0;    /* 0 = L, 1 = R             */
-static int32_t  g_enc_log_delta    = 0;    /* counts since trusted read */
-static int32_t  g_enc_log_dt_us    = 0;    /* us since trusted read     */
-
-/* This cycle's sensed values */
-static motion_wheel_t g_left  = {0u, 0, 0u, 0, 0};
-static motion_wheel_t g_right = {0u, 0, 0u, 0, 0};
+/* Full-width values (class E rows E_MOT_RAW, E_MOT_US, E_MOT_LOG): the
+   PIO counters and the 1 us timer are 32 bits and wrap; only modular
+   differences are used, and a counter jump is judged on its full width. */
+static uint32_t g_zero_raw[MOTION_WHEELS]  = {0u, 0u};  /* image at ZERO */
+static uint32_t g_trust_raw[MOTION_WHEELS] = {0u, 0u};  /* last trusted  */
+static uint32_t g_trust_us[MOTION_WHEELS]  = {0u, 0u};  /* and its time  */
+static uint32_t g_prev_us       = 0u;      /* time of the last read     */
+static int32_t  g_enc_log_delta = 0;       /* counts of the logged read */
 
 /* ---- private function prototypes ------------------------------------- */
 
 static void motion_startup(void);
 static void motion_cycle(void);
-static void motion_sense(void);
-static void motion_sense_wheel(motion_wheel_t * p_wheel, uint32_t raw,
-                               uint32_t now_us, uint32_t * p_prev,
-                               uint32_t * p_prev_us, uint32_t * p_raw0,
-                               uint32_t * p_streak, bool b_is_skewed);
+static void motion_sense(motion_sense_t * p_sense);
+static int32_t motion_sense_wheel(uint32_t wheel, uint32_t raw,
+                                  uint32_t now_us, bool b_is_skewed);
 static bool motion_check_safety(void);
 static void motion_commands(void);
 static void motion_handle_cmd(uint32_t type, uint32_t param, uint32_t tag);
@@ -154,23 +172,43 @@ static void motion_start_move(uint32_t state, int32_t base_cpw,
                               uint32_t target2, uint32_t tag);
 static void motion_zero(uint32_t tag);
 static void motion_cancel_active(void);
-static void motion_state_step(int32_t * p_sp_l, int32_t * p_sp_r);
+static void motion_state_step(motion_sense_t const * p_sense,
+                              int32_t * p_sp_l, int32_t * p_sp_r);
 static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r);
 static int32_t motion_follow_split(int32_t steer);
-static void motion_state_move(int32_t * p_sp_l, int32_t * p_sp_r);
-static void motion_state_turn(int32_t * p_sp_l, int32_t * p_sp_r);
-static void motion_finish_if_done(void);
+static void motion_state_move(motion_sense_t const * p_sense,
+                              int32_t * p_sp_l, int32_t * p_sp_r);
+static void motion_state_turn(motion_sense_t const * p_sense,
+                              int32_t * p_sp_l, int32_t * p_sp_r);
+static void motion_finish_if_done(motion_sense_t const * p_sense);
 static bool motion_in_creep_zone(void);
 static int32_t motion_move_base(void);
-static void motion_control(int32_t sp_l, int32_t sp_r);
-static void motion_stall_check(void);
+static void motion_control(motion_sense_t const * p_sense, int32_t sp_l,
+                           int32_t sp_r);
+static void motion_pi_step(uint32_t wheel, int32_t setpoint_cpw,
+                           int32_t speed_cpw);
+static void motion_stall_check(motion_sense_t const * p_sense);
 static uint32_t motion_stall_count(uint32_t count, int32_t duty,
                                    int32_t delta);
 static void motion_actuate(void);
-static void motion_publish(void);
+static void motion_publish(motion_sense_t const * p_sense);
 static bool motion_is_moving(uint32_t state);
 static void motion_reset_control(void);
 static uint32_t motion_abs_capped(int32_t value);
+static uint32_t motion_a(uint32_t pos, uint32_t width);
+static void motion_a_set(uint32_t pos, uint32_t width, uint32_t value);
+static uint32_t motion_b(uint32_t pos, uint32_t width);
+static void motion_b_set(uint32_t pos, uint32_t width, uint32_t value);
+static uint32_t motion_c(uint32_t pos, uint32_t width);
+static void motion_c_set(uint32_t pos, uint32_t width, uint32_t value);
+static uint32_t motion_state(void);
+static void motion_set_state(uint32_t state);
+static int32_t motion_base_cpw(void);
+static void motion_set_base_cpw(int32_t base_cpw);
+static int32_t motion_creep_cpw(void);
+static void motion_set_creep_cpw(int32_t creep_cpw);
+static int32_t motion_duty(uint32_t wheel);
+static int32_t motion_pos(uint32_t wheel);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -216,7 +254,8 @@ static void motion_startup(void)
     uint32_t sm_r      = 0u;
 
     drv_motor_init();                        /* all four inputs low */
-    gb_is_enc_ok = (0 == drv_encoder_init());
+    motion_a_set(PRV_MOT_A_ENC_OK_POS, PRV_MOT_A_ENC_OK_BITS,
+                 (0 == drv_encoder_init()) ? 1u : 0u);
 
     if (drv_encoder_location(&pio_index, &sm_l, &sm_r))
     {
@@ -229,15 +268,16 @@ static void motion_startup(void)
         app_log("ENC no PIO space: motors stay braked\n", 0, 0, 0);
     }
 
-    drv_encoder_read(&g_raw0_l, &g_raw0_r);
-    g_prev_l  = g_raw0_l;
-    g_prev_r  = g_raw0_r;
+    drv_encoder_read(&g_zero_raw[MOTION_WHEEL_L],
+                     &g_zero_raw[MOTION_WHEEL_R]);
+    g_trust_raw[MOTION_WHEEL_L] = g_zero_raw[MOTION_WHEEL_L];
+    g_trust_raw[MOTION_WHEEL_R] = g_zero_raw[MOTION_WHEEL_R];
     g_prev_us = sys_tick_now_us();
-    g_prev_l_us = g_prev_us;
-    g_prev_r_us = g_prev_us;
+    g_trust_us[MOTION_WHEEL_L] = g_prev_us;
+    g_trust_us[MOTION_WHEEL_R] = g_prev_us;
     odometry_window_reset(&g_window);
     motion_reset_control();
-    g_state = APP_MOT_BRAKE;
+    motion_set_state(APP_MOT_BRAKE);
 
     app_check(sys_tick_register(SYS_TICK_SLOT_MOTION, tk_get_tid()),
               "motion sys_tick_register");
@@ -251,21 +291,22 @@ static void motion_startup(void)
  */
 static void motion_cycle(void)
 {
+    motion_sense_t sense  = {0, 0, 0, 0};
     int32_t sp_l          = 0;
     int32_t sp_r          = 0;
     bool    b_is_stopped  = false;
 
-    if (gb_is_enc_ok)
+    if (0u != motion_a(PRV_MOT_A_ENC_OK_POS, PRV_MOT_A_ENC_OK_BITS))
     {
-        motion_sense();                         /* 2 */
+        motion_sense(&sense);                   /* 2 */
         b_is_stopped = motion_check_safety();   /* 3 */
         motion_commands();                      /* 4 */
 
         if (!b_is_stopped)
         {
-            motion_state_step(&sp_l, &sp_r);    /* 5 */
-            motion_control(sp_l, sp_r);         /* 6 */
-            motion_stall_check();               /* 7 */
+            motion_state_step(&sense, &sp_l, &sp_r);  /* 5 */
+            motion_control(&sense, sp_l, sp_r);       /* 6 */
+            motion_stall_check(&sense);               /* 7 */
         }
         else
         {
@@ -279,23 +320,26 @@ static void motion_cycle(void)
            can never hide it (D.13). Commands are drained and dropped.  */
         fault_set(APP_FAULT_PIO_LOAD);
         motion_cancel_active();
-        gb_is_pend_valid = false;
+        motion_a_set(PRV_MOT_A_PEND_VALID_POS, PRV_MOT_A_PEND_VALID_BITS, 0u);
         motion_commands();
-        g_state = APP_MOT_BRAKE;
+        motion_set_state(APP_MOT_BRAKE);
         motion_reset_control();
     }
 
     motion_actuate();                           /* 8 */
-    motion_publish();                           /* 9 */
+    motion_publish(&sense);                     /* 9 */
 
     /* Bring-up diagnosis, after the fault bit and the motor command of
-       this cycle (see gb_enc_log_pending).                             */
-    if (gb_enc_log_pending)
+       this cycle (see PRV_MOT_B LOG_PEND).                             */
+    if (0u != motion_b(PRV_MOT_B_LOG_PEND_POS, PRV_MOT_B_LOG_PEND_BITS))
     {
-        gb_enc_log_pending = false;
+        motion_b_set(PRV_MOT_B_LOG_PEND_POS, PRV_MOT_B_LOG_PEND_BITS, 0u);
+        /* casts: wheel is 0..1 and dt is <= 1 000 000, both fit int32_t */
         app_log("ENC impossible: wheel %d (0 = L, 1 = R), %d counts in"
-                " %d us\n", g_enc_log_wheel, g_enc_log_delta,
-                g_enc_log_dt_us);
+                " %d us\n",
+                (int32_t) motion_b(PRV_MOT_B_LOG_WHEEL_POS,
+                                   PRV_MOT_B_LOG_WHEEL_BITS),
+                g_enc_log_delta, (int32_t) g_enc_log_dt_us);
     }
 }
 
@@ -303,10 +347,11 @@ static void motion_cycle(void)
  * motion_sense
  * @brief   Step 2: encoder deltas, tick length, plausibility, speed window,
  *          path and the active command's own progress.
+ * @param   p_sense  receives this cycle's deltas and window speeds
  * @return  none
  * @context motion_task
  */
-static void motion_sense(void)
+static void motion_sense(motion_sense_t * p_sense)
 {
     uint32_t raw_l       = 0u;
     uint32_t raw_r       = 0u;
@@ -315,6 +360,7 @@ static void motion_sense(void)
     uint32_t dt_us       = 0u;
     uint32_t dt_ms       = 0u;
     uint32_t step2       = 0u;
+    uint32_t prog2       = 0u;
     bool     b_is_skewed = false;
 
     /* S2-U26: clock read on both sides of the encoder read */
@@ -325,31 +371,38 @@ static void motion_sense(void)
     dt_us       = now_us - g_prev_us;    /* unsigned: wraps correctly */
     g_prev_us   = now_us;
 
-    motion_sense_wheel(&g_left, raw_l, now_us, &g_prev_l, &g_prev_l_us,
-                       &g_raw0_l, &g_strk_l, b_is_skewed);
-    motion_sense_wheel(&g_right, raw_r, now_us, &g_prev_r, &g_prev_r_us,
-                       &g_raw0_r, &g_strk_r, b_is_skewed);
+    p_sense->delta_l = motion_sense_wheel(MOTION_WHEEL_L, raw_l, now_us,
+                                          b_is_skewed);
+    p_sense->delta_r = motion_sense_wheel(MOTION_WHEEL_R, raw_r, now_us,
+                                          b_is_skewed);
 
     /* (us x 1049) >> 20 = ms, no division; <= 63000 x 1049 < 2^32 */
     dt_ms = (((dt_us > MOTION_DT_US_MAX) ? MOTION_DT_US_MAX : dt_us)
              * MOTION_US_TO_MS_Q20) >> MOTION_US_TO_MS_SHIFT;
 
-    odometry_window_push(&g_window, g_left.delta, g_right.delta, dt_ms);
-    odometry_window_speed(&g_window, &g_left.speed_cpw, &g_right.speed_cpw);
+    odometry_window_push(&g_window, p_sense->delta_l, p_sense->delta_r,
+                         dt_ms);
+    odometry_window_speed(&g_window, &p_sense->speed_l_cpw,
+                          &p_sense->speed_r_cpw);
 
     /* Path: sum of |travel| of both wheels (half counts). Each |delta| is
        capped at 0xFFFF, so the sum fits 32 bits. The path wraps at 2^17
        counts (about 42.5 m): the track has no line end, and readers
        take distances modulo 2^17 (odometry_path_since).                */
-    step2   = g_left.abs_delta + g_right.abs_delta;
+    step2   = motion_abs_capped(p_sense->delta_l)
+              + motion_abs_capped(p_sense->delta_r);
     g_path2 = (g_path2 + step2) & MOTION_PATH2_MASK;
 
     /* Progress of a MOVE or TURN counts from 0 for this command only,
-       never from the wrapping path (review R03).                      */
-    if ((APP_MOT_FOLLOW != g_state) && motion_is_moving(g_state))
+       never from the wrapping path (review R03). It saturates at the
+       top of PROG2, which is at or above every target (SAT).          */
+    if ((APP_MOT_FOLLOW != motion_state())
+        && motion_is_moving(motion_state()))
     {
-        g_prog2 = ((0xFFFFFFFFu - g_prog2) < step2) ? 0xFFFFFFFFu
-                                                    : (g_prog2 + step2);
+        prog2 = motion_c(PRV_MOT_C_PROG2_POS, PRV_MOT_C_PROG2_BITS);
+        prog2 = ((MOTION_PROG2_MAX - prog2) < step2) ? MOTION_PROG2_MAX
+                                                     : (prog2 + step2);
+        motion_c_set(PRV_MOT_C_PROG2_POS, PRV_MOT_C_PROG2_BITS, prog2);
     }
 }
 
@@ -373,84 +426,82 @@ static void motion_sense(void)
  *          SPEC-QUESTION: B2.2.4 step 2 pushes every delta; the spec needs
  *          this rejection rule and the count/time pairing (test S2-U19
  *          proposed).
- * @param   p_wheel   receives this cycle's values
+ * @param   wheel      MOTION_WHEEL_L or MOTION_WHEEL_R
  * @param   raw        raw image read now
  * @param   now_us     time of this read
- * @param   p_prev     last trusted raw image (updated)
- * @param   p_prev_us  time of the last trusted raw image (updated)
- * @param   p_raw0     raw image at the last ZERO (moved on a resync)
- * @param   p_streak   impossible-read streak (updated)
  * @param   b_is_skewed  the task was held up during the read (S2-U26):
  *                     count and time do not match, skip this read
- * @return  none
+ * @return  trusted counts since the last cycle (0 if not trusted)
  * @context motion_task
  */
-static void motion_sense_wheel(motion_wheel_t * p_wheel, uint32_t raw,
-                               uint32_t now_us, uint32_t * p_prev,
-                               uint32_t * p_prev_us, uint32_t * p_raw0,
-                               uint32_t * p_streak, bool b_is_skewed)
+static int32_t motion_sense_wheel(uint32_t wheel, uint32_t raw,
+                                  uint32_t now_us, bool b_is_skewed)
 {
-    uint32_t const dt_us  = now_us - *p_prev_us;  /* since trusted read */
+    uint32_t const strk_pos = (MOTION_WHEEL_L == wheel)
+                              ? PRV_MOT_C_STRK_L_POS : PRV_MOT_C_STRK_R_POS;
+    uint32_t const dt_us  = now_us - g_trust_us[wheel]; /* since trusted */
     uint32_t const dt_cap = (dt_us > MOTION_RATE_DT_MAX_US)
                             ? MOTION_RATE_DT_MAX_US : dt_us;
     /* cast: modular difference of E3 images, reinterpreted as signed */
-    int32_t const  delta  = (int32_t) (raw - *p_prev);
+    int32_t const  delta  = (int32_t) (raw - g_trust_raw[wheel]);
 
     /* Impossible if |delta| / dt > 2 x the physical maximum per tick:
        |delta| x 10000 > 2 x APP_TICK_COUNTS_MAX x dt_us (no division). */
     bool const b_is_impossible =
         ((motion_abs_capped(delta) * MOTION_RATE_SCALE_US)
          > ((2u * APP_TICK_COUNTS_MAX) * dt_cap));
+    uint32_t streak = motion_c(strk_pos, PRV_MOT_C_STRK_L_BITS);
+    int32_t  result = 0;
 
     if (b_is_skewed)
     {
         /* S2-U26: count and timestamp may be up to the hold-up apart.
            Neither trusted nor counted as impossible; the next good read
            measures the movement against the last trusted pair.       */
-        p_wheel->delta = 0;
+        result = 0;
     }
     else if (!b_is_impossible)
     {
-        *p_streak  = 0u;
-        *p_prev    = raw;               /* trusted: accept the movement */
-        *p_prev_us = now_us;
-        p_wheel->delta = delta;
+        streak             = 0u;
+        g_trust_raw[wheel] = raw;       /* trusted: accept the movement */
+        g_trust_us[wheel]  = now_us;
+        result             = delta;
     }
     else
     {
-        if (*p_streak < MOTION_STREAK_MAX)
+        if (streak < MOTION_STREAK_MAX)
         {
-            (*p_streak)++;
+            streak++;
         }
-        p_wheel->delta = 0;             /* untrusted: no movement */
+        result = 0;                     /* untrusted: no movement */
     }
 
-    if (MOTION_ENC_FAULT_STREAK == *p_streak)
+    if (MOTION_ENC_FAULT_STREAK == streak)
     {
         /* Bring-up diagnosis, once per episode (the streak saturates
-           above this value): record now, print after step 9. cast: dt is
-           capped at 1 s, fits int32_t                                  */
-        if (!gb_enc_log_pending)
+           above this value): record now, print after step 9.           */
+        if (0u == motion_b(PRV_MOT_B_LOG_PEND_POS, PRV_MOT_B_LOG_PEND_BITS))
         {
-            gb_enc_log_pending = true;
-            g_enc_log_wheel    = (&g_left == p_wheel) ? 0 : 1;
-            g_enc_log_delta    = delta;
-            g_enc_log_dt_us    = (int32_t) dt_cap;
+            motion_b_set(PRV_MOT_B_LOG_PEND_POS, PRV_MOT_B_LOG_PEND_BITS, 1u);
+            motion_b_set(PRV_MOT_B_LOG_WHEEL_POS, PRV_MOT_B_LOG_WHEEL_BITS,
+                         wheel);
+            g_enc_log_delta = delta;
+            g_enc_log_dt_us = dt_cap;   /* <= 1 s: fits LOG_DT (20 bits) */
         }
     }
 
-    if (*p_streak >= MOTION_ENC_FAULT_STREAK)
+    if (streak >= MOTION_ENC_FAULT_STREAK)
     {
         fault_set(APP_FAULT_ENCODER);   /* again every cycle it lasts */
-        *p_raw0   += raw - *p_prev;     /* resync, jump left out of pos */
-        *p_prev    = raw;
-        *p_prev_us = now_us;
+        g_zero_raw[wheel] += raw - g_trust_raw[wheel]; /* resync: the jump
+                                                          stays out of pos */
+        g_trust_raw[wheel] = raw;
+        g_trust_us[wheel]  = now_us;
     }
 
-    p_wheel->raw       = *p_prev;       /* last trusted image (ZERO) */
-    p_wheel->abs_delta = motion_abs_capped(p_wheel->delta);
-    /* cast: modular difference of E3 images, reinterpreted as signed */
-    p_wheel->pos       = (int32_t) (*p_prev - *p_raw0);
+    motion_c_set(strk_pos, PRV_MOT_C_STRK_L_BITS, streak);
+
+    return result;
 }
 
 /**
@@ -465,29 +516,29 @@ static bool motion_check_safety(void)
 
     if (safety_is_active())
     {
-        if (APP_MOT_ESTOP != g_state)
+        if (APP_MOT_ESTOP != motion_state())
         {
             motion_cancel_active();   /* the latch is kept */
-            g_state = APP_MOT_ESTOP;
+            motion_set_state(APP_MOT_ESTOP);
         }
         b_is_stopped = true;
     }
-    else if (APP_MOT_ESTOP == g_state)
+    else if (APP_MOT_ESTOP == motion_state())
     {
         /* Flags cleared: BRAKE now, so a command sent together with the
            clearing (e.g. a bypass MOVE) starts in step 4 of this cycle. */
-        g_state = APP_MOT_BRAKE;
+        motion_set_state(APP_MOT_BRAKE);
     }
     else
     {
         /* no change */
     }
 
-    gb_is_motor_en = mission_mode_is_set(APP_MODE_MOTOR_EN);
-    if ((!gb_is_motor_en) && motion_is_moving(g_state))
+    if ((!mission_mode_is_set(APP_MODE_MOTOR_EN))
+        && motion_is_moving(motion_state()))
     {
         motion_cancel_active();
-        g_state = APP_MOT_BRAKE;
+        motion_set_state(APP_MOT_BRAKE);
     }
 
     return b_is_stopped;
@@ -518,10 +569,17 @@ static void motion_commands(void)
         }
     }
 
-    if ((APP_MOT_BRAKE == g_state) && gb_is_pend_valid)
+    if ((APP_MOT_BRAKE == motion_state())
+        && (0u != motion_a(PRV_MOT_A_PEND_VALID_POS,
+                           PRV_MOT_A_PEND_VALID_BITS)))
     {
-        gb_is_pend_valid = false;
-        motion_start_cmd(g_pend_type, g_pend_param, g_pend_tag);
+        motion_a_set(PRV_MOT_A_PEND_VALID_POS, PRV_MOT_A_PEND_VALID_BITS, 0u);
+        motion_start_cmd(motion_a(PRV_MOT_A_PEND_TYPE_POS,
+                                  PRV_MOT_A_PEND_TYPE_BITS),
+                         motion_a(PRV_MOT_A_PEND_PARAM_POS,
+                                  PRV_MOT_A_PEND_PARAM_BITS),
+                         motion_a(PRV_MOT_A_PEND_TAG_POS,
+                                  PRV_MOT_A_PEND_TAG_BITS));
     }
 }
 
@@ -541,16 +599,18 @@ static void motion_handle_cmd(uint32_t type, uint32_t param, uint32_t tag)
     {
         case APP_CMD_STOP:
             motion_cancel_active();
-            gb_is_pend_valid = false;
+            motion_a_set(PRV_MOT_A_PEND_VALID_POS, PRV_MOT_A_PEND_VALID_BITS,
+                         0u);
             motion_reset_control();
-            if (APP_MOT_ESTOP != g_state)
+            if (APP_MOT_ESTOP != motion_state())
             {
-                g_state = APP_MOT_BRAKE;  /* ESTOP stays until flags clear */
+                /* ESTOP stays until the flags clear */
+                motion_set_state(APP_MOT_BRAKE);
             }
             break;
 
         case APP_CMD_ZERO:
-            if (APP_MOT_BRAKE == g_state)
+            if (APP_MOT_BRAKE == motion_state())
             {
                 motion_zero(tag);
             }
@@ -561,11 +621,12 @@ static void motion_handle_cmd(uint32_t type, uint32_t param, uint32_t tag)
             break;
 
         case APP_CMD_FOLLOW:
-            if (APP_MOT_FOLLOW == g_state)
+            if (APP_MOT_FOLLOW == motion_state())
             {
                 /* Speed change only, no stop. cast: param <= 300 */
-                g_base_cpw = odometry_mm_s_to_cpw((int32_t) param);
-                g_act_tag  = tag;
+                motion_set_base_cpw(odometry_mm_s_to_cpw((int32_t) param));
+                motion_a_set(PRV_MOT_A_ACT_TAG_POS, PRV_MOT_A_ACT_TAG_BITS,
+                             tag);
             }
             else
             {
@@ -599,16 +660,20 @@ static void motion_handle_cmd(uint32_t type, uint32_t param, uint32_t tag)
 static void motion_start_or_latch(uint32_t type, uint32_t param,
                                   uint32_t tag)
 {
-    if ((APP_MOT_BRAKE == g_state) || (APP_MOT_STALLED == g_state))
+    if ((APP_MOT_BRAKE == motion_state())
+        || (APP_MOT_STALLED == motion_state()))
     {
         motion_start_cmd(type, param, tag);
     }
     else
     {
-        gb_is_pend_valid = true;
-        g_pend_type      = type;
-        g_pend_param     = param;
-        g_pend_tag       = tag;
+        /* type, tag and param come from one K5 word (MSG_CMD), whose
+           fields have the widths of the latch fields.                 */
+        motion_a_set(PRV_MOT_A_PEND_VALID_POS, PRV_MOT_A_PEND_VALID_BITS, 1u);
+        motion_a_set(PRV_MOT_A_PEND_TYPE_POS, PRV_MOT_A_PEND_TYPE_BITS, type);
+        motion_a_set(PRV_MOT_A_PEND_PARAM_POS, PRV_MOT_A_PEND_PARAM_BITS,
+                     param);
+        motion_a_set(PRV_MOT_A_PEND_TAG_POS, PRV_MOT_A_PEND_TAG_BITS, tag);
     }
 }
 
@@ -630,29 +695,29 @@ static void motion_start_or_latch(uint32_t type, uint32_t param,
  */
 static void motion_start_cmd(uint32_t type, uint32_t param, uint32_t tag)
 {
-    gb_is_motor_en = mission_mode_is_set(APP_MODE_MOTOR_EN);
+    bool const b_is_motor_en = mission_mode_is_set(APP_MODE_MOTOR_EN);
 
     /* casts below: param <= 2047 (validated), fits int32_t */
     if (APP_CMD_ZERO == type)
     {
-        g_state = APP_MOT_BRAKE;
+        motion_set_state(APP_MOT_BRAKE);
         motion_zero(tag);
     }
-    else if (!gb_is_motor_en)
+    else if (!b_is_motor_en)
     {
         /* Dropped: motors are not allowed to drive (FR17). */
     }
     else if (APP_CMD_FOLLOW == type)
     {
         motion_reset_control();
-        g_act_type = type;
-        g_act_tag  = tag;
-        g_base_cpw = odometry_mm_s_to_cpw((int32_t) param);
-        g_state    = APP_MOT_FOLLOW;
+        motion_a_set(PRV_MOT_A_ACT_TYPE_POS, PRV_MOT_A_ACT_TYPE_BITS, type);
+        motion_a_set(PRV_MOT_A_ACT_TAG_POS, PRV_MOT_A_ACT_TAG_BITS, tag);
+        motion_set_base_cpw(odometry_mm_s_to_cpw((int32_t) param));
+        motion_set_state(APP_MOT_FOLLOW);
     }
     else if ((APP_CMD_FWD == type) || (APP_CMD_BACK == type))
     {
-        g_act_type = type;
+        motion_a_set(PRV_MOT_A_ACT_TYPE_POS, PRV_MOT_A_ACT_TYPE_BITS, type);
         motion_start_move((APP_CMD_FWD == type) ? APP_MOT_MOVE_FWD
                                                 : APP_MOT_MOVE_BACK,
                           (APP_CMD_FWD == type)
@@ -662,7 +727,7 @@ static void motion_start_cmd(uint32_t type, uint32_t param, uint32_t tag)
     }
     else if ((APP_CMD_LEFT == type) || (APP_CMD_RIGHT == type))
     {
-        g_act_type = type;
+        motion_a_set(PRV_MOT_A_ACT_TYPE_POS, PRV_MOT_A_ACT_TYPE_BITS, type);
         motion_start_move((APP_CMD_LEFT == type) ? APP_MOT_TURN_L
                                                  : APP_MOT_TURN_R,
                           odometry_mm_s_to_cpw(MOTION_TURN_SPEED_MM_S),
@@ -689,26 +754,43 @@ static void motion_start_move(uint32_t state, int32_t base_cpw,
 {
     int32_t const creep = odometry_mm_s_to_cpw(MOTION_CREEP_MM_S);
     int32_t const mag   = (base_cpw < 0) ? -base_cpw : base_cpw;
+    bool          b_was_clamped = false;
+    uint32_t const target = app_bits_clamp_u(target2,
+                                             (uint32_t) PRV_MOT_C_TARGET2_MAX,
+                                             &b_was_clamped);
+
+    if (b_was_clamped)
+    {
+        /* Cannot happen for a validated command: 2047 mm and 360 deg
+           are both below the top of TARGET2 (RNG, S2-U32).            */
+        fault_set(APP_FAULT_RANGE_CLAMP);
+    }
 
     motion_reset_control();
-    g_act_tag    = tag;
-    g_base_cpw   = base_cpw;
-    g_target2    = target2;
-    g_prog2      = 0u;
-    g_diff_start = g_left.pos - g_right.pos;
-    g_state      = state;
+    motion_a_set(PRV_MOT_A_ACT_TAG_POS, PRV_MOT_A_ACT_TAG_BITS, tag);
+    motion_set_base_cpw(base_cpw);
+    motion_c_set(PRV_MOT_C_TARGET2_POS, PRV_MOT_C_TARGET2_BITS, target);
+    motion_c_set(PRV_MOT_C_PROG2_POS, PRV_MOT_C_PROG2_BITS, 0u);
+    /* casts: the signed difference is stored modulo 2^16; converting a
+       negative int32_t to uint32_t is defined (modular), and the masked
+       value fits uint16_t. motion_state_move() takes the drift modulo
+       2^16 as well, which is exact while |drift| < 32768 counts; one
+       MOVE covers at most 2047 mm (6318 counts).                       */
+    g_diff_start = (uint16_t) (((uint32_t) (motion_pos(MOTION_WHEEL_L)
+                                            - motion_pos(MOTION_WHEEL_R)))
+                               & MOTION_DIFF_MASK);
+    motion_set_state(state);
 
     /* Creep never faster than the command itself; same sign as base. */
     if (creep >= mag)
     {
-        g_creep_cpw = base_cpw;
+        motion_set_creep_cpw(base_cpw);
     }
     else
     {
-        g_creep_cpw = (base_cpw < 0) ? -creep : creep;
+        motion_set_creep_cpw((base_cpw < 0) ? -creep : creep);
     }
-    g_creep_zone2 = 2u * odometry_mm_to_counts(MOTION_CREEP_ZONE_MM);
-    g_creep_still = 0u;
+    motion_a_set(PRV_MOT_A_CREEP_STILL_POS, PRV_MOT_A_CREEP_STILL_BITS, 0u);
 }
 
 /**
@@ -721,12 +803,12 @@ static void motion_start_move(uint32_t state, int32_t base_cpw,
  */
 static void motion_zero(uint32_t tag)
 {
-    g_raw0_l     = g_left.raw;
-    g_raw0_r     = g_right.raw;
-    g_left.pos   = 0;
-    g_right.pos  = 0;
+    /* The last trusted images become the base, so both positions read
+       0 from here on.                                                  */
+    g_zero_raw[MOTION_WHEEL_L] = g_trust_raw[MOTION_WHEEL_L];
+    g_zero_raw[MOTION_WHEEL_R] = g_trust_raw[MOTION_WHEEL_R];
     g_path2      = 0u;
-    g_diff_start = 0;
+    g_diff_start = 0u;
 
     /* Full K4 is counted by mission as APP_FAULT_QUEUE_OVERFLOW. */
     (void) mission_post_event(APP_EVT_MOVE_DONE, tag);
@@ -740,26 +822,29 @@ static void motion_zero(uint32_t tag)
  */
 static void motion_cancel_active(void)
 {
-    g_act_type = APP_CMD_STOP;
-    g_base_cpw = 0;
-    g_target2  = 0u;
-    g_prog2    = 0u;
+    motion_a_set(PRV_MOT_A_ACT_TYPE_POS, PRV_MOT_A_ACT_TYPE_BITS,
+                 APP_CMD_STOP);
+    motion_set_base_cpw(0);
+    motion_c_set(PRV_MOT_C_TARGET2_POS, PRV_MOT_C_TARGET2_BITS, 0u);
+    motion_c_set(PRV_MOT_C_PROG2_POS, PRV_MOT_C_PROG2_BITS, 0u);
 }
 
 /**
  * motion_state_step
  * @brief   Step 5: set-points of the current state (one handler each).
- * @param   p_sp_l  receives the left set-point, cpw
- * @param   p_sp_r  receives the right set-point, cpw
+ * @param   p_sense  this cycle's sensed values
+ * @param   p_sp_l   receives the left set-point, cpw
+ * @param   p_sp_r   receives the right set-point, cpw
  * @return  none
  * @context motion_task
  */
-static void motion_state_step(int32_t * p_sp_l, int32_t * p_sp_r)
+static void motion_state_step(motion_sense_t const * p_sense,
+                              int32_t * p_sp_l, int32_t * p_sp_r)
 {
     *p_sp_l = 0;
     *p_sp_r = 0;
 
-    switch (g_state)
+    switch (motion_state())
     {
         case APP_MOT_BRAKE:
         case APP_MOT_STALLED:
@@ -772,12 +857,12 @@ static void motion_state_step(int32_t * p_sp_l, int32_t * p_sp_r)
 
         case APP_MOT_MOVE_FWD:
         case APP_MOT_MOVE_BACK:
-            motion_state_move(p_sp_l, p_sp_r);
+            motion_state_move(p_sense, p_sp_l, p_sp_r);
             break;
 
         case APP_MOT_TURN_L:
         case APP_MOT_TURN_R:
-            motion_state_turn(p_sp_l, p_sp_r);
+            motion_state_turn(p_sense, p_sp_l, p_sp_r);
             break;
 
         case APP_MOT_ESTOP:
@@ -786,7 +871,7 @@ static void motion_state_step(int32_t * p_sp_l, int32_t * p_sp_r)
 
         default:
             motion_cancel_active();     /* corrupted state: stop safely */
-            g_state = APP_MOT_ESTOP;
+            motion_set_state(APP_MOT_ESTOP);
             break;
     }
 }
@@ -820,7 +905,7 @@ static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r)
     cut  = (int32_t) ((motion_abs_capped(steer) * MOTION_CURVE_SLOW_Q10)
                       >> 10);
     /* Signed division by 256: shift with sign fix-up, no library call. */
-    base = (g_base_cpw * (MOTION_Q8_ONE - cut)) / MOTION_Q8_ONE;
+    base = (motion_base_cpw() * (MOTION_Q8_ONE - cut)) / MOTION_Q8_ONE;
     diff = motion_follow_split(steer);
     diff_max = (2 * base) / 3;
     if (diff > diff_max)
@@ -857,14 +942,15 @@ static void motion_state_follow(int32_t * p_sp_l, int32_t * p_sp_r)
 static int32_t motion_follow_split(int32_t steer)
 {
     int32_t const slow = odometry_mm_s_to_cpw(MOTION_SLOW_MM_S);
+    int32_t const base = motion_base_cpw();
     /* Signed division by 256 truncates toward zero, as before. */
     int32_t const full = (steer * MOTION_KP_STEER_Q8) / MOTION_Q8_ONE;
     int32_t       out  = full;
 
-    if ((g_base_cpw > 0) && (g_base_cpw < slow))
+    if ((base > 0) && (base < slow))
     {
         /* |full| <= 7 cpw and base < slow: the product is small. */
-        int32_t const prod = full * g_base_cpw;
+        int32_t const prod = full * base;
         int32_t const half = slow / 2;
 
         out = (prod >= 0) ? ((prod + half) / slow)
@@ -882,39 +968,51 @@ static int32_t motion_follow_split(int32_t steer)
  * motion_state_move
  * @brief   MOVE_FWD / MOVE_BACK: straight line, wheel difference held at
  *          its start value. Completion caps the distance (NFR16).
- * @param   p_sp_l  receives the left set-point, cpw
- * @param   p_sp_r  receives the right set-point, cpw
+ * @param   p_sense  this cycle's sensed values
+ * @param   p_sp_l   receives the left set-point, cpw
+ * @param   p_sp_r   receives the right set-point, cpw
  * @return  none
  * @context motion_task
  */
-static void motion_state_move(int32_t * p_sp_l, int32_t * p_sp_r)
+static void motion_state_move(motion_sense_t const * p_sense,
+                              int32_t * p_sp_l, int32_t * p_sp_r)
 {
-    int32_t const drift = (g_left.pos - g_right.pos) - g_diff_start;
+    /* Drift = (pos_l - pos_r) - start difference, taken modulo 2^16 and
+       read as a signed 16-bit value (see motion_start_move). casts:
+       int32_t to uint32_t is modular; d16 < 65536 fits int32_t.        */
+    uint32_t const d16 = (((uint32_t) (motion_pos(MOTION_WHEEL_L)
+                                       - motion_pos(MOTION_WHEEL_R)))
+                          - g_diff_start) & MOTION_DIFF_MASK;
+    int32_t const drift = (d16 >= MOTION_DIFF_SIGN)
+                          ? (((int32_t) d16) - ((int32_t) MOTION_DIFF_MASK) - 1)
+                          : ((int32_t) d16);
 
     /* Signed division by 256: shift with sign fix-up, no library call.
-       |drift| <= 262142 here (A23), x 64 < 2^31.                       */
+       |drift| < 32768 here, x 64 < 2^31.                               */
     int32_t const corr = (drift * MOTION_K_HEADING_Q8) / MOTION_Q8_ONE;
     int32_t const base = motion_move_base();
 
     *p_sp_l = base - corr;
     *p_sp_r = base + corr;
 
-    motion_finish_if_done();
+    motion_finish_if_done(p_sense);
 }
 
 /**
  * motion_state_turn
  * @brief   TURN_L / TURN_R: wheels in opposite directions.
- * @param   p_sp_l  receives the left set-point, cpw
- * @param   p_sp_r  receives the right set-point, cpw
+ * @param   p_sense  this cycle's sensed values
+ * @param   p_sp_l   receives the left set-point, cpw
+ * @param   p_sp_r   receives the right set-point, cpw
  * @return  none
  * @context motion_task
  */
-static void motion_state_turn(int32_t * p_sp_l, int32_t * p_sp_r)
+static void motion_state_turn(motion_sense_t const * p_sense,
+                              int32_t * p_sp_l, int32_t * p_sp_r)
 {
     int32_t const base = motion_move_base();
 
-    if (APP_MOT_TURN_L == g_state)
+    if (APP_MOT_TURN_L == motion_state())
     {
         *p_sp_l = -base;
         *p_sp_r = base;
@@ -925,7 +1023,7 @@ static void motion_state_turn(int32_t * p_sp_l, int32_t * p_sp_r)
         *p_sp_r = -base;
     }
 
-    motion_finish_if_done();
+    motion_finish_if_done(p_sense);
 }
 
 /**
@@ -933,27 +1031,40 @@ static void motion_state_turn(int32_t * p_sp_l, int32_t * p_sp_r)
  * @brief   A MOVE or TURN whose own progress reached its target, or that
  *          stood still for MOTION_CREEP_STUCK_TICKS in the creep zone
  *          after moving: brake, BRAKE, MOVE_DONE with the command's tag.
+ * @param   p_sense  this cycle's sensed values
  * @return  none
  * @context motion_task
  */
-static void motion_finish_if_done(void)
+static void motion_finish_if_done(motion_sense_t const * p_sense)
 {
-    if ((g_prog2 > 0u) && motion_in_creep_zone()
-        && (0 == g_left.delta) && (0 == g_right.delta))
+    uint32_t const prog2   = motion_c(PRV_MOT_C_PROG2_POS,
+                                      PRV_MOT_C_PROG2_BITS);
+    uint32_t const target2 = motion_c(PRV_MOT_C_TARGET2_POS,
+                                      PRV_MOT_C_TARGET2_BITS);
+    uint32_t       still   = motion_a(PRV_MOT_A_CREEP_STILL_POS,
+                                      PRV_MOT_A_CREEP_STILL_BITS);
+
+    if ((prog2 > 0u) && motion_in_creep_zone()
+        && (0 == p_sense->delta_l) && (0 == p_sense->delta_r))
     {
-        g_creep_still++;
+        /* SAT: the MOVE ends below when the limit is reached */
+        still = (still < (uint32_t) PRV_MOT_A_CREEP_STILL_MAX)
+                ? (still + 1u) : still;
     }
     else
     {
-        g_creep_still = 0u;
+        still = 0u;
     }
+    motion_a_set(PRV_MOT_A_CREEP_STILL_POS, PRV_MOT_A_CREEP_STILL_BITS,
+                 still);
 
-    if ((g_prog2 >= g_target2) || (g_creep_still >= MOTION_CREEP_STUCK_TICKS))
+    if ((prog2 >= target2) || (still >= MOTION_CREEP_STUCK_TICKS))
     {
-        uint32_t const tag = g_act_tag;
+        uint32_t const tag = motion_a(PRV_MOT_A_ACT_TAG_POS,
+                                      PRV_MOT_A_ACT_TAG_BITS);
 
         motion_cancel_active();
-        g_state = APP_MOT_BRAKE;
+        motion_set_state(APP_MOT_BRAKE);
         (void) mission_post_event(APP_EVT_MOVE_DONE, tag); /* see zero */
     }
 }
@@ -967,7 +1078,12 @@ static void motion_finish_if_done(void)
  */
 static bool motion_in_creep_zone(void)
 {
-    return ((g_target2 > g_prog2) && ((g_target2 - g_prog2) <= g_creep_zone2));
+    uint32_t const prog2   = motion_c(PRV_MOT_C_PROG2_POS,
+                                      PRV_MOT_C_PROG2_BITS);
+    uint32_t const target2 = motion_c(PRV_MOT_C_TARGET2_POS,
+                                      PRV_MOT_C_TARGET2_BITS);
+
+    return ((target2 > prog2) && ((target2 - prog2) <= MOTION_CREEP_ZONE2));
 }
 
 /**
@@ -979,11 +1095,11 @@ static bool motion_in_creep_zone(void)
  */
 static int32_t motion_move_base(void)
 {
-    int32_t base = g_base_cpw;
+    int32_t base = motion_base_cpw();
 
     if (motion_in_creep_zone())
     {
-        base = g_creep_cpw;
+        base = motion_creep_cpw();
     }
     else
     {
@@ -996,19 +1112,19 @@ static int32_t motion_move_base(void)
 /**
  * motion_control
  * @brief   Step 6: PI speed loop in a moving state; otherwise duty 0.
- * @param   sp_l  left set-point, cpw
- * @param   sp_r  right set-point, cpw
+ * @param   p_sense  this cycle's sensed values
+ * @param   sp_l     left set-point, cpw
+ * @param   sp_r     right set-point, cpw
  * @return  none
  * @context motion_task
  */
-static void motion_control(int32_t sp_l, int32_t sp_r)
+static void motion_control(motion_sense_t const * p_sense, int32_t sp_l,
+                           int32_t sp_r)
 {
-    if (motion_is_moving(g_state))
+    if (motion_is_moving(motion_state()))
     {
-        g_duty_l = speed_pid_step(&g_pid_l, sp_l, g_left.speed_cpw,
-                                  g_duty_l);
-        g_duty_r = speed_pid_step(&g_pid_r, sp_r, g_right.speed_cpw,
-                                  g_duty_r);
+        motion_pi_step(MOTION_WHEEL_L, sp_l, p_sense->speed_l_cpw);
+        motion_pi_step(MOTION_WHEEL_R, sp_r, p_sense->speed_r_cpw);
     }
     else
     {
@@ -1017,41 +1133,97 @@ static void motion_control(int32_t sp_l, int32_t sp_r)
 }
 
 /**
+ * motion_pi_step
+ * @brief   One PI step of one wheel: unpacks the integrator and the last
+ *          duty from PRV_MOT_PI, runs speed_pid_step(), packs both again.
+ *          speed_pid_step() keeps the integrator within +-MOTION_I_CLAMP
+ *          and the duty within +-1000, so neither store clamps (RNG: a
+ *          clamp would set RANGE_CLAMP).
+ * @param   wheel         MOTION_WHEEL_L or MOTION_WHEEL_R
+ * @param   setpoint_cpw  wanted speed, cpw
+ * @param   speed_cpw     measured speed, cpw
+ * @return  none
+ * @context motion_task
+ */
+static void motion_pi_step(uint32_t wheel, int32_t setpoint_cpw,
+                           int32_t speed_cpw)
+{
+    speed_pid_t pid  = {0};
+    int32_t     duty = 0;
+    uint32_t    word = g_pi[wheel];
+    bool        b_integ_clamped = false;
+    bool        b_duty_clamped  = false;
+
+    pid.integ = app_bits_decode(app_bits_get(word, PRV_MOT_PI_INTEG_POS,
+                                             PRV_MOT_PI_INTEG_BITS),
+                                PRV_MOT_PI_INTEG_OFFSET);
+    duty = speed_pid_step(&pid, setpoint_cpw, speed_cpw, motion_duty(wheel));
+
+    word = app_bits_put(word, PRV_MOT_PI_INTEG_POS, PRV_MOT_PI_INTEG_BITS,
+                        app_bits_encode(pid.integ, PRV_MOT_PI_INTEG_MIN,
+                                        PRV_MOT_PI_INTEG_MAX,
+                                        PRV_MOT_PI_INTEG_OFFSET,
+                                        &b_integ_clamped));
+    word = app_bits_put(word, PRV_MOT_PI_DUTY_POS, PRV_MOT_PI_DUTY_BITS,
+                        app_bits_encode(duty, PRV_MOT_PI_DUTY_MIN,
+                                        PRV_MOT_PI_DUTY_MAX,
+                                        PRV_MOT_PI_DUTY_OFFSET,
+                                        &b_duty_clamped));
+    g_pi[wheel] = word;
+
+    if (b_integ_clamped || b_duty_clamped)
+    {
+        fault_set(APP_FAULT_RANGE_CLAMP);
+    }
+}
+
+/**
  * motion_stall_check
  * @brief   Step 7: a wheel driven with >= STALL_DUTY_MIN that has not
  *          moved for MOTION_STALL_TICKS cycles -> brake, STALLED, fault
  *          bit first, then the STALL event with the wheel bits.
+ * @param   p_sense  this cycle's sensed values
  * @return  none
  * @context motion_task
  */
-static void motion_stall_check(void)
+static void motion_stall_check(motion_sense_t const * p_sense)
 {
-    uint32_t bits = 0u;
+    uint32_t bits    = 0u;
+    uint32_t stall_l = 0u;
+    uint32_t stall_r = 0u;
 
-    if (motion_is_moving(g_state))
+    if (motion_is_moving(motion_state()))
     {
-        g_stall_l = motion_stall_count(g_stall_l, g_duty_l, g_left.delta);
-        g_stall_r = motion_stall_count(g_stall_r, g_duty_r, g_right.delta);
+        stall_l = motion_stall_count(motion_b(PRV_MOT_B_STALL_L_POS,
+                                              PRV_MOT_B_STALL_L_BITS),
+                                     motion_duty(MOTION_WHEEL_L),
+                                     p_sense->delta_l);
+        stall_r = motion_stall_count(motion_b(PRV_MOT_B_STALL_R_POS,
+                                              PRV_MOT_B_STALL_R_BITS),
+                                     motion_duty(MOTION_WHEEL_R),
+                                     p_sense->delta_r);
     }
     else
     {
-        g_stall_l = 0u;
-        g_stall_r = 0u;
+        /* not driven: both counters 0 */
     }
 
-    bits = ((g_stall_l >= MOTION_STALL_TICKS) ? APP_STALL_LEFT : 0u)
-           | ((g_stall_r >= MOTION_STALL_TICKS) ? APP_STALL_RIGHT : 0u);
+    bits = ((stall_l >= MOTION_STALL_TICKS) ? APP_STALL_LEFT : 0u)
+           | ((stall_r >= MOTION_STALL_TICKS) ? APP_STALL_RIGHT : 0u);
 
     if (0u != bits)
     {
         motion_cancel_active();
         motion_reset_control();
-        g_state = APP_MOT_STALLED;
+        motion_set_state(APP_MOT_STALLED);
         fault_set(APP_FAULT_MOTOR_STALL);
         (void) mission_post_event(APP_EVT_STALL, bits); /* see zero */
-        g_stall_l = 0u;
-        g_stall_r = 0u;
+        stall_l = 0u;
+        stall_r = 0u;
     }
+
+    motion_b_set(PRV_MOT_B_STALL_L_POS, PRV_MOT_B_STALL_L_BITS, stall_l);
+    motion_b_set(PRV_MOT_B_STALL_R_POS, PRV_MOT_B_STALL_R_BITS, stall_r);
 }
 
 /**
@@ -1086,9 +1258,11 @@ static uint32_t motion_stall_count(uint32_t count, int32_t duty,
  */
 static void motion_actuate(void)
 {
-    if (gb_is_enc_ok && motion_is_moving(g_state))
+    if ((0u != motion_a(PRV_MOT_A_ENC_OK_POS, PRV_MOT_A_ENC_OK_BITS))
+        && motion_is_moving(motion_state()))
     {
-        drv_motor_set(g_duty_l, g_duty_r);
+        drv_motor_set(motion_duty(MOTION_WHEEL_L),
+                      motion_duty(MOTION_WHEEL_R));
     }
     else
     {
@@ -1100,18 +1274,19 @@ static void motion_actuate(void)
  * motion_publish
  * @brief   Step 9: motion part of the status board (natural units; the
  *          board clamps and converts).
+ * @param   p_sense  this cycle's sensed values
  * @return  none
  * @context motion_task
  */
-static void motion_publish(void)
+static void motion_publish(motion_sense_t const * p_sense)
 {
     status_board_motion_t part = {0, 0, 0u, 0, 0, 0u};
 
-    part.speed_l_cpw  = g_left.speed_cpw;
-    part.speed_r_cpw  = g_right.speed_cpw;
-    part.motion_state = g_state;
-    part.pos_l_counts = g_left.pos;
-    part.pos_r_counts = g_right.pos;
+    part.speed_l_cpw  = p_sense->speed_l_cpw;
+    part.speed_r_cpw  = p_sense->speed_r_cpw;
+    part.motion_state = motion_state();
+    part.pos_l_counts = motion_pos(MOTION_WHEEL_L);
+    part.pos_r_counts = motion_pos(MOTION_WHEEL_R);
     part.path_counts  = g_path2 >> MOTION_HALF_SHIFT;  /* path2 / 2 */
 
     status_board_write_motion(&part);
@@ -1139,10 +1314,8 @@ static bool motion_is_moving(uint32_t state)
  */
 static void motion_reset_control(void)
 {
-    speed_pid_reset(&g_pid_l);
-    speed_pid_reset(&g_pid_r);
-    g_duty_l = 0;
-    g_duty_r = 0;
+    g_pi[MOTION_WHEEL_L] = MOTION_PI_RESET;
+    g_pi[MOTION_WHEEL_R] = MOTION_PI_RESET;
 }
 
 /**
@@ -1160,6 +1333,211 @@ static uint32_t motion_abs_capped(int32_t value)
                                      : (uint32_t) value;
 
     return ((mag > MOTION_DELTA_ABS_MAX) ? MOTION_DELTA_ABS_MAX : mag);
+}
+
+/**
+ * motion_a
+ * @brief   Reads one field of PRV_MOT_A.
+ * @param   pos    field position (layout _POS macro)
+ * @param   width  field width (layout _BITS macro)
+ * @return  the stored value
+ * @context motion_task
+ */
+static uint32_t motion_a(uint32_t pos, uint32_t width)
+{
+    return app_bits_get(g_mot_a, pos, width);
+}
+
+/**
+ * motion_a_set
+ * @brief   Writes one field of PRV_MOT_A.
+ * @param   pos    field position (layout _POS macro)
+ * @param   width  field width (layout _BITS macro)
+ * @param   value  value within the field's range
+ * @return  none
+ * @context motion_task
+ */
+static void motion_a_set(uint32_t pos, uint32_t width, uint32_t value)
+{
+    g_mot_a = app_bits_put(g_mot_a, pos, width, value);
+}
+
+/**
+ * motion_b
+ * @brief   Reads one field of PRV_MOT_B.
+ * @param   pos    field position (layout _POS macro)
+ * @param   width  field width (layout _BITS macro)
+ * @return  the stored value
+ * @context motion_task
+ */
+static uint32_t motion_b(uint32_t pos, uint32_t width)
+{
+    return app_bits_get(g_mot_b, pos, width);
+}
+
+/**
+ * motion_b_set
+ * @brief   Writes one field of PRV_MOT_B.
+ * @param   pos    field position (layout _POS macro)
+ * @param   width  field width (layout _BITS macro)
+ * @param   value  value within the field's range
+ * @return  none
+ * @context motion_task
+ */
+static void motion_b_set(uint32_t pos, uint32_t width, uint32_t value)
+{
+    g_mot_b = app_bits_put(g_mot_b, pos, width, value);
+}
+
+/**
+ * motion_c
+ * @brief   Reads one field of PRV_MOT_C.
+ * @param   pos    field position (layout _POS macro)
+ * @param   width  field width (layout _BITS macro)
+ * @return  the stored value
+ * @context motion_task
+ */
+static uint32_t motion_c(uint32_t pos, uint32_t width)
+{
+    return app_bits_get(g_mot_c, pos, width);
+}
+
+/**
+ * motion_c_set
+ * @brief   Writes one field of PRV_MOT_C.
+ * @param   pos    field position (layout _POS macro)
+ * @param   width  field width (layout _BITS macro)
+ * @param   value  value within the field's range
+ * @return  none
+ * @context motion_task
+ */
+static void motion_c_set(uint32_t pos, uint32_t width, uint32_t value)
+{
+    g_mot_c = app_bits_put(g_mot_c, pos, width, value);
+}
+
+/**
+ * motion_state
+ * @brief   The executor state (PRV_MOT_A STATE).
+ * @return  APP_MOT_*
+ * @context motion_task
+ */
+static uint32_t motion_state(void)
+{
+    return motion_a(PRV_MOT_A_STATE_POS, PRV_MOT_A_STATE_BITS);
+}
+
+/**
+ * motion_set_state
+ * @brief   Sets the executor state (PRV_MOT_A STATE).
+ * @param   state  APP_MOT_*
+ * @return  none
+ * @context motion_task
+ */
+static void motion_set_state(uint32_t state)
+{
+    motion_a_set(PRV_MOT_A_STATE_POS, PRV_MOT_A_STATE_BITS, state);
+}
+
+/**
+ * motion_base_cpw
+ * @brief   Base set-point of the active command (PRV_MOT_B BASE_CPW).
+ * @return  cpw, negative for MOVE_BACK
+ * @context motion_task
+ */
+static int32_t motion_base_cpw(void)
+{
+    return app_bits_decode(motion_b(PRV_MOT_B_BASE_CPW_POS,
+                                    PRV_MOT_B_BASE_CPW_BITS),
+                           PRV_MOT_B_BASE_CPW_OFFSET);
+}
+
+/**
+ * motion_set_base_cpw
+ * @brief   Stores the base set-point. RNG: the largest validated command
+ *          (FOLLOW 300 mm/s) is 46 cpw; a clamp sets RANGE_CLAMP.
+ * @param   base_cpw  cpw, negative for MOVE_BACK
+ * @return  none
+ * @context motion_task
+ */
+static void motion_set_base_cpw(int32_t base_cpw)
+{
+    bool b_was_clamped = false;
+
+    motion_b_set(PRV_MOT_B_BASE_CPW_POS, PRV_MOT_B_BASE_CPW_BITS,
+                 app_bits_encode(base_cpw, PRV_MOT_B_BASE_CPW_MIN,
+                                 PRV_MOT_B_BASE_CPW_MAX,
+                                 PRV_MOT_B_BASE_CPW_OFFSET, &b_was_clamped));
+    if (b_was_clamped)
+    {
+        fault_set(APP_FAULT_RANGE_CLAMP);
+    }
+}
+
+/**
+ * motion_creep_cpw
+ * @brief   Creep set-point of the active MOVE or TURN (PRV_MOT_B
+ *          CREEP_CPW).
+ * @return  cpw, with the sign of the base set-point
+ * @context motion_task
+ */
+static int32_t motion_creep_cpw(void)
+{
+    return app_bits_decode(motion_b(PRV_MOT_B_CREEP_CPW_POS,
+                                    PRV_MOT_B_CREEP_CPW_BITS),
+                           PRV_MOT_B_CREEP_CPW_OFFSET);
+}
+
+/**
+ * motion_set_creep_cpw
+ * @brief   Stores the creep set-point. RNG: at most MOTION_CREEP_MM_S
+ *          (80 mm/s = 12 cpw); a clamp sets RANGE_CLAMP.
+ * @param   creep_cpw  cpw, with the sign of the base set-point
+ * @return  none
+ * @context motion_task
+ */
+static void motion_set_creep_cpw(int32_t creep_cpw)
+{
+    bool b_was_clamped = false;
+
+    motion_b_set(PRV_MOT_B_CREEP_CPW_POS, PRV_MOT_B_CREEP_CPW_BITS,
+                 app_bits_encode(creep_cpw, PRV_MOT_B_CREEP_CPW_MIN,
+                                 PRV_MOT_B_CREEP_CPW_MAX,
+                                 PRV_MOT_B_CREEP_CPW_OFFSET, &b_was_clamped));
+    if (b_was_clamped)
+    {
+        fault_set(APP_FAULT_RANGE_CLAMP);
+    }
+}
+
+/**
+ * motion_duty
+ * @brief   Duty applied to one wheel in the last control step (PRV_MOT_PI
+ *          DUTY).
+ * @param   wheel  MOTION_WHEEL_L or MOTION_WHEEL_R
+ * @return  permille, -1000..+1000
+ * @context motion_task
+ */
+static int32_t motion_duty(uint32_t wheel)
+{
+    return app_bits_decode(app_bits_get(g_pi[wheel], PRV_MOT_PI_DUTY_POS,
+                                        PRV_MOT_PI_DUTY_BITS),
+                           PRV_MOT_PI_DUTY_OFFSET);
+}
+
+/**
+ * motion_pos
+ * @brief   Position of one wheel: counts since the last ZERO, from the
+ *          last trusted image (modular, so it needs no storage of its
+ *          own).
+ * @param   wheel  MOTION_WHEEL_L or MOTION_WHEEL_R
+ * @return  counts (+ = forward)
+ * @context motion_task
+ */
+static int32_t motion_pos(uint32_t wheel)
+{
+    /* cast: modular difference of E3 images, reinterpreted as signed */
+    return (int32_t) (g_trust_raw[wheel] - g_zero_raw[wheel]);
 }
 
 /*** end of file ***/

@@ -134,9 +134,11 @@ int main(void)
     odometry_window_reset(&win);
     odometry_window_push(&win, 63, -63, 10u);
     odometry_window_push(&win, 64, -64, 10u);
-    HOST_CHECK("S2-U11", (63 == win.delta_l[0]) && (-63 == win.delta_r[0]),
-               "deltas +-63 stored unchanged");
-    HOST_CHECK("S2-U11", (63 == win.delta_l[1]) && (-63 == win.delta_r[1]),
+    HOST_CHECK("S2-U32", 16u == sizeof(win),
+               "speed window is packed: 16 bytes (was 64)");
+    HOST_CHECK("S2-U11", (127u == win.delta_l[0]) && (1u == win.delta_r[0]),
+               "deltas +-63 stored unchanged (as delta + 64)");
+    HOST_CHECK("S2-U11", (127u == win.delta_l[1]) && (1u == win.delta_r[1]),
                "deltas +-64 clamped to +-63");
 
     odometry_window_reset(&win);

@@ -1,8 +1,8 @@
 /**
  * @file    test_motion_task_host.c
  * @brief   Host simulation of motion_task (the Motion Executor): the cycle
- *          tests S2-U03, S2-U12, S2-U15..U18, S2-U31 and the encoder-glitch
- *          regression S2-U19 (proposed), run on the laptop.
+ *          tests S2-U03, S2-U12, S2-U15..U18, S2-U31, S2-U32 and the
+ *          encoder-glitch regression S2-U19 (proposed), run on the laptop.
  * @owner   Buddy 2 (motion)
  * @kind    test
  * @reqs    FR15, FR17, NFR10, NFR16, reviews R03 and R06
@@ -179,6 +179,42 @@ bool motion_cmd_receive(uint32_t * p_type, uint32_t * p_param,
     return b_has;
 }
 
+/* ---- views of the packed private state (PRV_MOT_*) ------------------- */
+
+static bool t_pend_valid(void)
+{
+    return (0u != motion_a(PRV_MOT_A_PEND_VALID_POS,
+                           PRV_MOT_A_PEND_VALID_BITS));
+}
+static uint32_t t_pend_type(void)
+{
+    return motion_a(PRV_MOT_A_PEND_TYPE_POS, PRV_MOT_A_PEND_TYPE_BITS);
+}
+static uint32_t t_pend_tag(void)
+{
+    return motion_a(PRV_MOT_A_PEND_TAG_POS, PRV_MOT_A_PEND_TAG_BITS);
+}
+static uint32_t t_still(void)
+{
+    return motion_a(PRV_MOT_A_CREEP_STILL_POS, PRV_MOT_A_CREEP_STILL_BITS);
+}
+static uint32_t t_prog2(void)
+{
+    return motion_c(PRV_MOT_C_PROG2_POS, PRV_MOT_C_PROG2_BITS);
+}
+static uint32_t t_target2(void)
+{
+    return motion_c(PRV_MOT_C_TARGET2_POS, PRV_MOT_C_TARGET2_BITS);
+}
+static uint32_t t_strk_l(void)
+{
+    return motion_c(PRV_MOT_C_STRK_L_POS, PRV_MOT_C_STRK_L_BITS);
+}
+static uint32_t t_strk_r(void)
+{
+    return motion_c(PRV_MOT_C_STRK_R_POS, PRV_MOT_C_STRK_R_BITS);
+}
+
 /* ---- simulation helpers ---------------------------------------------- */
 
 static void sim_send(uint32_t type, uint32_t param, uint32_t tag)
@@ -285,8 +321,7 @@ static void sim_reset(void)
     g_sim_acc_l = 0; g_sim_acc_r = 0; g_sim_glitch = 0u;
     gb_sim_motor_en = true; gb_sim_safety = false; g_sim_faults = 0u;
     g_sim_en_on_rcv = 0u; gb_sim_stuck = false;
-    gb_is_pend_valid = false; g_path2 = 0u; g_strk_l = 0u; g_strk_r = 0u;
-    g_stall_l = 0u; g_stall_r = 0u;
+    g_mot_a = 0u; g_mot_b = MOTION_B_RESET; g_mot_c = 0u; g_path2 = 0u;
     motion_cancel_active();
     motion_startup();
     sim_cycle();
@@ -310,33 +345,33 @@ int main(void)
     sim_reset();
     sim_send(APP_CMD_FWD, 1000u, 1u);
     sim_cycles(5u);
-    HOST_CHECK("S2-U03", APP_MOT_MOVE_FWD == g_state, "MOVE_FWD started");
+    HOST_CHECK("S2-U03", APP_MOT_MOVE_FWD == motion_state(), "MOVE_FWD started");
     sim_send(APP_CMD_LEFT, 90u, 2u);
     sim_cycle();
-    HOST_CHECK("S2-U03", (APP_MOT_MOVE_FWD == g_state) && gb_is_pend_valid
-               && (APP_CMD_LEFT == g_pend_type) && (2u == g_pend_tag),
+    HOST_CHECK("S2-U03", (APP_MOT_MOVE_FWD == motion_state()) && t_pend_valid()
+               && (APP_CMD_LEFT == t_pend_type()) && (2u == t_pend_tag()),
                "LEFT while moving waits in the latch");
     sim_send(APP_CMD_STOP, 0u, 3u);
     sim_cycle();
-    HOST_CHECK("S2-U03", (APP_MOT_BRAKE == g_state) && gb_sim_braked
-               && (!gb_is_pend_valid),
+    HOST_CHECK("S2-U03", (APP_MOT_BRAKE == motion_state()) && gb_sim_braked
+               && (!t_pend_valid()),
                "STOP brakes in the cycle it arrives and clears the latch");
 
     /* S2-U12: STOP during FOLLOW and during MOVE: braked within one cycle */
     sim_reset();
     sim_send(APP_CMD_FOLLOW, 250u, 1u);
     sim_cycles(20u);
-    HOST_CHECK("S2-U12", (APP_MOT_FOLLOW == g_state) && (!gb_sim_braked)
+    HOST_CHECK("S2-U12", (APP_MOT_FOLLOW == motion_state()) && (!gb_sim_braked)
                && (g_sim_duty_l > 0), "FOLLOW drives the wheels");
     sim_send(APP_CMD_STOP, 0u, 2u);
     sim_cycle();
-    HOST_CHECK("S2-U12", (APP_MOT_BRAKE == g_state) && gb_sim_braked,
+    HOST_CHECK("S2-U12", (APP_MOT_BRAKE == motion_state()) && gb_sim_braked,
                "STOP during FOLLOW: braked after one cycle");
     sim_send(APP_CMD_FWD, 500u, 3u);
     sim_cycles(20u);
     sim_send(APP_CMD_STOP, 0u, 0u);
     sim_cycle();
-    HOST_CHECK("S2-U12", (APP_MOT_BRAKE == g_state) && gb_sim_braked,
+    HOST_CHECK("S2-U12", (APP_MOT_BRAKE == motion_state()) && gb_sim_braked,
                "STOP during MOVE: braked after one cycle");
 
     /* S2-U15: progress is per command, never from the board path.
@@ -363,7 +398,7 @@ int main(void)
     sim_reset();
     sim_send(APP_CMD_FWD, 300u, 1u);
     (void) sim_run_until_done(1000u, &tag);
-    HOST_CHECK("S2-U16", (APP_MOT_BRAKE == g_state) && (0 != g_left.pos)
+    HOST_CHECK("S2-U16", (APP_MOT_BRAKE == motion_state()) && (0 != motion_pos(MOTION_WHEEL_L))
                && (0u != g_path2), "run 1 moved the wheels");
     sim_send(APP_CMD_ZERO, 0u, 2u);
     sim_cycle();
@@ -376,8 +411,8 @@ int main(void)
     sim_cycles(10u);
     sim_send(APP_CMD_ZERO, 0u, 0u);
     sim_cycle();
-    HOST_CHECK("S2-U16", (APP_MOT_FOLLOW == g_state) && gb_is_pend_valid
-               && (APP_CMD_ZERO == g_pend_type) && (0 != g_left.pos),
+    HOST_CHECK("S2-U16", (APP_MOT_FOLLOW == motion_state()) && t_pend_valid()
+               && (APP_CMD_ZERO == t_pend_type()) && (0 != motion_pos(MOTION_WHEEL_L)),
                "ZERO during FOLLOW waits in the latch");
 
     /* S2-U17: MOTOR_EN clear -> FOLLOW never drives; setting it later
@@ -386,11 +421,11 @@ int main(void)
     gb_sim_motor_en = false;
     sim_send(APP_CMD_FOLLOW, 250u, 1u);
     sim_cycles(20u);
-    HOST_CHECK("S2-U17", (APP_MOT_BRAKE == g_state) && gb_sim_braked,
+    HOST_CHECK("S2-U17", (APP_MOT_BRAKE == motion_state()) && gb_sim_braked,
                "FOLLOW with MOTOR_EN clear: never drives");
     gb_sim_motor_en = true;
     sim_cycles(20u);
-    HOST_CHECK("S2-U17", (APP_MOT_BRAKE == g_state) && gb_sim_braked,
+    HOST_CHECK("S2-U17", (APP_MOT_BRAKE == motion_state()) && gb_sim_braked,
                "setting MOTOR_EN later does not start the dropped command");
     sim_send(APP_CMD_FOLLOW, 250u, 2u);
     sim_cycles(5u);
@@ -418,14 +453,14 @@ int main(void)
     sim_reset();
     sim_send(APP_CMD_FWD, 1000u, 1u);
     sim_cycles(20u);
-    pos_l = g_left.pos;
-    prog2 = g_prog2;
+    pos_l = motion_pos(MOTION_WHEEL_L);
+    prog2 = t_prog2();
     g_sim_glitch = 5000u;            /* transient: next read only */
     sim_cycle();
-    HOST_CHECK("S2-U19", (APP_MOT_MOVE_FWD == g_state)
+    HOST_CHECK("S2-U19", (APP_MOT_MOVE_FWD == motion_state())
                && (0u == sim_count_events(APP_EVT_MOVE_DONE, 1u)),
                "5000-count glitch does not complete the 1 m MOVE");
-    HOST_CHECK("S2-U19", (g_prog2 == prog2) && (g_left.pos == pos_l),
+    HOST_CHECK("S2-U19", (t_prog2() == prog2) && (motion_pos(MOTION_WHEEL_L) == pos_l),
                "rejected read adds nothing to progress or position");
     HOST_CHECK("S2-U19", 0u == (g_sim_faults & APP_FAULT_ENCODER),
                "a single glitch raises no ENCODER fault");
@@ -438,14 +473,14 @@ int main(void)
     sim_reset();
     sim_send(APP_CMD_FWD, 1000u, 1u);
     sim_cycles(20u);
-    pos_l = g_left.pos;
+    pos_l = motion_pos(MOTION_WHEEL_L);
     g_sim_raw_l += 5000u;            /* persistent counter jump */
     g_sim_raw_r += 5000u;
     sim_cycles(2u);
     HOST_CHECK("S2-U19", 0u != (g_sim_faults & APP_FAULT_ENCODER),
                "jump that persists: ENCODER fault on the 2nd read");
     HOST_CHECK("S2-U19", (0u == sim_count_events(APP_EVT_MOVE_DONE, 1u))
-               && (g_left.pos < (pos_l + 100)),
+               && (motion_pos(MOTION_WHEEL_L) < (pos_l + 100)),
                "no premature MOVE_DONE; the jump is left out of position");
 
     /* Late cycle + one-off glitch + valid recovery (follow-up review):
@@ -455,21 +490,22 @@ int main(void)
     sim_reset();
     sim_send(APP_CMD_FOLLOW, 300u, 1u);
     sim_cycles(60u);
-    raw0_before  = g_raw0_l;
+    raw0_before  = g_zero_raw[MOTION_WHEEL_L];
     g_sim_glitch = 5000u;
     sim_late_cycle(3u);
-    HOST_CHECK("S2-U19", (1u == g_strk_l) && (1u == g_strk_r),
+    HOST_CHECK("S2-U19", (1u == t_strk_l()) && (1u == t_strk_r()),
                "late (30 ms) glitched read is rejected");
     raw_read = g_sim_raw_l;          /* what the recovery read returns */
+    pos_l    = motion_pos(MOTION_WHEEL_L);
     sim_cycle();
     HOST_CHECK("S2-U19", 0u == (g_sim_faults & APP_FAULT_ENCODER),
                "valid recovery read after a late tick: no ENCODER fault");
-    HOST_CHECK("S2-U19", (0u == g_strk_l) && (0u == g_strk_r)
-               && (g_left.delta > 30),
+    HOST_CHECK("S2-U19", (0u == t_strk_l()) && (0u == t_strk_r())
+               && ((motion_pos(MOTION_WHEEL_L) - pos_l) > 30),
                "recovery read accepted with its 40 ms of movement");
     /* cast: modular difference of the simulated raw images */
-    HOST_CHECK("S2-U19", (g_raw0_l == raw0_before)
-               && (g_left.pos == (int32_t) (raw_read - raw0_before)),
+    HOST_CHECK("S2-U19", (g_zero_raw[MOTION_WHEEL_L] == raw0_before)
+               && (motion_pos(MOTION_WHEEL_L) == (int32_t) (raw_read - raw0_before)),
                "no resync; position equals the counter read: nothing lost");
 
     /* S2-U20 (review 2026-10-26): dual-core race. mission_task sets
@@ -482,7 +518,7 @@ int main(void)
     sim_send(APP_CMD_LEFT, 30u, 1u);    /* first CAL_IR sweep leg */
     g_sim_en_on_rcv = 1u;
     sim_cycle();
-    HOST_CHECK("S2-U20", APP_MOT_TURN_L == g_state,
+    HOST_CHECK("S2-U20", APP_MOT_TURN_L == motion_state(),
                "first calibration turn starts when MOTOR_EN was set late");
     b_done = sim_run_until_done(200u, &tag);
     HOST_CHECK("S2-U20", b_done && (1u == tag),
@@ -494,7 +530,7 @@ int main(void)
     sim_send(APP_CMD_FOLLOW, 250u, 2u); /* first RUN command */
     g_sim_en_on_rcv = 1u;
     sim_cycles(20u);
-    HOST_CHECK("S2-U20", (APP_MOT_FOLLOW == g_state) && (!gb_sim_braked),
+    HOST_CHECK("S2-U20", (APP_MOT_FOLLOW == motion_state()) && (!gb_sim_braked),
                "first FOLLOW starts and drives when MOTOR_EN was set late");
 
     /* The other direction: MOTOR_EN cleared after step 3 read it set.
@@ -506,11 +542,11 @@ int main(void)
     sim_send(APP_CMD_FWD, 500u, 3u);
     g_sim_en_on_rcv = 2u;
     sim_cycle();
-    HOST_CHECK("S2-U20", (APP_MOT_BRAKE == g_state) && gb_sim_braked,
+    HOST_CHECK("S2-U20", (APP_MOT_BRAKE == motion_state()) && gb_sim_braked,
                "command after MOTOR_EN cleared late is rejected, braked");
     gb_sim_motor_en = true;
     sim_cycles(5u);
-    HOST_CHECK("S2-U20", (APP_MOT_BRAKE == g_state) && gb_sim_braked
+    HOST_CHECK("S2-U20", (APP_MOT_BRAKE == motion_state()) && gb_sim_braked
                && (0u == sim_count_events(APP_EVT_MOVE_DONE, 3u)),
                "rejected command is not started when MOTOR_EN returns");
 
@@ -520,28 +556,28 @@ int main(void)
     sim_reset();
     sim_send(APP_CMD_LEFT, 90u, 1u);
     sim_cycles(3u);
-    HOST_CHECK("S2-U23", (APP_MOT_TURN_L == g_state)
+    HOST_CHECK("S2-U23", (APP_MOT_TURN_L == motion_state())
                && (!motion_in_creep_zone())
-               && (g_base_cpw == motion_move_base()),
+               && (motion_base_cpw() == motion_move_base()),
                "90 deg turn starts at the full turn speed");
-    for (uint32_t i = 0u; (i < 400u) && (APP_MOT_TURN_L == g_state)
+    for (uint32_t i = 0u; (i < 400u) && (APP_MOT_TURN_L == motion_state())
                           && (!motion_in_creep_zone()); i++)
     {
         sim_cycle();
     }
-    HOST_CHECK("S2-U23", (APP_MOT_TURN_L == g_state) && motion_in_creep_zone()
-               && (g_creep_cpw == motion_move_base())
-               && (g_creep_cpw > 0) && (g_creep_cpw < g_base_cpw),
+    HOST_CHECK("S2-U23", (APP_MOT_TURN_L == motion_state()) && motion_in_creep_zone()
+               && (motion_creep_cpw() == motion_move_base())
+               && (motion_creep_cpw() > 0) && (motion_creep_cpw() < motion_base_cpw()),
                "last 20 mm of the turn: base set-point drops to creep");
     b_done = sim_run_until_done(400u, &tag);
-    HOST_CHECK("S2-U23", b_done && (1u == tag) && (g_prog2 >= g_target2),
+    HOST_CHECK("S2-U23", b_done && (1u == tag) && (t_prog2() >= t_target2()),
                "turn still completes on its own count with MOVE_DONE");
 
     sim_reset();
     sim_send(APP_CMD_BACK, 100u, 2u);
     sim_cycles(3u);
-    HOST_CHECK("S2-U23", (APP_MOT_MOVE_BACK == g_state)
-               && (g_creep_cpw < 0) && (g_creep_cpw > g_base_cpw),
+    HOST_CHECK("S2-U23", (APP_MOT_MOVE_BACK == motion_state())
+               && (motion_creep_cpw() < 0) && (motion_creep_cpw() > motion_base_cpw()),
                "MOVE_BACK: creep keeps the negative sign, smaller magnitude");
 
     /* Wheels stop turning inside the zone (creep duty too low): the
@@ -549,20 +585,20 @@ int main(void)
     sim_reset();
     sim_send(APP_CMD_FWD, 100u, 3u);
     sim_cycles(3u);
-    for (uint32_t i = 0u; (i < 400u) && (APP_MOT_MOVE_FWD == g_state)
+    for (uint32_t i = 0u; (i < 400u) && (APP_MOT_MOVE_FWD == motion_state())
                           && (!motion_in_creep_zone()); i++)
     {
         sim_cycle();
     }
     gb_sim_stuck = true;
     sim_cycles(MOTION_CREEP_STUCK_TICKS - 2u);
-    HOST_CHECK("S2-U23", (APP_MOT_MOVE_FWD == g_state) && (g_prog2 > 0u)
+    HOST_CHECK("S2-U23", (APP_MOT_MOVE_FWD == motion_state()) && (t_prog2() > 0u)
                && motion_in_creep_zone(),
                "held in the zone: not ended before MOTION_CREEP_STUCK_TICKS");
-    prog2  = g_prog2;                     /* short of the target here */
+    prog2  = t_prog2();                     /* short of the target here */
     b_done = sim_run_until_done(10u, &tag);
     HOST_CHECK("S2-U23", b_done && (3u == tag) && (prog2 > 0u)
-               && (g_creep_still >= MOTION_CREEP_STUCK_TICKS),
+               && (t_still() >= MOTION_CREEP_STUCK_TICKS),
                "held in the zone: ends with MOVE_DONE short of the target");
 
     /* A short move starts inside the zone: standing still before the
@@ -571,11 +607,11 @@ int main(void)
     gb_sim_stuck = true;
     sim_send(APP_CMD_FWD, 10u, 1u);
     sim_cycles(2u * MOTION_CREEP_STUCK_TICKS);
-    HOST_CHECK("S2-U23", (APP_MOT_MOVE_FWD == g_state) && (0u == g_prog2),
+    HOST_CHECK("S2-U23", (APP_MOT_MOVE_FWD == motion_state()) && (0u == t_prog2()),
                "short move not yet moving: not ended by the creep rule");
     gb_sim_stuck = false;
     b_done = sim_run_until_done(200u, &tag);
-    HOST_CHECK("S2-U23", b_done && (1u == tag) && (g_prog2 >= g_target2),
+    HOST_CHECK("S2-U23", b_done && (1u == tag) && (t_prog2() >= t_target2()),
                "short move completes on its count once the wheels turn");
 
     /* S2-U24 (on-car 2026-11-03): FOLLOW slows down in proportion to
@@ -589,20 +625,20 @@ int main(void)
         sim_cycles(3u);
         g_sim_steer = 0;
         motion_state_follow(&sp_l, &sp_r);
-        HOST_CHECK("S2-U24", (APP_MOT_FOLLOW == g_state)
-                   && (sp_l == g_base_cpw) && (sp_r == g_base_cpw),
+        HOST_CHECK("S2-U24", (APP_MOT_FOLLOW == motion_state())
+                   && (sp_l == motion_base_cpw()) && (sp_r == motion_base_cpw()),
                    "on the line (steering 0): both wheels at cruise");
         g_sim_steer = 1000;
         motion_state_follow(&sp_l, &sp_r);
         HOST_CHECK("S2-U24", (sp_r > sp_l)
-                   && (((sp_l + sp_r) / 2) <= ((g_base_cpw * 55) / 100))
-                   && (((sp_l + sp_r) / 2) >= ((g_base_cpw * 45) / 100)),
+                   && (((sp_l + sp_r) / 2) <= ((motion_base_cpw() * 55) / 100))
+                   && (((sp_l + sp_r) / 2) >= ((motion_base_cpw() * 45) / 100)),
                    "full left error: turn left at about half speed");
         g_sim_steer = -200;
         motion_state_follow(&sp_l, &sp_r);
         HOST_CHECK("S2-U24", (sp_l > sp_r)
-                   && (((sp_l + sp_r) / 2) < g_base_cpw)
-                   && (((sp_l + sp_r) / 2) >= ((g_base_cpw * 85) / 100)),
+                   && (((sp_l + sp_r) / 2) < motion_base_cpw())
+                   && (((sp_l + sp_r) / 2) >= ((motion_base_cpw() * 85) / 100)),
                    "small right error: turn right, only a little slower");
         g_sim_steer = 0;
     }
@@ -632,7 +668,7 @@ int main(void)
     HOST_CHECK("S2-U26", 0u == (g_sim_faults & APP_FAULT_ENCODER),
                "task held up between count and clock reads: no ENCODER"
                " fault");
-    HOST_CHECK("S2-U26", APP_MOT_FOLLOW == g_state,
+    HOST_CHECK("S2-U26", APP_MOT_FOLLOW == motion_state(),
                "... and FOLLOW goes on");
     /* a real impossible jump is still caught (S2-U19 rule unchanged) */
     g_sim_glitch = 5000u; sim_cycle();
@@ -790,6 +826,100 @@ int main(void)
         HOST_CHECK("S2-U30", b_same,
                    "cruise: split unchanged (steer x gain / 256) for every steer");
         g_sim_steer = 0;
+    }
+
+    /* S2-U32: the private state of motion_task is packed (layout groups
+       PRV_MOT_* and PRV_WIN_*), and every packed field holds the whole
+       range of what a validated command can put in it.                 */
+    {
+        size_t const bytes = sizeof(g_mot_a) + sizeof(g_mot_b)
+                             + sizeof(g_mot_c) + sizeof(g_path2)
+                             + sizeof(g_diff_start) + sizeof(g_enc_log_dt_us)
+                             + sizeof(g_pi) + sizeof(g_window)
+                             + sizeof(g_zero_raw) + sizeof(g_trust_raw)
+                             + sizeof(g_trust_us) + sizeof(g_prev_us)
+                             + sizeof(g_enc_log_delta);
+        int32_t  diff0   = 0;
+        int32_t  diff    = 0;
+        int32_t  worst   = 0;
+        bool     b_done  = false;
+
+        HOST_CHECK("S2-U32", (78u == bytes) && (16u == sizeof(g_window)),
+                   "private state of motion_task: 78 bytes, window 16");
+        HOST_CHECK("S2-U32", MOTION_CREEP_ZONE2
+                   == (2u * odometry_mm_to_counts(MOTION_CREEP_ZONE_MM)),
+                   "creep zone constant equals the rounded conversion");
+        HOST_CHECK("S2-U32",
+                   ((2u * odometry_mm_to_counts(MOTION_MOVE_MAX_MM))
+                    <= (uint32_t) PRV_MOT_C_TARGET2_MAX)
+                   && ((2u * odometry_turn_counts(MOTION_TURN_MAX_DEG))
+                       <= (uint32_t) PRV_MOT_C_TARGET2_MAX),
+                   "TARGET2 holds the longest MOVE (2047 mm) and TURN (360)");
+        HOST_CHECK("S2-U32",
+                   (odometry_mm_s_to_cpw(MOTION_FOLLOW_MAX_MM_S)
+                    <= PRV_MOT_B_BASE_CPW_MAX)
+                   && (odometry_mm_s_to_cpw(MOTION_MOVE_SPEED_MM_S)
+                       <= PRV_MOT_B_BASE_CPW_MAX)
+                   && (odometry_mm_s_to_cpw(MOTION_TURN_SPEED_MM_S)
+                       <= PRV_MOT_B_BASE_CPW_MAX)
+                   && (odometry_mm_s_to_cpw(MOTION_CREEP_MM_S)
+                       <= PRV_MOT_B_CREEP_CPW_MAX),
+                   "BASE_CPW and CREEP_CPW hold every command speed");
+
+        /* Fastest FOLLOW and longest MOVE: stored exactly, no clamp. */
+        sim_reset();
+        sim_send(APP_CMD_FOLLOW, (uint32_t) MOTION_FOLLOW_MAX_MM_S, 1u);
+        sim_cycles(3u);
+        HOST_CHECK("S2-U32", (APP_MOT_FOLLOW == motion_state())
+                   && (motion_base_cpw()
+                       == odometry_mm_s_to_cpw(MOTION_FOLLOW_MAX_MM_S))
+                   && (0u == (g_sim_faults & APP_FAULT_RANGE_CLAMP)),
+                   "FOLLOW 300 mm/s: base 46 cpw stored exactly");
+        sim_reset();
+        sim_send(APP_CMD_FWD, (uint32_t) MOTION_MOVE_MAX_MM, 2u);
+        sim_cycles(3u);
+        HOST_CHECK("S2-U32", (APP_MOT_MOVE_FWD == motion_state())
+                   && (t_target2()
+                       == (2u * odometry_mm_to_counts(MOTION_MOVE_MAX_MM))),
+                   "MOVE 2047 mm: target stored exactly");
+        b_done = sim_run_until_done(3000u, &tag);
+        HOST_CHECK("S2-U32", b_done && (2u == tag)
+                   && (0u == (g_sim_faults & APP_FAULT_RANGE_CLAMP)),
+                   "MOVE 2047 mm completes, no RANGE_CLAMP");
+
+        /* Heading hold with the start difference stored modulo 2^16: the
+           wheel difference starts 6 counts below 65536, and one wheel is
+           held for a moment so the drift crosses the wrap both ways.   */
+        sim_reset();
+        g_zero_raw[MOTION_WHEEL_L] -= 65530u;
+        sim_cycle();
+        diff0 = motion_pos(MOTION_WHEEL_L) - motion_pos(MOTION_WHEEL_R);
+        sim_send(APP_CMD_FWD, 600u, 3u);
+        b_done = false;
+        for (uint32_t i = 0u; (i < 1500u) && (!b_done); i++)
+        {
+            g_sim_acc_l += ((i > 40u) && (i < 60u)) ? 20 : 0;  /* L ahead  */
+            g_sim_acc_r += ((i > 140u) && (i < 170u)) ? 20 : 0; /* R ahead */
+            sim_cycle();
+            diff = (motion_pos(MOTION_WHEEL_L) - motion_pos(MOTION_WHEEL_R))
+                   - diff0;
+            diff = (diff < 0) ? -diff : diff;
+            worst = (diff > worst) ? diff : worst;
+            b_done = (0u != sim_count_events(APP_EVT_MOVE_DONE, 3u));
+        }
+        HOST_CHECK("S2-U32", (65530 == diff0) && b_done && (worst > 2)
+                   && (worst < 40),
+                   "MOVE holds its heading across the 16-bit wrap of the"
+                   " stored start difference");
+
+        /* RNG: a speed no validated command can carry is clamped and
+           reported, it never wraps into another value.                */
+        sim_reset();
+        sim_send(APP_CMD_FOLLOW, 2047u, 1u);
+        sim_cycles(2u);
+        HOST_CHECK("S2-U32", (PRV_MOT_B_BASE_CPW_MAX == motion_base_cpw())
+                   && (0u != (g_sim_faults & APP_FAULT_RANGE_CLAMP)),
+                   "out-of-range speed: clamped to 63 cpw with RANGE_CLAMP");
     }
 
     return (0 == HOST_SUMMARY("motion_task")) ? 0 : 1;

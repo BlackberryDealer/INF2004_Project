@@ -120,13 +120,35 @@ static inline uint32_t odometry_path_age_cap(uint32_t path_now,
 
 #define ODOMETRY_WINDOW_SLOTS  (5u)   /* 5 x 10 ms ticks = 50 ms window */
 
-typedef struct            /* Phase 2 (baseline) layout */
+/* Packed (layout groups PRV_WIN_L, PRV_WIN_R, PRV_WIN_T, PRV_WIN_I): one
+   byte per slot value. A delta is stored as counts + PRV_WIN_L_DELTA_OFFSET
+   (7 bits), so no signed value is ever shifted or masked.              */
+typedef struct
 {
-    int32_t  delta_l[ODOMETRY_WINDOW_SLOTS];  /* counts per tick, +-63 */
-    int32_t  delta_r[ODOMETRY_WINDOW_SLOTS];
-    uint32_t dt_ms[ODOMETRY_WINDOW_SLOTS];    /* tick length, 0..63 ms */
-    uint32_t idx;         /* next slot, 0..4 */
+    uint8_t delta_l[ODOMETRY_WINDOW_SLOTS];  /* counts per tick + 64    */
+    uint8_t delta_r[ODOMETRY_WINDOW_SLOTS];
+    uint8_t dt_ms[ODOMETRY_WINDOW_SLOTS];    /* tick length, 0..63 ms   */
+    uint8_t idx;                             /* next slot, 0..4         */
 } odometry_window_t;
+
+#if (PRV_WIN_L_DELTA_OFFSET != PRV_WIN_R_DELTA_OFFSET) \
+    || (PRV_WIN_L_DELTA_MAX != PRV_WIN_R_DELTA_MAX)
+#error "Both window delta rows must have the same layout"
+#endif
+
+/* Window with no movement: every delta slot holds the offset (= 0). */
+#define ODOMETRY_WINDOW_SLOT0   ((uint8_t) PRV_WIN_L_DELTA_OFFSET)
+#define ODOMETRY_WINDOW_EMPTY                                            \
+    {                                                                    \
+        {ODOMETRY_WINDOW_SLOT0, ODOMETRY_WINDOW_SLOT0,                   \
+         ODOMETRY_WINDOW_SLOT0, ODOMETRY_WINDOW_SLOT0,                   \
+         ODOMETRY_WINDOW_SLOT0},                                         \
+        {ODOMETRY_WINDOW_SLOT0, ODOMETRY_WINDOW_SLOT0,                   \
+         ODOMETRY_WINDOW_SLOT0, ODOMETRY_WINDOW_SLOT0,                   \
+         ODOMETRY_WINDOW_SLOT0},                                         \
+        {0u, 0u, 0u, 0u, 0u},                                            \
+        0u                                                               \
+    }
 
 extern void odometry_window_reset(odometry_window_t * p_win);
 extern void odometry_window_push(odometry_window_t * p_win, int32_t delta_l,
