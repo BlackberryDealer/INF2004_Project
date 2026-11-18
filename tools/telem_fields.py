@@ -522,4 +522,22 @@ GROUPS = {
     'PRV_ECHO_ARM': [
         ('ARMED', 1, 0, 1, 'flag'),
     ],
+    'PRV_MIS_G': [
+        ('BTN_RUN', 2, 0, 1, 'tick'),
+        ('BTN_RESET', 8, 0, 1, 'tick'),
+        ('RESET_SENT', 1, 0, 1, 'flag'),
+        ('WARNING', 1, 0, 1, 'flag'),
+        ('LED', 3, 0, 1, 'code'),
+        ('BUZZ', 1, 0, 1, 'flag'),
+        ('PREV_SYS', 4, 0, 1, 'code'),
+        ('BEEP', 2, 0, 1, 'code'),
+    ],
+    'PRV_HLT': [
+        ('NORMAL_WIN', 1, 0, 1, 'flag'),
+        ('WDT_ACTIVE', 1, 0, 1, 'flag'),
+        ('STARTED', 1, 0, 1, 'flag'),
+    ],
+    'SH_OBS_CHK': [
+        ('DONE', 1, 0, 1, 'flag'),
+    ],
 }

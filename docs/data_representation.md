@@ -344,6 +344,21 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | RISE_SEQ | PRV_ECHO_ISR | 0..255 × 1 count | 1 | 8 | 8 | RAW | P | Ping number captured at the rise (ISR only) |
 | ARMED | PRV_ECHO_ARM | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | A rise is armed (ISR only) |
 | TIME | E_OBS_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 timer images x2 (echo rise time in the ISR; scan start for the scan-time log): a stuck-high echo or a scan can exceed 65 ms (bits=31 for gen_layout.py) |
+| BTN_RUN | PRV_MIS_G | 0..3 × 1 tick | 1 | 2 | 2 | SAT | P | Run button pressed polls (MISSION_BTN_DEBOUNCE_TICKS) |
+| BTN_RESET | PRV_MIS_G | 0..200 × 1 tick | 1 | 8 | 8 | SAT | P | Reset button held polls (MISSION_BTN_RESET_HOLD_TICKS) |
+| RESET_SENT | PRV_MIS_G | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | RESET_HOLD reported for this hold |
+| WARNING | PRV_MIS_G | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | 1 s start warning on |
+| LED | PRV_MIS_G | 0..6 × 1 code | 1 | 3 | 3 | ENUM | P | HMI_LED_* colour last written; 6 = unknown (forces the first write) |
+| BUZZ | PRV_MIS_G | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Buzzer is on |
+| PREV_SYS | PRV_MIS_G | 0..8 × 1 code | 1 | 4 | 4 | ENUM | P | APP_SYS_* shown last pass; 8 = none yet |
+| BEEP | PRV_MIS_G | 0..2 × 1 code | 1 | 2 | 2 | ENUM | P | HMI_BEEP_* pattern in progress |
+| TIME | E_MIS_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 timer images x2 (HMI state entry; beep start): blink and alarm periods exceed 65 ms (bits=31 for gen_layout.py) |
+| NORMAL_WIN | PRV_HLT | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Watchdog runs the normal 30 ms window (else the 500 ms startup one): selects the LOAD value to feed |
+| WDT_ACTIVE | PRV_HLT | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Watchdog enabled |
+| STARTED | PRV_HLT | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | All four tasks checked in; normal window armed |
+| DONE | SH_OBS_CHK | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | obstacle_task has checked in (obstacle_task writes; mission_task reads; own byte) |
+| TIME | E_HLT_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 timer images x3 (obstacle check-in; watchdog enable; last feed): ages are compared with limits above 65 ms (bits=31 for gen_layout.py) |
+| MAX_US | E_HLT_GAP | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E7 longest gap between two watchdog feeds (bring-up latency figure; bits=31 for gen_layout.py) |
 
 ## Groups
 
@@ -455,6 +470,9 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | SH_ECHO_WIN | 1 | 8 |
 | PRV_ECHO_ISR | 8 | 8 |
 | PRV_ECHO_ARM | 1 | 8 |
+| PRV_MIS_G | 22 | 32 |
+| PRV_HLT | 3 | 8 |
+| SH_OBS_CHK | 1 | 8 |
 
 ## Range assumptions
 

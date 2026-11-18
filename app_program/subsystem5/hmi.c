@@ -10,6 +10,8 @@
 #include "hmi.h"               /* own header first (BARR-C 4.3.c) */
 #include "../board_pins.h"
 #include "../app_types.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "cfg_mission.h"
 #include "drv_buzzer.h"
 #include "drv_ws2812.h"
@@ -24,7 +26,7 @@
 #define HMI_LED_BLUE     (4u)
 #define HMI_LED_RED      (5u)
 #define HMI_LED_COUNT    (6u)
-#define HMI_LED_UNKNOWN  (0xFFu)       /* forces the first write */
+#define HMI_LED_UNKNOWN  (HMI_LED_COUNT) /* forces the first write */
 
 #define HMI_LEVEL        (32u)         /* brightness, 0..255 */
 
@@ -41,7 +43,16 @@
 #define HMI_BEEP_ONE     (1u)
 #define HMI_BEEP_TWO     (2u)
 
-#define HMI_STATE_NONE   (0xFFu)
+#define HMI_STATE_NONE   (APP_SYS_FAULT + 1u) /* no state shown yet */
+
+/* PRV_MIS_G rows must hold every code and count stored here. */
+#if (HMI_LED_UNKNOWN != PRV_MIS_G_LED_MAX)                              \
+    || (HMI_STATE_NONE != PRV_MIS_G_PREV_SYS_MAX)                       \
+    || (HMI_BEEP_TWO != PRV_MIS_G_BEEP_MAX)                             \
+    || (MISSION_BTN_DEBOUNCE_TICKS > PRV_MIS_G_BTN_RUN_MAX)             \
+    || (MISSION_BTN_RESET_HOLD_TICKS != PRV_MIS_G_BTN_RESET_MAX)
+#error "A PRV_MIS_G row no longer covers its HMI code or count"
+#endif
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -56,16 +67,13 @@ static uint8_t const g_hmi_rgb[HMI_LED_COUNT][3] =
     {HMI_LEVEL, 0u, 0u},                    /* red    */
 };
 
-/* All written only by mission_task. */
-static uint32_t g_run_cnt       = 0u;
-static uint32_t g_reset_cnt     = 0u;
-static bool     gb_reset_sent   = false;
-static bool     gb_is_warning   = false;
-static uint32_t g_led_code      = HMI_LED_UNKNOWN;
-static bool     gb_is_buzz_on   = false;
-static uint32_t g_prev_state    = HMI_STATE_NONE;
+/* All written only by mission_task. PRV_MIS_G: BTN_RUN, BTN_RESET,
+   RESET_SENT, WARNING, LED (starts unknown), BUZZ, PREV_SYS (starts
+   none), BEEP. The two times are E5 timer images (E_MIS_US).        */
+static uint32_t g_hmi_word =
+    ((uint32_t) HMI_LED_UNKNOWN << PRV_MIS_G_LED_POS)
+    | ((uint32_t) HMI_STATE_NONE << PRV_MIS_G_PREV_SYS_POS);
 static uint32_t g_entry_us      = 0u;
-static uint32_t g_beep_kind     = HMI_BEEP_NONE;
 static uint32_t g_beep_start_us = 0u;
 
 /* ---- private function prototypes ------------------------------------- */
@@ -74,6 +82,9 @@ static uint32_t hmi_colour(uint32_t sys_state, bool b_is_blink_on);
 static bool     hmi_buzz(uint32_t sys_state, uint32_t now_us,
                          uint32_t in_state_us);
 static bool     hmi_is_pressed(uint32_t pin);
+static uint32_t hmi_get(uint32_t pos, uint32_t width);
+static void     hmi_put(uint32_t pos, uint32_t width, uint32_t value);
+static bool     hmi_is_warning(void);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -110,41 +121,52 @@ bool hmi_init(void)
  */
 uint32_t hmi_poll(void)
 {
-    uint32_t result = HMI_NONE;
+    uint32_t result    = HMI_NONE;
+    uint32_t run_cnt   = hmi_get(PRV_MIS_G_BTN_RUN_POS,
+                                 PRV_MIS_G_BTN_RUN_BITS);
+    uint32_t reset_cnt = hmi_get(PRV_MIS_G_BTN_RESET_POS,
+                                 PRV_MIS_G_BTN_RESET_BITS);
+    bool     b_sent    = (0u != hmi_get(PRV_MIS_G_RESET_SENT_POS,
+                                        PRV_MIS_G_RESET_SENT_BITS));
 
     if (hmi_is_pressed(PIN_BTN_RUN))
     {
-        if (g_run_cnt < MISSION_BTN_DEBOUNCE_TICKS)
+        if (run_cnt < MISSION_BTN_DEBOUNCE_TICKS)
         {
-            g_run_cnt++;
+            run_cnt++;
         }
     }
     else
     {
-        if (g_run_cnt >= MISSION_BTN_DEBOUNCE_TICKS)
+        if (run_cnt >= MISSION_BTN_DEBOUNCE_TICKS)
         {
             result = HMI_RUN_PRESS;
         }
-        g_run_cnt = 0u;
+        run_cnt = 0u;
     }
 
     if (hmi_is_pressed(PIN_BTN_RESET))
     {
-        if (g_reset_cnt < MISSION_BTN_RESET_HOLD_TICKS)
+        if (reset_cnt < MISSION_BTN_RESET_HOLD_TICKS)
         {
-            g_reset_cnt++;
+            reset_cnt++;
         }
-        if ((g_reset_cnt >= MISSION_BTN_RESET_HOLD_TICKS) && (!gb_reset_sent))
+        if ((reset_cnt >= MISSION_BTN_RESET_HOLD_TICKS) && (!b_sent))
         {
-            gb_reset_sent = true;
-            result        = HMI_RESET_HOLD;   /* wins over a RUN press */
+            b_sent = true;
+            result = HMI_RESET_HOLD;      /* wins over a RUN press */
         }
     }
     else
     {
-        g_reset_cnt   = 0u;
-        gb_reset_sent = false;
+        reset_cnt = 0u;
+        b_sent    = false;
     }
+
+    hmi_put(PRV_MIS_G_BTN_RUN_POS, PRV_MIS_G_BTN_RUN_BITS, run_cnt);
+    hmi_put(PRV_MIS_G_BTN_RESET_POS, PRV_MIS_G_BTN_RESET_BITS, reset_cnt);
+    hmi_put(PRV_MIS_G_RESET_SENT_POS, PRV_MIS_G_RESET_SENT_BITS,
+            b_sent ? 1u : 0u);
 
     return result;
 }
@@ -163,18 +185,18 @@ void hmi_show(uint32_t sys_state, uint32_t now_us)
     uint32_t code        = HMI_LED_OFF;
     bool     b_is_buzz   = false;
 
-    if (sys_state != g_prev_state)
+    if (sys_state != hmi_get(PRV_MIS_G_PREV_SYS_POS, PRV_MIS_G_PREV_SYS_BITS))
     {
-        g_prev_state = sys_state;
+        hmi_put(PRV_MIS_G_PREV_SYS_POS, PRV_MIS_G_PREV_SYS_BITS, sys_state);
         g_entry_us   = now_us;
         if (APP_SYS_BOOT == sys_state)
         {
-            g_beep_kind     = HMI_BEEP_ONE;
+            hmi_put(PRV_MIS_G_BEEP_POS, PRV_MIS_G_BEEP_BITS, HMI_BEEP_ONE);
             g_beep_start_us = now_us;
         }
         else if (APP_SYS_FINISHED == sys_state)
         {
-            g_beep_kind     = HMI_BEEP_TWO;
+            hmi_put(PRV_MIS_G_BEEP_POS, PRV_MIS_G_BEEP_BITS, HMI_BEEP_TWO);
             g_beep_start_us = now_us;
         }
         else
@@ -186,17 +208,17 @@ void hmi_show(uint32_t sys_state, uint32_t now_us)
 
     code = hmi_colour(sys_state,
                       0u == ((in_state_us >> HMI_BLINK_SHIFT) & 1u));
-    if (code != g_led_code)
+    if (code != hmi_get(PRV_MIS_G_LED_POS, PRV_MIS_G_LED_BITS))
     {
-        g_led_code = code;
+        hmi_put(PRV_MIS_G_LED_POS, PRV_MIS_G_LED_BITS, code);
         drv_ws2812_set(g_hmi_rgb[code][0], g_hmi_rgb[code][1],
                        g_hmi_rgb[code][2]);
     }
 
     b_is_buzz = hmi_buzz(sys_state, now_us, in_state_us);
-    if (b_is_buzz != gb_is_buzz_on)
+    if (b_is_buzz != (0u != hmi_get(PRV_MIS_G_BUZZ_POS, PRV_MIS_G_BUZZ_BITS)))
     {
-        gb_is_buzz_on = b_is_buzz;
+        hmi_put(PRV_MIS_G_BUZZ_POS, PRV_MIS_G_BUZZ_BITS, b_is_buzz ? 1u : 0u);
         if (b_is_buzz)
         {
             drv_buzzer_on();
@@ -217,7 +239,7 @@ void hmi_show(uint32_t sys_state, uint32_t now_us)
  */
 void hmi_set_warning(bool b_is_on)
 {
-    gb_is_warning = b_is_on;
+    hmi_put(PRV_MIS_G_WARNING_POS, PRV_MIS_G_WARNING_BITS, b_is_on ? 1u : 0u);
 }
 
 /* ---- private functions ------------------------------------------------ */
@@ -244,7 +266,7 @@ static uint32_t hmi_colour(uint32_t sys_state, bool b_is_blink_on)
             code = b_is_blink_on ? HMI_LED_YELLOW : HMI_LED_OFF;
             break;
         case APP_SYS_READY:
-            if (gb_is_warning)
+            if (hmi_is_warning())
             {
                 code = b_is_blink_on ? HMI_LED_BLUE : HMI_LED_OFF;
             }
@@ -287,21 +309,23 @@ static bool hmi_buzz(uint32_t sys_state, uint32_t now_us,
                      uint32_t in_state_us)
 {
     uint32_t const beep_us   = now_us - g_beep_start_us;  /* wrap-safe */
+    uint32_t const beep_kind = hmi_get(PRV_MIS_G_BEEP_POS,
+                                       PRV_MIS_G_BEEP_BITS);
     bool           b_is_buzz = false;
 
     if (APP_SYS_FAULT == sys_state)
     {
         b_is_buzz = (0u == ((in_state_us >> HMI_ALARM_SHIFT) & 1u));
     }
-    else if ((APP_SYS_READY == sys_state) && gb_is_warning)
+    else if ((APP_SYS_READY == sys_state) && hmi_is_warning())
     {
         b_is_buzz = true;
     }
-    else if (HMI_BEEP_ONE == g_beep_kind)
+    else if (HMI_BEEP_ONE == beep_kind)
     {
         b_is_buzz = (beep_us < HMI_BEEP_US);
     }
-    else if (HMI_BEEP_TWO == g_beep_kind)
+    else if (HMI_BEEP_TWO == beep_kind)
     {
         b_is_buzz = (beep_us < HMI_BEEP_US)
                     || ((beep_us >= HMI_BEEP2_ON_US)
@@ -312,12 +336,43 @@ static bool hmi_buzz(uint32_t sys_state, uint32_t now_us,
         b_is_buzz = false;
     }
 
-    if ((HMI_BEEP_NONE != g_beep_kind) && (beep_us >= HMI_BEEP2_OFF_US))
+    if ((HMI_BEEP_NONE != beep_kind) && (beep_us >= HMI_BEEP2_OFF_US))
     {
-        g_beep_kind = HMI_BEEP_NONE;      /* pattern finished */
+        /* pattern finished */
+        hmi_put(PRV_MIS_G_BEEP_POS, PRV_MIS_G_BEEP_BITS, HMI_BEEP_NONE);
     }
 
     return b_is_buzz;
+}
+
+/**
+ * hmi_get / hmi_put
+ * @brief   One field of the packed HMI word (PRV_MIS_G).
+ * @param   pos    field position (PRV_MIS_G_*_POS)
+ * @param   width  field width (PRV_MIS_G_*_BITS)
+ * @param   value  new value, inside the row range (put only)
+ * @return  field value (get only)
+ * @context mission_task
+ */
+static uint32_t hmi_get(uint32_t pos, uint32_t width)
+{
+    return app_bits_get(g_hmi_word, pos, width);
+}
+
+static void hmi_put(uint32_t pos, uint32_t width, uint32_t value)
+{
+    g_hmi_word = app_bits_put(g_hmi_word, pos, width, value);
+}
+
+/**
+ * hmi_is_warning
+ * @brief   The 1 s start warning flag (PRV_MIS_G WARNING).
+ * @return  true while the warning is on
+ * @context mission_task
+ */
+static bool hmi_is_warning(void)
+{
+    return (0u != hmi_get(PRV_MIS_G_WARNING_POS, PRV_MIS_G_WARNING_BITS));
 }
 
 /**

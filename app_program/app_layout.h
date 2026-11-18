@@ -2367,6 +2367,96 @@
 #error "Group PRV_ECHO_ARM no longer fits in 8 bits"
 #endif
 
+/* PRV_MIS_G: 32-bit word */
+#define PRV_MIS_G_BTN_RUN_POS           (0u)
+#define PRV_MIS_G_BTN_RUN_BITS          (2u)
+#define PRV_MIS_G_BTN_RUN_MIN           (0)
+#define PRV_MIS_G_BTN_RUN_MAX           (3)
+#define PRV_MIS_G_BTN_RUN_OFFSET        (0)
+#define PRV_MIS_G_BTN_RUN_KIND          (APP_KIND_SAT)
+#define PRV_MIS_G_BTN_RESET_POS         (PRV_MIS_G_BTN_RUN_POS + PRV_MIS_G_BTN_RUN_BITS)
+#define PRV_MIS_G_BTN_RESET_BITS        (8u)
+#define PRV_MIS_G_BTN_RESET_MIN         (0)
+#define PRV_MIS_G_BTN_RESET_MAX         (200)
+#define PRV_MIS_G_BTN_RESET_OFFSET      (0)
+#define PRV_MIS_G_BTN_RESET_KIND        (APP_KIND_SAT)
+#define PRV_MIS_G_RESET_SENT_POS        (PRV_MIS_G_BTN_RESET_POS + PRV_MIS_G_BTN_RESET_BITS)
+#define PRV_MIS_G_RESET_SENT_BITS       (1u)
+#define PRV_MIS_G_RESET_SENT_MIN        (0)
+#define PRV_MIS_G_RESET_SENT_MAX        (1)
+#define PRV_MIS_G_RESET_SENT_OFFSET     (0)
+#define PRV_MIS_G_RESET_SENT_KIND       (APP_KIND_FLAG)
+#define PRV_MIS_G_WARNING_POS           (PRV_MIS_G_RESET_SENT_POS + PRV_MIS_G_RESET_SENT_BITS)
+#define PRV_MIS_G_WARNING_BITS          (1u)
+#define PRV_MIS_G_WARNING_MIN           (0)
+#define PRV_MIS_G_WARNING_MAX           (1)
+#define PRV_MIS_G_WARNING_OFFSET        (0)
+#define PRV_MIS_G_WARNING_KIND          (APP_KIND_FLAG)
+#define PRV_MIS_G_LED_POS               (PRV_MIS_G_WARNING_POS + PRV_MIS_G_WARNING_BITS)
+#define PRV_MIS_G_LED_BITS              (3u)
+#define PRV_MIS_G_LED_MIN               (0)
+#define PRV_MIS_G_LED_MAX               (6)
+#define PRV_MIS_G_LED_OFFSET            (0)
+#define PRV_MIS_G_LED_KIND              (APP_KIND_ENUM)
+#define PRV_MIS_G_BUZZ_POS              (PRV_MIS_G_LED_POS + PRV_MIS_G_LED_BITS)
+#define PRV_MIS_G_BUZZ_BITS             (1u)
+#define PRV_MIS_G_BUZZ_MIN              (0)
+#define PRV_MIS_G_BUZZ_MAX              (1)
+#define PRV_MIS_G_BUZZ_OFFSET           (0)
+#define PRV_MIS_G_BUZZ_KIND             (APP_KIND_FLAG)
+#define PRV_MIS_G_PREV_SYS_POS          (PRV_MIS_G_BUZZ_POS + PRV_MIS_G_BUZZ_BITS)
+#define PRV_MIS_G_PREV_SYS_BITS         (4u)
+#define PRV_MIS_G_PREV_SYS_MIN          (0)
+#define PRV_MIS_G_PREV_SYS_MAX          (8)
+#define PRV_MIS_G_PREV_SYS_OFFSET       (0)
+#define PRV_MIS_G_PREV_SYS_KIND         (APP_KIND_ENUM)
+#define PRV_MIS_G_BEEP_POS              (PRV_MIS_G_PREV_SYS_POS + PRV_MIS_G_PREV_SYS_BITS)
+#define PRV_MIS_G_BEEP_BITS             (2u)
+#define PRV_MIS_G_BEEP_MIN              (0)
+#define PRV_MIS_G_BEEP_MAX              (2)
+#define PRV_MIS_G_BEEP_OFFSET           (0)
+#define PRV_MIS_G_BEEP_KIND             (APP_KIND_ENUM)
+#define PRV_MIS_G_USED_BITS             (PRV_MIS_G_BEEP_POS + PRV_MIS_G_BEEP_BITS)
+#if (PRV_MIS_G_USED_BITS > 32u)
+#error "Group PRV_MIS_G no longer fits in 32 bits"
+#endif
+
+/* PRV_HLT: 8-bit word */
+#define PRV_HLT_NORMAL_WIN_POS          (0u)
+#define PRV_HLT_NORMAL_WIN_BITS         (1u)
+#define PRV_HLT_NORMAL_WIN_MIN          (0)
+#define PRV_HLT_NORMAL_WIN_MAX          (1)
+#define PRV_HLT_NORMAL_WIN_OFFSET       (0)
+#define PRV_HLT_NORMAL_WIN_KIND         (APP_KIND_FLAG)
+#define PRV_HLT_WDT_ACTIVE_POS          (PRV_HLT_NORMAL_WIN_POS + PRV_HLT_NORMAL_WIN_BITS)
+#define PRV_HLT_WDT_ACTIVE_BITS         (1u)
+#define PRV_HLT_WDT_ACTIVE_MIN          (0)
+#define PRV_HLT_WDT_ACTIVE_MAX          (1)
+#define PRV_HLT_WDT_ACTIVE_OFFSET       (0)
+#define PRV_HLT_WDT_ACTIVE_KIND         (APP_KIND_FLAG)
+#define PRV_HLT_STARTED_POS             (PRV_HLT_WDT_ACTIVE_POS + PRV_HLT_WDT_ACTIVE_BITS)
+#define PRV_HLT_STARTED_BITS            (1u)
+#define PRV_HLT_STARTED_MIN             (0)
+#define PRV_HLT_STARTED_MAX             (1)
+#define PRV_HLT_STARTED_OFFSET          (0)
+#define PRV_HLT_STARTED_KIND            (APP_KIND_FLAG)
+#define PRV_HLT_USED_BITS               (PRV_HLT_STARTED_POS + PRV_HLT_STARTED_BITS)
+#if (PRV_HLT_USED_BITS > 8u)
+#error "Group PRV_HLT no longer fits in 8 bits"
+#endif
+
+/* SH_OBS_CHK: 8-bit word */
+#define SH_OBS_CHK_DONE_POS             (0u)
+#define SH_OBS_CHK_DONE_BITS            (1u)
+#define SH_OBS_CHK_DONE_MIN             (0)
+#define SH_OBS_CHK_DONE_MAX             (1)
+#define SH_OBS_CHK_DONE_OFFSET          (0)
+#define SH_OBS_CHK_DONE_KIND            (APP_KIND_FLAG)
+#define SH_OBS_CHK_USED_BITS            (SH_OBS_CHK_DONE_POS + SH_OBS_CHK_DONE_BITS)
+#if (SH_OBS_CHK_USED_BITS > 8u)
+#error "Group SH_OBS_CHK no longer fits in 8 bits"
+#endif
+
 #endif /* APP_LAYOUT_H */
 
 /*** end of file ***/

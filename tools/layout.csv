@@ -310,3 +310,18 @@ SH_ECHO_WIN,8,OPEN,1,1,flag,0,1,0,FLAG,S,B5,Echo window open; obstacle_task writ
 PRV_ECHO_ISR,8,RISE_SEQ,8,1,count,0,255,0,RAW,P,B5,Ping number captured at the rise (ISR only)
 PRV_ECHO_ARM,8,ARMED,1,1,flag,0,1,0,FLAG,P,B5,A rise is armed (ISR only)
 E_OBS_US,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 timer images x2 (echo rise time in the ISR; scan start for the scan-time log): a stuck-high echo or a scan can exceed 65 ms (bits=31 for gen_layout.py)
+PRV_MIS_G,32,BTN_RUN,2,1,tick,0,3,0,SAT,P,B5,Run button pressed polls (MISSION_BTN_DEBOUNCE_TICKS)
+PRV_MIS_G,32,BTN_RESET,8,1,tick,0,200,0,SAT,P,B5,Reset button held polls (MISSION_BTN_RESET_HOLD_TICKS)
+PRV_MIS_G,32,RESET_SENT,1,1,flag,0,1,0,FLAG,P,B5,RESET_HOLD reported for this hold
+PRV_MIS_G,32,WARNING,1,1,flag,0,1,0,FLAG,P,B5,1 s start warning on
+PRV_MIS_G,32,LED,3,1,code,0,6,0,ENUM,P,B5,HMI_LED_* colour last written; 6 = unknown (forces the first write)
+PRV_MIS_G,32,BUZZ,1,1,flag,0,1,0,FLAG,P,B5,Buzzer is on
+PRV_MIS_G,32,PREV_SYS,4,1,code,0,8,0,ENUM,P,B5,APP_SYS_* shown last pass; 8 = none yet
+PRV_MIS_G,32,BEEP,2,1,code,0,2,0,ENUM,P,B5,HMI_BEEP_* pattern in progress
+E_MIS_US,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 timer images x2 (HMI state entry; beep start): blink and alarm periods exceed 65 ms (bits=31 for gen_layout.py)
+PRV_HLT,8,NORMAL_WIN,1,1,flag,0,1,0,FLAG,P,B5,Watchdog runs the normal 30 ms window (else the 500 ms startup one): selects the LOAD value to feed
+PRV_HLT,8,WDT_ACTIVE,1,1,flag,0,1,0,FLAG,P,B5,Watchdog enabled
+PRV_HLT,8,STARTED,1,1,flag,0,1,0,FLAG,P,B5,All four tasks checked in; normal window armed
+SH_OBS_CHK,8,DONE,1,1,flag,0,1,0,FLAG,S,B5,obstacle_task has checked in (obstacle_task writes; mission_task reads; own byte)
+E_HLT_US,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 timer images x3 (obstacle check-in; watchdog enable; last feed): ages are compared with limits above 65 ms (bits=31 for gen_layout.py)
+E_HLT_GAP,32,MAX_US,31,1,us,0,0,0,RAW,E,B5,E7 longest gap between two watchdog feeds (bring-up latency figure; bits=31 for gen_layout.py)
