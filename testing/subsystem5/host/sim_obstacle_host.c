@@ -251,6 +251,7 @@ int main(void) {
     CHECK("S5-U17", done_before == g_echo_done_cnt, "fall older than the 40 ms timeout is ignored");
     /* Fix 5: both edges in one R1 entry are never measured as 0 mm */
     { uint8_t rise_before = g_echo_rise_cnt;
+      obstacle_echo_t echo_rec = {0u, 0u, false};
       g_echo_window_open = 1u; g_echo_high = false;
       obstacle_echo_isr(DRV_GPIO_IRQ_BOTH, g_now + 2000u);
       CHECK("S5-U17", done_before == g_echo_done_cnt && rise_before == g_echo_rise_cnt && !gb_is_rise_armed, "RISE+FALL in one entry, pin low: both discarded, no 0 mm echo");
@@ -259,7 +260,8 @@ int main(void) {
       CHECK("S5-U17", done_before == g_echo_done_cnt && (uint8_t) (rise_before + 1u) == g_echo_rise_cnt && gb_is_rise_armed && g_now + 3000u == g_rise_us, "RISE+FALL in one entry, pin high: kept as a rise only");
       g_echo_high = false;
       obstacle_echo_isr(DRV_GPIO_IRQ_FALL, g_now + 3000u + 580u);
-      CHECK("S5-U17", (uint8_t) (done_before + 1u) == g_echo_done_cnt && g_echo.b_is_valid && 100u == obstacle_width_to_mm(g_echo.width_4us), "... and its real fall then measures normally (100 mm)");
+      obstacle_read_record(&echo_rec);
+      CHECK("S5-U17", (uint8_t) (done_before + 1u) == g_echo_done_cnt && echo_rec.b_is_valid && 100u == obstacle_width_to_mm(echo_rec.width_4us), "... and its real fall then measures normally (100 mm)");
       g_echo_window_open = 0u; gb_is_rise_armed = false; } }
   /* S5-U38 (on-car 2026-11-04 13:09, clear track): a stray echo under
      600 mm started APPROACH, then the open track's normal lost pings

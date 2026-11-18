@@ -51,6 +51,7 @@ car.
 | Generated layout, not hand packing | `mission_evt_barcode_value()` packs with the `EVT_BARCODE` macros; a build check keeps `EVT_MAP` identical | `mission.c` |
 | Change Requirement 2 document | The IR level-lift path (S4-U17) is described with its rule, threshold history and the 18 Nov car results | `docs/change_requirement_2_lift_stop.md` section 3.1 |
 | RAM evidence | Section 5 of `docs/ram_comparison.md`: car image `ae78cf5` -> `9dcc102` -> this change, with the symbol deltas | `tools/ram_report.sh`, `tools/ram_symbols.txt` |
+| Echo record uses `MSG_ECHO` (Buddy 5) | `obstacle_echo_isr` packs WIDTH / SEQ / VALID into the 16-bit `MSG_ECHO` word and stores it at once; obstacle_task reads it with one load (the read-twice loop is gone). 12 B -> 2 B | Obstacle and mission host simulations print identical output (logs included) before and after; build check ties the ISR limits to the row |
 
 ## 3. Still open (left until the car can be tested)
 
@@ -58,8 +59,8 @@ These change the code that drives the car, so they wait for a car run.
 
 **Buddy 5 (mission, obstacle, HMI).** `mission_ctx_t` (about 70 fields),
 the obstacle-task statics and the `g_obs_scan` array, and the HMI statics
-are in natural types. The ultrasonic echo record still uses a three-field
-struct instead of the `MSG_ECHO` word that `tools/layout.csv` defines.
+are in natural types. (The ultrasonic echo record now uses the `MSG_ECHO`
+word: section 2a.)
 
 **Buddy 3 test switch.** `gb_bar_reread_always` in `barcode.c` stays a
 `bool`: it is a build setting (`BAR_REREAD_ALWAYS`) that only the host

@@ -141,6 +141,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-18 | S5-U81 | before fix (`d50de2a`) | Hanz | FAIL | Mission host simulation | Retries backed 70 mm past the pass start (2 checks failed). |
 | 2026-11-18 | S5-U68, S5-U81 | `tribunal1-car-test` | Hanz | PASS | Mission host simulation | Mission simulation 196 pass (S5-U68 retry moves updated); other subsystem 5 suites unchanged. Host only. |
 | 2026-11-18 | S5-U82 | `tribunal1-car-test` | Hanz | PASS | Obstacle profile + obstacle host simulation | 13:03 scan: lateral 272 mm (was 293), forward 474 mm (was 557). Car run pending. Host only. |
+| 2026-11-18 | S5-U17, S5-U08 (packing check) | `tribunal1-packing` | Hanz | PASS | Obstacle + mission host simulations | Echo record is now the packed 16-bit `MSG_ECHO` word (one ISR store, one task load). Both simulations print identical output, console lines included, before and after (172 and 827 lines). Host suites 879 pass; `-Werror` builds clean. Car check still to do. |
 | 2026-11-16 | S5-U74 | `tribunal1-safe-gaps` | Lucas | PASS | [`2026-11-16_host_all_safe_gaps.txt`](../subsystem1/logs/2026-11-16_host_all_safe_gaps.txt) | Junction field narrowed to 2 bits (codes 0..3 since `b3c4505`): the line-part check now uses `APP_JCT_SIDE_R` (3) as the largest code instead of 4. `status_board.o` disassembly differs from `main` only in the junction and calibrated bit positions. Status board 8/8, mission simulation 193/193, obstacle simulation 77/77. Host only. |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)

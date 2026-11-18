@@ -14,6 +14,8 @@
 #include "obstacle.h"          /* own header first (BARR-C 4.3.c) */
 #include "../board_pins.h"
 #include "../app_types.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "../subsystem2/safety.h"
 #include "../subsystem2/fault.h"
 #include "../subsystem2/odometry.h"
@@ -43,6 +45,10 @@
 #define OBS_WIDTH_SHIFT        (2u)          /* 4 us units            */
 #define OBS_WIDTH_4US_MAX      (4095u)       /* 12 bits; SAT          */
 #define OBS_SEQ_LOW_MASK       (0x3u)        /* record keeps 2 bits   */
+#if (OBS_WIDTH_4US_MAX != MSG_ECHO_WIDTH_MAX) \
+    || (OBS_SEQ_LOW_MASK != MSG_ECHO_SEQ_MAX)
+#error "The echo record limits must match the MSG_ECHO row"
+#endif
 #define OBS_MM_STEP            (4u)          /* stored resolution     */
 #define OBS_CLEAR_HYST_MM      (50u)         /* APPROACH -> MONITOR   */
 #define OBS_CLEAR_READINGS     (2u)
@@ -60,8 +66,9 @@
 #define OBS_SEEN_RESUME        (0x4u)
 #define OBS_DIST_LOG_PINGS     (8u)          /* bring-up print: ~0.5 s */
 
-/* Echo record: written only by obstacle_echo_isr. Natural types, the
-   same information as the packed MSG_ECHO word (Phase 4).            */
+/* Echo record as obstacle_task uses it, decoded from one load of the
+   packed MSG_ECHO word that obstacle_echo_isr writes (local copies
+   only; nothing of this type is stored between calls).              */
 typedef struct
 {
     uint32_t width_4us;     /* 0..4095 (4 us units, SAT)          */
@@ -85,8 +92,10 @@ static uint64_t g_obstacle_stack[OBSTACLE_STACK_WORDS];
 static ID       gh_obstacle_task = 0;
 static ID       gh_echo_sem      = 0;     /* K1 SEM_ECHO */
 
-/* Written only by the ISR (B5.2.2). */
-static volatile obstacle_echo_t g_echo          = {0u, 0u, false};
+/* Written only by the ISR (B5.2.2). MSG_ECHO: WIDTH 12, SEQ 2, VALID 1,
+   PAD 1; the ISR stores the whole 16-bit word at once, so one task load
+   is always a consistent record.                                     */
+static volatile uint16_t        g_echo_word     = 0u;
 static volatile uint8_t         g_echo_rise_cnt = 0u;  /* accepted rises */
 static volatile uint8_t         g_echo_done_cnt = 0u;  /* accepted falls */
 /* ISR-private. g_rise_us is E5: a stuck-high echo can exceed 65 ms. */
@@ -142,6 +151,8 @@ static void     obstacle_echo_isr(uint32_t events, uint32_t now_us);
 static void     obstacle_ping(obstacle_reading_t * p_rd);
 static bool     obstacle_wait_echo(uint8_t done0);
 static void     obstacle_read_record(obstacle_echo_t * p_rec);
+static void     obstacle_echo_store(uint32_t width_4us, uint32_t seq,
+                                    bool b_is_valid);
 static void     obstacle_scan_log(void);
 static void     obstacle_ranges_log(void);
 static void     obstacle_block_log(bool b_is_left, uint32_t step,
@@ -393,10 +404,10 @@ static void obstacle_echo_isr(uint32_t events, uint32_t now_us)
             g_rise_us         = now_us;
             g_rise_seq        = g_ping_seq;  /* captured at the rise */
             gb_is_rise_armed  = true;
-            g_echo.width_4us  = OBS_WIDTH_4US_MAX;
-            /* cast: widen the 8-bit ping number */
-            g_echo.seq        = (uint32_t) g_rise_seq & OBS_SEQ_LOW_MASK;
-            g_echo.b_is_valid = false;      /* started, not finished */
+            /* cast: widen the 8-bit ping number; started, not finished */
+            obstacle_echo_store(OBS_WIDTH_4US_MAX,
+                                (uint32_t) g_rise_seq & OBS_SEQ_LOW_MASK,
+                                false);
             g_echo_rise_cnt++;
         }
     }
@@ -412,10 +423,10 @@ static void obstacle_echo_isr(uint32_t events, uint32_t now_us)
             {
                 width = OBS_WIDTH_4US_MAX;
             }
-            g_echo.width_4us  = width;
             /* cast: widen the 8-bit ping number */
-            g_echo.seq        = (uint32_t) g_rise_seq & OBS_SEQ_LOW_MASK;
-            g_echo.b_is_valid = true;
+            obstacle_echo_store(width,
+                                (uint32_t) g_rise_seq & OBS_SEQ_LOW_MASK,
+                                true);
             g_echo_done_cnt++;
             gb_is_rise_armed  = false;
             (void) tk_sig_sem(gh_echo_sem, 1);      /* E_QOVR is harmless */
@@ -543,29 +554,44 @@ static bool obstacle_wait_echo(uint8_t done0)
 
 /**
  * obstacle_read_record
- * @brief   Coherent read of the ISR's 3-field record: read twice until
- *          both copies match (the task cannot interrupt the ISR, so two
- *          equal reads are consistent). Phase 4: one 16-bit load.
+ * @brief   Coherent read of the ISR's record: one 16-bit load of the
+ *          MSG_ECHO word (the ISR writes the whole word at once),
+ *          decoded into the task's local copy.
  * @param   p_rec copy out
  * @context obstacle_task
  */
 static void obstacle_read_record(obstacle_echo_t * p_rec)
 {
-    obstacle_echo_t again   = {0u, 0u, false};
-    bool            b_equal = false;
+    uint32_t const word = (uint32_t) g_echo_word;  /* one load */
 
-    while (!b_equal)
-    {
-        p_rec->width_4us  = g_echo.width_4us;
-        p_rec->seq        = g_echo.seq;
-        p_rec->b_is_valid = g_echo.b_is_valid;
-        again.width_4us   = g_echo.width_4us;
-        again.seq         = g_echo.seq;
-        again.b_is_valid  = g_echo.b_is_valid;
-        b_equal = (p_rec->width_4us == again.width_4us)
-                  && (p_rec->seq == again.seq)
-                  && (p_rec->b_is_valid == again.b_is_valid);
-    }
+    p_rec->width_4us  = app_bits_get(word, MSG_ECHO_WIDTH_POS,
+                                     MSG_ECHO_WIDTH_BITS);
+    p_rec->seq        = app_bits_get(word, MSG_ECHO_SEQ_POS,
+                                     MSG_ECHO_SEQ_BITS);
+    p_rec->b_is_valid = (0u != app_bits_get(word, MSG_ECHO_VALID_POS,
+                                            MSG_ECHO_VALID_BITS));
+}
+
+/**
+ * obstacle_echo_store
+ * @brief   Packs one echo record into MSG_ECHO and stores the whole word
+ *          with one 16-bit store (PAD stays 0).
+ * @param   width_4us   0..OBS_WIDTH_4US_MAX (already saturated)
+ * @param   seq         low 2 bits of the ping number
+ * @param   b_is_valid  a complete pulse was measured
+ * @context ISR (obstacle_echo_isr)
+ */
+static void obstacle_echo_store(uint32_t width_4us, uint32_t seq,
+                                bool b_is_valid)
+{
+    uint32_t word = 0u;
+
+    word = app_bits_put(word, MSG_ECHO_WIDTH_POS, MSG_ECHO_WIDTH_BITS,
+                        width_4us);
+    word = app_bits_put(word, MSG_ECHO_SEQ_POS, MSG_ECHO_SEQ_BITS, seq);
+    word = app_bits_put(word, MSG_ECHO_VALID_POS, MSG_ECHO_VALID_BITS,
+                        b_is_valid ? 1u : 0u);
+    g_echo_word = (uint16_t) word; /* cast: MSG_ECHO is a 16-bit word */
 }
 
 /**
