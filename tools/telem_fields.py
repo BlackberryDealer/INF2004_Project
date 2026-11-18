@@ -382,6 +382,7 @@ GROUPS = {
         ('STATE', 2, 0, 1, 'code'),
         ('N_ELEM', 6, 0, 1, 'count'),
         ('LAST_LEVEL', 1, 0, 1, 'flag'),
+        ('CLAMP_AGE', 5, 0, 1, 'count'),
     ],
     'PRV_BAR_B': [
         ('MARK', 17, 0, 1, 'count'),

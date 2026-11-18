@@ -229,6 +229,7 @@ PRV_LINE_C,32,RUN_MARK,17,1,count,0,131071,0,RAW,P,B3,Path at black run start (w
 PRV_BAR_A,32,STATE,2,1,code,0,3,0,ENUM,P,B3,Decoder state
 PRV_BAR_A,32,N_ELEM,6,1,count,0,63,0,SAT,P,B3,Elements captured
 PRV_BAR_A,32,LAST_LEVEL,1,1,flag,0,1,0,FLAG,P,B3,Level of the last entry
+PRV_BAR_A,32,CLAMP_AGE,5,1,count,0,29,0,SAT,P,B3,Elements stored after the last clamped gap; 29 = none in the decode window (S3-U48)
 PRV_BAR_B,32,MARK,17,1,count,0,131071,0,RAW,P,B3,Path at last edge or cooldown start (wrapping path)
 PRV_BAR_W,8,WIDTH,8,100,um,0,255,0,SAT,P,B3,Element width x32 bytes
 PRV_BAR_MAP,8,CHAR,6,1,code,0,63,0,ENUM,P,B3,Map character (63 = empty) x8

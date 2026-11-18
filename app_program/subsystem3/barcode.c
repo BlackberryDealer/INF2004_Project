@@ -19,6 +19,10 @@
 #include "cfg_barcode.h"
 #include "code39.h"
 
+#if (BAR_ELEMENTS > PRV_BAR_A_CLAMP_AGE_MAX)
+#error "PRV_BAR_A.CLAMP_AGE must count up to BAR_ELEMENTS"
+#endif
+
 /* ---- private constants and types ------------------------------------ */
 
 #define BARCODE_STACK_WORDS  (APP_STACK_BARCODE_BYTES / 8u)
@@ -117,6 +121,7 @@ static void     barcode_edge_idle(uint32_t level, uint32_t path);
 static void     barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
                                        uint32_t cpw, uint32_t path);
 static void     barcode_store_width(uint32_t n_elem, uint8_t width);
+static void     barcode_clamp_age_step(uint32_t n_elem, bool b_clamped);
 static void     barcode_probe(uint32_t path);
 static void     barcode_request_rewind(uint32_t path);
 static void     barcode_step_decoding(uint32_t path);
@@ -893,6 +898,8 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
 
             /* cast: clamped to <= 255 above */
             barcode_store_width(n_elem, (uint8_t) width_01mm);
+            barcode_clamp_age_step(n_elem,
+                                   gap_all >= (uint32_t) MSG_EDGE_GAP_MAX);
             if (n_elem < (uint32_t) PRV_BAR_A_N_ELEM_MAX)
             {
                 n_elem++;
@@ -926,6 +933,46 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
             }
         }
     }
+}
+
+/**
+ * barcode_clamp_age_step
+ * @brief   Counts the elements stored since the last one whose time reached
+ *          the MSG_EDGE gap clamp (32767 x 16 us, about 524 ms: the car
+ *          stopped or crawled on the strip). Such a width is clamp x speed,
+ *          not a measured length, so a frame that still holds it is not
+ *          decoded (S3-U48). The capture itself carries on as before, so
+ *          probe, rewind and reread timing are unchanged. The first bar
+ *          keeps its own rules (branch line, end-bar cap S3-U43).
+ * @param   n_elem     Index the width was stored at (0 = first bar).
+ * @param   b_clamped  The element's time reached the clamp.
+ * @return  none
+ * @context barcode_task
+ */
+static void barcode_clamp_age_step(uint32_t n_elem, bool b_clamped)
+{
+    uint32_t age = app_bits_get(g_bar_prv_a, PRV_BAR_A_CLAMP_AGE_POS,
+                                PRV_BAR_A_CLAMP_AGE_BITS);
+
+    if (0u == n_elem)
+    {
+        age = BAR_ELEMENTS; /* new capture: no clamped element yet */
+    }
+    else if (b_clamped)
+    {
+        age = 0u;
+    }
+    else if (age < BAR_ELEMENTS)
+    {
+        age++;
+    }
+    else
+    {
+        /* Saturated: the clamped element left the 29-element window. */
+    }
+
+    g_bar_prv_a = app_bits_put(g_bar_prv_a, PRV_BAR_A_CLAMP_AGE_POS,
+                               PRV_BAR_A_CLAMP_AGE_BITS, age);
 }
 
 /**
@@ -1004,7 +1051,17 @@ static void barcode_step_decoding(uint32_t path)
     uint32_t n_elem   = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
                                      PRV_BAR_A_N_ELEM_BITS);
 
-    if (CODE39_OK == code39_decode(g_bar_widths, BAR_ELEMENTS, &char_idx))
+    uint32_t const clamp_age = app_bits_get(g_bar_prv_a,
+        PRV_BAR_A_CLAMP_AGE_POS, PRV_BAR_A_CLAMP_AGE_BITS);
+
+    if (clamp_age < BAR_ELEMENTS)
+    {
+        /* A clamped gap is in the window: its width is unknown (S3-U48).
+           Keep capturing; a frame without it can still decode. */
+        barcode_state_set(BAR_STATE_CAPTURING, n_elem);
+    }
+    else if (CODE39_OK == code39_decode(g_bar_widths, BAR_ELEMENTS,
+                                        &char_idx))
     {
         uint32_t cmd = 0u;
 

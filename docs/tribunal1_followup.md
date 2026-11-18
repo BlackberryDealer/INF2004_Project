@@ -34,7 +34,7 @@ car.
 
 | Item | Change | Evidence |
 |---|---|---|
-| Gap 2, "still to add": reject a clamped gap | A barcode capture is dropped when a gap after the first bar reaches the 15-bit clamp (about 524 ms) | S3-U47, branch `barcode-clamped-gap-reject` |
+| Gap 2, "still to add": reject a clamped gap | A 29-element frame that holds a gap (after the first bar) at the 15-bit clamp (about 524 ms) is not decoded. The capture is not dropped, so rereads and rewinds behave as on the proven code (14c3dc1) | S3-U48. The earlier drop-the-capture version (S3-U47, branch `barcode-clamped-gap-reject`) changed reread behaviour in traces and is not used |
 | No text values over MQTT | The console-line (LOG) and SENSORS debug payloads are sent only by a `DEBUG_MQTT=1` image; the normal image sends only binary payloads | S1-U38 run for both builds; `docs/message_sizes.md` |
 | Kernel object table | The console mirror buffer is K13 in `TEAM.md` (it was also called K12, the ID of `FLG_FAULT`) | `TEAM.md` section 5 |
 | Only the bits needed | Junction code is 2 bits (codes 0..3 since `b3c4505`), in `SB_LINE0` and `EVT_JUNCTION` | `tools/layout.csv`; build check in `line.c` |

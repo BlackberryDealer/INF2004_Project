@@ -166,6 +166,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | STATE | PRV_BAR_A | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | Decoder state |
 | N_ELEM | PRV_BAR_A | 0..63 × 1 count | 1 | 6 | 6 | SAT | P | Elements captured |
 | LAST_LEVEL | PRV_BAR_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Level of the last entry |
+| CLAMP_AGE | PRV_BAR_A | 0..29 × 1 count | 1 | 5 | 5 | SAT | P | Elements stored after the last clamped gap; 29 = none in the decode window (S3-U48) |
 | MARK | PRV_BAR_B | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at last edge or cooldown start (wrapping path) |
 | WIDTH | PRV_BAR_W | 0..255 × 100 um | 100 | 8 | 8 | SAT | P | Element width x32 bytes |
 | CHAR | PRV_BAR_MAP | 0..63 × 1 code | 1 | 6 | 6 | ENUM | P | Map character (63 = empty) x8 |
@@ -356,7 +357,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_LINE_D | 25 | 32 |
 | PRV_LINE_B | 17 | 32 |
 | PRV_LINE_C | 17 | 32 |
-| PRV_BAR_A | 9 | 32 |
+| PRV_BAR_A | 14 | 32 |
 | PRV_BAR_B | 17 | 32 |
 | PRV_BAR_W | 8 | 8 |
 | PRV_BAR_MAP | 8 | 8 |

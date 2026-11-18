@@ -1714,7 +1714,13 @@
 #define PRV_BAR_A_LAST_LEVEL_MAX        (1)
 #define PRV_BAR_A_LAST_LEVEL_OFFSET     (0)
 #define PRV_BAR_A_LAST_LEVEL_KIND       (APP_KIND_FLAG)
-#define PRV_BAR_A_USED_BITS             (PRV_BAR_A_LAST_LEVEL_POS + PRV_BAR_A_LAST_LEVEL_BITS)
+#define PRV_BAR_A_CLAMP_AGE_POS         (PRV_BAR_A_LAST_LEVEL_POS + PRV_BAR_A_LAST_LEVEL_BITS)
+#define PRV_BAR_A_CLAMP_AGE_BITS        (5u)
+#define PRV_BAR_A_CLAMP_AGE_MIN         (0)
+#define PRV_BAR_A_CLAMP_AGE_MAX         (29)
+#define PRV_BAR_A_CLAMP_AGE_OFFSET      (0)
+#define PRV_BAR_A_CLAMP_AGE_KIND        (APP_KIND_SAT)
+#define PRV_BAR_A_USED_BITS             (PRV_BAR_A_CLAMP_AGE_POS + PRV_BAR_A_CLAMP_AGE_BITS)
 #if (PRV_BAR_A_USED_BITS > 32u)
 #error "Group PRV_BAR_A no longer fits in 32 bits"
 #endif
