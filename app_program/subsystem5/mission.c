@@ -13,6 +13,7 @@
 #include "../app_bits.h"
 #include "../app_layout.h"
 #include "../subsystem1/telem.h"
+#include "../subsystem1/cfg_telem.h"
 #include "../subsystem2/fault.h"
 #include "../subsystem2/safety.h"
 #include "../subsystem2/motion.h"
@@ -163,6 +164,7 @@ static void mission_button_event(mission_ctx_t const * p_ctx, uint32_t press,
                                  mission_evt_in_t * p_btn);
 static void mission_note_high_water(void);
 static void mission_ctx_reset(mission_ctx_t * p_ctx);
+static void mission_stack_log(void);
 static void mission_ctx_save(mission_ctx_t const * p_ctx);
 static void mission_ctx_load(mission_ctx_t * p_ctx);
 static uint32_t mission_put(uint32_t word, uint32_t pos, uint32_t width,
@@ -1302,6 +1304,7 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
             mission_stop_motion(p_ctx);
             mission_mode_clear(APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD);
             mission_summary(p_ctx, p_snap, now_us);
+            mission_stack_log();
             break;
         case APP_SYS_FAULT:
             p_ctx->end_reason = APP_END_FAULT;
@@ -1309,6 +1312,7 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
             mission_mode_clear(APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD);
             safety_set(SAFETY_FAULT);
             mission_summary(p_ctx, p_snap, now_us);
+            mission_stack_log();
             break;
         default:
             p_ctx->sys_state = APP_SYS_FAULT;     /* unknown: fail safe */
@@ -1317,6 +1321,22 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
             safety_set(SAFETY_FAULT);
             break;
     }
+}
+
+/**
+ * mission_stack_log
+ * @brief   Bring-up diagnosis (debug image only, DEBUG_MQTT=1): when a run
+ *          ends (FINISHED, LINE_LOST_STOP or FAULT) prints the never-used
+ *          bytes of every task stack, so the margin after a real course is
+ *          measured (RAM report section 3). The motors are already braked.
+ *          Compiled out of the normal image.
+ * @context mission_task (state entry)
+ */
+static void mission_stack_log(void)
+{
+#if (TELEM_DEBUG_MQTT != 0u)
+    app_stack_report();
+#endif
 }
 
 /**
