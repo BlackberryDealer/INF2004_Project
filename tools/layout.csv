@@ -191,6 +191,19 @@ PRV_IMU_R,32,PEAK,9,1,mg,0,511,0,RNG,P,B4,One-wheel hump: largest smoothed |ay| 
 PRV_IMU_R,32,TICKS,8,1,tick,0,255,0,SAT,P,B4,One-wheel hump: cycles on this hump (ramp / held-tilt reject)
 PRV_IMU_E,32,PREV_POS_L,18,1,count,-131071,131071,131072,RNG,P,B4,Previous left position
 PRV_IMU_F,32,PREV_POS_R,18,1,count,-131071,131071,131072,RNG,P,B4,Previous right position
+PRV_IMU_G,32,PITCH,12,1,0.1 deg,-1800,1800,2048,RNG,P,B4,Pitch this cycle before the board clamp (atan2 range); read for the board and the magnetometer check
+PRV_IMU_G,32,HUMP_NOW,12,1,mm,0,2148,0,RNG,P,B4,Hump height this cycle before the board clamp (terrain_acc_to_mm of a positive int32 is at most 2148)
+PRV_IMU_G,32,CAL_ACTIVE,1,1,flag,0,1,0,FLAG,P,B4,IMU calibration mode seen
+PRV_IMU_G,32,CAL_DONE,1,1,flag,0,1,0,FLAG,P,B4,Offsets computed for this calibration
+PRV_IMU_G,32,TURN_ENC,1,1,flag,0,1,0,FLAG,P,B4,Reported turn rate is from the encoders (A7)
+PRV_IMU_H,32,AX,14,1,mg,-8191,8191,8192,RNG,P,B4,Calibrated average X: int16 sample x 61/500 minus an offset of at most 4096 mg (|AX| <= 8093)
+PRV_IMU_H,32,AY,14,1,mg,-8191,8191,8192,RNG,P,B4,Calibrated average Y (same range as AX)
+PRV_IMU_J,32,AZ,14,1,mg,-8191,8191,8192,RNG,P,B4,Calibrated average Z (same range as AX); 1000 at boot
+PRV_IMU_J,32,A_FWD,13,1,mg,-4095,4095,4096,RNG,P,B4,Forward acceleration from the 50 ms speed history: 254 cpw x gain / 1024 (|A_FWD| <= 3615)
+PRV_IMU_K,32,TURN_DPS,22,1,deg/s,-2097151,2097151,2097152,RNG,P,B4,Turn rate before the board clamp: encoder heading difference / 5 (|rate| <= 1677708) or magnetometer x 2 (<= 3600)
+PRV_IMU_L,32,ENC_HDG,23,1,0.01 deg,-4194303,4194303,4194304,RNG,P,B4,Encoder heading at the last magnetometer cycle: wheel difference (A23) x 16 (|heading| <= 4194272)
+PRV_IMU_M,32,MX,16,1,code,-32768,32767,32768,RAW,P,B4,Magnetometer X register image of this cycle
+PRV_IMU_M,32,MY,16,1,code,-32768,32767,32768,RAW,P,B4,Magnetometer Y register image of this cycle
 PRV_HIST_A,32,H0,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 0
 PRV_HIST_A,32,H1,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 1
 PRV_HIST_A,32,H2,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 2

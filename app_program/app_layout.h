@@ -1419,6 +1419,120 @@
 #error "Group PRV_IMU_F no longer fits in 32 bits"
 #endif
 
+/* PRV_IMU_G: 32-bit word */
+#define PRV_IMU_G_PITCH_POS             (0u)
+#define PRV_IMU_G_PITCH_BITS            (12u)
+#define PRV_IMU_G_PITCH_MIN             (-1800)
+#define PRV_IMU_G_PITCH_MAX             (1800)
+#define PRV_IMU_G_PITCH_OFFSET          (2048)
+#define PRV_IMU_G_PITCH_KIND            (APP_KIND_RNG)
+#define PRV_IMU_G_HUMP_NOW_POS          (PRV_IMU_G_PITCH_POS + PRV_IMU_G_PITCH_BITS)
+#define PRV_IMU_G_HUMP_NOW_BITS         (12u)
+#define PRV_IMU_G_HUMP_NOW_MIN          (0)
+#define PRV_IMU_G_HUMP_NOW_MAX          (2148)
+#define PRV_IMU_G_HUMP_NOW_OFFSET       (0)
+#define PRV_IMU_G_HUMP_NOW_KIND         (APP_KIND_RNG)
+#define PRV_IMU_G_CAL_ACTIVE_POS        (PRV_IMU_G_HUMP_NOW_POS + PRV_IMU_G_HUMP_NOW_BITS)
+#define PRV_IMU_G_CAL_ACTIVE_BITS       (1u)
+#define PRV_IMU_G_CAL_ACTIVE_MIN        (0)
+#define PRV_IMU_G_CAL_ACTIVE_MAX        (1)
+#define PRV_IMU_G_CAL_ACTIVE_OFFSET     (0)
+#define PRV_IMU_G_CAL_ACTIVE_KIND       (APP_KIND_FLAG)
+#define PRV_IMU_G_CAL_DONE_POS          (PRV_IMU_G_CAL_ACTIVE_POS + PRV_IMU_G_CAL_ACTIVE_BITS)
+#define PRV_IMU_G_CAL_DONE_BITS         (1u)
+#define PRV_IMU_G_CAL_DONE_MIN          (0)
+#define PRV_IMU_G_CAL_DONE_MAX          (1)
+#define PRV_IMU_G_CAL_DONE_OFFSET       (0)
+#define PRV_IMU_G_CAL_DONE_KIND         (APP_KIND_FLAG)
+#define PRV_IMU_G_TURN_ENC_POS          (PRV_IMU_G_CAL_DONE_POS + PRV_IMU_G_CAL_DONE_BITS)
+#define PRV_IMU_G_TURN_ENC_BITS         (1u)
+#define PRV_IMU_G_TURN_ENC_MIN          (0)
+#define PRV_IMU_G_TURN_ENC_MAX          (1)
+#define PRV_IMU_G_TURN_ENC_OFFSET       (0)
+#define PRV_IMU_G_TURN_ENC_KIND         (APP_KIND_FLAG)
+#define PRV_IMU_G_USED_BITS             (PRV_IMU_G_TURN_ENC_POS + PRV_IMU_G_TURN_ENC_BITS)
+#if (PRV_IMU_G_USED_BITS > 32u)
+#error "Group PRV_IMU_G no longer fits in 32 bits"
+#endif
+
+/* PRV_IMU_H: 32-bit word */
+#define PRV_IMU_H_AX_POS                (0u)
+#define PRV_IMU_H_AX_BITS               (14u)
+#define PRV_IMU_H_AX_MIN                (-8191)
+#define PRV_IMU_H_AX_MAX                (8191)
+#define PRV_IMU_H_AX_OFFSET             (8192)
+#define PRV_IMU_H_AX_KIND               (APP_KIND_RNG)
+#define PRV_IMU_H_AY_POS                (PRV_IMU_H_AX_POS + PRV_IMU_H_AX_BITS)
+#define PRV_IMU_H_AY_BITS               (14u)
+#define PRV_IMU_H_AY_MIN                (-8191)
+#define PRV_IMU_H_AY_MAX                (8191)
+#define PRV_IMU_H_AY_OFFSET             (8192)
+#define PRV_IMU_H_AY_KIND               (APP_KIND_RNG)
+#define PRV_IMU_H_USED_BITS             (PRV_IMU_H_AY_POS + PRV_IMU_H_AY_BITS)
+#if (PRV_IMU_H_USED_BITS > 32u)
+#error "Group PRV_IMU_H no longer fits in 32 bits"
+#endif
+
+/* PRV_IMU_J: 32-bit word */
+#define PRV_IMU_J_AZ_POS                (0u)
+#define PRV_IMU_J_AZ_BITS               (14u)
+#define PRV_IMU_J_AZ_MIN                (-8191)
+#define PRV_IMU_J_AZ_MAX                (8191)
+#define PRV_IMU_J_AZ_OFFSET             (8192)
+#define PRV_IMU_J_AZ_KIND               (APP_KIND_RNG)
+#define PRV_IMU_J_A_FWD_POS             (PRV_IMU_J_AZ_POS + PRV_IMU_J_AZ_BITS)
+#define PRV_IMU_J_A_FWD_BITS            (13u)
+#define PRV_IMU_J_A_FWD_MIN             (-4095)
+#define PRV_IMU_J_A_FWD_MAX             (4095)
+#define PRV_IMU_J_A_FWD_OFFSET          (4096)
+#define PRV_IMU_J_A_FWD_KIND            (APP_KIND_RNG)
+#define PRV_IMU_J_USED_BITS             (PRV_IMU_J_A_FWD_POS + PRV_IMU_J_A_FWD_BITS)
+#if (PRV_IMU_J_USED_BITS > 32u)
+#error "Group PRV_IMU_J no longer fits in 32 bits"
+#endif
+
+/* PRV_IMU_K: 32-bit word */
+#define PRV_IMU_K_TURN_DPS_POS          (0u)
+#define PRV_IMU_K_TURN_DPS_BITS         (22u)
+#define PRV_IMU_K_TURN_DPS_MIN          (-2097151)
+#define PRV_IMU_K_TURN_DPS_MAX          (2097151)
+#define PRV_IMU_K_TURN_DPS_OFFSET       (2097152)
+#define PRV_IMU_K_TURN_DPS_KIND         (APP_KIND_RNG)
+#define PRV_IMU_K_USED_BITS             (PRV_IMU_K_TURN_DPS_POS + PRV_IMU_K_TURN_DPS_BITS)
+#if (PRV_IMU_K_USED_BITS > 32u)
+#error "Group PRV_IMU_K no longer fits in 32 bits"
+#endif
+
+/* PRV_IMU_L: 32-bit word */
+#define PRV_IMU_L_ENC_HDG_POS           (0u)
+#define PRV_IMU_L_ENC_HDG_BITS          (23u)
+#define PRV_IMU_L_ENC_HDG_MIN           (-4194303)
+#define PRV_IMU_L_ENC_HDG_MAX           (4194303)
+#define PRV_IMU_L_ENC_HDG_OFFSET        (4194304)
+#define PRV_IMU_L_ENC_HDG_KIND          (APP_KIND_RNG)
+#define PRV_IMU_L_USED_BITS             (PRV_IMU_L_ENC_HDG_POS + PRV_IMU_L_ENC_HDG_BITS)
+#if (PRV_IMU_L_USED_BITS > 32u)
+#error "Group PRV_IMU_L no longer fits in 32 bits"
+#endif
+
+/* PRV_IMU_M: 32-bit word */
+#define PRV_IMU_M_MX_POS                (0u)
+#define PRV_IMU_M_MX_BITS               (16u)
+#define PRV_IMU_M_MX_MIN                (-32768)
+#define PRV_IMU_M_MX_MAX                (32767)
+#define PRV_IMU_M_MX_OFFSET             (32768)
+#define PRV_IMU_M_MX_KIND               (APP_KIND_RAW)
+#define PRV_IMU_M_MY_POS                (PRV_IMU_M_MX_POS + PRV_IMU_M_MX_BITS)
+#define PRV_IMU_M_MY_BITS               (16u)
+#define PRV_IMU_M_MY_MIN                (-32768)
+#define PRV_IMU_M_MY_MAX                (32767)
+#define PRV_IMU_M_MY_OFFSET             (32768)
+#define PRV_IMU_M_MY_KIND               (APP_KIND_RAW)
+#define PRV_IMU_M_USED_BITS             (PRV_IMU_M_MY_POS + PRV_IMU_M_MY_BITS)
+#if (PRV_IMU_M_USED_BITS > 32u)
+#error "Group PRV_IMU_M no longer fits in 32 bits"
+#endif
+
 /* PRV_HIST_A: 32-bit word */
 #define PRV_HIST_A_H0_POS               (0u)
 #define PRV_HIST_A_H0_BITS              (8u)

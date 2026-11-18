@@ -72,9 +72,6 @@ static int32_t const g_recip_q15[IMU_ACC_SAMPLES_MAX + 1u] = {0, 32768, 16384,
 static terrain_t            g_terrain;
 static terrain_speed_hist_t g_speed_hist;
 
-static int16_t g_mag_mx = 0;
-static int16_t g_mag_my = 0;
-static int16_t g_mag_mz = 0;
 
 /* Packed private state (Phase 4, B4.4). imu_task is the only writer of
    every word: no ISR writes IMU data since the INT1 callback was removed
@@ -98,26 +95,35 @@ static uint32_t g_ofs_word_b = (2048u); /* encoded zero AZ offset */
 static int32_t g_cal_sum_x      = 0;
 static int32_t g_cal_sum_y      = 0;
 static int32_t g_cal_sum_z      = 0;
-static bool    gb_cal_active    = false;
-static bool    gb_cal_done_once = false;
 
 /* Per-cycle caches: recomputed from the packed state or the sensors and
    kept so the board write and the next cycle can read them. */
 static int16_t  g_avg_raw_x         = 0; /* E4 raw averages, before offsets */
 static int16_t  g_avg_raw_y         = 0;
 static int16_t  g_avg_raw_z         = 0;
-static int32_t  g_avg_ax_mg         = 0; /* calibrated averages */
-static int32_t  g_avg_ay_mg         = 0;
-static int32_t  g_avg_az_mg         = 1000; /* flat rest: az = +1000 mg */
 /* SH_IMU_ACC: the three calibrated averages in 4 mg steps for debug
    telemetry; imu_task stores the whole word at once (single writer). */
 static volatile uint32_t g_sh_imu_acc = 0u;
-static int32_t  g_a_fwd_mg          = 0;
-static int32_t  g_turn_dps          = 0;
-static bool     gb_is_turn_from_enc = false;
-static int32_t  g_pitch_ddeg        = 0;
-static uint32_t g_hump_now_mm       = 0u;
-static int32_t  g_enc_hdg_prev_cdeg = 0;
+/* Per-cycle values kept for the board write and the next cycles, packed
+   (PRV_IMU_G..M rows; each row states the range the arithmetic can
+   produce, so encoding never clamps). Every word starts at value 0,
+   except AZ = +1000 mg (flat rest). imu_task is the only writer.     */
+static uint32_t g_imu_prv_g = /* PITCH, HUMP_NOW, CAL_ACTIVE, CAL_DONE,
+                                 TURN_ENC */
+    ((uint32_t)PRV_IMU_G_PITCH_OFFSET << PRV_IMU_G_PITCH_POS);
+static uint32_t g_imu_prv_h = /* AX, AY */
+    ((uint32_t)PRV_IMU_H_AX_OFFSET << PRV_IMU_H_AX_POS) |
+    ((uint32_t)PRV_IMU_H_AY_OFFSET << PRV_IMU_H_AY_POS);
+static uint32_t g_imu_prv_j = /* AZ, A_FWD */
+    ((uint32_t)(PRV_IMU_J_AZ_OFFSET + IMU_REST_AZ_MG) << PRV_IMU_J_AZ_POS) |
+    ((uint32_t)PRV_IMU_J_A_FWD_OFFSET << PRV_IMU_J_A_FWD_POS);
+static uint32_t g_imu_prv_k = /* TURN_DPS */
+    ((uint32_t)PRV_IMU_K_TURN_DPS_OFFSET << PRV_IMU_K_TURN_DPS_POS);
+static uint32_t g_imu_prv_l = /* ENC_HDG */
+    ((uint32_t)PRV_IMU_L_ENC_HDG_OFFSET << PRV_IMU_L_ENC_HDG_POS);
+static uint32_t g_imu_prv_m = /* MX, MY */
+    ((uint32_t)PRV_IMU_M_MX_OFFSET << PRV_IMU_M_MX_POS) |
+    ((uint32_t)PRV_IMU_M_MY_OFFSET << PRV_IMU_M_MY_POS);
 
 /* ---- private function prototypes ------------------------------------- */
 
@@ -134,6 +140,19 @@ static bool     imu_configure_if_needed(void);
 static void     imu_need_cfg_set(bool b_need);
 static void     imu_acc_publish(void);
 static uint32_t imu_acc_code(int32_t mg);
+static int32_t  imu_field_get(uint32_t word, uint32_t pos, uint32_t width,
+                              int32_t offset);
+static uint32_t imu_field_put(uint32_t word, uint32_t pos, uint32_t width,
+                              int32_t value, int32_t min, int32_t max,
+                              int32_t offset);
+static bool     imu_g_flag(uint32_t pos);
+static void     imu_g_flag_set(uint32_t pos, bool b_value);
+static int32_t  imu_ax_mg(void);
+static int32_t  imu_ay_mg(void);
+static int32_t  imu_az_mg(void);
+static int32_t  imu_a_fwd_mg(void);
+static int32_t  imu_pitch_ddeg(void);
+static int32_t  imu_turn_dps(void);
 static void     imu_calibrate(bool b_mode_set, bool b_read_ok);
 static void     imu_run_start(int32_t pos_l, int32_t pos_r);
 static void     imu_turn_rate(bool b_mag_cycle, bool b_mag_read, int32_t pos_l,
@@ -344,7 +363,10 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
 
     /* 5. Forward acceleration: the difference across the full 50 ms
        window, never 10 ms. */
-    g_a_fwd_mg = terrain_speed_hist_push(&g_speed_hist, speed_cpw);
+    g_imu_prv_j = imu_field_put(g_imu_prv_j, PRV_IMU_J_A_FWD_POS,
+            PRV_IMU_J_A_FWD_BITS,
+            terrain_speed_hist_push(&g_speed_hist, speed_cpw),
+            PRV_IMU_J_A_FWD_MIN, PRV_IMU_J_A_FWD_MAX, PRV_IMU_J_A_FWD_OFFSET);
 
     g_imu_prv_e = app_bits_put(
         g_imu_prv_e, PRV_IMU_E_PREV_POS_L_POS, PRV_IMU_E_PREV_POS_L_BITS,
@@ -359,9 +381,9 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
                         &b_clamped));
     imu_clamp_fault(b_clamped);
 
-    in.ax_mg     = g_avg_ax_mg;
-    in.az_mg     = g_avg_az_mg;
-    in.a_fwd_mg  = g_a_fwd_mg;
+    in.ax_mg     = imu_ax_mg();
+    in.az_mg     = imu_az_mg();
+    in.a_fwd_mg  = imu_a_fwd_mg();
     in.ds_counts = terrain_ds_counts(dpos_l, dpos_r);
 
     terrain_step(&g_terrain, &in, &out);
@@ -371,7 +393,7 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
     {
         uint32_t roll_mm = 0u;
 
-        g_imu_prv_r = terrain_roll_hump_step(g_imu_prv_r, g_avg_ay_mg,
+        g_imu_prv_r = terrain_roll_hump_step(g_imu_prv_r, imu_ay_mg(),
                                              dpos_l, dpos_r, &roll_mm);
         if (roll_mm > 0u)
         {
@@ -384,8 +406,14 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
         }
     }
 
-    g_pitch_ddeg  = out.pitch_ddeg;
-    g_hump_now_mm = out.hump_now_mm;
+    g_imu_prv_g = imu_field_put(g_imu_prv_g, PRV_IMU_G_PITCH_POS,
+            PRV_IMU_G_PITCH_BITS, out.pitch_ddeg, PRV_IMU_G_PITCH_MIN,
+            PRV_IMU_G_PITCH_MAX, PRV_IMU_G_PITCH_OFFSET);
+    g_imu_prv_g = imu_field_put(g_imu_prv_g, PRV_IMU_G_HUMP_NOW_POS,
+            PRV_IMU_G_HUMP_NOW_BITS,
+            (int32_t)out.hump_now_mm, /* cast: <= 2148 */
+            PRV_IMU_G_HUMP_NOW_MIN, PRV_IMU_G_HUMP_NOW_MAX,
+            PRV_IMU_G_HUMP_NOW_OFFSET);
 
     if (out.hump_done_mm > 0u)
     {
@@ -516,13 +544,23 @@ static bool imu_read_acc(uint32_t * p_n_samples)
                 (int16_t)((sum_y * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
             g_avg_raw_z =
                 (int16_t)((sum_z * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
-            g_avg_ax_mg =
-                (((int32_t)g_avg_raw_x * IMU_MG_NUM) / IMU_MG_DEN) - ofs_ax;
-            g_avg_ax_mg = g_avg_ax_mg * IMU_X_FORWARD_SIGN;
-            g_avg_ay_mg =
+            int32_t const ax_mg =
+                ((((int32_t)g_avg_raw_x * IMU_MG_NUM) / IMU_MG_DEN) - ofs_ax)
+                * IMU_X_FORWARD_SIGN;
+            int32_t const ay_mg =
                 (((int32_t)g_avg_raw_y * IMU_MG_NUM) / IMU_MG_DEN) - ofs_ay;
-            g_avg_az_mg =
+            int32_t const az_mg =
                 (((int32_t)g_avg_raw_z * IMU_MG_NUM) / IMU_MG_DEN) - ofs_az;
+
+            g_imu_prv_h = imu_field_put(g_imu_prv_h, PRV_IMU_H_AX_POS,
+                    PRV_IMU_H_AX_BITS, ax_mg, PRV_IMU_H_AX_MIN,
+                    PRV_IMU_H_AX_MAX, PRV_IMU_H_AX_OFFSET);
+            g_imu_prv_h = imu_field_put(g_imu_prv_h, PRV_IMU_H_AY_POS,
+                    PRV_IMU_H_AY_BITS, ay_mg, PRV_IMU_H_AY_MIN,
+                    PRV_IMU_H_AY_MAX, PRV_IMU_H_AY_OFFSET);
+            g_imu_prv_j = imu_field_put(g_imu_prv_j, PRV_IMU_J_AZ_POS,
+                    PRV_IMU_J_AZ_BITS, az_mg, PRV_IMU_J_AZ_MIN,
+                    PRV_IMU_J_AZ_MAX, PRV_IMU_J_AZ_OFFSET);
             imu_acc_publish();
         }
     }
@@ -549,6 +587,15 @@ static void imu_read_mag_if_due(uint32_t n_samples, bool * pb_mag_cycle,
                                       PRV_IMU_A_MAG_DIV_BITS);
     bool     b_mag_due = (0u == mag_div);
     int32_t  ercd      = 0;
+    /* The driver writes the register images here; they are kept in
+       PRV_IMU_M exactly as written (Z is not used). */
+    int16_t  mag_x     = (int16_t)imu_field_get(
+        g_imu_prv_m, PRV_IMU_M_MX_POS, PRV_IMU_M_MX_BITS,
+        PRV_IMU_M_MX_OFFSET); /* cast: RAW row range is int16 */
+    int16_t  mag_y     = (int16_t)imu_field_get(
+        g_imu_prv_m, PRV_IMU_M_MY_POS, PRV_IMU_M_MY_BITS,
+        PRV_IMU_M_MY_OFFSET); /* cast: RAW row range is int16 */
+    int16_t  mag_z     = 0;
 
     *pb_mag_cycle = b_mag_due;
     *pb_mag_read  = false;
@@ -565,7 +612,13 @@ static void imu_read_mag_if_due(uint32_t n_samples, bool * pb_mag_cycle,
         return; /* backlog cycle: postponed, MAG_DIV stays 0 */
     }
 
-    ercd = drv_lsm303_read_mag(&g_mag_mx, &g_mag_my, &g_mag_mz);
+    ercd = drv_lsm303_read_mag(&mag_x, &mag_y, &mag_z);
+    g_imu_prv_m = imu_field_put(g_imu_prv_m, PRV_IMU_M_MX_POS,
+            PRV_IMU_M_MX_BITS, mag_x, PRV_IMU_M_MX_MIN,
+            PRV_IMU_M_MX_MAX, PRV_IMU_M_MX_OFFSET);
+    g_imu_prv_m = imu_field_put(g_imu_prv_m, PRV_IMU_M_MY_POS,
+            PRV_IMU_M_MY_BITS, mag_y, PRV_IMU_M_MY_MIN,
+            PRV_IMU_M_MY_MAX, PRV_IMU_M_MY_OFFSET);
     if (ercd < 0)
     {
         imu_i2c_result(false, false);
@@ -708,10 +761,10 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
     uint32_t cal_cnt = app_bits_get(g_imu_prv_b, PRV_IMU_B_CAL_CNT_POS,
                                     PRV_IMU_B_CAL_CNT_BITS);
 
-    if (b_mode_set && !gb_cal_active)
+    if (b_mode_set && !imu_g_flag(PRV_IMU_G_CAL_ACTIVE_POS))
     {
-        gb_cal_active    = true;
-        gb_cal_done_once = false;
+        imu_g_flag_set(PRV_IMU_G_CAL_ACTIVE_POS, true);
+        imu_g_flag_set(PRV_IMU_G_CAL_DONE_POS, false);
         cal_cnt          = 0u; /* the local copy too: on a second
                                   calibration it still held 200 and the
                                   offsets were computed from empty sums */
@@ -724,7 +777,7 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
     }
     else if (!b_mode_set)
     {
-        gb_cal_active = false;
+        imu_g_flag_set(PRV_IMU_G_CAL_ACTIVE_POS, false);
         return;
     }
 
@@ -743,7 +796,7 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
         return;
     }
 
-    if (!gb_cal_done_once)
+    if (!imu_g_flag(PRV_IMU_G_CAL_DONE_POS))
     {
         bool    b_clamped = false;
         int32_t avg_raw_x = 0;
@@ -788,7 +841,7 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
         app_log("IMU at rest, raw before offsets: ax %d ay %d az %d mg\n",
                 ofs_ax, ofs_ay,
                 ofs_az + IMU_REST_AZ_MG);
-        gb_cal_done_once = true;
+        imu_g_flag_set(PRV_IMU_G_CAL_DONE_POS, true);
         imu_terrain_state_set(TERRAIN_FLAT);
         terrain_reset(&g_terrain);
         (void)mission_post_event(APP_EVT_CAL_DONE, APP_CAL_SRC_IMU);
@@ -840,12 +893,22 @@ static void imu_run_start(int32_t pos_l, int32_t pos_r)
                         &b_clamped));
     imu_clamp_fault(b_clamped);
 
-    g_a_fwd_mg          = 0;
-    g_enc_hdg_prev_cdeg = 0;
-    g_turn_dps          = 0;
-    gb_is_turn_from_enc = false;
-    g_pitch_ddeg        = 0;
-    g_hump_now_mm       = 0u;
+    g_imu_prv_j = imu_field_put(g_imu_prv_j, PRV_IMU_J_A_FWD_POS,
+            PRV_IMU_J_A_FWD_BITS, 0, PRV_IMU_J_A_FWD_MIN,
+            PRV_IMU_J_A_FWD_MAX, PRV_IMU_J_A_FWD_OFFSET);
+    g_imu_prv_l = imu_field_put(g_imu_prv_l, PRV_IMU_L_ENC_HDG_POS,
+            PRV_IMU_L_ENC_HDG_BITS, 0, PRV_IMU_L_ENC_HDG_MIN,
+            PRV_IMU_L_ENC_HDG_MAX, PRV_IMU_L_ENC_HDG_OFFSET);
+    g_imu_prv_k = imu_field_put(g_imu_prv_k, PRV_IMU_K_TURN_DPS_POS,
+            PRV_IMU_K_TURN_DPS_BITS, 0, PRV_IMU_K_TURN_DPS_MIN,
+            PRV_IMU_K_TURN_DPS_MAX, PRV_IMU_K_TURN_DPS_OFFSET);
+    imu_g_flag_set(PRV_IMU_G_TURN_ENC_POS, false);
+    g_imu_prv_g = imu_field_put(g_imu_prv_g, PRV_IMU_G_PITCH_POS,
+            PRV_IMU_G_PITCH_BITS, 0, PRV_IMU_G_PITCH_MIN,
+            PRV_IMU_G_PITCH_MAX, PRV_IMU_G_PITCH_OFFSET);
+    g_imu_prv_g = imu_field_put(g_imu_prv_g, PRV_IMU_G_HUMP_NOW_POS,
+            PRV_IMU_G_HUMP_NOW_BITS, 0, PRV_IMU_G_HUMP_NOW_MIN,
+            PRV_IMU_G_HUMP_NOW_MAX, PRV_IMU_G_HUMP_NOW_OFFSET);
     g_imu_prv_a         = app_bits_put(g_imu_prv_a, PRV_IMU_A_LIFT_CNT_POS,
                                        PRV_IMU_A_LIFT_CNT_BITS, 0u);
     g_imu_prv_a =
@@ -892,8 +955,12 @@ static void imu_turn_rate(bool b_mag_cycle, bool b_mag_read, int32_t pos_l,
         b_use_enc = true; /* A7: the encoder rate wins */
     }
 
-    g_turn_dps          = (b_use_enc) ? enc_dps : imu_dps;
-    gb_is_turn_from_enc = b_use_enc;
+    g_imu_prv_k = imu_field_put(g_imu_prv_k, PRV_IMU_K_TURN_DPS_POS,
+            PRV_IMU_K_TURN_DPS_BITS,
+            (b_use_enc) ? enc_dps : imu_dps,
+            PRV_IMU_K_TURN_DPS_MIN, PRV_IMU_K_TURN_DPS_MAX,
+            PRV_IMU_K_TURN_DPS_OFFSET);
+    imu_g_flag_set(PRV_IMU_G_TURN_ENC_POS, b_use_enc);
 }
 
 /**
@@ -909,10 +976,16 @@ static void imu_turn_rate(bool b_mag_cycle, bool b_mag_read, int32_t pos_l,
 static int32_t imu_encoder_rate(int32_t pos_l, int32_t pos_r)
 {
     int32_t enc_hdg = odometry_heading_cdeg(pos_l, pos_r);
-    int32_t enc_dps = (enc_hdg - g_enc_hdg_prev_cdeg) / IMU_TURN_WINDOW_CYCLES;
+    int32_t enc_dps =
+        (enc_hdg - imu_field_get(g_imu_prv_l, PRV_IMU_L_ENC_HDG_POS,
+                                 PRV_IMU_L_ENC_HDG_BITS,
+                                 PRV_IMU_L_ENC_HDG_OFFSET))
+        / IMU_TURN_WINDOW_CYCLES;
     bool    b_clamped = false;
 
-    g_enc_hdg_prev_cdeg = enc_hdg;
+    g_imu_prv_l = imu_field_put(g_imu_prv_l, PRV_IMU_L_ENC_HDG_POS,
+            PRV_IMU_L_ENC_HDG_BITS, enc_hdg, PRV_IMU_L_ENC_HDG_MIN,
+            PRV_IMU_L_ENC_HDG_MAX, PRV_IMU_L_ENC_HDG_OFFSET);
 
     /* PREV_DIFF: the position difference that will be 50 ms old on the
        next magnetometer cycle. */
@@ -954,7 +1027,7 @@ static int32_t imu_mag_rate(bool b_mag_read, bool * pb_use_enc)
         return 0;
     }
 
-    if (terrain_abs(g_pitch_ddeg) > (uint32_t)IMU_MAG_MAX_PITCH_DDEG)
+    if (terrain_abs(imu_pitch_ddeg()) > (uint32_t)IMU_MAG_MAX_PITCH_DDEG)
     /* cast: positive constant, comparison only */
     {
         /* On a hump there is no tilt compensation: use the encoder rate
@@ -966,9 +1039,15 @@ static int32_t imu_mag_rate(bool b_mag_read, bool * pb_use_enc)
     }
 
     {
-        int32_t  heading      = terrain_atan2_ddeg(g_mag_my - IMU_MAG_OFS_Y,
-                                                   g_mag_mx - IMU_MAG_OFS_X) *
-                                IMU_MAG_HEADING_SIGN;
+        int32_t  heading      =
+            terrain_atan2_ddeg(
+                imu_field_get(g_imu_prv_m, PRV_IMU_M_MY_POS,
+                              PRV_IMU_M_MY_BITS, PRV_IMU_M_MY_OFFSET)
+                    - IMU_MAG_OFS_Y,
+                imu_field_get(g_imu_prv_m, PRV_IMU_M_MX_POS,
+                              PRV_IMU_M_MX_BITS, PRV_IMU_M_MX_OFFSET)
+                    - IMU_MAG_OFS_X) *
+            IMU_MAG_HEADING_SIGN;
         uint32_t heading_wrap = (uint32_t)terrain_heading_wrap_ddeg(heading);
         /* cast: wrap >= 0 */
         bool b_hdg_valid =
@@ -1067,8 +1146,8 @@ static void imu_lift_check(bool b_has_data)
         }
         else if (b_has_data)
         {
-            lift_cnt = terrain_lift_step(lift_cnt, g_avg_ax_mg, g_avg_ay_mg,
-                                         g_avg_az_mg, &b_is_lifted);
+            lift_cnt = terrain_lift_step(lift_cnt, imu_ax_mg(), imu_ay_mg(),
+                                         imu_az_mg(), &b_is_lifted);
         }
         else
         {
@@ -1086,7 +1165,7 @@ static void imu_lift_check(bool b_has_data)
             if (b_is_lifted)
             {
                 app_log("LIFT STOP: robot lifted or overturned (az %d mg)\n",
-                        g_avg_az_mg, 0, 0);
+                        imu_az_mg(), 0, 0);
             }
             else
             {
@@ -1125,8 +1204,8 @@ static void imu_classify(int32_t speed_cpw)
                                        PRV_IMU_A_CLASS_GAP_BITS);
 
     cls = terrain_classify(imu_terrain_state_get(),
-                           (0u != (safety_get() & SAFETY_LIFT)), g_turn_dps,
-                           g_a_fwd_mg, speed_cpw);
+                           (0u != (safety_get() & SAFETY_LIFT)), imu_turn_dps(),
+                           imu_a_fwd_mg(), speed_cpw);
 
     if (cls != last_class)
     {
@@ -1164,13 +1243,14 @@ static void imu_write_board(uint32_t motion_class)
 {
     status_board_imu_t part;
 
-    part.pitch_ddeg         = g_pitch_ddeg;
-    part.hump_now_mm        = g_hump_now_mm;
+    part.pitch_ddeg         = imu_pitch_ddeg();
+    part.hump_now_mm        = app_bits_get(g_imu_prv_g, PRV_IMU_G_HUMP_NOW_POS,
+                                           PRV_IMU_G_HUMP_NOW_BITS);
     part.hump_peak_mm       = app_bits_get(g_imu_prv_c, PRV_IMU_C_RUN_PEAK_POS,
                                            PRV_IMU_C_RUN_PEAK_BITS);
     part.motion_class       = motion_class;
-    part.b_is_turn_from_enc = gb_is_turn_from_enc;
-    part.turn_rate_dps      = g_turn_dps;
+    part.b_is_turn_from_enc = imu_g_flag(PRV_IMU_G_TURN_ENC_POS);
+    part.turn_rate_dps      = imu_turn_dps();
 
     status_board_write_imu(&part);
 }
@@ -1211,6 +1291,108 @@ static void imu_clamp_fault(bool b_was_clamped)
 }
 
 /**
+ * imu_field_get
+ * @brief   Reads one signed field of a packed IMU word.
+ * @param   word    packed word
+ * @param   pos     field position (_POS)
+ * @param   width   field width (_BITS)
+ * @param   offset  field offset (_OFFSET)
+ * @return  stored value
+ * @context imu_task
+ */
+static int32_t imu_field_get(uint32_t word, uint32_t pos, uint32_t width,
+                             int32_t offset)
+{
+    return app_bits_decode(app_bits_get(word, pos, width), offset);
+}
+
+/**
+ * imu_field_put
+ * @brief   Writes one signed field of a packed IMU word. The PRV_IMU_G..M
+ *          rows cover every value their arithmetic can produce, so the
+ *          clamp inside app_bits_encode never acts.
+ * @param   word    packed word
+ * @param   pos     field position (_POS)
+ * @param   width   field width (_BITS)
+ * @param   value   value to store
+ * @param   min     row minimum (_MIN)
+ * @param   max     row maximum (_MAX)
+ * @param   offset  field offset (_OFFSET)
+ * @return  the updated word
+ * @context imu_task
+ */
+static uint32_t imu_field_put(uint32_t word, uint32_t pos, uint32_t width,
+                              int32_t value, int32_t min, int32_t max,
+                              int32_t offset)
+{
+    return app_bits_put(word, pos, width,
+                        app_bits_encode(value, min, max, offset, NULL));
+}
+
+/**
+ * imu_g_flag / imu_g_flag_set
+ * @brief   One 1-bit flag of PRV_IMU_G (CAL_ACTIVE, CAL_DONE, TURN_ENC).
+ * @param   pos      flag position (PRV_IMU_G_*_POS)
+ * @param   b_value  new flag value (set only)
+ * @return  flag value (get only)
+ * @context imu_task
+ */
+static bool imu_g_flag(uint32_t pos)
+{
+    return (0u != app_bits_get(g_imu_prv_g, pos, 1u));
+}
+
+static void imu_g_flag_set(uint32_t pos, bool b_value)
+{
+    g_imu_prv_g = app_bits_put(g_imu_prv_g, pos, 1u, b_value ? 1u : 0u);
+}
+
+/**
+ * imu_ax_mg / imu_ay_mg / imu_az_mg / imu_a_fwd_mg / imu_pitch_ddeg /
+ * imu_turn_dps
+ * @brief   This cycle's calibrated averages (PRV_IMU_H, PRV_IMU_J AZ),
+ *          forward acceleration (PRV_IMU_J A_FWD), pitch (PRV_IMU_G) and
+ *          last reported turn rate (PRV_IMU_K).
+ * @return  value in the row's unit
+ * @context imu_task
+ */
+static int32_t imu_ax_mg(void)
+{
+    return imu_field_get(g_imu_prv_h, PRV_IMU_H_AX_POS, PRV_IMU_H_AX_BITS,
+                         PRV_IMU_H_AX_OFFSET);
+}
+
+static int32_t imu_ay_mg(void)
+{
+    return imu_field_get(g_imu_prv_h, PRV_IMU_H_AY_POS, PRV_IMU_H_AY_BITS,
+                         PRV_IMU_H_AY_OFFSET);
+}
+
+static int32_t imu_az_mg(void)
+{
+    return imu_field_get(g_imu_prv_j, PRV_IMU_J_AZ_POS, PRV_IMU_J_AZ_BITS,
+                         PRV_IMU_J_AZ_OFFSET);
+}
+
+static int32_t imu_a_fwd_mg(void)
+{
+    return imu_field_get(g_imu_prv_j, PRV_IMU_J_A_FWD_POS,
+                         PRV_IMU_J_A_FWD_BITS, PRV_IMU_J_A_FWD_OFFSET);
+}
+
+static int32_t imu_pitch_ddeg(void)
+{
+    return imu_field_get(g_imu_prv_g, PRV_IMU_G_PITCH_POS,
+                         PRV_IMU_G_PITCH_BITS, PRV_IMU_G_PITCH_OFFSET);
+}
+
+static int32_t imu_turn_dps(void)
+{
+    return imu_field_get(g_imu_prv_k, PRV_IMU_K_TURN_DPS_POS,
+                         PRV_IMU_K_TURN_DPS_BITS, PRV_IMU_K_TURN_DPS_OFFSET);
+}
+
+/**
  * imu_acc_publish
  * @brief   Packs the three calibrated averages into SH_IMU_ACC and stores
  *          the whole word at once.
@@ -1221,11 +1403,11 @@ static void imu_acc_publish(void)
     uint32_t word = 0u;
 
     word = app_bits_put(word, SH_IMU_ACC_AX_POS, SH_IMU_ACC_AX_BITS,
-                        imu_acc_code(g_avg_ax_mg));
+                        imu_acc_code(imu_ax_mg()));
     word = app_bits_put(word, SH_IMU_ACC_AY_POS, SH_IMU_ACC_AY_BITS,
-                        imu_acc_code(g_avg_ay_mg));
+                        imu_acc_code(imu_ay_mg()));
     word = app_bits_put(word, SH_IMU_ACC_AZ_POS, SH_IMU_ACC_AZ_BITS,
-                        imu_acc_code(g_avg_az_mg));
+                        imu_acc_code(imu_az_mg()));
     g_sh_imu_acc = word;
 }
 

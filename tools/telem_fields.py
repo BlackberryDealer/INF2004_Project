@@ -318,6 +318,31 @@ GROUPS = {
     'PRV_IMU_F': [
         ('PREV_POS_R', 18, 131072, 1, 'count'),
     ],
+    'PRV_IMU_G': [
+        ('PITCH', 12, 2048, 1, '0.1 deg'),
+        ('HUMP_NOW', 12, 0, 1, 'mm'),
+        ('CAL_ACTIVE', 1, 0, 1, 'flag'),
+        ('CAL_DONE', 1, 0, 1, 'flag'),
+        ('TURN_ENC', 1, 0, 1, 'flag'),
+    ],
+    'PRV_IMU_H': [
+        ('AX', 14, 8192, 1, 'mg'),
+        ('AY', 14, 8192, 1, 'mg'),
+    ],
+    'PRV_IMU_J': [
+        ('AZ', 14, 8192, 1, 'mg'),
+        ('A_FWD', 13, 4096, 1, 'mg'),
+    ],
+    'PRV_IMU_K': [
+        ('TURN_DPS', 22, 2097152, 1, 'deg/s'),
+    ],
+    'PRV_IMU_L': [
+        ('ENC_HDG', 23, 4194304, 1, '0.01 deg'),
+    ],
+    'PRV_IMU_M': [
+        ('MX', 16, 32768, 1, 'code'),
+        ('MY', 16, 32768, 1, 'code'),
+    ],
     'PRV_HIST_A': [
         ('H0', 8, 128, 1, 'count/50ms'),
         ('H1', 8, 128, 1, 'count/50ms'),

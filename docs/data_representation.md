@@ -236,6 +236,19 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | TICKS | PRV_IMU_R | 0..255 × 1 tick | 1 | 8 | 8 | SAT | P | One-wheel hump: cycles on this hump (ramp / held-tilt reject) |
 | PREV_POS_L | PRV_IMU_E | -131071..131071 × 1 count | 1 | 18 | 18 | RNG | P | Previous left position |
 | PREV_POS_R | PRV_IMU_F | -131071..131071 × 1 count | 1 | 18 | 18 | RNG | P | Previous right position |
+| PITCH | PRV_IMU_G | -1800..1800 × 1 0.1 deg | 1 | 12 | 12 | RNG | P | Pitch this cycle before the board clamp (atan2 range); read for the board and the magnetometer check |
+| HUMP_NOW | PRV_IMU_G | 0..2148 × 1 mm | 1 | 12 | 12 | RNG | P | Hump height this cycle before the board clamp (terrain_acc_to_mm of a positive int32 is at most 2148) |
+| CAL_ACTIVE | PRV_IMU_G | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | IMU calibration mode seen |
+| CAL_DONE | PRV_IMU_G | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Offsets computed for this calibration |
+| TURN_ENC | PRV_IMU_G | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Reported turn rate is from the encoders (A7) |
+| AX | PRV_IMU_H | -8191..8191 × 1 mg | 1 | 14 | 14 | RNG | P | Calibrated average X: int16 sample x 61/500 minus an offset of at most 4096 mg (\|AX\| <= 8093) |
+| AY | PRV_IMU_H | -8191..8191 × 1 mg | 1 | 14 | 14 | RNG | P | Calibrated average Y (same range as AX) |
+| AZ | PRV_IMU_J | -8191..8191 × 1 mg | 1 | 14 | 14 | RNG | P | Calibrated average Z (same range as AX); 1000 at boot |
+| A_FWD | PRV_IMU_J | -4095..4095 × 1 mg | 1 | 13 | 13 | RNG | P | Forward acceleration from the 50 ms speed history: 254 cpw x gain / 1024 (\|A_FWD\| <= 3615) |
+| TURN_DPS | PRV_IMU_K | -2097151..2097151 × 1 deg/s | 1 | 22 | 22 | RNG | P | Turn rate before the board clamp: encoder heading difference / 5 (\|rate\| <= 1677708) or magnetometer x 2 (<= 3600) |
+| ENC_HDG | PRV_IMU_L | -4194303..4194303 × 1 0.01 deg | 1 | 23 | 23 | RNG | P | Encoder heading at the last magnetometer cycle: wheel difference (A23) x 16 (\|heading\| <= 4194272) |
+| MX | PRV_IMU_M | -32768..32767 × 1 code | 1 | 16 | 16 | RAW | P | Magnetometer X register image of this cycle |
+| MY | PRV_IMU_M | -32768..32767 × 1 code | 1 | 16 | 16 | RAW | P | Magnetometer Y register image of this cycle |
 | H0 | PRV_HIST_A | -127..127 × 1 count/50ms | 1 | 8 | 8 | RNG | P | Speed history 0 |
 | H1 | PRV_HIST_A | -127..127 × 1 count/50ms | 1 | 8 | 8 | RNG | P | Speed history 1 |
 | H2 | PRV_HIST_A | -127..127 × 1 count/50ms | 1 | 8 | 8 | RNG | P | Speed history 2 |
@@ -368,6 +381,12 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_IMU_R | 31 | 32 |
 | PRV_IMU_E | 18 | 32 |
 | PRV_IMU_F | 18 | 32 |
+| PRV_IMU_G | 27 | 32 |
+| PRV_IMU_H | 28 | 32 |
+| PRV_IMU_J | 27 | 32 |
+| PRV_IMU_K | 22 | 32 |
+| PRV_IMU_L | 23 | 32 |
+| PRV_IMU_M | 32 | 32 |
 | PRV_HIST_A | 32 | 32 |
 | PRV_HIST_B | 8 | 32 |
 | PRV_OFS_A | 24 | 32 |
