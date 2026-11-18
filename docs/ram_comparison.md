@@ -6,6 +6,10 @@ stores the same information in natural types; the packed image uses the
 the `.text` row of section 1 is informational only, because the packed
 build also carries the encode/decode code.
 
+> **Sections 1-3 are the Week 11 Buddy 4 comparison** (pre-packing
+> baseline `05a20af` vs the Phase 4 packed IMU). They are kept as
+> measured then. The current team image is measured in section 5.
+
 ## 1. Section sizes (`arm-none-eabi-size -A`)
 
 | Section | Baseline B | Packed B | Delta |
@@ -96,3 +100,78 @@ Removed: `g_imu_impact_seq` (1 B, the ISR byte SH_IMU), `g_imu_isr_us`,
 `g_imu_int1_glitches` and the INT1 diagnosis buffers. In PRV_IMU_A the 9 bits
 of IMPACT_HOLD + IMPACT_SEQ became the 3-bit LIFT_CNT inside the same word.
 Details: `docs/change_requirement_2_lift_stop.md`.
+
+## 5. Tribunal 1 follow-up (18 Nov 2026)
+
+Car image (`make NET=lwip MQTT=1`, Pico SDK 2.2.0, arm-none-eabi-gcc 13.2.1),
+`arm-none-eabi-size -A`:
+
+| Image | .data B | .bss B | RAM B | .text B |
+|---|---:|---:|---:|---:|
+| `main` `ae78cf5` (before the follow-up) | 256 | 99464 | 99720 | 386548 |
+| `tribunal1-car-test` `9dcc102` (motion packing `69dccb1`, DEBUG_MQTT off, car fixes of 18 Nov) | 288 | 98232 | 98520 | 387376 |
+| + B3/B4 late-variable packing (this change) | 308 | 98140 | 98448 | 388536 |
+
+- `ae78cf5` -> `9dcc102`: RAM -1200 B. Most of it is the text-log message
+  buffer (`g_telem_k12_mbf_buf`, 960 B) and part of K11 (96 B) that the
+  normal image no longer builds now that text over MQTT is a `DEBUG_MQTT=1`
+  option; the remaining 144 B are the B2 motion packing and smaller
+  changes on the branch.
+- This change: RAM -72 B (.bss -92, .data +20). `.data` grows because
+  packed words that start at a non-zero code (offset fields, AZ = +1000 mg)
+  are initialised data. `.text` +1160 B is the encode/decode code.
+
+Symbols that changed with this change (`tools/ram_report.sh` with
+`9dcc102` as the baseline; filtered by `tools/ram_symbols.txt`):
+
+| Symbol | Before B | After B | Delta | Owner |
+|--------|---------:|--------:|------:|-------|
+| g_bar_carry_16us | 4 | 0 | -4 | B3 |
+| g_bar_cycle_seq | 4 | 0 | -4 | B3 |
+| g_bar_edge_cnt | 4 | 2 | -2 | B3 |
+| g_bar_elog_cnt | 4 | 0 | -4 | B3 |
+| g_bar_elog_head | 4 | 0 | -4 | B3 |
+| g_bar_elog_left | 4 | 0 | -4 | B3 |
+| g_bar_fix_cnt | 4 | 0 | -4 | B3 |
+| g_bar_prv_c | 0 | 4 | +4 | B3 |
+| g_bar_prv_log | 0 | 4 | +4 | B3 |
+| g_bar_settle_16us | 4 | 0 | -4 | B3 |
+| g_bar_start_path | 4 | 0 | -4 | B3 |
+| g_cross_mark | 4 | 0 | -4 | B3 |
+| g_last_jct | 1 | 0 | -1 | B3 |
+| g_line_prv_e | 0 | 4 | +4 | B3 |
+| g_line_prv_f | 0 | 4 | +4 | B3 |
+| g_raw_log_cnt | 4 | 0 | -4 | B3 |
+| g_white_mark | 4 | 0 | -4 | B3 |
+| gb_bar_probe_ok | 1 | 0 | -1 | B3 |
+| gb_bar_quiet_known | 1 | 0 | -1 | B3 |
+| gb_bar_reread_first | 1 | 0 | -1 | B3 |
+| gb_branch_seen | 1 | 0 | -1 | B3 |
+| gb_cross_straight | 1 | 0 | -1 | B3 |
+| gb_rejoin_white | 1 | 0 | -1 | B3 |
+| gb_cal_active | 1 | 0 | -1 | B3/B4 |
+| g_a_fwd_mg | 4 | 0 | -4 | B4 |
+| g_avg_ax_mg | 4 | 0 | -4 | B4 |
+| g_avg_ay_mg | 4 | 0 | -4 | B4 |
+| g_avg_az_mg | 4 | 0 | -4 | B4 |
+| g_enc_hdg_prev_cdeg | 4 | 0 | -4 | B4 |
+| g_hump_now_mm | 4 | 0 | -4 | B4 |
+| g_imu_prv_g | 0 | 4 | +4 | B4 |
+| g_imu_prv_h | 0 | 4 | +4 | B4 |
+| g_imu_prv_j | 0 | 4 | +4 | B4 |
+| g_imu_prv_k | 0 | 4 | +4 | B4 |
+| g_imu_prv_l | 0 | 4 | +4 | B4 |
+| g_imu_prv_m | 0 | 4 | +4 | B4 |
+| g_mag_mx | 2 | 0 | -2 | B4 |
+| g_mag_my | 2 | 0 | -2 | B4 |
+| g_mag_mz | 2 | 0 | -2 | B4 |
+| g_pitch_ddeg | 4 | 0 | -4 | B4 |
+| g_turn_dps | 4 | 0 | -4 | B4 |
+| gb_cal_done_once | 1 | 0 | -1 | B4 |
+| gb_is_turn_from_enc | 1 | 0 | -1 | B4 |
+
+Net -54 B on the listed symbols; the other 18 B are alignment padding
+between objects.
+
+Stack free space (section 3) still needs the `app_stack_report()` console
+lines of both images from the car.
