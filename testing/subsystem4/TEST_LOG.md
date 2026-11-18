@@ -35,6 +35,7 @@ Define a test here before running it. Test IDs never change (spec B4).
 | S4-I10 | Magnetometer hard-iron offsets | R15 | bench | level, 360 deg slow turn, log mx/my | Offsets into `cfg_imu.h` |
 | S4-I11 | Mag vs encoder rate after S4-I10 | A7 | bench | 10 on-the-spot turns | Within 10 % |
 | S4-U16 | Lift-stop check `terrain_lift_step` (Change Requirement 2) | FR13 (lift-stop) | auto (host) | `make -C testing/subsystem4/host terrain`: flat, 45 deg slope, ±0.2 g braking, 40 ms bumps, hand lift +350 mg, upside down, 70 deg tip, lowered fast, out-of-range input, class LIFTED | No stop on the flat, the slope, braking or a 40 ms bump; stop on the 5th lifted cycle (50 ms); count saturates at 5 (3-bit LIFT_CNT); LIFTED class wins while SAFETY_LIFT is set |
+| S4-U17 | Level-lift check `terrain_ir_lift_step`: both raw IR > 3850 for 30 cycles (300 ms) while MOTOR_EN sets SAFETY_LIFT (on-car 18 Nov 13:19: a smooth level lift kept az ~1000 mg, no stop; IR read 3890..4067 lifted, darkest tape that day 3570) | FR13 (lift-stop) | auto (host) | `test_terrain_host.c`: darkest tape 2 s, one sensor high, 290 ms crest, logged lift values, saturation | No stop on tape, one sensor or a 290 ms crest; stop on the 30th lifted cycle; count saturates at 30 (5-bit IR_LIFT_CNT) |
 | S4-I12 | Lift-stop on the car (Change Requirement 2) | FR13 (lift-stop), NFR10a | car | RUN on the track; lift the car straight up, then tilted, then turn it over on a soft surface; 10 lifts in all; console + dashboard; optional GP14 probe on the motor pins | Every lift: `LIFT STOP` log, motors stop within 100 ms of the lift (50 ms confirm + ≤ 10 ms imu cycle + ≤ 11 ms motion), state FINISHED with end reason STOP; RESET → READY |
 | S4-I13 | No false lift-stop on humps and ramps (Change Requirement 2) | FR4, FR13 | track | 3 full runs over every hump and ramp at cruise, plus 3 obstacle stops | No `LIFT STOP` line; if one trips, raise `IMU_LIFT_DG_MG` or `IMU_LIFT_CONFIRM_CYCLES` (≤ 7) and repeat S4-I12 |
 
@@ -61,6 +62,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S4-I01–I11 | — | Faris | pending | — | bench/track: needs the physical car (placeholders kept, spec rule A.3) |
 | 2026-11-12 | S4-U01–U03, U06, U07, U10, U12–U14, U16 | `imu-lift-stop` | Hanz | PASS (host) | `logs/2026-11-12_host_lift_stop.txt` | Change Requirement 2: terrain 31/31 (12 new S4-U16 checks), drv_lsm303 14/14. Normal (`NET=lwip MQTT=1`) and `TEST=1` images build with zero warnings; `barr_check.sh` 95 files, no findings |
 | 2026-11-12 | S4-I12, S4-I13 | — | — | pending | — | needs the car: lift-stop timing and no false trip on humps |
+| 2026-11-18 | S4-U17 | `tribunal1-car-test` | Hanz | PASS | Terrain host test | Level-lift IR check added after the 13:19 car run (level lift did not stop). Car re-test pending. Host only. |
 
 ## SPEC-QUESTION
 

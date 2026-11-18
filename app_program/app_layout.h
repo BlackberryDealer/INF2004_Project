@@ -1276,7 +1276,13 @@
 #define PRV_IMU_A_NEED_CFG_MAX          (1)
 #define PRV_IMU_A_NEED_CFG_OFFSET       (0)
 #define PRV_IMU_A_NEED_CFG_KIND         (APP_KIND_FLAG)
-#define PRV_IMU_A_USED_BITS             (PRV_IMU_A_NEED_CFG_POS + PRV_IMU_A_NEED_CFG_BITS)
+#define PRV_IMU_A_IR_LIFT_CNT_POS       (PRV_IMU_A_NEED_CFG_POS + PRV_IMU_A_NEED_CFG_BITS)
+#define PRV_IMU_A_IR_LIFT_CNT_BITS      (5u)
+#define PRV_IMU_A_IR_LIFT_CNT_MIN       (0)
+#define PRV_IMU_A_IR_LIFT_CNT_MAX       (30)
+#define PRV_IMU_A_IR_LIFT_CNT_OFFSET    (0)
+#define PRV_IMU_A_IR_LIFT_CNT_KIND      (APP_KIND_SAT)
+#define PRV_IMU_A_USED_BITS             (PRV_IMU_A_IR_LIFT_CNT_POS + PRV_IMU_A_IR_LIFT_CNT_BITS)
 #if (PRV_IMU_A_USED_BITS > 32u)
 #error "Group PRV_IMU_A no longer fits in 32 bits"
 #endif

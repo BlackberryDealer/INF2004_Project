@@ -200,6 +200,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | MAG_DIV | PRV_IMU_A | 0..4 × 1 tick | 1 | 3 | 3 | RNG | P | Cycles to next magnetometer read |
 | LIFT_CNT | PRV_IMU_A | 0..5 × 1 tick | 1 | 3 | 3 | SAT | P | Lift-stop: cycles in a row lifted or overturned (CR2) |
 | NEED_CFG | PRV_IMU_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | LSM303D registers must be (re)written |
+| IR_LIFT_CNT | PRV_IMU_A | 0..30 × 1 tick | 1 | 5 | 5 | SAT | P | Level lift: cycles in a row both IR read no floor (S4-U17) |
 | CAL_CNT | PRV_IMU_B | 0..200 × 1 sample | 1 | 8 | 8 | RNG | P | Calibration samples |
 | CLIMB_CNT | PRV_IMU_B | 0..2047 × 1 count | 1 | 11 | 11 | SAT | P | Climb distance |
 | HIST_IDX | PRV_IMU_B | 0..4 × 1 slot | 1 | 3 | 3 | RNG | P | Speed history index |
@@ -336,7 +337,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_WIN_R | 7 | 8 |
 | PRV_WIN_T | 6 | 8 |
 | PRV_WIN_I | 3 | 8 |
-| PRV_IMU_A | 26 | 32 |
+| PRV_IMU_A | 31 | 32 |
 | PRV_IMU_B | 29 | 32 |
 | PRV_IMU_C | 30 | 32 |
 | PRV_IMU_D | 19 | 32 |

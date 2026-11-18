@@ -41,6 +41,7 @@
 #include "../subsystem2/odometry.h"
 #include "../subsystem2/safety.h"
 #include "../subsystem2/fault.h"
+#include "../subsystem3/line.h"
 #include "../subsystem5/status_board.h"
 #include "../subsystem5/mission.h"
 #include "../subsystem5/sys_tick.h"
@@ -1012,6 +1013,9 @@ static bool imu_turn_disagrees(int32_t imu_dps, int32_t enc_dps)
  *          cycles in a row the car is lifted or overturned; at
  *          IMU_LIFT_CONFIRM_CYCLES SAFETY_LIFT is set and motion_task
  *          brakes at its next cycle. Only mission_task clears the bit.
+ *          The IR pair reading no floor for IMU_LIFT_IR_CYCLES cycles
+ *          (a level lift the IMU cannot see, S4-U17) also sets it, and
+ *          still runs while the IMU is in FAULT.
  * @param   b_has_data  true when this cycle brought new calibrated
  *                      samples (and the IMU is not calibrating)
  * @return  none
@@ -1019,32 +1023,66 @@ static bool imu_turn_disagrees(int32_t imu_dps, int32_t enc_dps)
  */
 static void imu_lift_check(bool b_has_data)
 {
-    uint32_t lift_cnt     = app_bits_get(g_imu_prv_a, PRV_IMU_A_LIFT_CNT_POS,
-                                         PRV_IMU_A_LIFT_CNT_BITS);
-    bool     b_is_lifted  = false;
+    uint32_t       lift_cnt    = app_bits_get(g_imu_prv_a,
+                                              PRV_IMU_A_LIFT_CNT_POS,
+                                              PRV_IMU_A_LIFT_CNT_BITS);
+    uint32_t       ir_cnt      = app_bits_get(g_imu_prv_a,
+                                              PRV_IMU_A_IR_LIFT_CNT_POS,
+                                              PRV_IMU_A_IR_LIFT_CNT_BITS);
+    uint32_t const ir_word     = line_raw_word();   /* one load */
+    bool           b_is_lifted = false;
+    bool           b_ir_lifted = false;
 
-    if (!mission_mode_is_set(APP_MODE_MOTOR_EN)
-        || (TERRAIN_FAULT == imu_terrain_state_get()))
+    if (!mission_mode_is_set(APP_MODE_MOTOR_EN))
     {
         lift_cnt = 0u; /* disarmed: start again from zero */
-    }
-    else if (b_has_data)
-    {
-        lift_cnt = terrain_lift_step(lift_cnt, g_avg_ax_mg, g_avg_ay_mg,
-                                     g_avg_az_mg, &b_is_lifted);
-        if (b_is_lifted && (0u == (safety_get() & SAFETY_LIFT)))
-        {
-            safety_set(SAFETY_LIFT); /* brake first, then report */
-            app_log("LIFT STOP: robot lifted or overturned (az %d mg)\n",
-                    g_avg_az_mg, 0, 0);
-        }
+        ir_cnt   = 0u;
     }
     else
     {
-        /* no new samples: keep the count */
+        if (TERRAIN_FAULT == imu_terrain_state_get())
+        {
+            lift_cnt = 0u; /* no IMU data: only the IR check runs */
+        }
+        else if (b_has_data)
+        {
+            lift_cnt = terrain_lift_step(lift_cnt, g_avg_ax_mg, g_avg_ay_mg,
+                                         g_avg_az_mg, &b_is_lifted);
+        }
+        else
+        {
+            /* no new samples: keep the count */
+        }
+        /* S4-U17: a level lift keeps |a| at 1 g; the IR pair sees it */
+        ir_cnt = terrain_ir_lift_step(ir_cnt,
+                     app_bits_get(ir_word, SH_IR_RAW_L_POS, SH_IR_RAW_L_BITS),
+                     app_bits_get(ir_word, SH_IR_RAW_R_POS, SH_IR_RAW_R_BITS),
+                     &b_ir_lifted);
+        if ((b_is_lifted || b_ir_lifted)
+            && (0u == (safety_get() & SAFETY_LIFT)))
+        {
+            safety_set(SAFETY_LIFT); /* brake first, then report */
+            if (b_is_lifted)
+            {
+                app_log("LIFT STOP: robot lifted or overturned (az %d mg)\n",
+                        g_avg_az_mg, 0, 0);
+            }
+            else
+            {
+                /* casts: 12-bit raw values */
+                app_log("LIFT STOP: no floor under the IR sensors"
+                        " (L %d R %d)\n",
+                        (int32_t) app_bits_get(ir_word, SH_IR_RAW_L_POS,
+                                               SH_IR_RAW_L_BITS),
+                        (int32_t) app_bits_get(ir_word, SH_IR_RAW_R_POS,
+                                               SH_IR_RAW_R_BITS), 0);
+            }
+        }
     }
     g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_LIFT_CNT_POS,
                                PRV_IMU_A_LIFT_CNT_BITS, lift_cnt);
+    g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_IR_LIFT_CNT_POS,
+                               PRV_IMU_A_IR_LIFT_CNT_BITS, ir_cnt);
 }
 
 /**

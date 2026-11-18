@@ -288,6 +288,7 @@ GROUPS = {
         ('MAG_DIV', 3, 0, 1, 'tick'),
         ('LIFT_CNT', 3, 0, 1, 'tick'),
         ('NEED_CFG', 1, 0, 1, 'flag'),
+        ('IR_LIFT_CNT', 5, 0, 1, 'tick'),
     ],
     'PRV_IMU_B': [
         ('CAL_CNT', 8, 0, 1, 'sample'),

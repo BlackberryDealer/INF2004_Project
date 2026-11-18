@@ -540,6 +540,36 @@ uint32_t terrain_lift_step(uint32_t lift_cnt, int32_t ax_mg, int32_t ay_mg,
     return cnt;
 }
 
+/**
+ * terrain_ir_lift_step
+ * @brief   Level-lift check (S4-U17): with no floor under them both IR
+ *          sensors read near full scale, above any tape on the track.
+ *          Both above IMU_LIFT_IR_RAW_MIN for IMU_LIFT_IR_CYCLES cycles
+ *          in a row counts as lifted; one cycle without it restarts the
+ *          count.
+ * @param   ir_cnt        cycles in a row so far (PRV_IMU_A IR_LIFT_CNT)
+ * @param   raw_l         left raw IR ADC, 0..4095
+ * @param   raw_r         right raw IR ADC, 0..4095
+ * @param   pb_is_lifted  out: true once the count reaches
+ *                        IMU_LIFT_IR_CYCLES
+ * @return  the new count, 0..IMU_LIFT_IR_CYCLES (saturates)
+ * @context imu_task, host test
+ */
+uint32_t terrain_ir_lift_step(uint32_t ir_cnt, uint32_t raw_l,
+                              uint32_t raw_r, bool * pb_is_lifted)
+{
+    uint32_t cnt = 0u;
+
+    if ((raw_l > IMU_LIFT_IR_RAW_MIN) && (raw_r > IMU_LIFT_IR_RAW_MIN))
+    {
+        cnt = (ir_cnt < IMU_LIFT_IR_CYCLES) ? (ir_cnt + 1u)
+                                            : IMU_LIFT_IR_CYCLES;
+    }
+    *pb_is_lifted = (cnt >= IMU_LIFT_IR_CYCLES);
+
+    return cnt;
+}
+
 /* ---- private functions ------------------------------------------------ */
 
 /**

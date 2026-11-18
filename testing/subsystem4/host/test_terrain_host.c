@@ -379,5 +379,56 @@ int main(void)
                    "class LIFTED wins while SAFETY_LIFT is set, else as before");
     }
 
+    /* S4-U17 (car run 2026-11-18 13:19): a smooth level lift kept az at
+       ~1000 mg, so only the IR pair saw it (both 3890..4067 raw); the
+       darkest tape that day read 3570. */
+    {
+        uint32_t cnt    = 0u;
+        bool     b_lift = false;
+        bool     b_any  = false;
+        uint32_t idx    = 0u;
+
+        for (idx = 0u; idx < 200u; idx++)   /* 2 s on a cross: 3570/3570 */
+        {
+            cnt = terrain_ir_lift_step(cnt, 3570u, 3570u, &b_lift);
+            b_any = b_any || b_lift;
+        }
+        HOST_CHECK("S4-U17", !b_any && (0u == cnt),
+                   "both on the darkest tape (3570): never lifted");
+        b_any = false;
+        for (idx = 0u; idx < 200u; idx++)   /* one sensor off the floor */
+        {
+            cnt = terrain_ir_lift_step(cnt, 4050u, 3200u, &b_lift);
+            b_any = b_any || b_lift;
+        }
+        HOST_CHECK("S4-U17", !b_any, "only one sensor high: not lifted");
+        b_any = false;
+        cnt   = 0u;
+        for (idx = 0u; idx < 29u; idx++)    /* a 290 ms crest, then floor */
+        {
+            cnt = terrain_ir_lift_step(cnt, 3926u, 3899u, &b_lift);
+            b_any = b_any || b_lift;
+        }
+        cnt = terrain_ir_lift_step(cnt, 3200u, 3926u, &b_lift);
+        HOST_CHECK("S4-U17", !b_any && !b_lift && (0u == cnt),
+                   "290 ms with no floor, then floor: no stop, count reset");
+        for (idx = 0u; idx < 29u; idx++)
+        {
+            cnt = terrain_ir_lift_step(cnt, 4021u, 3999u, &b_lift);
+        }
+        HOST_CHECK("S4-U17", !b_lift && (29u == cnt),
+                   "logged level lift: not yet after 29 cycles");
+        cnt = terrain_ir_lift_step(cnt, 4023u, 4028u, &b_lift);
+        HOST_CHECK("S4-U17", b_lift && (IMU_LIFT_IR_CYCLES == cnt),
+                   "logged level lift: stop on the 30th cycle (300 ms)");
+        for (idx = 0u; idx < 50u; idx++)
+        {
+            cnt = terrain_ir_lift_step(cnt, 4050u, 4050u, &b_lift);
+        }
+        HOST_CHECK("S4-U17", (IMU_LIFT_IR_CYCLES == cnt)
+                   && (cnt <= (uint32_t)PRV_IMU_A_IR_LIFT_CNT_MAX),
+                   "count saturates at 30: fits the 5-bit IR_LIFT_CNT field");
+    }
+
     return (0 == HOST_SUMMARY("terrain")) ? 0 : 1;
 }

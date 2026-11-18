@@ -117,6 +117,12 @@ extern uint32_t terrain_lift_step(uint32_t lift_cnt, int32_t ax_mg,
                                   int32_t ay_mg, int32_t az_mg,
                                   bool * pb_is_lifted);
 
+/* One 10 ms step of the level-lift check on the raw IR pair (S4-U17):
+   ir_cnt is the PRV_IMU_A IR_LIFT_CNT value; the new count is returned
+   and *pb_is_lifted is true once it reaches IMU_LIFT_IR_CYCLES.        */
+extern uint32_t terrain_ir_lift_step(uint32_t ir_cnt, uint32_t raw_l,
+                                     uint32_t raw_r, bool * pb_is_lifted);
+
 #endif /* TERRAIN_H */
 
 /*** end of file ***/
