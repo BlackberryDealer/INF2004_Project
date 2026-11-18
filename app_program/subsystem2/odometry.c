@@ -47,8 +47,13 @@
 #define ODOMETRY_DIFF_MAX           (262142)  /* 2 x 131071 (A23)      */
 
 /* Speed window */
-#define ODOMETRY_DELTA_MAX          (63)      /* 7-bit slot (Phase 4)   */
-#define ODOMETRY_DT_MAX_MS          (63u)     /* 6-bit slot (Phase 4)   */
+#define ODOMETRY_DELTA_MAX          (PRV_WIN_L_DELTA_MAX)     /* 7-bit slot */
+#define ODOMETRY_DELTA_OFFSET       (PRV_WIN_L_DELTA_OFFSET)
+#define ODOMETRY_DT_MAX_MS          ((uint32_t) PRV_WIN_T_DT_MS_MAX) /* 6-bit */
+
+#if (ODOMETRY_WINDOW_SLOTS != 5u) || (PRV_WIN_I_IDX_MAX != 4)
+#error "ODOMETRY_WINDOW_EMPTY and PRV_WIN_I are written for 5 slots"
+#endif
 #define ODOMETRY_SPAN_MIN_MS        (45u)     /* normal window: 50 +- 5 */
 #define ODOMETRY_SPAN_MAX_MS        (55u)
 
@@ -74,6 +79,8 @@
 
 /* ---- private function prototypes ------------------------------------- */
 
+static uint8_t odometry_slot_pack(int32_t delta);
+static int32_t odometry_slot_unpack(uint8_t stored);
 static int32_t odometry_clamp(int32_t value, int32_t limit);
 
 /* ---- public functions ------------------------------------------------- */
@@ -213,8 +220,8 @@ void odometry_window_reset(odometry_window_t * p_win)
     {
         for (idx = 0u; idx < ODOMETRY_WINDOW_SLOTS; idx++)
         {
-            p_win->delta_l[idx] = 0;
-            p_win->delta_r[idx] = 0;
+            p_win->delta_l[idx] = odometry_slot_pack(0);
+            p_win->delta_r[idx] = odometry_slot_pack(0);
             p_win->dt_ms[idx]   = 0u;
         }
         p_win->idx = 0u;
@@ -237,12 +244,11 @@ void odometry_window_push(odometry_window_t * p_win, int32_t delta_l,
 {
     if ((NULL != p_win) && (p_win->idx < ODOMETRY_WINDOW_SLOTS))
     {
-        p_win->delta_l[p_win->idx] = odometry_clamp(delta_l,
-                                                    ODOMETRY_DELTA_MAX);
-        p_win->delta_r[p_win->idx] = odometry_clamp(delta_r,
-                                                    ODOMETRY_DELTA_MAX);
-        p_win->dt_ms[p_win->idx]   = (dt_ms > ODOMETRY_DT_MAX_MS)
-                                     ? ODOMETRY_DT_MAX_MS : dt_ms;
+        p_win->delta_l[p_win->idx] = odometry_slot_pack(delta_l);
+        p_win->delta_r[p_win->idx] = odometry_slot_pack(delta_r);
+        /* cast: clamped to 0..63, fits the byte */
+        p_win->dt_ms[p_win->idx]   = (uint8_t) ((dt_ms > ODOMETRY_DT_MAX_MS)
+                                                ? ODOMETRY_DT_MAX_MS : dt_ms);
 
         /* Wrap without % (no division in the 10 ms path). */
         if (p_win->idx >= (ODOMETRY_WINDOW_SLOTS - 1u))
@@ -280,8 +286,8 @@ void odometry_window_speed(odometry_window_t const * p_win,
     {
         for (idx = 0u; idx < ODOMETRY_WINDOW_SLOTS; idx++)
         {
-            sum_l += p_win->delta_l[idx];
-            sum_r += p_win->delta_r[idx];
+            sum_l += odometry_slot_unpack(p_win->delta_l[idx]);
+            sum_r += odometry_slot_unpack(p_win->delta_r[idx]);
             span  += p_win->dt_ms[idx];
         }
 
@@ -308,6 +314,34 @@ void odometry_window_speed(odometry_window_t const * p_win,
 }
 
 /* ---- private functions ------------------------------------------------ */
+
+/**
+ * odometry_slot_pack
+ * @brief   One window delta to its stored byte: clamped to +-63, then
+ *          the layout offset is added (PRV_WIN_L / PRV_WIN_R DELTA).
+ * @param   delta  counts this tick
+ * @return  stored byte, 1..127
+ * @context motion_task
+ */
+static uint8_t odometry_slot_pack(int32_t delta)
+{
+    /* cast: clamp + offset is 1..127, fits the byte */
+    return (uint8_t) (odometry_clamp(delta, ODOMETRY_DELTA_MAX)
+                      + ODOMETRY_DELTA_OFFSET);
+}
+
+/**
+ * odometry_slot_unpack
+ * @brief   Inverse of odometry_slot_pack.
+ * @param   stored  stored byte
+ * @return  counts, -63..+63 for a byte written by odometry_slot_pack
+ * @context motion_task
+ */
+static int32_t odometry_slot_unpack(uint8_t stored)
+{
+    /* cast: a byte always fits int32_t */
+    return ((int32_t) stored) - ODOMETRY_DELTA_OFFSET;
+}
 
 /**
  * odometry_clamp

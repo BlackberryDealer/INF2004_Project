@@ -46,7 +46,7 @@ extern uint32_t mqtt_bridge_publish_drops(void);   /* 0..255, for telem */
 /* Next mirrored console line as a LOG payload (header byte, then the
    text without newline or NUL), at most size bytes. Returns its length,
    0 if no line is queued. A line saying how many lines were dropped
-   comes first when K12 overflowed. Never blocks.                     */
+   comes first when K13 overflowed. Never blocks.                     */
 extern uint32_t mqtt_bridge_take_log(uint8_t * p_buf, uint32_t size);
 
 /* The command topic string the radio task subscribes to. */

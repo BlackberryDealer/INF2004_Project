@@ -178,7 +178,7 @@ void status_board_read(status_board_t * p_snapshot)
 uint32_t status_board_path(status_board_t const * p_snap)
 {
     (void) p_snap;
-    return g_sim_path;
+    return g_sim_path & 0x1FFFFu;   /* the 17-bit SB_MOT3 PATH field */
 }
 
 int32_t status_board_pos_l(status_board_t const * p_snap)
@@ -322,6 +322,43 @@ static uint32_t sim_feed_barcode_edges(uint32_t char_idx, uint32_t start_us)
     }
 
     return now_us;
+}
+
+/* S3-U50: '*' X '*' with the path advancing through each element
+   (mocked wheel speed) and the task running in the middle of every
+   element and after every edge, so a capture crosses the 2^17-count
+   path wrap between two edges.                                       */
+static void sim_feed_barcode_stepped(uint32_t char_idx, uint32_t start_us)
+{
+    uint32_t chars[3] = { CODE39_STAR, char_idx, CODE39_STAR };
+    uint32_t now_us   = start_us;
+
+    gb_sim_bar_pin = true;
+    barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+    barcode_cycle();
+    for (uint32_t c_idx = 0u; c_idx < 3u; c_idx++)
+    {
+        uint16_t const pat   = g_sim_patterns[chars[c_idx]];
+        uint32_t const n_bit = (c_idx < 2u) ? 10u : 9u; /* + gap */
+
+        for (uint32_t bit = 0u; bit < n_bit; bit++)
+        {
+            bool const b_wide = (bit < 9u)
+                && (0u != (pat & (uint16_t) (1u << (8u - bit))));
+            uint32_t const dur_us = b_wide ? 30000u : 12000u;
+
+            uint32_t const half = (dur_us * (uint32_t) g_sim_speed_l)
+                                  / 100000u;
+
+            g_sim_path += half;           /* mid-element task cycle */
+            barcode_cycle();
+            now_us     += dur_us;
+            g_sim_path += half;
+            gb_sim_bar_pin = !gb_sim_bar_pin;
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+            barcode_cycle();
+        }
+    }
 }
 
 /* Replay logged widths through the IRQ and task at the mocked wheel speed. */
@@ -1489,8 +1526,11 @@ int main(void)
         static uint8_t const misread[BAR_ELEMENTS] = {
             67u, 176u, 82u, 51u, 238u, 29u, 191u, 51u, 66u, 43u,
             154u, 81u, 73u, 47u, 64u, 173u, 63u, 30u, 193u, 54u,
-            55u, 114u, 100u, 49u, 180u, 42u, 175u, 36u, 57u
+            55u, 114u, 150u, 49u, 180u, 42u, 175u, 36u, 57u
         };
+        /* Element 23 was 100: since S3-U51 the logged frame decodes as A
+           (its stop guard has bar ratio 1.75), so it is made invalid here
+           (150) to keep checking the rewind after a failed read.       */
 
         sim_reset();
         g_sim_mode_mask = APP_MODE_MOTOR_EN;
@@ -1924,6 +1964,135 @@ int main(void)
     line_cycle();
     HOST_CHECK("S3-U33", g_sim_line_out.steering < 0,
                "a lasting one-sided reading steers again after the hold");
+
+    /* ---- S3-U48 (Tribunal 1 row 2: a clamped gap is not decoded) ---- */
+    /* A gap is stored in 16 us units and clamps at 32767 (about 524 ms).
+       If the car crawls on the strip, clamp x speed can still look like
+       a narrow element, so a frame holding it could decode. Such a frame
+       is now not decoded. The capture itself carries on as before (no
+       drop, no extra event), so probe, rewind and reread timing are those
+       of the proven code; only the frame that holds the clamp changes.  */
+    for (uint32_t pass = 0u; pass < 2u; pass++)
+    {
+        int32_t  gaps[BAR_ELEMENTS] = {0};
+        uint8_t  cpws[BAR_ELEMENTS] = {0u};
+        uint32_t chars[3] = { CODE39_STAR, 10u, CODE39_STAR };
+        uint32_t elem     = 0u;
+        uint32_t narrow   = 0u;
+        uint32_t now_us   = 50000u;
+        uint32_t age      = 0u;
+
+        for (uint32_t c_idx = 0u; c_idx < 3u; c_idx++)
+        {
+            uint16_t const pat = g_sim_patterns[chars[c_idx]];
+
+            for (uint32_t bit = 0u; bit < 9u; bit++)
+            {
+                bool const b_wide =
+                    (0u != (pat & (uint16_t) (1u << (8u - bit))));
+
+                gaps[elem] = b_wide ? 30000 : 12000;
+                elem++;
+            }
+            if (c_idx < 2u)
+            {
+                gaps[elem] = 12000;
+                elem++;
+            }
+        }
+        for (elem = 0u; elem < BAR_ELEMENTS; elem++)
+        {
+            cpws[elem] = 36u;
+            /* element elem ends with the edge after it: odd = falling */
+            gaps[elem] = (0u == (elem % 2u)) ? -gaps[elem] : gaps[elem];
+            if ((0u == narrow) && (elem > 1u)
+                && ((12000 == gaps[elem]) || (-12000 == gaps[elem])))
+            {
+                narrow = elem;
+            }
+        }
+        if (1u == pass)
+        {
+            /* the car crawls through one narrow element: 600 ms at
+               1 count per window, which the ISR clamps to 524 ms and
+               the decoder sees as a 1.2 x narrow width                */
+            gaps[narrow] = (gaps[narrow] < 0) ? -600000 : 600000;
+            cpws[narrow] = 1u;
+        }
+
+        sim_reset();
+        gb_sim_bar_pin = true;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+        barcode_cycle();
+        sim_feed_raw(gaps, cpws, BAR_ELEMENTS, &now_us);
+        age = app_bits_get(g_bar_prv_a, PRV_BAR_A_CLAMP_AGE_POS,
+                           PRV_BAR_A_CLAMP_AGE_BITS);
+        if (0u == pass)
+        {
+            exp_val = mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u);
+            HOST_CHECK("S3-U48", (1u == g_sim_evt_cnt)
+                       && (APP_EVT_BARCODE == g_sim_evts[0].type)
+                       && (exp_val == g_sim_evts[0].value),
+                       "control: *A* without a clamped gap decodes A");
+        }
+        else
+        {
+            uint32_t const n_elem = app_bits_get(g_bar_prv_a,
+                PRV_BAR_A_N_ELEM_POS, PRV_BAR_A_N_ELEM_BITS);
+            uint32_t const state  = app_bits_get(g_bar_prv_a,
+                PRV_BAR_A_STATE_POS, PRV_BAR_A_STATE_BITS);
+
+            HOST_CHECK("S3-U48", 0u == g_sim_evt_cnt,
+                       "*A* holding a clamped gap: not decoded");
+            HOST_CHECK("S3-U48", (BAR_ELEMENTS == n_elem)
+                       && (BAR_STATE_CAPTURING == state)
+                       && (age < BAR_ELEMENTS),
+                       "the capture carries on (no drop): same path as "
+                       "a frame that does not decode");
+        }
+    }
+
+    /* ---- S3-U50 (2026-11-16: the path wraps at 2^17 counts) ---------- */
+    /* The board path now wraps at 2^17 counts (about 42.5 m) instead of
+       stopping: the track has no line end. Every "travelled since" rule
+       must measure across the wrap like anywhere else.                 */
+    sim_reset();
+    g_sim_path = 131072u - 3u;   /* wraps inside the first bar, between edges */
+    sim_feed_barcode_stepped(10u, 50000u);
+    exp_val = mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u);
+    HOST_CHECK("S3-U50",
+               (1u == g_sim_evt_cnt)
+               && (APP_EVT_BARCODE == g_sim_evts[0].type)
+               && (exp_val == g_sim_evts[0].value)
+               && (g_sim_path > 131071u),
+               "*A* read while the path wraps decodes A (no quiet-zone drop)");
+
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path  = 131072u - 20u;          /* the exit crosses the wrap */
+    g_sim_raw_l = 3500u;                  /* black under the left sensor */
+    g_sim_raw_r = 500u;
+    for (uint32_t i = 0u; i < 5u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    g_sim_raw_l = 500u;
+    for (uint32_t i = 0u; i < 30u; i++)   /* 300 ms, 30 mm both white */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U50", 0u == g_sim_evt_cnt,
+               "black exit across the path wrap: no LINE_LOST before 60 mm");
+    for (uint32_t i = 0u; i < 40u; i++)   /* to 70 mm both white */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U50", (1u == g_sim_evt_cnt)
+               && (APP_EVT_LINE_LOST == g_sim_evts[0].type),
+               "black exit across the path wrap: LINE_LOST after 60 mm");
 
     return (0 == HOST_SUMMARY("line_barcode_sim")) ? 0 : 1;
 }

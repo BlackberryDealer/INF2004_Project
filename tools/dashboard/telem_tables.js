@@ -29,7 +29,7 @@
       "EVT_JUNCTION": [
        [
         "CLASS",
-        3,
+        2,
         0,
         1,
         "code"
@@ -67,6 +67,24 @@
         0,
         1,
         "code"
+       ]
+      ],
+      "EVT_INVALID": [
+       [
+        "N_ELEM",
+        6,
+        0,
+        1,
+        "count"
+       ]
+      ],
+      "EVT_BARCODE_PROBE": [
+       [
+        "MM",
+        11,
+        0,
+        1,
+        "mm"
        ]
       ],
       "EVT_PLAN": [

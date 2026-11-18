@@ -44,6 +44,8 @@
 #include "sys_health.h"        /* own header first (BARR-C 4.3.c) */
 #include "drv_led_alive.h"
 #include "sys_tick.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
 #if defined(TM_WIFI_CYW43) && (TM_WIFI_CYW43 != 0)
 /* Plain stdint header (no SDK or kernel types): radio init status. */
 #include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
@@ -108,10 +110,10 @@ static ID gh_alive_flg = 0;
 static volatile uint32_t g_obs_checkin_us      = 0u;
 static volatile uint8_t  gb_obs_has_checked_in = 0u;
 
-/* Written only by mission_task. */
-static bool     gb_is_wdt_active = false;
-static bool     gb_is_started    = false;
-static uint32_t g_wdt_load       = SYS_HEALTH_LOAD_START;
+/* Written only by mission_task. PRV_HLT: NORMAL_WIN (the watchdog LOAD
+   is one of two constants, so one bit selects it), WDT_ACTIVE,
+   STARTED. g_boot_us is E5.                                          */
+static uint8_t  g_hlt_word       = 0u;
 static uint32_t g_boot_us        = 0u;   /* sys_health_enable_watchdog() */
 /* Bring-up diagnosis: longest time between two normal-window feeds. The
    kernel tick is 10 ms (CNF_TIMER_PERIOD), so mission_task's 10 ms
@@ -123,6 +125,9 @@ static uint32_t g_feed_gap_max_us = 0u;
 /* ---- private function prototypes ------------------------------------- */
 
 static void sys_health_wdt_start(uint32_t load);
+static bool sys_health_flag(uint32_t pos);
+static void sys_health_flag_set(uint32_t pos, bool b_value);
+static uint32_t sys_health_load(void);
 static bool sys_health_radio_settled(void);
 
 /* ---- public functions ------------------------------------------------- */
@@ -199,18 +204,19 @@ void sys_health_service(void)
                   == (((uint32_t) rflg.flgptn) & SYS_HEALTH_FAST_BITS));
     }
 
-    if (!gb_is_started)
+    if (!sys_health_flag(PRV_HLT_STARTED_POS))
     {
-        if (b_fast && (0u != gb_obs_has_checked_in) && gb_is_wdt_active)
+        if (b_fast && (0u != gb_obs_has_checked_in)
+            && sys_health_flag(PRV_HLT_WDT_ACTIVE_POS))
         {
             if (sys_health_radio_settled())
             {
                 sys_health_wdt_start(SYS_HEALTH_LOAD_NORMAL); /* 30 ms */
-                gb_is_started = true;
+                sys_health_flag_set(PRV_HLT_STARTED_POS, true);
             }
             else
             {
-                out_w(SYS_HEALTH_WDT_LOAD, g_wdt_load); /* feed 500 ms */
+                out_w(SYS_HEALTH_WDT_LOAD, sys_health_load()); /* feed 500 ms */
             }
             b_feed = true;
         }
@@ -219,7 +225,7 @@ void sys_health_service(void)
     {
         uint32_t const now_us = sys_tick_now_us();
 
-        out_w(SYS_HEALTH_WDT_LOAD, g_wdt_load);           /* feed */
+        out_w(SYS_HEALTH_WDT_LOAD, sys_health_load());           /* feed */
         b_feed            = true;
         if ((0u != g_last_feed_us)
             && ((now_us - g_last_feed_us) > g_feed_gap_max_us))
@@ -251,7 +257,7 @@ void sys_health_enable_watchdog(void)
 {
     g_boot_us = sys_tick_now_us();
     sys_health_wdt_start(SYS_HEALTH_LOAD_START);
-    gb_is_wdt_active = true;
+    sys_health_flag_set(PRV_HLT_WDT_ACTIVE_POS, true);
 }
 
 /**
@@ -277,12 +283,12 @@ uint32_t sys_health_feed_gap_max_us(bool b_reset)
  * sys_health_is_started
  * @brief   True once all four tasks have checked in for the first time
  *          and the normal 30 ms window runs.
- * @return  gb_is_started
+ * @return  PRV_HLT STARTED
  * @context mission_task (BOOT waits for it)
  */
 bool sys_health_is_started(void)
 {
-    return gb_is_started;
+    return sys_health_flag(PRV_HLT_STARTED_POS);
 }
 
 /* ---- private functions ------------------------------------------------ */
@@ -298,7 +304,8 @@ bool sys_health_is_started(void)
  */
 static void sys_health_wdt_start(uint32_t load)
 {
-    g_wdt_load = load;
+    sys_health_flag_set(PRV_HLT_NORMAL_WIN_POS,
+                        SYS_HEALTH_LOAD_NORMAL == load);
     out_w(SYS_HEALTH_WDT_SCRATCH0
           + (SYS_HEALTH_WDT_REG_BYTES * SYS_HEALTH_SCRATCH_IDX),
           SYS_HEALTH_WDT_NONBOOT);
@@ -310,6 +317,38 @@ static void sys_health_wdt_start(uint32_t load)
     set_w(SYS_HEALTH_WDT_CTRL, SYS_HEALTH_WDT_DBG_BITS);
     out_w(SYS_HEALTH_WDT_LOAD, load);
     set_w(SYS_HEALTH_WDT_CTRL, SYS_HEALTH_WDT_CTRL_ENABLE);
+}
+
+/**
+ * sys_health_flag / sys_health_flag_set
+ * @brief   One flag of the PRV_HLT byte.
+ * @param   pos      flag position (PRV_HLT_*_POS)
+ * @param   b_value  new value (set only)
+ * @return  flag value (get only)
+ * @context mission_task
+ */
+static bool sys_health_flag(uint32_t pos)
+{
+    return (0u != app_bits_get((uint32_t) g_hlt_word, pos, 1u));
+}
+
+static void sys_health_flag_set(uint32_t pos, bool b_value)
+{
+    /* cast: PRV_HLT is an 8-bit group */
+    g_hlt_word = (uint8_t) app_bits_put((uint32_t) g_hlt_word, pos, 1u,
+                                        b_value ? 1u : 0u);
+}
+
+/**
+ * sys_health_load
+ * @brief   The watchdog LOAD value of the window in use.
+ * @return  SYS_HEALTH_LOAD_NORMAL or SYS_HEALTH_LOAD_START
+ * @context mission_task
+ */
+static uint32_t sys_health_load(void)
+{
+    return sys_health_flag(PRV_HLT_NORMAL_WIN_POS) ? SYS_HEALTH_LOAD_NORMAL
+                                                   : SYS_HEALTH_LOAD_START;
 }
 
 /**

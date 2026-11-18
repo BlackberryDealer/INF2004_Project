@@ -349,5 +349,74 @@ int main(void)
                CODE39_INVALID == code39_decode(widths, BAR_ELEMENTS, &out_idx),
                "long first bar does not rescue a broken data character");
 
+    /* S3-U51: on-car 18 Nov 12:24, slow reread of *A*. One narrow bar of
+       the A read 12.4 mm (grey print) against 18 mm wide bars, so that
+       character's bar ratio was 1.47 and every pass failed. A last split
+       try accepts a bar ratio of 1.3; spaces, guards and gaps unchanged. */
+    {
+        static uint8_t const grey_bar[BAR_ELEMENTS] = {
+            61u, 161u, 65u, 49u, 173u, 44u, 189u, 56u, 68u, 51u,
+            182u, 51u, 71u, 45u, 124u, 100u, 74u, 47u, 183u, 53u,
+            73u, 139u, 65u, 53u, 157u, 55u, 226u, 41u, 76u
+        };
+
+        out_idx = 0xFFu;
+        HOST_CHECK("S3-U51",
+                   (CODE39_OK == code39_decode(grey_bar, BAR_ELEMENTS,
+                                               &out_idx)) && (10u == out_idx),
+                   "on-car reread with a 12.4 mm grey bar decodes 'A'");
+        reverse_widths(grey_bar, widths);
+        out_idx = 0xFFu;
+        HOST_CHECK("S3-U51",
+                   (CODE39_OK == code39_decode(widths, BAR_ELEMENTS, &out_idx))
+                   && (10u == out_idx),
+                   "same capture read the other way decodes 'A'");
+        (void) memcpy(widths, grey_bar, BAR_ELEMENTS);
+        widths[14] = 156u;             /* bar ratio 182/156 = 1.17 */
+        HOST_CHECK("S3-U51",
+                   CODE39_INVALID == code39_decode(widths, BAR_ELEMENTS,
+                                                   &out_idx),
+                   "bar ratio 1.17 is still rejected");
+        {
+            /* 12:33 passes: the grey bar read 13.7 and 12.8 mm (1.31
+               and 1.38 against the A's wide bars)                  */
+            static uint8_t const pass1[BAR_ELEMENTS] = {
+                54u, 185u, 61u, 50u, 176u, 57u, 177u, 51u, 61u, 55u,
+                192u, 46u, 71u, 41u, 137u, 113u, 65u, 52u, 180u, 48u,
+                65u, 166u, 64u, 53u, 189u, 45u, 202u, 47u, 76u
+            };
+            static uint8_t const pass3[BAR_ELEMENTS] = {
+                62u, 164u, 66u, 55u, 185u, 55u, 179u, 54u, 61u, 61u,
+                203u, 47u, 76u, 45u, 128u, 111u, 72u, 51u, 176u, 58u,
+                66u, 189u, 62u, 53u, 194u, 56u, 165u, 42u, 80u
+            };
+
+            out_idx = 0xFFu;
+            HOST_CHECK("S3-U51",
+                       (CODE39_OK == code39_decode(pass1, BAR_ELEMENTS,
+                                                   &out_idx))
+                       && (10u == out_idx),
+                       "12:33 pass 1 (grey bar ratio 1.31) decodes 'A'");
+            out_idx = 0xFFu;
+            HOST_CHECK("S3-U51",
+                       (CODE39_OK == code39_decode(pass3, BAR_ELEMENTS,
+                                                   &out_idx))
+                       && (10u == out_idx),
+                       "12:33 pass 3 (grey bar ratio 1.38) decodes 'A'");
+        }
+        (void) memcpy(widths, grey_bar, BAR_ELEMENTS);
+        widths[15] = 70u;              /* space ratio 70/51 = 1.37 */
+        HOST_CHECK("S3-U51",
+                   CODE39_INVALID == code39_decode(widths, BAR_ELEMENTS,
+                                                   &out_idx),
+                   "spaces keep the 1.8 ratio: a weak wide space is rejected");
+    }
+    HOST_CHECK("S3-U51", check_all_chars_biased(20u, 30u, 20u, 50u, false,
+                                                false),
+               "bar ratio 1.5, space ratio 2.5: all 43 chars decode fwd");
+    HOST_CHECK("S3-U51", check_all_chars_biased(20u, 30u, 20u, 50u, false,
+                                                true),
+               "bar ratio 1.5, space ratio 2.5: all 43 chars decode rev");
+
     return (0 == HOST_SUMMARY("code39")) ? 0 : 1;
 }

@@ -35,6 +35,10 @@
    rewind is sent as moves of at most MOTION_REVERSE_MAX_MM.          */
 #define MISSION_BARCODE_REWIND_MM    (600u)
 #define MISSION_BARCODE_BACK_EXTRA_MM (70u) /* past the needed distance */
+/* S5-U81 (on-car 2026-11-18 12:24): a retry backs up only this far past
+   the start of the failed slow pass. That start already had a white
+   lead-in; +70 mm on every retry left the track on retry 2.          */
+#define MISSION_BARCODE_RETRY_EXTRA_MM (10u)
 #define MISSION_BARCODE_BACK_PAD_MM  (10u)  /* leave room to brake */
 #define MISSION_BARCODE_WAIT_MS      (250u) /* let the line settle */
 #define MISSION_BARCODE_BRAKE_MS     (500u)

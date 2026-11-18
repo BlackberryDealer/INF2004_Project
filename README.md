@@ -250,6 +250,9 @@ Each option goes through the same steps:
 The makefile also has `NET=lwip` and `MQTT=1` (TCP/IP and MQTT over WiFi).
 They need the SDK's `lib/lwip` submodule and a `config/wifi_secrets.h`
 (copy `config/wifi_secrets.example.h`). This guide does not cover them.
+With `MQTT=1`, `DEBUG_MQTT=1` also publishes the console lines and raw
+sensor readings for the dashboard (image name ends in `_dbg`); it is off
+by default because the course requirement allows no text over MQTT.
 
 ---
 

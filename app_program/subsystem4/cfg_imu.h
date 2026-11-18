@@ -54,6 +54,16 @@
 #define IMU_LIFT_TILT_AZ_MG      (500)  /* TUNE: az below = tilted > 60 deg */
 #define IMU_LIFT_DG_MG           (300)  /* TUNE: ||a| - 1 g| above = lifted */
 #define IMU_LIFT_CONFIRM_CYCLES  (5u)   /* 50 ms in a row before the stop */
+/* Level lift (car run 2026-11-18 13:19, S4-U17): a smooth level lift
+   keeps |a| at 1 g, so the IMU check never fires. With no floor under
+   them both IR sensors read 3890..4067 raw; the darkest tape in every
+   run that day read <= 3570, the dark ramp up to 3905 (13:28). Both
+   above IMU_LIFT_IR_RAW_MIN (3950, lifted reads 3980..4067) for
+   IMU_LIFT_IR_CYCLES cycles in a row (300 ms, longer than a crest or a
+   cross at cruise speed) also sets SAFETY_LIFT. IR_LIFT_CNT in PRV_IMU_A
+   is 5 bits, so IMU_LIFT_IR_CYCLES must stay <= 31.                  */
+#define IMU_LIFT_IR_RAW_MIN      (3950u) /* TUNE: raw ADC, no floor above */
+#define IMU_LIFT_IR_CYCLES       (30u)   /* 300 ms in a row               */
 #define IMU_TURNING_DPS          (30)  /* TUNE */
 #define IMU_ACCEL_MG             (50)  /* TUNE */
 #define IMU_TURN_DISAGREE_PCT    (10)  /* A7 */
@@ -65,6 +75,23 @@
 #define TERRAIN_MAX_CLIMB_MM     (400u) /* TUNE: ramp rule        */
 #define TERRAIN_HUMP_MIN_MM      (5u)
 #define TERRAIN_WHEELBASE_MM     (100) /* MEASURE: axle to front contact */
+/* One-wheel hump (track 2026-11-18, S4-U18): the demo hump is a thin
+   strip only the right wheel climbs, so the car tilts sideways about the
+   line from the left wheel to the front contact, not nose up. For a
+   wheel raised h the sideways gravity component is ay = g x h / track
+   (the pitch part, g x h / wheelbase, is mixed with braking), so
+   h = track x |ay| / 1000 mg. ay is smoothed (1/4 per cycle); a hump
+   starts after TERRAIN_ROLL_HYST cycles above TERRAIN_ROLL_START_MG
+   while driving straight, ends after TERRAIN_ROLL_HYST cycles below
+   TERRAIN_ROLL_LEVEL_MG, and more than TERRAIN_ROLL_MAX_TICKS on it is a
+   ramp or a held tilt, not a hump. GAIN_PCT corrects the sensor scale
+   against a ruler. */
+#define TERRAIN_ROLL_START_MG    (45)   /* TUNE: ~2.6 deg, h ~ 5.6 mm  */
+#define TERRAIN_ROLL_LEVEL_MG    (20)   /* TUNE                        */
+#define TERRAIN_ROLL_HYST        (3u)   /* cycles, <= 7 (3-bit HYST)   */
+#define TERRAIN_ROLL_STRAIGHT_COUNTS (3) /* |dl - dr| per 10 ms, ~10 mg */
+#define TERRAIN_ROLL_MAX_TICKS   (200u) /* TUNE: 2 s, ramp rule, <= 255 */
+#define TERRAIN_ROLL_GAIN_PCT    (67u)  /* car 18 Nov: 15 mm vs ruler 10 */
 #define TERRAIN_REPORT_MODE      (0u)  /* 0 integ, 1 geom, 2 mean */
 /* Forward acceleration gain: a change of 1 count per 50 ms window over
    50 ms is 14.2 mg. a = dcpw x um-per-count x 1000 / window^2 mm/s^2,

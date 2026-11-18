@@ -52,7 +52,8 @@ test_motion_task_host.out: test_motion_task_host.c mock/tk/tkernel.h \
                            $(S2_DIR)/speed_pid.c $(S2_DIR)/cfg_motion.h \
                            ../../host/host_test.h
 	$(CC) $(CFLAGS) $(MOCK) -o $@ test_motion_task_host.c \
-	    $(S2_DIR)/odometry.c $(S2_DIR)/speed_pid.c
+	    $(S2_DIR)/odometry.c $(S2_DIR)/speed_pid.c \
+	    $(S2_DIR)/../app_bits.c
 
 flags: test_flags_host.out
 	./test_flags_host.out

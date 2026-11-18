@@ -202,12 +202,14 @@ record.
 | `c28/d` | SENSORS, 12 B binary (`MQ_SENS` in `tools/layout.csv`) | 5 Hz, QoS 0 | raw IR, ultrasonic, scanner, barcode, accelerometer, feed gap |
 | `c28/l` | LOG: header byte `0x49` + one console line (ASCII) | as printed, QoS 0 | every `app_log()` line |
 
-- Both are bring-up diagnostics like the console prints. They are on in
-  images built with `MQTT=1` while `TELEM_DEBUG_MQTT` is 1
-  (`app_program/subsystem1/cfg_telem.h`); set it to 0 for the Week 13
-  message-size evidence, which then shows only the original payloads.
+- Both are bring-up diagnostics like the console prints. Since
+  2026-11-16 they are sent only by an image built with
+  `make NET=lwip MQTT=1 DEBUG_MQTT=1` (image name ends in `_dbg`). The
+  normal image sends no text over MQTT (Change Requirement 1), so with it
+  the LOG and SENSORS panels stay empty; use it for the Week 13
+  message-size evidence.
 - Console lines never block the code that prints them: `app_log()` queues
-  the format and arguments (K12, 48 lines) and the radio task formats and
+  the format and arguments (K13, 48 lines) and the radio task formats and
   publishes them, at most 2 per 50 ms, and only while the MQTT output
   buffer is at most a quarter full, so telemetry always goes first.
 - `py tools/telem_decode.py` prints both (SENSORS fields, LOG text).

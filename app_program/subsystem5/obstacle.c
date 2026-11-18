@@ -14,6 +14,8 @@
 #include "obstacle.h"          /* own header first (BARR-C 4.3.c) */
 #include "../board_pins.h"
 #include "../app_types.h"
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "../subsystem2/safety.h"
 #include "../subsystem2/fault.h"
 #include "../subsystem2/odometry.h"
@@ -43,6 +45,10 @@
 #define OBS_WIDTH_SHIFT        (2u)          /* 4 us units            */
 #define OBS_WIDTH_4US_MAX      (4095u)       /* 12 bits; SAT          */
 #define OBS_SEQ_LOW_MASK       (0x3u)        /* record keeps 2 bits   */
+#if (OBS_WIDTH_4US_MAX != MSG_ECHO_WIDTH_MAX) \
+    || (OBS_SEQ_LOW_MASK != MSG_ECHO_SEQ_MAX)
+#error "The echo record limits must match the MSG_ECHO row"
+#endif
 #define OBS_MM_STEP            (4u)          /* stored resolution     */
 #define OBS_CLEAR_HYST_MM      (50u)         /* APPROACH -> MONITOR   */
 #define OBS_CLEAR_READINGS     (2u)
@@ -59,9 +65,64 @@
 #define OBS_SEEN_STOPPED       (0x2u)
 #define OBS_SEEN_RESUME        (0x4u)
 #define OBS_DIST_LOG_PINGS     (8u)          /* bring-up print: ~0.5 s */
+#define OBS_PART_WORDS         (3u)          /* SB_OBS0..2 */
 
-/* Echo record: written only by obstacle_echo_isr. Natural types, the
-   same information as the packed MSG_ECHO word (Phase 4).            */
+/* Private fields (index into g_obs_f) */
+#define OBS_F_MEASURED         (0u)
+#define OBS_F_STATE            (1u)
+#define OBS_F_SETTLE           (2u)
+#define OBS_F_ON_RAMP          (3u)
+#define OBS_F_INFERRED         (4u)
+#define OBS_F_STEP             (5u)
+#define OBS_F_SAMPLE_CNT       (6u)
+#define OBS_F_PREV             (7u)          /* 4 mm code */
+#define OBS_F_ECHO             (8u)          /* 4 mm code */
+#define OBS_F_WARMUP           (9u)
+#define OBS_F_SILENT           (10u)
+#define OBS_F_LOST             (11u)
+#define OBS_F_FAR              (12u)
+#define OBS_F_PASS_MARK        (13u)
+#define OBS_F_RAMP_HOLD        (14u)
+#define OBS_F_MODE_SEEN        (15u)
+#define OBS_F_DIST_LOG         (16u)
+#define OBS_F_RAMP_LOGGED      (17u)
+#define OBS_F_CREEP_LOGGED     (18u)
+#define OBS_F_RAMP_MARK        (19u)
+#define OBS_F_COUNT            (20u)
+
+/* Every PRV_OBS_* row must hold the full range its code uses. */
+#if (APP_SCAN_STEPS != PRV_OBS_M_MEASURED_BITS)                         \
+    || (APP_SCAN_STEPS != PRV_OBS_I_INFERRED_BITS)                      \
+    || ((APP_SCAN_STEPS - 1u) != PRV_OBS_I_STEP_MAX)
+#error "PRV_OBS_M / PRV_OBS_I must have one bit / code per scan step"
+#endif
+#if (OBS_WATCH_SETTLE_PINGS > PRV_OBS_M_SETTLE_MAX)                     \
+    || (OBS_SETTLE_PINGS > PRV_OBS_M_SETTLE_MAX)                        \
+    || ((OBS_SCAN_SAMPLES - 1u) != PRV_OBS_I_SAMPLE_CNT_MAX)            \
+    || (OBS_WARMUP_PINGS != PRV_OBS_A_WARMUP_MAX)                       \
+    || (OBS_NO_ECHO_PINGS > PRV_OBS_A_SILENT_MAX)                       \
+    || (OBS_LOST_PINGS >= PRV_OBS_A_LOST_MAX)                           \
+    || (OBS_CLEAR_READINGS >= PRV_OBS_A_FAR_MAX)                        \
+    || (OBS_RAMP_HOLD_PINGS != PRV_OBS_B_RAMP_HOLD_MAX)                 \
+    || ((OBS_DIST_LOG_PINGS - 1u) != PRV_OBS_B_DIST_LOG_MAX)
+#error "A PRV_OBS_* row no longer covers its cfg limit"
+#endif
+#if ((APP_DIST_NONE_MM / OBS_MM_STEP) != PRV_OBS_A_PREV_MAX)            \
+    || ((APP_DIST_NONE_MM / OBS_MM_STEP) != PRV_OBS_A_ECHO_MAX)         \
+    || ((APP_PROFILE_CLEAR_MM / OBS_MM_STEP) != PRV_OBS_SCAN_MM_MAX)    \
+    || ((APP_PROFILE_CLEAR_MM / OBS_MM_STEP) != PRV_OBS_SMP_MM_MAX)     \
+    || ((APP_DIST_NONE_MM % OBS_MM_STEP) != 0u)                         \
+    || ((APP_PROFILE_CLEAR_MM % OBS_MM_STEP) != 0u)
+#error "Distance codes must cover the sentinels in 4 mm steps"
+#endif
+#if (SB_MOT3_PATH_MAX != PRV_OBS_B_PASS_MARK_MAX)                       \
+    || (SB_MOT3_PATH_MAX != PRV_OBS_C_RAMP_MARK_MAX)
+#error "Path marks must hold the whole wrapping path"
+#endif
+
+/* Echo record as obstacle_task uses it, decoded from one load of the
+   packed MSG_ECHO word that obstacle_echo_isr writes (local copies
+   only; nothing of this type is stored between calls).              */
 typedef struct
 {
     uint32_t width_4us;     /* 0..4095 (4 us units, SAT)          */
@@ -85,8 +146,10 @@ static uint64_t g_obstacle_stack[OBSTACLE_STACK_WORDS];
 static ID       gh_obstacle_task = 0;
 static ID       gh_echo_sem      = 0;     /* K1 SEM_ECHO */
 
-/* Written only by the ISR (B5.2.2). */
-static volatile obstacle_echo_t g_echo          = {0u, 0u, false};
+/* Written only by the ISR (B5.2.2). MSG_ECHO: WIDTH 12, SEQ 2, VALID 1,
+   PAD 1; the ISR stores the whole 16-bit word at once, so one task load
+   is always a consistent record.                                     */
+static volatile uint16_t        g_echo_word     = 0u;
 static volatile uint8_t         g_echo_rise_cnt = 0u;  /* accepted rises */
 static volatile uint8_t         g_echo_done_cnt = 0u;  /* accepted falls */
 /* ISR-private. g_rise_us is E5: a stuck-high echo can exceed 65 ms. */
@@ -97,41 +160,67 @@ static volatile bool            gb_is_rise_armed = false;
 static volatile uint8_t         g_ping_seq         = 0u;  /* 8 bits, wraps */
 static volatile uint8_t         g_echo_window_open = 0u;
 
-/* Everything below is private to obstacle_task. */
-static uint32_t           g_state         = APP_SCAN_MONITOR;
-static uint32_t           g_prev_mm       = APP_DIST_NONE_MM;
-static uint32_t           g_lost          = 0u;
-/* Last real echo distance in APPROACH (S5-U38): lost pings mean "too
-   close to measure" only when that echo was already inside the stop
-   distance; after a farther echo they mean nothing is in range.      */
-static uint32_t           g_echo_mm       = APP_DIST_NONE_MM;
-static uint32_t           g_silent        = 0u;
-static uint32_t           g_warmup_left   = OBS_WARMUP_PINGS; /* S5-U30 */
-static uint32_t           g_far           = 0u;
-static uint32_t           g_mode_seen     = 0u;
-static uint32_t           g_step          = 0u;
-static uint32_t           g_settle        = 0u;
-static uint32_t           g_pass_mark     = 0u;   /* path counts */
-static uint32_t           g_scan_start_us = 0u;
-static uint32_t           g_measured      = 0u;   /* bit n: step measured */
-static uint32_t           g_inferred      = 0u;   /* bit n: step filled   */
-static uint32_t           g_dist_log_cnt  = 0u;   /* bring-up print divider */
-static bool               gb_on_ramp      = false; /* S5-U42 ramp state    */
-static uint32_t           g_ramp_hold     = 0u;   /* pings after ramp     */
-static uint32_t           g_ramp_mark     = 0u;   /* path at last pitch   */
-static bool               gb_ramp_logged  = false; /* one RAMP line/approach */
-static bool               gb_creep_logged = false; /* one CREEP line/stop   */
-static uint16_t           g_obs_scan[APP_SCAN_STEPS];
-static uint16_t           g_samples[OBS_SCAN_SAMPLES]; /* S5-U47 */
-static uint32_t           g_sample_cnt    = 0u;   /* pings taken at step */
-static status_board_obs_t g_part =
+/* Everything below is private to obstacle_task, packed in the
+   PRV_OBS_* rows of tools/layout.csv. ECHO (S5-U38) is the last real
+   echo distance in APPROACH: lost pings mean "too close to measure"
+   only when that echo was already inside the stop distance.          */
+static uint32_t g_obs_prv_m =   /* MEASURED, STATE = MONITOR, SETTLE, ON_RAMP */
+    ((uint32_t) APP_SCAN_MONITOR << PRV_OBS_M_STATE_POS);
+static uint32_t g_obs_prv_i = 0u; /* INFERRED, STEP, SAMPLE_CNT */
+static uint32_t g_obs_prv_a =   /* PREV, ECHO = nothing; WARMUP (S5-U30) */
+    ((uint32_t) PRV_OBS_A_PREV_MAX << PRV_OBS_A_PREV_POS)
+    | ((uint32_t) PRV_OBS_A_ECHO_MAX << PRV_OBS_A_ECHO_POS)
+    | ((uint32_t) OBS_WARMUP_PINGS << PRV_OBS_A_WARMUP_POS);
+static uint32_t g_obs_prv_b = 0u; /* PASS_MARK, RAMP_HOLD, MODE_SEEN,
+                                     DIST_LOG, RAMP_LOGGED, CREEP_LOGGED */
+static uint32_t g_obs_prv_c = 0u; /* RAMP_MARK */
+static uint32_t g_scan_start_us = 0u; /* E_OBS_US (E5): scan-time log */
+/* Scan table and the pings at one step, 4 mm codes (PRV_OBS_SCAN,
+   PRV_OBS_SMP); 255 = clear (APP_PROFILE_CLEAR_MM).                  */
+static uint8_t  g_obs_scan[APP_SCAN_STEPS];
+static uint8_t  g_samples[OBS_SCAN_SAMPLES]; /* S5-U47 */
+/* The obstacle part of the board as last written, in the board's own
+   SB_OBS0..2 layout (obstacle_task is its only writer).              */
+static uint32_t g_part_w[OBS_PART_WORDS] =
 {
-    .distance_mm    = APP_DIST_NONE_MM,
-    .scanner_state  = APP_SCAN_MONITOR,
-    .width_mm       = APP_PROFILE_CLEAR_MM,
-    .nearest_mm     = APP_PROFILE_CLEAR_MM,
-    .clear_left_mm  = APP_PROFILE_CLEAR_MM,
-    .clear_right_mm = APP_PROFILE_CLEAR_MM,
+    ((uint32_t) SB_OBS0_DIST_MAX << SB_OBS0_DIST_POS),
+    ((uint32_t) SB_OBS1_WIDTH_MAX << SB_OBS1_WIDTH_POS)
+    | ((uint32_t) SB_OBS1_NEAREST_MAX << SB_OBS1_NEAREST_POS)
+    | ((uint32_t) SB_OBS1_CLEAR_L_MAX << SB_OBS1_CLEAR_L_POS)
+    | ((uint32_t) SB_OBS1_CLEAR_R_MAX << SB_OBS1_CLEAR_R_POS),
+    0u
+};
+
+/* One private field: the word that holds it, position and width. */
+typedef struct
+{
+    uint32_t * p_word;
+    uint32_t   pos;
+    uint32_t   width;
+} obstacle_field_t;
+
+static obstacle_field_t const g_obs_f[OBS_F_COUNT] =
+{
+    {&g_obs_prv_m, PRV_OBS_M_MEASURED_POS, PRV_OBS_M_MEASURED_BITS},
+    {&g_obs_prv_m, PRV_OBS_M_STATE_POS, PRV_OBS_M_STATE_BITS},
+    {&g_obs_prv_m, PRV_OBS_M_SETTLE_POS, PRV_OBS_M_SETTLE_BITS},
+    {&g_obs_prv_m, PRV_OBS_M_ON_RAMP_POS, PRV_OBS_M_ON_RAMP_BITS},
+    {&g_obs_prv_i, PRV_OBS_I_INFERRED_POS, PRV_OBS_I_INFERRED_BITS},
+    {&g_obs_prv_i, PRV_OBS_I_STEP_POS, PRV_OBS_I_STEP_BITS},
+    {&g_obs_prv_i, PRV_OBS_I_SAMPLE_CNT_POS, PRV_OBS_I_SAMPLE_CNT_BITS},
+    {&g_obs_prv_a, PRV_OBS_A_PREV_POS, PRV_OBS_A_PREV_BITS},
+    {&g_obs_prv_a, PRV_OBS_A_ECHO_POS, PRV_OBS_A_ECHO_BITS},
+    {&g_obs_prv_a, PRV_OBS_A_WARMUP_POS, PRV_OBS_A_WARMUP_BITS},
+    {&g_obs_prv_a, PRV_OBS_A_SILENT_POS, PRV_OBS_A_SILENT_BITS},
+    {&g_obs_prv_a, PRV_OBS_A_LOST_POS, PRV_OBS_A_LOST_BITS},
+    {&g_obs_prv_a, PRV_OBS_A_FAR_POS, PRV_OBS_A_FAR_BITS},
+    {&g_obs_prv_b, PRV_OBS_B_PASS_MARK_POS, PRV_OBS_B_PASS_MARK_BITS},
+    {&g_obs_prv_b, PRV_OBS_B_RAMP_HOLD_POS, PRV_OBS_B_RAMP_HOLD_BITS},
+    {&g_obs_prv_b, PRV_OBS_B_MODE_SEEN_POS, PRV_OBS_B_MODE_SEEN_BITS},
+    {&g_obs_prv_b, PRV_OBS_B_DIST_LOG_POS, PRV_OBS_B_DIST_LOG_BITS},
+    {&g_obs_prv_b, PRV_OBS_B_RAMP_LOGGED_POS, PRV_OBS_B_RAMP_LOGGED_BITS},
+    {&g_obs_prv_b, PRV_OBS_B_CREEP_LOGGED_POS, PRV_OBS_B_CREEP_LOGGED_BITS},
+    {&g_obs_prv_c, PRV_OBS_C_RAMP_MARK_POS, PRV_OBS_C_RAMP_MARK_BITS},
 };
 
 /* ---- private function prototypes ------------------------------------- */
@@ -142,11 +231,20 @@ static void     obstacle_echo_isr(uint32_t events, uint32_t now_us);
 static void     obstacle_ping(obstacle_reading_t * p_rd);
 static bool     obstacle_wait_echo(uint8_t done0);
 static void     obstacle_read_record(obstacle_echo_t * p_rec);
+static void     obstacle_echo_store(uint32_t width_4us, uint32_t seq,
+                                    bool b_is_valid);
 static void     obstacle_scan_log(void);
 static void     obstacle_ranges_log(void);
 static void     obstacle_block_log(bool b_is_left, uint32_t step,
                                    uint32_t gap_mm);
-static uint32_t obstacle_median3(uint16_t const * p_val);
+static uint32_t obstacle_median3(uint8_t const * p_val);
+static uint32_t obstacle_get(uint32_t field);
+static void     obstacle_set(uint32_t field, uint32_t value);
+static uint32_t obstacle_scan_mm(uint32_t step);
+static uint8_t  obstacle_mm_code(uint32_t distance_mm);
+static void     obstacle_part_get(status_board_obs_t * p_part);
+static void     obstacle_part_put(status_board_obs_t const * p_part);
+static uint32_t obstacle_part_mm(uint32_t distance_mm, uint32_t max);
 static uint32_t obstacle_width_to_mm(uint32_t width_4us);
 static uint32_t obstacle_round_mm(uint32_t distance_mm);
 static void     obstacle_modes(uint32_t * p_rising);
@@ -189,7 +287,7 @@ ER obstacle_init(void)
     }
     for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)
     {
-        g_obs_scan[idx] = (uint16_t) APP_PROFILE_CLEAR_MM; /* cast: 1020 */
+        g_obs_scan[idx] = obstacle_mm_code(APP_PROFILE_CLEAR_MM);
     }
     drv_ultrasonic_init();
     drv_servo_init();
@@ -261,6 +359,8 @@ static void obstacle_cycle(void)
 {
     obstacle_reading_t reading = {APP_DIST_NONE_MM, true, false};
     uint32_t           rising  = 0u;
+    uint32_t           log_cnt = 0u;  /* bring-up print divider */
+    status_board_obs_t part;
 
     bool               b_is_armed = false;
 
@@ -287,17 +387,18 @@ static void obstacle_cycle(void)
     }
     else if (!b_is_armed)
     {
-        if (APP_SCAN_MONITOR != g_state)
+        if (APP_SCAN_MONITOR != obstacle_get(OBS_F_STATE))
         {
             obstacle_enter(APP_SCAN_MONITOR);
         }
 
         /* Bring-up diagnosis: what the sensor sees while unarmed, every
            ~0.5 s. cast: distance 0..2047 mm, lost flag 0..1 fit int32_t */
-        g_dist_log_cnt++;
-        if (g_dist_log_cnt >= OBS_DIST_LOG_PINGS)
+        log_cnt = obstacle_get(OBS_F_DIST_LOG) + 1u;
+        obstacle_set(OBS_F_DIST_LOG,
+                     (log_cnt >= OBS_DIST_LOG_PINGS) ? 0u : log_cnt);
+        if (log_cnt >= OBS_DIST_LOG_PINGS)
         {
-            g_dist_log_cnt = 0u;
             app_log("US dist %d mm, lost %d\n",
                     (int32_t) reading.distance_mm,
                     reading.b_is_lost ? 1 : 0, 0);
@@ -305,7 +406,7 @@ static void obstacle_cycle(void)
     }
     else
     {
-        switch (g_state)
+        switch (obstacle_get(OBS_F_STATE))
         {
             case APP_SCAN_MONITOR:
                 obstacle_step_monitor(&reading);
@@ -343,9 +444,12 @@ static void obstacle_cycle(void)
         }
     }
 
-    g_part.distance_mm   = reading.distance_mm;
-    g_part.scanner_state = g_state;
-    status_board_write_obstacle(&g_part);
+    obstacle_part_get(&part);
+    part.distance_mm   = reading.distance_mm;
+    part.scanner_state = obstacle_get(OBS_F_STATE);
+    obstacle_part_put(&part);
+    obstacle_part_get(&part);       /* as stored: the board's 4 mm codes */
+    status_board_write_obstacle(&part);
 }
 
 /**
@@ -393,10 +497,10 @@ static void obstacle_echo_isr(uint32_t events, uint32_t now_us)
             g_rise_us         = now_us;
             g_rise_seq        = g_ping_seq;  /* captured at the rise */
             gb_is_rise_armed  = true;
-            g_echo.width_4us  = OBS_WIDTH_4US_MAX;
-            /* cast: widen the 8-bit ping number */
-            g_echo.seq        = (uint32_t) g_rise_seq & OBS_SEQ_LOW_MASK;
-            g_echo.b_is_valid = false;      /* started, not finished */
+            /* cast: widen the 8-bit ping number; started, not finished */
+            obstacle_echo_store(OBS_WIDTH_4US_MAX,
+                                (uint32_t) g_rise_seq & OBS_SEQ_LOW_MASK,
+                                false);
             g_echo_rise_cnt++;
         }
     }
@@ -412,10 +516,10 @@ static void obstacle_echo_isr(uint32_t events, uint32_t now_us)
             {
                 width = OBS_WIDTH_4US_MAX;
             }
-            g_echo.width_4us  = width;
             /* cast: widen the 8-bit ping number */
-            g_echo.seq        = (uint32_t) g_rise_seq & OBS_SEQ_LOW_MASK;
-            g_echo.b_is_valid = true;
+            obstacle_echo_store(width,
+                                (uint32_t) g_rise_seq & OBS_SEQ_LOW_MASK,
+                                true);
             g_echo_done_cnt++;
             gb_is_rise_armed  = false;
             (void) tk_sig_sem(gh_echo_sem, 1);      /* E_QOVR is harmless */
@@ -471,37 +575,39 @@ static void obstacle_ping(obstacle_reading_t * p_rd)
     if (b_done && rec.b_is_valid
         && (rec.seq == ((uint32_t) g_ping_seq & OBS_SEQ_LOW_MASK)))
     {
-        g_silent          = 0u;             /* echo complete */
-        g_warmup_left     = 0u;             /* sensor is up */
+        obstacle_set(OBS_F_SILENT, 0u);             /* echo complete */
+        obstacle_set(OBS_F_WARMUP, 0u);             /* sensor is up */
         p_rd->b_is_lost   = false;
         p_rd->distance_mm = obstacle_width_to_mm(rec.width_4us);
     }
     else if (b_rise)
     {
-        g_silent      = 0u;                 /* still high: nothing in range */
-        g_warmup_left = 0u;                 /* an edge: sensor is up */
+        obstacle_set(OBS_F_SILENT, 0u); /* still high: nothing in range */
+        obstacle_set(OBS_F_WARMUP, 0u); /* an edge: sensor is up */
     }
-    else if (0u != g_warmup_left)
+    else if (0u != obstacle_get(OBS_F_WARMUP))
     {
-        g_warmup_left--;                    /* power-up grace (S5-U30) */
+        /* power-up grace (S5-U30) */
+        obstacle_set(OBS_F_WARMUP, obstacle_get(OBS_F_WARMUP) - 1u);
     }
     else
     {
-        if (g_silent < OBS_NO_ECHO_PINGS)   /* no edge at all (or stuck) */
+        /* no edge at all (or stuck) */
+        if (obstacle_get(OBS_F_SILENT) < OBS_NO_ECHO_PINGS)
         {
-            g_silent++;
+            obstacle_set(OBS_F_SILENT, obstacle_get(OBS_F_SILENT) + 1u);
         }
-        if (g_silent >= OBS_NO_ECHO_PINGS)
+        if (obstacle_get(OBS_F_SILENT) >= OBS_NO_ECHO_PINGS)
         {
             fault_set(APP_FAULT_NO_ECHO);   /* again every silent ping */
         }
     }
 
-    diff = (p_rd->distance_mm > g_prev_mm)
-           ? (p_rd->distance_mm - g_prev_mm)
-           : (g_prev_mm - p_rd->distance_mm);
+    diff = (p_rd->distance_mm > (obstacle_get(OBS_F_PREV) * OBS_MM_STEP))
+           ? (p_rd->distance_mm - (obstacle_get(OBS_F_PREV) * OBS_MM_STEP))
+           : ((obstacle_get(OBS_F_PREV) * OBS_MM_STEP) - p_rd->distance_mm);
     p_rd->b_is_confirmed = (diff <= OBS_AGREE_MM);
-    g_prev_mm            = p_rd->distance_mm;
+    obstacle_set(OBS_F_PREV, p_rd->distance_mm / OBS_MM_STEP);
 }
 
 /**
@@ -543,29 +649,44 @@ static bool obstacle_wait_echo(uint8_t done0)
 
 /**
  * obstacle_read_record
- * @brief   Coherent read of the ISR's 3-field record: read twice until
- *          both copies match (the task cannot interrupt the ISR, so two
- *          equal reads are consistent). Phase 4: one 16-bit load.
+ * @brief   Coherent read of the ISR's record: one 16-bit load of the
+ *          MSG_ECHO word (the ISR writes the whole word at once),
+ *          decoded into the task's local copy.
  * @param   p_rec copy out
  * @context obstacle_task
  */
 static void obstacle_read_record(obstacle_echo_t * p_rec)
 {
-    obstacle_echo_t again   = {0u, 0u, false};
-    bool            b_equal = false;
+    uint32_t const word = (uint32_t) g_echo_word;  /* one load */
 
-    while (!b_equal)
-    {
-        p_rec->width_4us  = g_echo.width_4us;
-        p_rec->seq        = g_echo.seq;
-        p_rec->b_is_valid = g_echo.b_is_valid;
-        again.width_4us   = g_echo.width_4us;
-        again.seq         = g_echo.seq;
-        again.b_is_valid  = g_echo.b_is_valid;
-        b_equal = (p_rec->width_4us == again.width_4us)
-                  && (p_rec->seq == again.seq)
-                  && (p_rec->b_is_valid == again.b_is_valid);
-    }
+    p_rec->width_4us  = app_bits_get(word, MSG_ECHO_WIDTH_POS,
+                                     MSG_ECHO_WIDTH_BITS);
+    p_rec->seq        = app_bits_get(word, MSG_ECHO_SEQ_POS,
+                                     MSG_ECHO_SEQ_BITS);
+    p_rec->b_is_valid = (0u != app_bits_get(word, MSG_ECHO_VALID_POS,
+                                            MSG_ECHO_VALID_BITS));
+}
+
+/**
+ * obstacle_echo_store
+ * @brief   Packs one echo record into MSG_ECHO and stores the whole word
+ *          with one 16-bit store (PAD stays 0).
+ * @param   width_4us   0..OBS_WIDTH_4US_MAX (already saturated)
+ * @param   seq         low 2 bits of the ping number
+ * @param   b_is_valid  a complete pulse was measured
+ * @context ISR (obstacle_echo_isr)
+ */
+static void obstacle_echo_store(uint32_t width_4us, uint32_t seq,
+                                bool b_is_valid)
+{
+    uint32_t word = 0u;
+
+    word = app_bits_put(word, MSG_ECHO_WIDTH_POS, MSG_ECHO_WIDTH_BITS,
+                        width_4us);
+    word = app_bits_put(word, MSG_ECHO_SEQ_POS, MSG_ECHO_SEQ_BITS, seq);
+    word = app_bits_put(word, MSG_ECHO_VALID_POS, MSG_ECHO_VALID_BITS,
+                        b_is_valid ? 1u : 0u);
+    g_echo_word = (uint16_t) word; /* cast: MSG_ECHO is a 16-bit word */
 }
 
 /**
@@ -628,14 +749,14 @@ static void obstacle_modes(uint32_t * p_rising)
     {
         now |= OBS_SEEN_RESUME;
     }
-    *p_rising   = now & ~g_mode_seen;
-    g_mode_seen = now;
+    *p_rising   = now & ~obstacle_get(OBS_F_MODE_SEEN);
+    obstacle_set(OBS_F_MODE_SEEN, now);
 }
 
 /**
  * obstacle_update_ramp
  * @brief   Tracks whether the car is climbing, descending, or exiting a
- *          ramp/hump (S5-U42). Holds gb_on_ramp for OBS_RAMP_HOLD_PINGS
+ *          ramp/hump (S5-U42). Holds ON_RAMP for OBS_RAMP_HOLD_PINGS
  *          (and OBS_RAMP_CLEAR_MM when odometry moves) after levelling off
  *          so the ramp crest and bottom exit do not trigger a false stop.
  * @param   b_is_armed true while obstacle detection is armed
@@ -652,8 +773,8 @@ static void obstacle_update_ramp(bool b_is_armed)
 
     if (!b_is_armed)
     {
-        gb_on_ramp  = false;
-        g_ramp_hold = 0u;
+        obstacle_set(OBS_F_ON_RAMP, 0u);
+        obstacle_set(OBS_F_RAMP_HOLD, 0u);
         return;
     }
 
@@ -670,21 +791,23 @@ static void obstacle_update_ramp(bool b_is_armed)
 
     if (b_pitched)
     {
-        gb_on_ramp  = true;
-        g_ramp_hold = OBS_RAMP_HOLD_PINGS;
-        g_ramp_mark = path_now;
+        obstacle_set(OBS_F_ON_RAMP, 1u);
+        obstacle_set(OBS_F_RAMP_HOLD, OBS_RAMP_HOLD_PINGS);
+        obstacle_set(OBS_F_RAMP_MARK, path_now);
     }
-    else if (gb_on_ramp)
+    else if ((0u != obstacle_get(OBS_F_ON_RAMP)))
     {
-        if (g_ramp_hold > 0u)
+        if (obstacle_get(OBS_F_RAMP_HOLD) > 0u)
         {
-            g_ramp_hold--;
+            obstacle_set(OBS_F_RAMP_HOLD, obstacle_get(OBS_F_RAMP_HOLD) - 1u);
         }
-        done_mm = odometry_counts_to_mm(path_now - g_ramp_mark);
-        if ((0u == g_ramp_hold)
-            && ((done_mm >= OBS_RAMP_CLEAR_MM) || (path_now == g_ramp_mark)))
+        done_mm = odometry_counts_to_mm(
+            odometry_path_since(path_now, obstacle_get(OBS_F_RAMP_MARK)));
+        if ((0u == obstacle_get(OBS_F_RAMP_HOLD))
+            && ((done_mm >= OBS_RAMP_CLEAR_MM)
+                || (path_now == obstacle_get(OBS_F_RAMP_MARK))))
         {
-            gb_on_ramp = false;
+            obstacle_set(OBS_F_ON_RAMP, 0u);
         }
     }
     else
@@ -701,12 +824,14 @@ static void obstacle_update_ramp(bool b_is_armed)
  */
 static void obstacle_enter(uint32_t state)
 {
-    g_state = state;
-    g_far     = 0u;
-    g_lost    = 0u;
-    g_echo_mm = APP_DIST_NONE_MM;
-    gb_ramp_logged = false;
-    gb_creep_logged = false;
+    status_board_obs_t part;
+
+    obstacle_set(OBS_F_STATE, state);
+    obstacle_set(OBS_F_FAR, 0u);
+    obstacle_set(OBS_F_LOST, 0u);
+    obstacle_set(OBS_F_ECHO, APP_DIST_NONE_MM / OBS_MM_STEP);
+    obstacle_set(OBS_F_RAMP_LOGGED, 0u);
+    obstacle_set(OBS_F_CREEP_LOGGED, 0u);
 
     if ((APP_SCAN_MONITOR == state) || (APP_SCAN_PASSING == state))
     {
@@ -714,12 +839,13 @@ static void obstacle_enter(uint32_t state)
     }
     if (APP_SCAN_PASSING == state)
     {
-        g_pass_mark = obstacle_path_counts();
+        obstacle_set(OBS_F_PASS_MARK, obstacle_path_counts());
     }
     if (APP_SCAN_WATCH_SETTLE == state)
     {
-        g_settle = OBS_WATCH_SETTLE_PINGS;
-        if (APP_SIDE_LEFT == g_part.plan_side)
+        obstacle_set(OBS_F_SETTLE, OBS_WATCH_SETTLE_PINGS);
+        obstacle_part_get(&part);
+        if (APP_SIDE_LEFT == part.plan_side)
         {
             drv_servo_set_deg(OBS_WATCH_DEG_LEFT_PASS);  /* obstacle right */
         }
@@ -742,7 +868,7 @@ static void obstacle_step_monitor(obstacle_reading_t const * p_rd)
     {
         (void) mission_post_event(APP_EVT_OBSTACLE_AHEAD, 0u); /* counted */
         obstacle_enter(APP_SCAN_APPROACH);
-        g_echo_mm = p_rd->distance_mm;
+        obstacle_set(OBS_F_ECHO, p_rd->distance_mm / OBS_MM_STEP);
         /* Bring-up diagnosis: what started the slow-down.
            cast: distance 0..2047 mm fits int32_t                       */
         app_log("OBSTACLE AHEAD: distance %d mm, slowing down\n",
@@ -773,14 +899,14 @@ static void obstacle_step_approach(obstacle_reading_t const * p_rd)
     /* Pitched on a ramp (S5-U42): the beam sees the ramp face or the
        floor, so only the early-stop margin is dropped. The computed NFR6
        minimum still stops the car for a real obstacle.                 */
-    if (gb_on_ramp)
+    if ((0u != obstacle_get(OBS_F_ON_RAMP)))
     {
         stop_mm = OBS_RAMP_STOP_MM;
-        if ((!gb_ramp_logged) && p_rd->b_is_confirmed
+        if ((!(0u != obstacle_get(OBS_F_RAMP_LOGGED))) && p_rd->b_is_confirmed
             && (p_rd->distance_mm >= OBS_RAMP_STOP_MM)
             && (p_rd->distance_mm < OBS_STOP_MM))
         {
-            gb_ramp_logged = true;
+            obstacle_set(OBS_F_RAMP_LOGGED, 1u);
             /* casts: distances 0..2047 mm fit int32_t */
             app_log("RAMP: pitched, echo %d mm ignored, stop below %d mm\n",
                     (int32_t) p_rd->distance_mm,
@@ -790,33 +916,35 @@ static void obstacle_step_approach(obstacle_reading_t const * p_rd)
 
     if (!p_rd->b_is_lost)
     {
-        g_echo_mm = p_rd->distance_mm;
-        g_lost    = 0u;
+        obstacle_set(OBS_F_ECHO, p_rd->distance_mm / OBS_MM_STEP);
+        obstacle_set(OBS_F_LOST, 0u);
         b_is_far  = (p_rd->distance_mm > (OBS_SLOW_MM + OBS_CLEAR_HYST_MM));
     }
-    else if (g_echo_mm < stop_mm)
+    else if ((obstacle_get(OBS_F_ECHO) * OBS_MM_STEP) < stop_mm)
     {
-        g_lost++;                         /* too close to measure */
+        /* too close to measure */
+        obstacle_set(OBS_F_LOST, obstacle_get(OBS_F_LOST) + 1u);
     }
     else
     {
-        g_lost   = 0u;
+        obstacle_set(OBS_F_LOST, 0u);
         b_is_far = true;                  /* nothing in range */
     }
-    g_far = b_is_far ? (g_far + 1u) : 0u;
+    obstacle_set(OBS_F_FAR, b_is_far ? (obstacle_get(OBS_F_FAR) + 1u) : 0u);
 
     if ((p_rd->b_is_confirmed && (p_rd->distance_mm < stop_mm))
-        || (g_lost >= OBS_LOST_PINGS))
+        || (obstacle_get(OBS_F_LOST) >= OBS_LOST_PINGS))
     {
         safety_set(SAFETY_ESTOP);                 /* brake first (NFR6) */
         (void) mission_post_event(APP_EVT_OBSTACLE, 0u);   /* counted */
         /* Bring-up diagnosis (after the brake). casts: distance 0..2047
            and lost count 0..3 fit int32_t                              */
         app_log("OBSTACLE STOP (ESTOP): distance %d mm, lost echoes %d\n",
-                (int32_t) p_rd->distance_mm, (int32_t) g_lost, 0);
+                (int32_t) p_rd->distance_mm,
+                (int32_t) obstacle_get(OBS_F_LOST), 0);
         obstacle_enter(APP_SCAN_STOPPED);
     }
-    else if (g_far >= OBS_CLEAR_READINGS)
+    else if (obstacle_get(OBS_F_FAR) >= OBS_CLEAR_READINGS)
     {
         (void) mission_post_event(APP_EVT_CONTINUE, 0u);   /* counted */
         obstacle_enter(APP_SCAN_MONITOR);
@@ -838,40 +966,40 @@ static void obstacle_step_approach(obstacle_reading_t const * p_rd)
  */
 static void obstacle_step_scan(obstacle_reading_t const * p_rd)
 {
-    bool b_is_more = true;
+    bool           b_is_more  = true;
+    uint32_t const settle     = obstacle_get(OBS_F_SETTLE);
+    uint32_t const sample_cnt = obstacle_get(OBS_F_SAMPLE_CNT);
+    uint32_t const step       = obstacle_get(OBS_F_STEP);
 
-    if (g_settle > 0u)
+    if (settle > 0u)
     {
-        g_settle--;                               /* servo still moving */
+        obstacle_set(OBS_F_SETTLE, settle - 1u);  /* servo still moving */
     }
-    else if (g_sample_cnt < (OBS_SCAN_SAMPLES - 1u))
+    else if (sample_cnt < (OBS_SCAN_SAMPLES - 1u))
     {
-        /* cast: <= 1020 after the clamp */
-        g_samples[g_sample_cnt] = (uint16_t) ((p_rd->distance_mm
-                                               < APP_PROFILE_CLEAR_MM)
-                                              ? p_rd->distance_mm
-                                              : APP_PROFILE_CLEAR_MM);
-        g_sample_cnt++;                           /* more pings at step */
+        g_samples[sample_cnt] = obstacle_mm_code(
+            (p_rd->distance_mm < APP_PROFILE_CLEAR_MM)
+            ? p_rd->distance_mm : APP_PROFILE_CLEAR_MM);
+        obstacle_set(OBS_F_SAMPLE_CNT, sample_cnt + 1u); /* more pings */
     }
     else
     {
-        /* cast: <= 1020 after the clamp */
-        g_samples[g_sample_cnt] = (uint16_t) ((p_rd->distance_mm
-                                               < APP_PROFILE_CLEAR_MM)
-                                              ? p_rd->distance_mm
-                                              : APP_PROFILE_CLEAR_MM);
-        /* cast: median of values <= 1020 */
-        g_obs_scan[g_step] = (uint16_t) obstacle_median3(g_samples);
-        g_measured |= (1u << g_step);
-        if (APP_SCAN_COARSE == g_state)
+        g_samples[sample_cnt] = obstacle_mm_code(
+            (p_rd->distance_mm < APP_PROFILE_CLEAR_MM)
+            ? p_rd->distance_mm : APP_PROFILE_CLEAR_MM);
+        /* cast: median of three codes <= 255 */
+        g_obs_scan[step] = (uint8_t) obstacle_median3(g_samples);
+        obstacle_set(OBS_F_MEASURED,
+                     obstacle_get(OBS_F_MEASURED) | (1u << step));
+        if (APP_SCAN_COARSE == obstacle_get(OBS_F_STATE))
         {
-            if ((g_step + OBS_COARSE_STRIDE) < APP_SCAN_STEPS)
+            if ((step + OBS_COARSE_STRIDE) < APP_SCAN_STEPS)
             {
-                obstacle_set_step(g_step + OBS_COARSE_STRIDE);
+                obstacle_set_step(step + OBS_COARSE_STRIDE);
             }
             else
             {
-                g_state   = APP_SCAN_FINE;
+                obstacle_set(OBS_F_STATE, APP_SCAN_FINE);
                 b_is_more = obstacle_next_fine();
             }
         }
@@ -906,9 +1034,9 @@ static void obstacle_step_creep(obstacle_reading_t const * p_rd)
             || (p_rd->distance_mm <= OBS_SCAN_MM)))
     {
         safety_set(SAFETY_ESTOP);
-        if (!gb_creep_logged)
+        if (!(0u != obstacle_get(OBS_F_CREEP_LOGGED)))
         {
-            gb_creep_logged = true;
+            obstacle_set(OBS_F_CREEP_LOGGED, 1u);
             /* casts: 0..2047 mm and flags fit int32_t */
             app_log("CREEP stop at %d mm (lost %d, agrees %d)\n",
                     (int32_t) p_rd->distance_mm, p_rd->b_is_lost ? 1 : 0,
@@ -927,13 +1055,16 @@ static void obstacle_step_creep(obstacle_reading_t const * p_rd)
  */
 static void obstacle_step_settle(void)
 {
-    if (g_settle > 0u)
+    status_board_obs_t part;
+
+    if (obstacle_get(OBS_F_SETTLE) > 0u)
     {
-        g_settle--;
+        obstacle_set(OBS_F_SETTLE, obstacle_get(OBS_F_SETTLE) - 1u);
     }
-    if (0u == g_settle)
+    if (0u == obstacle_get(OBS_F_SETTLE))
     {
-        (void) mission_post_event(APP_EVT_PLAN, g_part.plan_side); /* cnt */
+        obstacle_part_get(&part);
+        (void) mission_post_event(APP_EVT_PLAN, part.plan_side); /* cnt */
         obstacle_enter(APP_SCAN_BYPASS_WATCH);
     }
 }
@@ -946,10 +1077,15 @@ static void obstacle_step_settle(void)
  */
 static void obstacle_step_passing(void)
 {
-    uint32_t const need_mm = g_part.nearest_mm + OBS_DEPTH_ASSUMED_MM
-                             + OBS_ROBOT_LEN_MM;
-    uint32_t const done_mm = odometry_counts_to_mm(obstacle_path_counts()
-                                                   - g_pass_mark);
+    status_board_obs_t part;
+    uint32_t           need_mm = 0u;
+    uint32_t           done_mm = 0u;
+
+    obstacle_part_get(&part);
+    need_mm = part.nearest_mm + OBS_DEPTH_ASSUMED_MM + OBS_ROBOT_LEN_MM;
+    done_mm = odometry_counts_to_mm(
+        odometry_path_since(obstacle_path_counts(),
+                            obstacle_get(OBS_F_PASS_MARK)));
 
     if (done_mm >= need_mm)
     {
@@ -986,16 +1122,20 @@ static void obstacle_step_watch(obstacle_reading_t const * p_rd)
  */
 static void obstacle_scan_begin(void)
 {
+    status_board_obs_t part;
+
     for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)
     {
-        g_obs_scan[idx] = (uint16_t) APP_PROFILE_CLEAR_MM; /* cast: 1020 */
+        g_obs_scan[idx] = obstacle_mm_code(APP_PROFILE_CLEAR_MM);
     }
-    g_measured                = 0u;
-    g_inferred                = 0u;
-    g_part.b_is_profile_valid = false;
+    obstacle_set(OBS_F_MEASURED, 0u);
+    obstacle_set(OBS_F_INFERRED, 0u);
+    obstacle_part_get(&part);
+    part.b_is_profile_valid = false;
+    obstacle_part_put(&part);
     g_scan_start_us           = sys_tick_now_us();
-    g_state                   = APP_SCAN_COARSE;
-    g_step                    = OBS_STEP_CENTRE;   /* servo at 90 deg */
+    obstacle_set(OBS_F_STATE, APP_SCAN_COARSE);
+    obstacle_set(OBS_F_STEP, OBS_STEP_CENTRE);   /* servo at 90 deg */
     obstacle_set_step(0u);
 }
 
@@ -1021,10 +1161,11 @@ static bool obstacle_next_fine(void)
         coarse = idx - (idx % OBS_COARSE_STRIDE);
         if (((idx % OBS_COARSE_STRIDE) != 0u)
             && ((coarse + OBS_COARSE_STRIDE) < APP_SCAN_STEPS)
-            && (0u == (g_measured & (1u << idx))))
+            && (0u == (obstacle_get(OBS_F_MEASURED) & (1u << idx))))
         {
-            b_near  = (g_obs_scan[coarse] < OBS_NEAR_MM);
-            b_near2 = (g_obs_scan[coarse + OBS_COARSE_STRIDE] < OBS_NEAR_MM);
+            b_near  = (obstacle_scan_mm(coarse) < OBS_NEAR_MM);
+            b_near2 = (obstacle_scan_mm(coarse + OBS_COARSE_STRIDE)
+                       < OBS_NEAR_MM);
             if (b_near || b_near2)
             {
                 next = idx;
@@ -1050,11 +1191,19 @@ static bool obstacle_next_fine(void)
  */
 static void obstacle_scan_finish(void)
 {
-    obs_profile_t prof = {0};
-    obs_plan_t    plan = {OBS_OUT_NO_PATH, APP_SIDE_LEFT, 0u, 0u, false};
+    obs_profile_t      prof = {0};
+    obs_plan_t         plan = {OBS_OUT_NO_PATH, APP_SIDE_LEFT, 0u, 0u, false};
+    status_board_obs_t part;
+    uint16_t           scan_mm[APP_SCAN_STEPS];
+    uint32_t           idx  = 0u;
 
     obstacle_fill_gaps();
-    obs_profile_build(g_obs_scan, g_inferred, &prof);
+    for (idx = 0u; idx < APP_SCAN_STEPS; idx++)
+    {
+        /* cast: <= 1020 mm */
+        scan_mm[idx] = (uint16_t) obstacle_scan_mm(idx);
+    }
+    obs_profile_build(scan_mm, obstacle_get(OBS_F_INFERRED), &prof);
     obs_profile_plan(&prof, &plan);
     /* S5-U42: a scan that saw only a narrow normal-incidence glint
        (< OBS_MIN_WIDTH_MM) off a sloped ramp face is a ramp: drive on
@@ -1066,7 +1215,8 @@ static void obstacle_scan_finish(void)
     {
         /* casts: width 0..1020 mm, flag 0..1 fit int32_t */
         app_log("RAMP/GLINT in scan (width %d mm, on_ramp %d): continuing\n",
-                (int32_t) prof.raw_width_mm, gb_on_ramp ? 1 : 0, 0);
+                (int32_t) prof.raw_width_mm,
+                (0u != obstacle_get(OBS_F_ON_RAMP)) ? 1 : 0, 0);
         plan.outcome       = OBS_OUT_CONTINUE;
         plan.b_was_clamped = false;
     }
@@ -1077,24 +1227,27 @@ static void obstacle_scan_finish(void)
 
     /* stored in 4 mm steps (same information as the packed build);
        legs round up so a rounded leg is never shorter than planned */
-    g_part.b_is_profile_valid = prof.b_is_valid;
-    g_part.angle_step         = prof.angle_step;
-    g_part.width_mm           = obstacle_round_mm(prof.width_mm);
-    g_part.nearest_mm         = obstacle_round_mm(prof.nearest_mm);
-    g_part.clear_left_mm      = obstacle_round_mm(prof.clear_left_mm);
-    g_part.clear_right_mm     = obstacle_round_mm(prof.clear_right_mm);
-    g_part.plan_side          = plan.side;
-    g_part.leg_lateral_mm     = ((plan.leg_lateral_mm + OBS_MM_STEP - 1u)
-                                 / OBS_MM_STEP) * OBS_MM_STEP;
-    g_part.leg_forward_mm     = ((plan.leg_forward_mm + OBS_MM_STEP - 1u)
-                                 / OBS_MM_STEP) * OBS_MM_STEP;
-    g_part.scanner_state      = g_state;
-    status_board_write_obstacle(&g_part);         /* board before event */
+    obstacle_part_get(&part);
+    part.b_is_profile_valid = prof.b_is_valid;
+    part.angle_step         = prof.angle_step;
+    part.width_mm           = obstacle_round_mm(prof.width_mm);
+    part.nearest_mm         = obstacle_round_mm(prof.nearest_mm);
+    part.clear_left_mm      = obstacle_round_mm(prof.clear_left_mm);
+    part.clear_right_mm     = obstacle_round_mm(prof.clear_right_mm);
+    part.plan_side          = plan.side;
+    part.leg_lateral_mm     = ((plan.leg_lateral_mm + OBS_MM_STEP - 1u)
+                               / OBS_MM_STEP) * OBS_MM_STEP;
+    part.leg_forward_mm     = ((plan.leg_forward_mm + OBS_MM_STEP - 1u)
+                               / OBS_MM_STEP) * OBS_MM_STEP;
+    part.scanner_state      = obstacle_get(OBS_F_STATE);
+    obstacle_part_put(&part);
+    obstacle_part_get(&part);       /* as stored: the board's 4 mm codes */
+    status_board_write_obstacle(&part);           /* board before event */
 
     /* casts: scan ms, outcome and the 25-bit mask all fit int32_t */
     app_log("SCAN %d ms out %d inferred 0x%x\n",
             (int32_t) ((sys_tick_now_us() - g_scan_start_us) / OBS_US_PER_MS),
-            (int32_t) plan.outcome, (int32_t) g_inferred);
+            (int32_t) plan.outcome, (int32_t) obstacle_get(OBS_F_INFERRED));
     obstacle_scan_log();
     obstacle_ranges_log();
     if (prof.b_is_valid)
@@ -1143,14 +1296,14 @@ static void obstacle_scan_log(void)
 
     for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)
     {
-        if (0u != (g_measured & (1u << idx)))
+        if (0u != (obstacle_get(OBS_F_MEASURED) & (1u << idx)))
         {
-            if (g_obs_scan[idx] < nearest)
+            if (obstacle_scan_mm(idx) < nearest)
             {
-                nearest = g_obs_scan[idx];
+                nearest = obstacle_scan_mm(idx);
                 at_step = idx;
             }
-            if (g_obs_scan[idx] < OBS_NEAR_MM)
+            if (obstacle_scan_mm(idx) < OBS_NEAR_MM)
             {
                 near_mask |= (1u << idx);
             }
@@ -1194,14 +1347,14 @@ static void obstacle_ranges_log(void)
         if ((step + OBS_RANGE_PER_LINE) <= APP_SCAN_STEPS)
         {
             /* casts: <= 1020 mm fit int32_t */
-            app_log(p_fmt[line], (int32_t) g_obs_scan[step],
-                    (int32_t) g_obs_scan[step + 1u],
-                    (int32_t) g_obs_scan[step + 2u]);
+            app_log(p_fmt[line], (int32_t) obstacle_scan_mm(step),
+                    (int32_t) obstacle_scan_mm(step + 1u),
+                    (int32_t) obstacle_scan_mm(step + 2u));
         }
         else
         {
             /* cast: <= 1020 mm fits int32_t */
-            app_log(p_fmt[line], (int32_t) g_obs_scan[step], 0, 0);
+            app_log(p_fmt[line], (int32_t) obstacle_scan_mm(step), 0, 0);
         }
     }
 }
@@ -1228,15 +1381,172 @@ static void obstacle_block_log(bool b_is_left, uint32_t step,
         {
             app_log("SCAN left gap %d mm, set by the return at %d deg"
                     " (%d mm)\n", (int32_t) gap_mm, deg,
-                    (int32_t) g_obs_scan[step]);
+                    (int32_t) obstacle_scan_mm(step));
         }
         else
         {
             app_log("SCAN right gap %d mm, set by the return at %d deg"
                     " (%d mm)\n", (int32_t) gap_mm, deg,
-                    (int32_t) g_obs_scan[step]);
+                    (int32_t) obstacle_scan_mm(step));
         }
     }
+}
+
+/**
+ * obstacle_get
+ * @brief   Reads one private field (PRV_OBS_* rows).
+ * @param   field OBS_F_*
+ * @return  field value (4 mm code for OBS_F_PREV / OBS_F_ECHO)
+ * @context obstacle_task
+ */
+static uint32_t obstacle_get(uint32_t field)
+{
+    obstacle_field_t const * const p_f = &g_obs_f[field];
+
+    return app_bits_get(*p_f->p_word, p_f->pos, p_f->width);
+}
+
+/**
+ * obstacle_set
+ * @brief   Writes one private field. Callers keep every value inside its
+ *          row range (build checks above tie the rows to the cfg limits).
+ * @param   field OBS_F_*
+ * @param   value new value
+ * @context obstacle_task
+ */
+static void obstacle_set(uint32_t field, uint32_t value)
+{
+    obstacle_field_t const * const p_f = &g_obs_f[field];
+
+    *p_f->p_word = app_bits_put(*p_f->p_word, p_f->pos, p_f->width, value);
+}
+
+/**
+ * obstacle_mm_code
+ * @brief   A scan distance (a multiple of 4 mm, <= APP_PROFILE_CLEAR_MM)
+ *          as its 4 mm code (PRV_OBS_SCAN / PRV_OBS_SMP).
+ * @param   distance_mm 0..1020, a multiple of 4
+ * @return  code 0..255
+ * @context obstacle_task, usermain (init)
+ */
+static uint8_t obstacle_mm_code(uint32_t distance_mm)
+{
+    return (uint8_t) (distance_mm / OBS_MM_STEP); /* cast: <= 255 */
+}
+
+/**
+ * obstacle_scan_mm
+ * @brief   One scan table point in mm.
+ * @param   step 0..APP_SCAN_STEPS - 1
+ * @return  0..1020 mm (1020 = clear)
+ * @context obstacle_task
+ */
+static uint32_t obstacle_scan_mm(uint32_t step)
+{
+    return ((uint32_t) g_obs_scan[step] * OBS_MM_STEP);
+}
+
+/**
+ * obstacle_part_mm
+ * @brief   A distance as the board stores it: rounded to 4 mm and
+ *          saturated at the field maximum (same rule as sb_put_mm).
+ * @param   distance_mm mm
+ * @param   max         field maximum (code)
+ * @return  code
+ * @context obstacle_task
+ */
+static uint32_t obstacle_part_mm(uint32_t distance_mm, uint32_t max)
+{
+    return app_bits_clamp_u((distance_mm + (OBS_MM_STEP / 2u))
+                            / OBS_MM_STEP, max, NULL);
+}
+
+/**
+ * obstacle_part_put
+ * @brief   Stores the obstacle board part in g_part_w, in the SB_OBS0..2
+ *          layout with the board's rounding, so reading it back gives
+ *          exactly what the board holds.
+ * @param   p_part part in natural units
+ * @context obstacle_task
+ */
+static void obstacle_part_put(status_board_obs_t const * p_part)
+{
+    uint32_t w0 = 0u;
+    uint32_t w1 = 0u;
+    uint32_t w2 = 0u;
+
+    w0 = app_bits_put(w0, SB_OBS0_DIST_POS, SB_OBS0_DIST_BITS,
+                      obstacle_part_mm(p_part->distance_mm,
+                                       SB_OBS0_DIST_MAX));
+    w0 = app_bits_put(w0, SB_OBS0_SCAN_STATE_POS, SB_OBS0_SCAN_STATE_BITS,
+                      p_part->scanner_state);
+    w0 = app_bits_put(w0, SB_OBS0_ANGLE_STEP_POS, SB_OBS0_ANGLE_STEP_BITS,
+                      p_part->angle_step);
+    w0 = app_bits_put(w0, SB_OBS0_PLAN_SIDE_POS, SB_OBS0_PLAN_SIDE_BITS,
+                      p_part->plan_side);
+    w0 = app_bits_put(w0, SB_OBS0_PROFILE_VALID_POS,
+                      SB_OBS0_PROFILE_VALID_BITS,
+                      p_part->b_is_profile_valid ? 1u : 0u);
+    w1 = app_bits_put(w1, SB_OBS1_WIDTH_POS, SB_OBS1_WIDTH_BITS,
+                      obstacle_part_mm(p_part->width_mm, SB_OBS1_WIDTH_MAX));
+    w1 = app_bits_put(w1, SB_OBS1_NEAREST_POS, SB_OBS1_NEAREST_BITS,
+                      obstacle_part_mm(p_part->nearest_mm,
+                                       SB_OBS1_NEAREST_MAX));
+    w1 = app_bits_put(w1, SB_OBS1_CLEAR_L_POS, SB_OBS1_CLEAR_L_BITS,
+                      obstacle_part_mm(p_part->clear_left_mm,
+                                       SB_OBS1_CLEAR_L_MAX));
+    w1 = app_bits_put(w1, SB_OBS1_CLEAR_R_POS, SB_OBS1_CLEAR_R_BITS,
+                      obstacle_part_mm(p_part->clear_right_mm,
+                                       SB_OBS1_CLEAR_R_MAX));
+    w2 = app_bits_put(w2, SB_OBS2_LEG_LAT_POS, SB_OBS2_LEG_LAT_BITS,
+                      obstacle_part_mm(p_part->leg_lateral_mm,
+                                       SB_OBS2_LEG_LAT_MAX));
+    w2 = app_bits_put(w2, SB_OBS2_LEG_FWD_POS, SB_OBS2_LEG_FWD_BITS,
+                      obstacle_part_mm(p_part->leg_forward_mm,
+                                       SB_OBS2_LEG_FWD_MAX));
+    g_part_w[0] = w0;
+    g_part_w[1] = w1;
+    g_part_w[2] = w2;
+}
+
+/**
+ * obstacle_part_get
+ * @brief   The obstacle board part as stored in g_part_w, natural units.
+ * @param   p_part part out
+ * @context obstacle_task
+ */
+static void obstacle_part_get(status_board_obs_t * p_part)
+{
+    uint32_t const w0 = g_part_w[0];
+    uint32_t const w1 = g_part_w[1];
+    uint32_t const w2 = g_part_w[2];
+
+    p_part->distance_mm = app_bits_get(w0, SB_OBS0_DIST_POS,
+                                       SB_OBS0_DIST_BITS) * OBS_MM_STEP;
+    p_part->scanner_state = app_bits_get(w0, SB_OBS0_SCAN_STATE_POS,
+                                         SB_OBS0_SCAN_STATE_BITS);
+    p_part->angle_step = app_bits_get(w0, SB_OBS0_ANGLE_STEP_POS,
+                                      SB_OBS0_ANGLE_STEP_BITS);
+    p_part->plan_side = app_bits_get(w0, SB_OBS0_PLAN_SIDE_POS,
+                                     SB_OBS0_PLAN_SIDE_BITS);
+    p_part->b_is_profile_valid =
+        (0u != app_bits_get(w0, SB_OBS0_PROFILE_VALID_POS,
+                            SB_OBS0_PROFILE_VALID_BITS));
+    p_part->width_mm = app_bits_get(w1, SB_OBS1_WIDTH_POS,
+                                    SB_OBS1_WIDTH_BITS) * OBS_MM_STEP;
+    p_part->nearest_mm = app_bits_get(w1, SB_OBS1_NEAREST_POS,
+                                      SB_OBS1_NEAREST_BITS) * OBS_MM_STEP;
+    p_part->clear_left_mm = app_bits_get(w1, SB_OBS1_CLEAR_L_POS,
+                                         SB_OBS1_CLEAR_L_BITS) * OBS_MM_STEP;
+    p_part->clear_right_mm = app_bits_get(w1, SB_OBS1_CLEAR_R_POS,
+                                          SB_OBS1_CLEAR_R_BITS)
+                             * OBS_MM_STEP;
+    p_part->leg_lateral_mm = app_bits_get(w2, SB_OBS2_LEG_LAT_POS,
+                                          SB_OBS2_LEG_LAT_BITS)
+                             * OBS_MM_STEP;
+    p_part->leg_forward_mm = app_bits_get(w2, SB_OBS2_LEG_FWD_POS,
+                                          SB_OBS2_LEG_FWD_BITS)
+                             * OBS_MM_STEP;
 }
 
 /**
@@ -1246,7 +1556,7 @@ static void obstacle_block_log(bool b_is_left, uint32_t step,
  * @return  the middle one
  * @context any
  */
-static uint32_t obstacle_median3(uint16_t const * p_val)
+static uint32_t obstacle_median3(uint8_t const * p_val)
 {
     uint32_t const val_a = p_val[0];
     uint32_t const val_b = p_val[1];
@@ -1286,25 +1596,28 @@ static void obstacle_fill_gaps(void)
 
     for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)
     {
-        if (0u == (g_measured & (1u << idx)))
+        if (0u == (obstacle_get(OBS_F_MEASURED) & (1u << idx)))
         {
             left  = idx;
             right = idx;
-            while ((left > 0u) && (0u == (g_measured & (1u << left))))
+            while ((left > 0u)
+                   && (0u == (obstacle_get(OBS_F_MEASURED) & (1u << left))))
             {
                 left--;
             }
             while ((right < (APP_SCAN_STEPS - 1u))
-                   && (0u == (g_measured & (1u << right))))
+                   && (0u == (obstacle_get(OBS_F_MEASURED) & (1u << right))))
             {
                 right++;
             }
             g_obs_scan[idx] = (g_obs_scan[left] < g_obs_scan[right])
                               ? g_obs_scan[left] : g_obs_scan[right];
-            g_inferred |= (1u << idx);
+            /* codes keep the order of the distances they stand for */
+            obstacle_set(OBS_F_INFERRED,
+                         obstacle_get(OBS_F_INFERRED) | (1u << idx));
         }
     }
-    g_inferred &= OBS_MASK_ALL;
+    obstacle_set(OBS_F_INFERRED, obstacle_get(OBS_F_INFERRED) & OBS_MASK_ALL);
 }
 
 /**
@@ -1315,14 +1628,14 @@ static void obstacle_fill_gaps(void)
  */
 static void obstacle_set_step(uint32_t step)
 {
-    uint32_t const moved = (step > g_step) ? (step - g_step)
-                                           : (g_step - step);
+    uint32_t const now   = obstacle_get(OBS_F_STEP);
+    uint32_t const moved = (step > now) ? (step - now) : (now - step);
 
     /* S5-U52: short moves (<= one coarse stride) settle in one ping */
-    g_settle     = (moved <= OBS_COARSE_STRIDE) ? OBS_SETTLE_SMALL_PINGS
-                                                : OBS_SETTLE_PINGS;
-    g_step       = step;
-    g_sample_cnt = 0u;
+    obstacle_set(OBS_F_SETTLE, (moved <= OBS_COARSE_STRIDE)
+                               ? OBS_SETTLE_SMALL_PINGS : OBS_SETTLE_PINGS);
+    obstacle_set(OBS_F_STEP, step);
+    obstacle_set(OBS_F_SAMPLE_CNT, 0u);
     drv_servo_set_deg(APP_SCAN_ANGLE_MIN_DEG
                       + (APP_SCAN_ANGLE_STEP_DEG * step));
 }

@@ -1,14 +1,14 @@
 group,group_bits,field,bits,lsb,unit,min,max,offset,kind,class,owner,description
 SB_LINE0,32,STEERING,11,1,permille,-1000,1000,1024,RNG,S,B3,Steering error L-R; + = line left
 SB_LINE0,32,STATUS,2,1,code,0,3,0,ENUM,S,B3,APP_LINE_*
-SB_LINE0,32,JUNCTION,3,1,code,0,4,0,ENUM,S,B3,APP_JCT_* last junction class
+SB_LINE0,32,JUNCTION,2,1,code,0,3,0,ENUM,S,B3,APP_JCT_* last junction class
 SB_LINE0,32,CALIBRATED,1,1,flag,0,1,0,FLAG,S,B3,IR calibration done
 SB_MOT0,32,SPEED_L,8,1,count/50ms,-127,127,128,RNG,S,B2,Left wheel speed (approx 7 mm/s per LSB)
 SB_MOT0,32,SPEED_R,8,1,count/50ms,-127,127,128,RNG,S,B2,Right wheel speed
 SB_MOT0,32,STATE,3,1,code,0,7,0,ENUM,S,B2,APP_MOT_*
 SB_MOT1,32,POS_L,18,1,count,-131071,131071,131072,RNG,S,B2,Left encoder position (A23)
 SB_MOT2,32,POS_R,18,1,count,-131071,131071,131072,RNG,S,B2,Right encoder position (A23)
-SB_MOT3,32,PATH,17,1,count,0,131071,0,RNG,S,B2,Path length sum of |travel| (A23)
+SB_MOT3,32,PATH,17,1,count,0,131071,0,RAW,S,B2,Path length sum of |travel|; wraps at 2^17 counts (about 42.5 m); read only as differences (odometry_path_since)
 SB_IMU0,32,PITCH,10,1,0.1 deg,-450,450,512,RNG,S,B4,Pitch (A24)
 SB_IMU0,32,HUMP_NOW,7,1,mm,0,127,0,RNG,S,B4,Current hump height (A25)
 SB_IMU0,32,HUMP_PEAK,7,1,mm,0,127,0,RNG,S,B4,Highest hump this run (A25)
@@ -43,11 +43,13 @@ MSG_ECHO,16,VALID,1,1,flag,0,1,0,FLAG,S,B5,Width is a complete measurement
 MSG_ECHO,16,PAD,1,1,-,0,0,0,PAD,S,B5,Zero
 MSG_EDGE,16,GAP,15,16,us,0,32767,0,SAT,S,B3,Gap since previous accepted edge; 32767 = stopped
 MSG_EDGE,16,LEVEL,1,1,flag,0,1,0,FLAG,S,B3,DO level after the edge (1 = black)
-EVT_JUNCTION,11,CLASS,3,1,code,0,4,0,ENUM,S,B3,APP_JCT_*
+EVT_JUNCTION,11,CLASS,2,1,code,0,3,0,ENUM,S,B3,APP_JCT_*
 EVT_LINE_FOUND,11,CROSS_MM,8,1,mm,0,255,0,SAT,S,B3,Black crossing length
 EVT_BARCODE,11,CHAR,6,1,code,0,42,0,ENUM,S,B3,Code 39 character index
 EVT_BARCODE,11,CMD,2,1,code,0,3,0,ENUM,S,B3,APP_BAR_CMD_*
 EVT_UNMAPPED,11,CHAR,6,1,code,0,42,0,ENUM,S,B3,Code 39 character index
+EVT_INVALID,11,N_ELEM,6,1,count,0,63,0,SAT,S,B3,Elements in the failed capture (a barcode has 29); PRV_BAR_A.N_ELEM
+EVT_BARCODE_PROBE,11,MM,11,1,mm,0,2047,0,RNG,S,B3,Travel since the capture started (rewind length)
 EVT_PLAN,11,SIDE,1,1,flag,0,1,0,FLAG,S,B5,APP_SIDE_*
 EVT_MOVE_DONE,11,TAG,2,1,count,0,3,0,RAW,S,B2,Tag of the finished command
 EVT_STALL,11,LEFT,1,1,flag,0,1,0,FLAG,S,B2,Left wheel stalled
@@ -88,7 +90,7 @@ MQ_STATE,0,POS_L,18,1,count,-131071,131071,131072,RNG,S,B1,from SB_MOT1
 MQ_STATE,0,POS_R,18,1,count,-131071,131071,131072,RNG,S,B1,from SB_MOT2
 MQ_STATE,0,LINE,2,1,code,0,3,0,ENUM,S,B1,from SB_LINE0 status
 MQ_STATE,0,STEER,11,1,permille,-1000,1000,1024,RNG,S,B1,from SB_LINE0
-MQ_STATE,0,ODO_MM,15,1,mm,0,32767,0,RNG,S,B1,path x um/count / 1000
+MQ_STATE,0,ODO_MM,15,1,mm,0,32767,0,RNG,S,B1,path x um/count / 1000; restarts from 0 when the path wraps
 MQ_STATE,0,PITCH,10,1,0.1 deg,-450,450,512,RNG,S,B1,from SB_IMU0
 MQ_STATE,0,HUMP_PEAK,7,1,mm,0,127,0,RNG,S,B1,from SB_IMU0
 MQ_STATE,0,TURN,10,1,deg/s,-360,360,512,RNG,S,B1,from SB_IMU1
@@ -132,6 +134,37 @@ MQ_SENS,0,SCAN,3,1,code,0,7,0,ENUM,S,B1,APP_SCAN_* obstacle scanner state
 MQ_SENS,0,PAD,5,1,-,0,0,0,PAD,S,B1,Zero
 MQ_MAP,8,CHAR,6,1,code,0,42,0,ENUM,S,B1,Byte 1 of a MAP command
 MQ_MAP,8,CMD,2,1,code,0,3,0,ENUM,S,B1,Byte 1 of a MAP command
+PRV_MOT_A,32,STATE,3,1,code,0,7,0,ENUM,P,B2,APP_MOT_* state of the Motion Executor
+PRV_MOT_A,32,ENC_OK,1,1,flag,0,1,0,FLAG,P,B2,Encoder PIO program loaded
+PRV_MOT_A,32,ACT_TYPE,3,1,code,0,6,0,ENUM,P,B2,APP_CMD_* of the running command (0 = none)
+PRV_MOT_A,32,ACT_TAG,2,1,count,0,3,0,RAW,P,B2,Tag of the running command; echoed in MOVE_DONE
+PRV_MOT_A,32,PEND_VALID,1,1,flag,0,1,0,FLAG,P,B2,A command waits in the one-slot latch
+PRV_MOT_A,32,PEND_TYPE,3,1,code,0,6,0,ENUM,P,B2,APP_CMD_* of the latched command
+PRV_MOT_A,32,PEND_TAG,2,1,count,0,3,0,RAW,P,B2,Tag of the latched command
+PRV_MOT_A,32,PEND_PARAM,11,1,mm|deg|mm/s,0,2047,0,RNG,P,B2,Parameter of the latched command (K5 PARAM width)
+PRV_MOT_A,32,CREEP_STILL,4,1,tick,0,15,0,SAT,P,B2,Still cycles inside the creep zone (MOTION_CREEP_STUCK_TICKS)
+PRV_MOT_B,32,BASE_CPW,7,1,count/50ms,-63,63,64,RNG,P,B2,Base set-point; FOLLOW max 300 mm/s = 46
+PRV_MOT_B,32,CREEP_CPW,5,1,count/50ms,-15,15,16,RNG,P,B2,Creep set-point with the sign of the base; 80 mm/s = 12
+PRV_MOT_B,32,STALL_L,5,1,tick,0,30,0,SAT,P,B2,Left wheel: cycles driven hard without a count (MOTION_STALL_TICKS)
+PRV_MOT_B,32,STALL_R,5,1,tick,0,30,0,SAT,P,B2,Right wheel: cycles driven hard without a count
+PRV_MOT_B,32,LOG_PEND,1,1,flag,0,1,0,FLAG,P,B2,Impossible encoder read recorded; printed after step 9
+PRV_MOT_B,32,LOG_WHEEL,1,1,code,0,1,0,ENUM,P,B2,Wheel of the recorded read (0 = L 1 = R)
+PRV_MOT_C,32,TARGET2,14,1,half count,0,16383,0,RNG,P,B2,2 x counts of the running MOVE or TURN (2047 mm = 12636)
+PRV_MOT_C,32,PROG2,14,1,half count,0,16383,0,SAT,P,B2,Progress of the running MOVE or TURN; saturates above every target
+PRV_MOT_C,32,STRK_L,2,1,count,0,3,0,SAT,P,B2,Left wheel: impossible encoder reads in a row
+PRV_MOT_C,32,STRK_R,2,1,count,0,3,0,SAT,P,B2,Right wheel: impossible encoder reads in a row
+PRV_MOT_D,32,PATH2,18,1,half count,0,262143,0,RAW,P,B2,2 x PATH; wraps with the 17-bit PATH
+PRV_MOT_E,16,DIFF_START,16,1,count,0,65535,0,RAW,P,B2,Low 16 bits of pos_l - pos_r when the MOVE started; the drift is taken modulo 2^16
+PRV_MOT_F,32,LOG_DT,20,1,us,0,1000000,0,RNG,P,B2,Time since the trusted read of the recorded read (capped at 1 s)
+PRV_MOT_PI,32,INTEG,18,1,permille/256,-76800,76800,131072,RNG,P,B2,PI integrator per wheel x2 (MOTION_I_CLAMP)
+PRV_MOT_PI,32,DUTY,11,1,permille,-1000,1000,1024,RNG,P,B2,Duty applied last cycle per wheel x2
+PRV_WIN_L,8,DELTA,7,1,count,-63,63,64,RNG,P,B2,Speed window: left counts per tick x5
+PRV_WIN_R,8,DELTA,7,1,count,-63,63,64,RNG,P,B2,Speed window: right counts per tick x5
+PRV_WIN_T,8,DT_MS,6,1,ms,0,63,0,SAT,P,B2,Speed window: tick length x5
+PRV_WIN_I,8,IDX,3,1,slot,0,4,0,RNG,P,B2,Speed window: next slot
+E_MOT_RAW,32,COUNT,31,1,count,0,0,0,RAW,E,B2,E3 encoder images x4 (at ZERO and last trusted; L and R): the PIO counter is 32 bits and wraps and a jump is judged on its full width (bits=31 for gen_layout.py)
+E_MOT_US,32,TIME,31,1,us,0,0,0,RAW,E,B2,E5 times x3 (last read; last trusted read L and R): the 1 us timer is 32 bits and wraps and only differences are used (bits=31 for gen_layout.py)
+E_MOT_LOG,32,DELTA,31,1,count,0,0,0,RAW,E,B2,Counts of the recorded impossible encoder read: any 32-bit jump; console only (bits=31 for gen_layout.py)
 PRV_IMU_A,32,STATE,3,1,code,0,4,0,ENUM,P,B4,Terrain state
 PRV_IMU_A,32,HYST,4,1,sample,0,15,0,SAT,P,B4,Hysteresis count
 PRV_IMU_A,32,I2C_ERR,2,1,count,0,3,0,SAT,P,B4,I2C errors in a row
@@ -141,6 +174,7 @@ PRV_IMU_A,32,LAST_CLASS,3,1,code,0,6,0,ENUM,P,B4,Last posted class
 PRV_IMU_A,32,MAG_DIV,3,1,tick,0,4,0,RNG,P,B4,Cycles to next magnetometer read
 PRV_IMU_A,32,LIFT_CNT,3,1,tick,0,5,0,SAT,P,B4,Lift-stop: cycles in a row lifted or overturned (CR2)
 PRV_IMU_A,32,NEED_CFG,1,1,flag,0,1,0,FLAG,P,B4,LSM303D registers must be (re)written
+PRV_IMU_A,32,IR_LIFT_CNT,5,1,tick,0,30,0,SAT,P,B4,Level lift: cycles in a row both IR read no floor (S4-U17)
 PRV_IMU_B,32,CAL_CNT,8,1,sample,0,200,0,RNG,P,B4,Calibration samples
 PRV_IMU_B,32,CLIMB_CNT,11,1,count,0,2047,0,SAT,P,B4,Climb distance
 PRV_IMU_B,32,HIST_IDX,3,1,slot,0,4,0,RNG,P,B4,Speed history index
@@ -150,8 +184,26 @@ PRV_IMU_C,32,PREV_HDG_VALID,1,1,flag,0,1,0,FLAG,P,B4,PREV_HDG is from the previo
 PRV_IMU_C,32,PITCH_MAX,10,1,0.1 deg,-450,450,512,RNG,P,B4,Max pitch this hump (A24)
 PRV_IMU_C,32,RUN_PEAK,7,1,mm,0,127,0,RNG,P,B4,Highest hump this run
 PRV_IMU_D,32,PREV_DIFF,19,1,count,-262142,262142,262144,RNG,P,B4,pos_l-pos_r 50 ms ago
+PRV_IMU_R,32,STATE,1,1,flag,0,1,0,FLAG,P,B4,One-wheel hump: 1 = on it (S4-U18)
+PRV_IMU_R,32,HYST,3,1,sample,0,7,0,SAT,P,B4,One-wheel hump: cycles in a row past the start / level threshold
+PRV_IMU_R,32,FILT,10,1,mg,-511,511,512,RNG,P,B4,One-wheel hump: smoothed sideways tilt (ay)
+PRV_IMU_R,32,PEAK,9,1,mg,0,511,0,RNG,P,B4,One-wheel hump: largest smoothed |ay| on this hump
+PRV_IMU_R,32,TICKS,8,1,tick,0,255,0,SAT,P,B4,One-wheel hump: cycles on this hump (ramp / held-tilt reject)
 PRV_IMU_E,32,PREV_POS_L,18,1,count,-131071,131071,131072,RNG,P,B4,Previous left position
 PRV_IMU_F,32,PREV_POS_R,18,1,count,-131071,131071,131072,RNG,P,B4,Previous right position
+PRV_IMU_G,32,PITCH,12,1,0.1 deg,-1800,1800,2048,RNG,P,B4,Pitch this cycle before the board clamp (atan2 range); read for the board and the magnetometer check
+PRV_IMU_G,32,HUMP_NOW,12,1,mm,0,2148,0,RNG,P,B4,Hump height this cycle before the board clamp (terrain_acc_to_mm of a positive int32 is at most 2148)
+PRV_IMU_G,32,CAL_ACTIVE,1,1,flag,0,1,0,FLAG,P,B4,IMU calibration mode seen
+PRV_IMU_G,32,CAL_DONE,1,1,flag,0,1,0,FLAG,P,B4,Offsets computed for this calibration
+PRV_IMU_G,32,TURN_ENC,1,1,flag,0,1,0,FLAG,P,B4,Reported turn rate is from the encoders (A7)
+PRV_IMU_H,32,AX,14,1,mg,-8191,8191,8192,RNG,P,B4,Calibrated average X: int16 sample x 61/500 minus an offset of at most 4096 mg (|AX| <= 8093)
+PRV_IMU_H,32,AY,14,1,mg,-8191,8191,8192,RNG,P,B4,Calibrated average Y (same range as AX)
+PRV_IMU_J,32,AZ,14,1,mg,-8191,8191,8192,RNG,P,B4,Calibrated average Z (same range as AX); 1000 at boot
+PRV_IMU_J,32,A_FWD,13,1,mg,-4095,4095,4096,RNG,P,B4,Forward acceleration from the 50 ms speed history: 254 cpw x gain / 1024 (|A_FWD| <= 3615)
+PRV_IMU_K,32,TURN_DPS,22,1,deg/s,-2097151,2097151,2097152,RNG,P,B4,Turn rate before the board clamp: encoder heading difference / 5 (|rate| <= 1677708) or magnetometer x 2 (<= 3600)
+PRV_IMU_L,32,ENC_HDG,23,1,0.01 deg,-4194303,4194303,4194304,RNG,P,B4,Encoder heading at the last magnetometer cycle: wheel difference (A23) x 16 (|heading| <= 4194272)
+PRV_IMU_M,32,MX,16,1,code,-32768,32767,32768,RAW,P,B4,Magnetometer X register image of this cycle
+PRV_IMU_M,32,MY,16,1,code,-32768,32767,32768,RAW,P,B4,Magnetometer Y register image of this cycle
 PRV_HIST_A,32,H0,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 0
 PRV_HIST_A,32,H1,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 1
 PRV_HIST_A,32,H2,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 2
@@ -187,21 +239,41 @@ PRV_LINE_A,32,SAT_L,1,1,flag,0,1,0,FLAG,P,B3,Left saturated seen
 PRV_LINE_A,32,SAT_R,1,1,flag,0,1,0,FLAG,P,B3,Right saturated seen
 PRV_LINE_A,32,SEQ0,8,1,count,0,255,0,RAW,P,B3,Branch sequence at start
 PRV_LINE_D,32,LAST_SEQ,8,1,count,0,255,0,RAW,P,B3,Branch sequence seen last cycle
-PRV_LINE_D,32,BRANCH_PATH,17,1,count,0,131071,0,RNG,P,B3,Path when the branch sequence last changed
+PRV_LINE_D,32,BRANCH_PATH,17,1,count,0,131071,0,RAW,P,B3,Path when the branch sequence last changed (wrapping path)
 PRV_LINE_A,32,RUN_ACTIVE,1,1,flag,0,1,0,FLAG,P,B3,Black run in progress
 PRV_LINE_A,32,CAL_ACTIVE,1,1,flag,0,1,0,FLAG,P,B3,Calibration mode seen
 PRV_LINE_A,32,CALIBRATED,1,1,flag,0,1,0,FLAG,P,B3,Calibration valid
-PRV_LINE_B,32,JCT_MARK,17,1,count,0,131071,0,RNG,P,B3,Path at junction start
-PRV_LINE_C,32,RUN_MARK,17,1,count,0,131071,0,RNG,P,B3,Path at black run start
+PRV_LINE_B,32,JCT_MARK,17,1,count,0,131071,0,RAW,P,B3,Path at junction start (wrapping path)
+PRV_LINE_C,32,RUN_MARK,17,1,count,0,131071,0,RAW,P,B3,Path at black run start (wrapping path)
+PRV_LINE_A,32,REJOIN_WHITE,1,1,flag,0,1,0,FLAG,P,B3,Rejoin latch: both sensors saw white since the last black run
+PRV_LINE_A,32,CROSS_STRT,1,1,flag,0,1,0,FLAG,P,B3,Steering bias cleared until LINE_JUNCTION_EXIT_MM past CROSS_MARK
+PRV_LINE_A,32,BRANCH_SEEN,1,1,flag,0,1,0,FLAG,P,B3,A branch sequence change is still recent
+PRV_LINE_A,32,LAST_JCT,2,1,code,0,3,0,ENUM,P,B3,APP_JCT_* last junction class posted
+PRV_LINE_A,32,RAW_LOG_CNT,6,1,tick,0,49,0,RNG,P,B3,Bring-up raw print divider (LINE_RAW_LOG_CYCLES 50)
+PRV_LINE_E,32,WHITE_MARK,17,1,count,0,131071,0,RAW,P,B3,Path where the current both-white stretch began (S3-U19; wrapping path)
+PRV_LINE_F,32,CROSS_MARK,17,1,count,0,131071,0,RAW,P,B3,Path at the last cycle with both sensors on a stripe (wrapping path)
 PRV_BAR_A,32,STATE,2,1,code,0,3,0,ENUM,P,B3,Decoder state
 PRV_BAR_A,32,N_ELEM,6,1,count,0,63,0,SAT,P,B3,Elements captured
 PRV_BAR_A,32,LAST_LEVEL,1,1,flag,0,1,0,FLAG,P,B3,Level of the last entry
-PRV_BAR_B,32,MARK,17,1,count,0,131071,0,RNG,P,B3,Path at last edge or cooldown start
+PRV_BAR_A,32,CLAMP_AGE,5,1,count,0,29,0,SAT,P,B3,Elements stored after the last clamped gap; 29 = none in the decode window (S3-U48)
+PRV_BAR_B,32,MARK,17,1,count,0,131071,0,RAW,P,B3,Path at last edge or cooldown start (wrapping path)
+PRV_BAR_B,32,CARRY,15,16,us,0,32767,0,SAT,P,B3,Flicker time carried into the next element (S3-U37); saturates like MSG_EDGE GAP
+PRV_BAR_C,32,FIX_CNT,2,1,count,0,3,0,SAT,P,B3,Level fixes in this capture (BAR_LEVEL_FIX_MAX)
+PRV_BAR_C,32,SETTLE,8,16,us,0,249,0,RNG,P,B3,Time since the last accepted DO transition while under BAR_SETTLE_US (S3-U37)
+PRV_BAR_C,32,REREAD_FIRST,1,1,flag,0,1,0,FLAG,P,B3,Verified reread lead-in: the first transition starts the capture
+PRV_BAR_C,32,PROBE_OK,1,1,flag,0,1,0,FLAG,P,B3,Probe accepted the first bars of this capture
+PRV_BAR_C,32,QUIET_KNOWN,1,1,flag,0,1,0,FLAG,P,B3,Sensor known to be on white with no edge behind it
+PRV_BAR_C,32,START_PATH,17,1,count,0,131071,0,RAW,P,B3,Path at capture start (wrapping path)
+PRV_BAR_LOG,32,HEAD,6,1,slot,0,47,0,RNG,P,B3,Raw edge log next slot (BAR_EDGE_LOG_MAX 48; bring-up log S3-U36)
+PRV_BAR_LOG,32,CNT,6,1,count,0,48,0,SAT,P,B3,Raw edge log entries stored
+PRV_BAR_LOG,32,LEFT,6,1,count,0,48,0,RNG,P,B3,Raw edge log entries still to print
+PRV_BAR_LOG,32,CYCLE,8,1,count,0,255,0,RAW,P,B3,barcode_task cycle number; wraps (log keeps 8 bits; print every 4 cycles)
 PRV_BAR_W,8,WIDTH,8,100,um,0,255,0,SAT,P,B3,Element width x32 bytes
-PRV_BAR_MAP,8,CHAR,6,1,code,0,63,0,ENUM,P,B3,Map character (63 = empty) x8
-PRV_BAR_MAP,8,CMD,2,1,code,0,3,0,ENUM,P,B3,Map command x8
+PRV_BAR_MAP,8,CHAR,6,1,code,0,63,0,ENUM,S,B3,Map character (63 = empty) x8; mission_task writes one byte per update (MAP) and barcode_task reads whole bytes
+PRV_BAR_MAP,8,CMD,2,1,code,0,3,0,ENUM,S,B3,Map command x8 (same byte as CHAR)
 SH_BAR,8,BRANCH_SEQ,8,1,count,0,255,0,RAW,S,B3,barcode_task -> line_task; wraps
 SH_BAR_OVF,8,OVERFLOW,8,1,count,0,255,0,SAT,S,B3,Ring overflows (ISR writer)
+SH_BAR_EDGES,16,COUNT,16,1,count,0,65535,0,RAW,S,B3,Accepted DO edges (ISR writer); wraps; readers compare for change or keep the low 8 bits
 E_LINE,32,RECIP,18,1,Q16,0,0,0,RAW,E,B3,E8 precomputed reciprocals x2
 E_BAR,8,HEAD_TAIL,6,1,index,0,0,0,RAW,E,B3,E6 ring head (ISR) and tail (task): one writer per byte
 E_BAR_US,32,LAST_US,31,1,us,0,0,0,RAW,E,B3,E5 ISR-private last accepted edge time (own E group and bits=31 for gen_layout.py; SPEC-QUESTION SQ-B3-1)
@@ -210,3 +282,106 @@ SH_IR_RAW,32,R,12,1,adc,0,4095,0,RNG,S,B3,Raw right IR ADC
 SH_IMU_ACC,32,AX,10,4,mg,-511,511,512,SAT,S,B4,Accel X after offsets; imu_task writes the whole word each cycle
 SH_IMU_ACC,32,AY,10,4,mg,-511,511,512,SAT,S,B4,Accel Y after offsets
 SH_IMU_ACC,32,AZ,10,4,mg,-511,511,512,SAT,S,B4,Accel Z after offsets
+PRV_OBS_M,32,MEASURED,25,1,mask,0,33554431,0,RAW,P,B5,Scan steps measured (bit n = step n)
+PRV_OBS_M,32,STATE,3,1,code,0,7,0,ENUM,P,B5,APP_SCAN_* scanner state
+PRV_OBS_M,32,SETTLE,3,1,ping,0,4,0,RNG,P,B5,Servo settle pings left (OBS_WATCH_SETTLE_PINGS)
+PRV_OBS_M,32,ON_RAMP,1,1,flag,0,1,0,FLAG,P,B5,Pitched or just off a ramp (S5-U42)
+PRV_OBS_I,32,INFERRED,25,1,mask,0,33554431,0,RAW,P,B5,Scan steps filled from neighbours (bit n = step n)
+PRV_OBS_I,32,STEP,5,1,5 deg,0,24,0,RNG,P,B5,Current scan step (30 + 5 x step deg)
+PRV_OBS_I,32,SAMPLE_CNT,2,1,ping,0,2,0,RNG,P,B5,Pings taken at this step (OBS_SCAN_SAMPLES - 1)
+PRV_OBS_A,32,PREV,9,4,mm,0,511,0,SAT,P,B5,Previous reading; 511 = nothing (APP_DIST_NONE_MM)
+PRV_OBS_A,32,ECHO,9,4,mm,0,511,0,SAT,P,B5,Last real echo in APPROACH (S5-U38); 511 = nothing
+PRV_OBS_A,32,WARMUP,6,1,ping,0,34,0,RNG,P,B5,Power-up grace pings left (OBS_WARMUP_PINGS; S5-U30)
+PRV_OBS_A,32,SILENT,2,1,ping,0,3,0,SAT,P,B5,Silent pings in a row (OBS_NO_ECHO_PINGS)
+PRV_OBS_A,32,LOST,2,1,ping,0,3,0,SAT,P,B5,Lost echoes in APPROACH (stop at OBS_LOST_PINGS = 2)
+PRV_OBS_A,32,FAR,2,1,ping,0,3,0,SAT,P,B5,Far readings in APPROACH (clear at OBS_CLEAR_READINGS = 2)
+PRV_OBS_B,32,PASS_MARK,17,1,count,0,131071,0,RAW,P,B5,Path at PASSING entry (wrapping path)
+PRV_OBS_B,32,RAMP_HOLD,4,1,ping,0,8,0,RNG,P,B5,Ramp hold pings left (OBS_RAMP_HOLD_PINGS)
+PRV_OBS_B,32,MODE_SEEN,3,1,mask,0,7,0,RAW,P,B5,RESCAN / STOPPED / RESUME mode bits seen last cycle
+PRV_OBS_B,32,DIST_LOG,3,1,ping,0,7,0,RNG,P,B5,Bring-up distance print divider (OBS_DIST_LOG_PINGS 8)
+PRV_OBS_B,32,RAMP_LOGGED,1,1,flag,0,1,0,FLAG,P,B5,One RAMP line per approach
+PRV_OBS_B,32,CREEP_LOGGED,1,1,flag,0,1,0,FLAG,P,B5,One CREEP line per stop
+PRV_OBS_C,32,RAMP_MARK,17,1,count,0,131071,0,RAW,P,B5,Path at the last pitched cycle (wrapping path)
+PRV_OBS_SCAN,8,MM,8,4,mm,0,255,0,SAT,P,B5,Scan table point x25 (APP_SCAN_STEPS); 255 = clear (APP_PROFILE_CLEAR_MM)
+PRV_OBS_SMP,8,MM,8,4,mm,0,255,0,SAT,P,B5,Pings at one step x3 (OBS_SCAN_SAMPLES); median kept
+SH_ECHO_CNT,8,COUNT,8,1,count,0,255,0,RAW,S,B5,Accepted echo rises and falls x2 (ISR writer; one byte each); obstacle_task compares for change
+SH_PING,8,SEQ,8,1,count,0,255,0,RAW,S,B5,Ping number; obstacle_task writes; the ISR reads; wraps
+SH_ECHO_WIN,8,OPEN,1,1,flag,0,1,0,FLAG,S,B5,Echo window open; obstacle_task writes; the ISR reads (own byte: one writer)
+PRV_ECHO_ISR,8,RISE_SEQ,8,1,count,0,255,0,RAW,P,B5,Ping number captured at the rise (ISR only)
+PRV_ECHO_ARM,8,ARMED,1,1,flag,0,1,0,FLAG,P,B5,A rise is armed (ISR only)
+E_OBS_US,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 timer images x2 (echo rise time in the ISR; scan start for the scan-time log): a stuck-high echo or a scan can exceed 65 ms (bits=31 for gen_layout.py)
+PRV_MIS_G,32,BTN_RUN,2,1,tick,0,3,0,SAT,P,B5,Run button pressed polls (MISSION_BTN_DEBOUNCE_TICKS)
+PRV_MIS_G,32,BTN_RESET,8,1,tick,0,200,0,SAT,P,B5,Reset button held polls (MISSION_BTN_RESET_HOLD_TICKS)
+PRV_MIS_G,32,RESET_SENT,1,1,flag,0,1,0,FLAG,P,B5,RESET_HOLD reported for this hold
+PRV_MIS_G,32,WARNING,1,1,flag,0,1,0,FLAG,P,B5,1 s start warning on
+PRV_MIS_G,32,LED,3,1,code,0,6,0,ENUM,P,B5,HMI_LED_* colour last written; 6 = unknown (forces the first write)
+PRV_MIS_G,32,BUZZ,1,1,flag,0,1,0,FLAG,P,B5,Buzzer is on
+PRV_MIS_G,32,PREV_SYS,4,1,code,0,8,0,ENUM,P,B5,APP_SYS_* shown last pass; 8 = none yet
+PRV_MIS_G,32,BEEP,2,1,code,0,2,0,ENUM,P,B5,HMI_BEEP_* pattern in progress
+E_MIS_US,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 timer images x2 (HMI state entry; beep start): blink and alarm periods exceed 65 ms (bits=31 for gen_layout.py)
+PRV_HLT,8,NORMAL_WIN,1,1,flag,0,1,0,FLAG,P,B5,Watchdog runs the normal 30 ms window (else the 500 ms startup one): selects the LOAD value to feed
+PRV_HLT,8,WDT_ACTIVE,1,1,flag,0,1,0,FLAG,P,B5,Watchdog enabled
+PRV_HLT,8,STARTED,1,1,flag,0,1,0,FLAG,P,B5,All four tasks checked in; normal window armed
+SH_OBS_CHK,8,DONE,1,1,flag,0,1,0,FLAG,S,B5,obstacle_task has checked in (obstacle_task writes; mission_task reads; own byte)
+E_HLT_US,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 timer images x3 (obstacle check-in; watchdog enable; last feed): ages are compared with limits above 65 ms (bits=31 for gen_layout.py)
+E_HLT_GAP,32,MAX_US,31,1,us,0,0,0,RAW,E,B5,E7 longest gap between two watchdog feeds (bring-up latency figure; bits=31 for gen_layout.py)
+PRV_MIS_A,32,DIFF_AT_STOP,19,1,count,-262142,262142,262144,RNG,P,B5,pos_l - pos_r when the bypass started (A23)
+PRV_MIS_A,32,REJOIN_E,11,1,mm,0,1442,0,RNG,P,B5,Expected rejoin distance: LEG_LAT x 1.414
+PRV_MIS_A,32,END_REASON,2,1,code,0,3,0,ENUM,P,B5,APP_END_*
+PRV_MIS_B,32,CAL_DIFF0,19,1,count,-262142,262142,262144,RNG,P,B5,pos_l - pos_r when CAL_IR started (A23)
+PRV_MIS_B,32,LAST_FAULTS,10,1,mask,0,1023,0,RAW,P,B5,APP_FAULT_* mask seen last pass
+PRV_MIS_B,32,SYS_STATE,3,1,code,0,7,0,ENUM,P,B5,APP_SYS_*
+PRV_MIS_C,32,RETRY_PARAM,18,1,mm|deg,-131071,131071,131072,RNG,P,B5,Parameter to retry; the largest caller is the CAL_IR return turn (|heading| / 100)
+PRV_MIS_C,32,BAR_BACK_LEFT,10,1,mm,0,600,0,RNG,P,B5,Rewind still to send (<= MISSION_BARCODE_REWIND_MM)
+PRV_MIS_C,32,SYS_REQUEST,4,1,code,0,8,0,ENUM,P,B5,APP_SYS_* requested by a RUN handler; 8 = none (MISSION_REQ_NONE)
+PRV_MIS_D,32,BAR_MARK,17,1,count,0,131071,0,RAW,P,B5,Rewind target; progress or read start (wrapping path)
+PRV_MIS_D,32,MOVE_LIMIT_MS,15,1,ms,0,21469,0,RNG,P,B5,Deadline of the tracked move: 2047 mm at 150 mm/s x 1.5 + 1 s at most
+PRV_MIS_E,32,BAR_PROBE_MARK,17,1,count,0,131071,0,RAW,P,B5,Pending rewind target (wrapping path)
+PRV_MIS_E,32,LEG_LAT,10,1,mm,0,1020,0,RNG,P,B5,Planned lateral leg (from SB_OBS2)
+PRV_MIS_E,32,RUN_STATE,3,1,code,0,4,0,ENUM,P,B5,APP_RUN_*
+PRV_MIS_E,32,ARMED_CMD,2,1,code,0,3,0,ENUM,P,B5,APP_BAR_CMD_*
+PRV_MIS_F,32,BAR_REARM_PATH,17,1,count,0,131071,0,RAW,P,B5,Path when the last rewind or read ended
+PRV_MIS_F,32,LEG_FWD,10,1,mm,0,1020,0,RNG,P,B5,Planned forward leg (from SB_OBS2)
+PRV_MIS_F,32,AVOID_STEP,3,1,code,0,6,0,ENUM,P,B5,APP_AVOID_*
+PRV_MIS_F,32,NO_PATH_CNT,2,1,count,0,3,0,SAT,P,B5,NO_PATH answers for this obstacle (counts to 2; not read)
+PRV_MIS_H,32,BAR_FOLLOW,17,1,count,0,131071,0,RAW,P,B5,Start of the current following stretch
+PRV_MIS_H,32,ARMED_CHAR,6,1,code,0,63,0,RNG,P,B5,Decoded Code 39 index (RUN_BAR_CHAR_MASK)
+PRV_MIS_H,32,SUBSTEP,3,1,step,0,5,0,RNG,P,B5,Step in a sweep / turn / rejoin (RUN_SUB_* or MISSION_CAL_SUB_*)
+PRV_MIS_H,32,BAR_PHASE,3,1,code,0,4,0,ENUM,P,B5,RUN_BAR_* rewind / reread phase
+PRV_MIS_H,32,RETRY_KIND,3,1,code,0,4,0,ENUM,P,B5,MISSION_MV_* to retry
+PRV_MIS_J,32,BAR_BACK_PATH,17,1,count,0,131071,0,RAW,P,B5,Path when the reverse command started
+PRV_MIS_J,32,BAR_TRIES,2,1,count,0,2,0,RNG,P,B5,Slow passes retried for this strip (MISSION_BARCODE_RETRIES)
+PRV_MIS_J,32,SEARCH_FIRST,2,1,code,0,3,0,ENUM,P,B5,MISSION_MV_LEFT / RIGHT: first search sweep
+PRV_MIS_J,32,CAL_CORR_CNT,2,1,count,0,2,0,RNG,P,B5,Heading return turns after the sweep (MISSION_CAL_CORR_MAX)
+PRV_MIS_J,32,WAIT_TAG,2,1,count,0,3,0,RAW,P,B5,Tag of the awaited move (MSG_CMD TAG)
+PRV_MIS_J,32,ARMED,1,1,flag,0,1,0,FLAG,P,B5,A barcode command is stored
+PRV_MIS_J,32,PROBE_PENDING,1,1,flag,0,1,0,FLAG,P,B5,PROBE_MARK holds a target
+PRV_MIS_J,32,REARM_WAIT,1,1,flag,0,1,0,FLAG,P,B5,No rewind until REARM mm past REARM_PATH
+PRV_MIS_J,32,SIDE,1,1,flag,0,1,0,FLAG,P,B5,Planned bypass side (APP_SIDE_*)
+PRV_MIS_J,32,WARNING,1,1,flag,0,1,0,FLAG,P,B5,is warning
+PRV_MIS_J,32,RESUME_PENDING,1,1,flag,0,1,0,FLAG,P,B5,resume pending
+PRV_MIS_J,32,INHIBIT_PEND,1,1,flag,0,1,0,FLAG,P,B5,inhibit pending
+PRV_MIS_K,32,BAR_EDGE_PATH,17,1,count,0,131071,0,RAW,P,B5,Path at the last edge or black sample
+PRV_MIS_K,32,FR9_RUNNING,1,1,flag,0,1,0,FLAG,P,B5,fr9 running
+PRV_MIS_K,32,WAIT_STILL,1,1,flag,0,1,0,FLAG,P,B5,wait standstill
+PRV_MIS_K,32,CREEPING,1,1,flag,0,1,0,FLAG,P,B5,creeping
+PRV_MIS_K,32,CREPT,1,1,flag,0,1,0,FLAG,P,B5,crept
+PRV_MIS_K,32,HAS_RUN,1,1,flag,0,1,0,FLAG,P,B5,has run
+PRV_MIS_K,32,POST_AVOID,1,1,flag,0,1,0,FLAG,P,B5,post avoid slow
+PRV_MIS_K,32,QUIET,1,1,flag,0,1,0,FLAG,P,B5,is quiet
+PRV_MIS_K,32,MOVE_PENDING,1,1,flag,0,1,0,FLAG,P,B5,move pending
+PRV_MIS_K,32,RETRY_PENDING,1,1,flag,0,1,0,FLAG,P,B5,retry pending
+PRV_MIS_K,32,MOTION_FAILED,1,1,flag,0,1,0,FLAG,P,B5,motion failed
+PRV_MIS_K,32,IMU_VALID,1,1,flag,0,1,0,FLAG,P,B5,imu valid
+PRV_MIS_K,32,IR_VALID,1,1,flag,0,1,0,FLAG,P,B5,ir valid
+PRV_MIS_K,32,WDT_ENABLED,1,1,flag,0,1,0,FLAG,P,B5,wdt enabled
+PRV_MIS_K,32,RUN_STARTING,1,1,flag,0,1,0,FLAG,P,B5,run starting
+PRV_MIS_K,32,ZERO_DONE,1,1,flag,0,1,0,FLAG,P,B5,zero done
+PRV_MIS_L,32,PATH_AT_STOP,17,1,count,0,131071,0,RAW,P,B5,Path when the bypass started
+PRV_MIS_L,32,RECOVERING,1,1,flag,0,1,0,FLAG,P,B5,recovering
+PRV_MIS_M,32,RUN_ODO_MARK,17,1,count,0,131071,0,RAW,P,B5,Path when RUN_ODO was last summed
+PRV_MIS_N,32,RUN_ODO,17,1,count,0,131071,0,RNG,P,B5,Path travelled this run; saturates at MISSION_ODO_MAX_COUNTS
+PRV_MIS_P,32,REJOIN_START,17,1,count,0,131071,0,RAW,P,B5,Path at the rejoin move
+PRV_MIS_Q,32,INHIBIT_MARK,17,1,count,0,131071,0,RAW,P,B5,Path at which the inhibits clear
+PRV_MIS_R,32,BAR_EDGES,16,1,count,0,65535,0,RAW,P,B5,Last observed SH_BAR_EDGES count
+E_MIS_RUN,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 mission timer images x12 (barcode phase; CAL_IR; sweep; warning; search; FR9; resume; run start / end; move; RUN_START; recovery): intervals exceed 65 ms (bits=31 for gen_layout.py)

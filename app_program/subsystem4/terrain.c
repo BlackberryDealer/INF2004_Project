@@ -540,6 +540,177 @@ uint32_t terrain_lift_step(uint32_t lift_cnt, int32_t ax_mg, int32_t ay_mg,
     return cnt;
 }
 
+/**
+ * terrain_ir_lift_step
+ * @brief   Level-lift check (S4-U17): with no floor under them both IR
+ *          sensors read near full scale, above any tape on the track.
+ *          Both above IMU_LIFT_IR_RAW_MIN for IMU_LIFT_IR_CYCLES cycles
+ *          in a row counts as lifted; one cycle without it restarts the
+ *          count.
+ * @param   ir_cnt        cycles in a row so far (PRV_IMU_A IR_LIFT_CNT)
+ * @param   raw_l         left raw IR ADC, 0..4095
+ * @param   raw_r         right raw IR ADC, 0..4095
+ * @param   pb_is_lifted  out: true once the count reaches
+ *                        IMU_LIFT_IR_CYCLES
+ * @return  the new count, 0..IMU_LIFT_IR_CYCLES (saturates)
+ * @context imu_task, host test
+ */
+uint32_t terrain_ir_lift_step(uint32_t ir_cnt, uint32_t raw_l,
+                              uint32_t raw_r, bool * pb_is_lifted)
+{
+    uint32_t cnt = 0u;
+
+    if ((raw_l > IMU_LIFT_IR_RAW_MIN) && (raw_r > IMU_LIFT_IR_RAW_MIN))
+    {
+        cnt = (ir_cnt < IMU_LIFT_IR_CYCLES) ? (ir_cnt + 1u)
+                                            : IMU_LIFT_IR_CYCLES;
+    }
+    *pb_is_lifted = (cnt >= IMU_LIFT_IR_CYCLES);
+
+    return cnt;
+}
+
+/**
+ * terrain_roll_hump_step
+ * @brief   One-wheel hump (S4-U18): the right wheel alone climbs a thin
+ *          strip, so the car tilts sideways. The smoothed |ay| rises to
+ *          g x h / track at the top; h = track x peak / 1000 mg (scaled
+ *          by TERRAIN_ROLL_GAIN_PCT). A hump only starts while driving
+ *          straight (a turn's sideways acceleration also shows in ay)
+ *          and forward; on it, more than TERRAIN_ROLL_MAX_MM of travel
+ *          is a ramp or a held tilt and is dropped without a report.
+ * @param   word       PRV_IMU_R word
+ * @param   ay_mg      calibrated sideways average this cycle
+ * @param   dpos_l     left encoder steps this cycle
+ * @param   dpos_r     right encoder steps this cycle
+ * @param   p_done_mm  out: height of a hump that ended now, else 0
+ * @return  the new PRV_IMU_R word
+ * @context imu_task, host test
+ */
+uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
+                                int32_t dpos_r, uint32_t * p_done_mm)
+{
+    bool const     b_on     = (0u != app_bits_get(word, PRV_IMU_R_STATE_POS,
+                                                  PRV_IMU_R_STATE_BITS));
+    uint32_t       hyst     = app_bits_get(word, PRV_IMU_R_HYST_POS,
+                                           PRV_IMU_R_HYST_BITS);
+    int32_t        filt     = app_bits_decode(
+                                  app_bits_get(word, PRV_IMU_R_FILT_POS,
+                                               PRV_IMU_R_FILT_BITS),
+                                  PRV_IMU_R_FILT_OFFSET);
+    uint32_t       peak     = app_bits_get(word, PRV_IMU_R_PEAK_POS,
+                                           PRV_IMU_R_PEAK_BITS);
+    uint32_t       ticks    = app_bits_get(word, PRV_IMU_R_TICKS_POS,
+                                           PRV_IMU_R_TICKS_BITS);
+    int32_t const  turn     = dpos_r - dpos_l;
+    int32_t const  fwd      = dpos_r + dpos_l;
+    bool const     b_strt   = (turn <= TERRAIN_ROLL_STRAIGHT_COUNTS)
+                              && (turn >= -TERRAIN_ROLL_STRAIGHT_COUNTS)
+                              && (fwd > 0);
+    uint32_t       mag      = 0u;
+    bool           b_now_on = b_on;
+
+    *p_done_mm = 0u;
+
+    /* EMA 1/4 per cycle; a signed division, never >> (BARR-C 5.3) */
+    filt = filt + ((terrain_lift_clamp(ay_mg) - filt) / 4);
+    if (filt > PRV_IMU_R_FILT_MAX)
+    {
+        filt = PRV_IMU_R_FILT_MAX;
+    }
+    if (filt < PRV_IMU_R_FILT_MIN)
+    {
+        filt = PRV_IMU_R_FILT_MIN;
+    }
+    mag = terrain_abs(filt);
+
+    if (!b_on)
+    {
+        ticks = 0u;
+        peak  = 0u;
+        if (b_strt && (mag >= (uint32_t)TERRAIN_ROLL_START_MG))
+        {
+            hyst++;
+            if (hyst >= TERRAIN_ROLL_HYST)
+            {
+                b_now_on = true;
+                hyst     = 0u;
+                peak     = mag;
+            }
+        }
+        else
+        {
+            hyst = 0u;
+        }
+    }
+    else
+    {
+        bool const b_latched = (ticks >= (uint32_t)PRV_IMU_R_TICKS_MAX);
+
+        if (!b_latched)
+        {
+            if (mag > peak)
+            {
+                peak = mag;
+            }
+            ticks++;
+            if (ticks > TERRAIN_ROLL_MAX_TICKS)
+            {
+                /* a ramp or a held tilt: latch, no report, and no new
+                   hump until the car is level again */
+                ticks = PRV_IMU_R_TICKS_MAX;
+                peak  = 0u;
+            }
+        }
+        if (mag <= (uint32_t)TERRAIN_ROLL_LEVEL_MG)
+        {
+            hyst++;
+            if (hyst >= TERRAIN_ROLL_HYST)
+            {
+                if (!b_latched)
+                {
+                    *p_done_mm = (((APP_TRACK_UM / 1000u) * peak
+                                   * TERRAIN_ROLL_GAIN_PCT) + 50000u)
+                                 / 100000u;
+                }
+                b_now_on = false;
+                hyst     = 0u;
+                ticks    = 0u;
+                peak     = 0u;
+            }
+        }
+        else
+        {
+            hyst = 0u;
+        }
+    }
+    if (hyst > PRV_IMU_R_HYST_MAX)
+    {
+        hyst = PRV_IMU_R_HYST_MAX;
+    }
+    if (peak > PRV_IMU_R_PEAK_MAX)
+    {
+        peak = PRV_IMU_R_PEAK_MAX;
+    }
+    if (ticks > PRV_IMU_R_TICKS_MAX)
+    {
+        ticks = PRV_IMU_R_TICKS_MAX;
+    }
+
+    word = app_bits_put(word, PRV_IMU_R_STATE_POS, PRV_IMU_R_STATE_BITS,
+                        b_now_on ? 1u : 0u);
+    word = app_bits_put(word, PRV_IMU_R_HYST_POS, PRV_IMU_R_HYST_BITS, hyst);
+    word = app_bits_put(word, PRV_IMU_R_FILT_POS, PRV_IMU_R_FILT_BITS,
+                        app_bits_encode(filt, PRV_IMU_R_FILT_MIN,
+                                        PRV_IMU_R_FILT_MAX,
+                                        PRV_IMU_R_FILT_OFFSET, NULL));
+    word = app_bits_put(word, PRV_IMU_R_PEAK_POS, PRV_IMU_R_PEAK_BITS, peak);
+    word = app_bits_put(word, PRV_IMU_R_TICKS_POS, PRV_IMU_R_TICKS_BITS,
+                        ticks);
+
+    return word;
+}
+
 /* ---- private functions ------------------------------------------------ */
 
 /**
