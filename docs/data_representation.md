@@ -316,6 +316,34 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | ODO_MM | K7_SNAP | 0..32767 × 1 mm | 1 | 15 | 15 | RNG | S | Distance this run so far (A23) |
 | FAULTS | K7_SNAP | 0..1023 × 1 mask | 1 | 10 | 10 | RAW | S | APP_FAULT_* mask |
 | RUN_S | K7_SNAP | 0..1023 × 1 s | 1 | 10 | 10 | RNG | S | Run time so far; frozen once the run ends (A28) |
+| MEASURED | PRV_OBS_M | 0..33554431 × 1 mask | 1 | 25 | 25 | RAW | P | Scan steps measured (bit n = step n) |
+| STATE | PRV_OBS_M | 0..7 × 1 code | 1 | 3 | 3 | ENUM | P | APP_SCAN_* scanner state |
+| SETTLE | PRV_OBS_M | 0..4 × 1 ping | 1 | 3 | 3 | RNG | P | Servo settle pings left (OBS_WATCH_SETTLE_PINGS) |
+| ON_RAMP | PRV_OBS_M | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Pitched or just off a ramp (S5-U42) |
+| INFERRED | PRV_OBS_I | 0..33554431 × 1 mask | 1 | 25 | 25 | RAW | P | Scan steps filled from neighbours (bit n = step n) |
+| STEP | PRV_OBS_I | 0..24 × 1 5 deg | 1 | 5 | 5 | RNG | P | Current scan step (30 + 5 x step deg) |
+| SAMPLE_CNT | PRV_OBS_I | 0..2 × 1 ping | 1 | 2 | 2 | RNG | P | Pings taken at this step (OBS_SCAN_SAMPLES - 1) |
+| PREV | PRV_OBS_A | 0..511 × 4 mm | 4 | 9 | 9 | SAT | P | Previous reading; 511 = nothing (APP_DIST_NONE_MM) |
+| ECHO | PRV_OBS_A | 0..511 × 4 mm | 4 | 9 | 9 | SAT | P | Last real echo in APPROACH (S5-U38); 511 = nothing |
+| WARMUP | PRV_OBS_A | 0..34 × 1 ping | 1 | 6 | 6 | RNG | P | Power-up grace pings left (OBS_WARMUP_PINGS; S5-U30) |
+| SILENT | PRV_OBS_A | 0..3 × 1 ping | 1 | 2 | 2 | SAT | P | Silent pings in a row (OBS_NO_ECHO_PINGS) |
+| LOST | PRV_OBS_A | 0..3 × 1 ping | 1 | 2 | 2 | SAT | P | Lost echoes in APPROACH (stop at OBS_LOST_PINGS = 2) |
+| FAR | PRV_OBS_A | 0..3 × 1 ping | 1 | 2 | 2 | SAT | P | Far readings in APPROACH (clear at OBS_CLEAR_READINGS = 2) |
+| PASS_MARK | PRV_OBS_B | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at PASSING entry (wrapping path) |
+| RAMP_HOLD | PRV_OBS_B | 0..8 × 1 ping | 1 | 4 | 4 | RNG | P | Ramp hold pings left (OBS_RAMP_HOLD_PINGS) |
+| MODE_SEEN | PRV_OBS_B | 0..7 × 1 mask | 1 | 3 | 3 | RAW | P | RESCAN / STOPPED / RESUME mode bits seen last cycle |
+| DIST_LOG | PRV_OBS_B | 0..7 × 1 ping | 1 | 3 | 3 | RNG | P | Bring-up distance print divider (OBS_DIST_LOG_PINGS 8) |
+| RAMP_LOGGED | PRV_OBS_B | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | One RAMP line per approach |
+| CREEP_LOGGED | PRV_OBS_B | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | One CREEP line per stop |
+| RAMP_MARK | PRV_OBS_C | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at the last pitched cycle (wrapping path) |
+| MM | PRV_OBS_SCAN | 0..255 × 4 mm | 4 | 8 | 8 | SAT | P | Scan table point x25 (APP_SCAN_STEPS); 255 = clear (APP_PROFILE_CLEAR_MM) |
+| MM | PRV_OBS_SMP | 0..255 × 4 mm | 4 | 8 | 8 | SAT | P | Pings at one step x3 (OBS_SCAN_SAMPLES); median kept |
+| COUNT | SH_ECHO_CNT | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | Accepted echo rises and falls x2 (ISR writer; one byte each); obstacle_task compares for change |
+| SEQ | SH_PING | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | Ping number; obstacle_task writes; the ISR reads; wraps |
+| OPEN | SH_ECHO_WIN | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | Echo window open; obstacle_task writes; the ISR reads (own byte: one writer) |
+| RISE_SEQ | PRV_ECHO_ISR | 0..255 × 1 count | 1 | 8 | 8 | RAW | P | Ping number captured at the rise (ISR only) |
+| ARMED | PRV_ECHO_ARM | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | A rise is armed (ISR only) |
+| TIME | E_OBS_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 timer images x2 (echo rise time in the ISR; scan start for the scan-time log): a stuck-high echo or a scan can exceed 65 ms (bits=31 for gen_layout.py) |
 
 ## Groups
 
@@ -415,6 +443,18 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | SH_BAR_EDGES | 16 | 16 |
 | SH_IR_RAW | 24 | 32 |
 | SH_IMU_ACC | 30 | 32 |
+| PRV_OBS_M | 32 | 32 |
+| PRV_OBS_I | 32 | 32 |
+| PRV_OBS_A | 30 | 32 |
+| PRV_OBS_B | 29 | 32 |
+| PRV_OBS_C | 17 | 32 |
+| PRV_OBS_SCAN | 8 | 8 |
+| PRV_OBS_SMP | 8 | 8 |
+| SH_ECHO_CNT | 8 | 8 |
+| SH_PING | 8 | 8 |
+| SH_ECHO_WIN | 1 | 8 |
+| PRV_ECHO_ISR | 8 | 8 |
+| PRV_ECHO_ARM | 1 | 8 |
 
 ## Range assumptions
 

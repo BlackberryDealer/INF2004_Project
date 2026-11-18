@@ -2133,6 +2133,240 @@
 #error "Group SH_IMU_ACC no longer fits in 32 bits"
 #endif
 
+/* PRV_OBS_M: 32-bit word */
+#define PRV_OBS_M_MEASURED_POS          (0u)
+#define PRV_OBS_M_MEASURED_BITS         (25u)
+#define PRV_OBS_M_MEASURED_MIN          (0)
+#define PRV_OBS_M_MEASURED_MAX          (33554431)
+#define PRV_OBS_M_MEASURED_OFFSET       (0)
+#define PRV_OBS_M_MEASURED_KIND         (APP_KIND_RAW)
+#define PRV_OBS_M_STATE_POS             (PRV_OBS_M_MEASURED_POS + PRV_OBS_M_MEASURED_BITS)
+#define PRV_OBS_M_STATE_BITS            (3u)
+#define PRV_OBS_M_STATE_MIN             (0)
+#define PRV_OBS_M_STATE_MAX             (7)
+#define PRV_OBS_M_STATE_OFFSET          (0)
+#define PRV_OBS_M_STATE_KIND            (APP_KIND_ENUM)
+#define PRV_OBS_M_SETTLE_POS            (PRV_OBS_M_STATE_POS + PRV_OBS_M_STATE_BITS)
+#define PRV_OBS_M_SETTLE_BITS           (3u)
+#define PRV_OBS_M_SETTLE_MIN            (0)
+#define PRV_OBS_M_SETTLE_MAX            (4)
+#define PRV_OBS_M_SETTLE_OFFSET         (0)
+#define PRV_OBS_M_SETTLE_KIND           (APP_KIND_RNG)
+#define PRV_OBS_M_ON_RAMP_POS           (PRV_OBS_M_SETTLE_POS + PRV_OBS_M_SETTLE_BITS)
+#define PRV_OBS_M_ON_RAMP_BITS          (1u)
+#define PRV_OBS_M_ON_RAMP_MIN           (0)
+#define PRV_OBS_M_ON_RAMP_MAX           (1)
+#define PRV_OBS_M_ON_RAMP_OFFSET        (0)
+#define PRV_OBS_M_ON_RAMP_KIND          (APP_KIND_FLAG)
+#define PRV_OBS_M_USED_BITS             (PRV_OBS_M_ON_RAMP_POS + PRV_OBS_M_ON_RAMP_BITS)
+#if (PRV_OBS_M_USED_BITS > 32u)
+#error "Group PRV_OBS_M no longer fits in 32 bits"
+#endif
+
+/* PRV_OBS_I: 32-bit word */
+#define PRV_OBS_I_INFERRED_POS          (0u)
+#define PRV_OBS_I_INFERRED_BITS         (25u)
+#define PRV_OBS_I_INFERRED_MIN          (0)
+#define PRV_OBS_I_INFERRED_MAX          (33554431)
+#define PRV_OBS_I_INFERRED_OFFSET       (0)
+#define PRV_OBS_I_INFERRED_KIND         (APP_KIND_RAW)
+#define PRV_OBS_I_STEP_POS              (PRV_OBS_I_INFERRED_POS + PRV_OBS_I_INFERRED_BITS)
+#define PRV_OBS_I_STEP_BITS             (5u)
+#define PRV_OBS_I_STEP_MIN              (0)
+#define PRV_OBS_I_STEP_MAX              (24)
+#define PRV_OBS_I_STEP_OFFSET           (0)
+#define PRV_OBS_I_STEP_KIND             (APP_KIND_RNG)
+#define PRV_OBS_I_SAMPLE_CNT_POS        (PRV_OBS_I_STEP_POS + PRV_OBS_I_STEP_BITS)
+#define PRV_OBS_I_SAMPLE_CNT_BITS       (2u)
+#define PRV_OBS_I_SAMPLE_CNT_MIN        (0)
+#define PRV_OBS_I_SAMPLE_CNT_MAX        (2)
+#define PRV_OBS_I_SAMPLE_CNT_OFFSET     (0)
+#define PRV_OBS_I_SAMPLE_CNT_KIND       (APP_KIND_RNG)
+#define PRV_OBS_I_USED_BITS             (PRV_OBS_I_SAMPLE_CNT_POS + PRV_OBS_I_SAMPLE_CNT_BITS)
+#if (PRV_OBS_I_USED_BITS > 32u)
+#error "Group PRV_OBS_I no longer fits in 32 bits"
+#endif
+
+/* PRV_OBS_A: 32-bit word */
+#define PRV_OBS_A_PREV_POS              (0u)
+#define PRV_OBS_A_PREV_BITS             (9u)
+#define PRV_OBS_A_PREV_MIN              (0)
+#define PRV_OBS_A_PREV_MAX              (511)
+#define PRV_OBS_A_PREV_OFFSET           (0)
+#define PRV_OBS_A_PREV_KIND             (APP_KIND_SAT)
+#define PRV_OBS_A_ECHO_POS              (PRV_OBS_A_PREV_POS + PRV_OBS_A_PREV_BITS)
+#define PRV_OBS_A_ECHO_BITS             (9u)
+#define PRV_OBS_A_ECHO_MIN              (0)
+#define PRV_OBS_A_ECHO_MAX              (511)
+#define PRV_OBS_A_ECHO_OFFSET           (0)
+#define PRV_OBS_A_ECHO_KIND             (APP_KIND_SAT)
+#define PRV_OBS_A_WARMUP_POS            (PRV_OBS_A_ECHO_POS + PRV_OBS_A_ECHO_BITS)
+#define PRV_OBS_A_WARMUP_BITS           (6u)
+#define PRV_OBS_A_WARMUP_MIN            (0)
+#define PRV_OBS_A_WARMUP_MAX            (34)
+#define PRV_OBS_A_WARMUP_OFFSET         (0)
+#define PRV_OBS_A_WARMUP_KIND           (APP_KIND_RNG)
+#define PRV_OBS_A_SILENT_POS            (PRV_OBS_A_WARMUP_POS + PRV_OBS_A_WARMUP_BITS)
+#define PRV_OBS_A_SILENT_BITS           (2u)
+#define PRV_OBS_A_SILENT_MIN            (0)
+#define PRV_OBS_A_SILENT_MAX            (3)
+#define PRV_OBS_A_SILENT_OFFSET         (0)
+#define PRV_OBS_A_SILENT_KIND           (APP_KIND_SAT)
+#define PRV_OBS_A_LOST_POS              (PRV_OBS_A_SILENT_POS + PRV_OBS_A_SILENT_BITS)
+#define PRV_OBS_A_LOST_BITS             (2u)
+#define PRV_OBS_A_LOST_MIN              (0)
+#define PRV_OBS_A_LOST_MAX              (3)
+#define PRV_OBS_A_LOST_OFFSET           (0)
+#define PRV_OBS_A_LOST_KIND             (APP_KIND_SAT)
+#define PRV_OBS_A_FAR_POS               (PRV_OBS_A_LOST_POS + PRV_OBS_A_LOST_BITS)
+#define PRV_OBS_A_FAR_BITS              (2u)
+#define PRV_OBS_A_FAR_MIN               (0)
+#define PRV_OBS_A_FAR_MAX               (3)
+#define PRV_OBS_A_FAR_OFFSET            (0)
+#define PRV_OBS_A_FAR_KIND              (APP_KIND_SAT)
+#define PRV_OBS_A_USED_BITS             (PRV_OBS_A_FAR_POS + PRV_OBS_A_FAR_BITS)
+#if (PRV_OBS_A_USED_BITS > 32u)
+#error "Group PRV_OBS_A no longer fits in 32 bits"
+#endif
+
+/* PRV_OBS_B: 32-bit word */
+#define PRV_OBS_B_PASS_MARK_POS         (0u)
+#define PRV_OBS_B_PASS_MARK_BITS        (17u)
+#define PRV_OBS_B_PASS_MARK_MIN         (0)
+#define PRV_OBS_B_PASS_MARK_MAX         (131071)
+#define PRV_OBS_B_PASS_MARK_OFFSET      (0)
+#define PRV_OBS_B_PASS_MARK_KIND        (APP_KIND_RAW)
+#define PRV_OBS_B_RAMP_HOLD_POS         (PRV_OBS_B_PASS_MARK_POS + PRV_OBS_B_PASS_MARK_BITS)
+#define PRV_OBS_B_RAMP_HOLD_BITS        (4u)
+#define PRV_OBS_B_RAMP_HOLD_MIN         (0)
+#define PRV_OBS_B_RAMP_HOLD_MAX         (8)
+#define PRV_OBS_B_RAMP_HOLD_OFFSET      (0)
+#define PRV_OBS_B_RAMP_HOLD_KIND        (APP_KIND_RNG)
+#define PRV_OBS_B_MODE_SEEN_POS         (PRV_OBS_B_RAMP_HOLD_POS + PRV_OBS_B_RAMP_HOLD_BITS)
+#define PRV_OBS_B_MODE_SEEN_BITS        (3u)
+#define PRV_OBS_B_MODE_SEEN_MIN         (0)
+#define PRV_OBS_B_MODE_SEEN_MAX         (7)
+#define PRV_OBS_B_MODE_SEEN_OFFSET      (0)
+#define PRV_OBS_B_MODE_SEEN_KIND        (APP_KIND_RAW)
+#define PRV_OBS_B_DIST_LOG_POS          (PRV_OBS_B_MODE_SEEN_POS + PRV_OBS_B_MODE_SEEN_BITS)
+#define PRV_OBS_B_DIST_LOG_BITS         (3u)
+#define PRV_OBS_B_DIST_LOG_MIN          (0)
+#define PRV_OBS_B_DIST_LOG_MAX          (7)
+#define PRV_OBS_B_DIST_LOG_OFFSET       (0)
+#define PRV_OBS_B_DIST_LOG_KIND         (APP_KIND_RNG)
+#define PRV_OBS_B_RAMP_LOGGED_POS       (PRV_OBS_B_DIST_LOG_POS + PRV_OBS_B_DIST_LOG_BITS)
+#define PRV_OBS_B_RAMP_LOGGED_BITS      (1u)
+#define PRV_OBS_B_RAMP_LOGGED_MIN       (0)
+#define PRV_OBS_B_RAMP_LOGGED_MAX       (1)
+#define PRV_OBS_B_RAMP_LOGGED_OFFSET    (0)
+#define PRV_OBS_B_RAMP_LOGGED_KIND      (APP_KIND_FLAG)
+#define PRV_OBS_B_CREEP_LOGGED_POS      (PRV_OBS_B_RAMP_LOGGED_POS + PRV_OBS_B_RAMP_LOGGED_BITS)
+#define PRV_OBS_B_CREEP_LOGGED_BITS     (1u)
+#define PRV_OBS_B_CREEP_LOGGED_MIN      (0)
+#define PRV_OBS_B_CREEP_LOGGED_MAX      (1)
+#define PRV_OBS_B_CREEP_LOGGED_OFFSET   (0)
+#define PRV_OBS_B_CREEP_LOGGED_KIND     (APP_KIND_FLAG)
+#define PRV_OBS_B_USED_BITS             (PRV_OBS_B_CREEP_LOGGED_POS + PRV_OBS_B_CREEP_LOGGED_BITS)
+#if (PRV_OBS_B_USED_BITS > 32u)
+#error "Group PRV_OBS_B no longer fits in 32 bits"
+#endif
+
+/* PRV_OBS_C: 32-bit word */
+#define PRV_OBS_C_RAMP_MARK_POS         (0u)
+#define PRV_OBS_C_RAMP_MARK_BITS        (17u)
+#define PRV_OBS_C_RAMP_MARK_MIN         (0)
+#define PRV_OBS_C_RAMP_MARK_MAX         (131071)
+#define PRV_OBS_C_RAMP_MARK_OFFSET      (0)
+#define PRV_OBS_C_RAMP_MARK_KIND        (APP_KIND_RAW)
+#define PRV_OBS_C_USED_BITS             (PRV_OBS_C_RAMP_MARK_POS + PRV_OBS_C_RAMP_MARK_BITS)
+#if (PRV_OBS_C_USED_BITS > 32u)
+#error "Group PRV_OBS_C no longer fits in 32 bits"
+#endif
+
+/* PRV_OBS_SCAN: 8-bit word */
+#define PRV_OBS_SCAN_MM_POS             (0u)
+#define PRV_OBS_SCAN_MM_BITS            (8u)
+#define PRV_OBS_SCAN_MM_MIN             (0)
+#define PRV_OBS_SCAN_MM_MAX             (255)
+#define PRV_OBS_SCAN_MM_OFFSET          (0)
+#define PRV_OBS_SCAN_MM_KIND            (APP_KIND_SAT)
+#define PRV_OBS_SCAN_USED_BITS          (PRV_OBS_SCAN_MM_POS + PRV_OBS_SCAN_MM_BITS)
+#if (PRV_OBS_SCAN_USED_BITS > 8u)
+#error "Group PRV_OBS_SCAN no longer fits in 8 bits"
+#endif
+
+/* PRV_OBS_SMP: 8-bit word */
+#define PRV_OBS_SMP_MM_POS              (0u)
+#define PRV_OBS_SMP_MM_BITS             (8u)
+#define PRV_OBS_SMP_MM_MIN              (0)
+#define PRV_OBS_SMP_MM_MAX              (255)
+#define PRV_OBS_SMP_MM_OFFSET           (0)
+#define PRV_OBS_SMP_MM_KIND             (APP_KIND_SAT)
+#define PRV_OBS_SMP_USED_BITS           (PRV_OBS_SMP_MM_POS + PRV_OBS_SMP_MM_BITS)
+#if (PRV_OBS_SMP_USED_BITS > 8u)
+#error "Group PRV_OBS_SMP no longer fits in 8 bits"
+#endif
+
+/* SH_ECHO_CNT: 8-bit word */
+#define SH_ECHO_CNT_COUNT_POS           (0u)
+#define SH_ECHO_CNT_COUNT_BITS          (8u)
+#define SH_ECHO_CNT_COUNT_MIN           (0)
+#define SH_ECHO_CNT_COUNT_MAX           (255)
+#define SH_ECHO_CNT_COUNT_OFFSET        (0)
+#define SH_ECHO_CNT_COUNT_KIND          (APP_KIND_RAW)
+#define SH_ECHO_CNT_USED_BITS           (SH_ECHO_CNT_COUNT_POS + SH_ECHO_CNT_COUNT_BITS)
+#if (SH_ECHO_CNT_USED_BITS > 8u)
+#error "Group SH_ECHO_CNT no longer fits in 8 bits"
+#endif
+
+/* SH_PING: 8-bit word */
+#define SH_PING_SEQ_POS                 (0u)
+#define SH_PING_SEQ_BITS                (8u)
+#define SH_PING_SEQ_MIN                 (0)
+#define SH_PING_SEQ_MAX                 (255)
+#define SH_PING_SEQ_OFFSET              (0)
+#define SH_PING_SEQ_KIND                (APP_KIND_RAW)
+#define SH_PING_USED_BITS               (SH_PING_SEQ_POS + SH_PING_SEQ_BITS)
+#if (SH_PING_USED_BITS > 8u)
+#error "Group SH_PING no longer fits in 8 bits"
+#endif
+
+/* SH_ECHO_WIN: 8-bit word */
+#define SH_ECHO_WIN_OPEN_POS            (0u)
+#define SH_ECHO_WIN_OPEN_BITS           (1u)
+#define SH_ECHO_WIN_OPEN_MIN            (0)
+#define SH_ECHO_WIN_OPEN_MAX            (1)
+#define SH_ECHO_WIN_OPEN_OFFSET         (0)
+#define SH_ECHO_WIN_OPEN_KIND           (APP_KIND_FLAG)
+#define SH_ECHO_WIN_USED_BITS           (SH_ECHO_WIN_OPEN_POS + SH_ECHO_WIN_OPEN_BITS)
+#if (SH_ECHO_WIN_USED_BITS > 8u)
+#error "Group SH_ECHO_WIN no longer fits in 8 bits"
+#endif
+
+/* PRV_ECHO_ISR: 8-bit word */
+#define PRV_ECHO_ISR_RISE_SEQ_POS       (0u)
+#define PRV_ECHO_ISR_RISE_SEQ_BITS      (8u)
+#define PRV_ECHO_ISR_RISE_SEQ_MIN       (0)
+#define PRV_ECHO_ISR_RISE_SEQ_MAX       (255)
+#define PRV_ECHO_ISR_RISE_SEQ_OFFSET    (0)
+#define PRV_ECHO_ISR_RISE_SEQ_KIND      (APP_KIND_RAW)
+#define PRV_ECHO_ISR_USED_BITS          (PRV_ECHO_ISR_RISE_SEQ_POS + PRV_ECHO_ISR_RISE_SEQ_BITS)
+#if (PRV_ECHO_ISR_USED_BITS > 8u)
+#error "Group PRV_ECHO_ISR no longer fits in 8 bits"
+#endif
+
+/* PRV_ECHO_ARM: 8-bit word */
+#define PRV_ECHO_ARM_ARMED_POS          (0u)
+#define PRV_ECHO_ARM_ARMED_BITS         (1u)
+#define PRV_ECHO_ARM_ARMED_MIN          (0)
+#define PRV_ECHO_ARM_ARMED_MAX          (1)
+#define PRV_ECHO_ARM_ARMED_OFFSET       (0)
+#define PRV_ECHO_ARM_ARMED_KIND         (APP_KIND_FLAG)
+#define PRV_ECHO_ARM_USED_BITS          (PRV_ECHO_ARM_ARMED_POS + PRV_ECHO_ARM_ARMED_BITS)
+#if (PRV_ECHO_ARM_USED_BITS > 8u)
+#error "Group PRV_ECHO_ARM no longer fits in 8 bits"
+#endif
+
 #endif /* APP_LAYOUT_H */
 
 /*** end of file ***/

@@ -282,3 +282,31 @@ SH_IR_RAW,32,R,12,1,adc,0,4095,0,RNG,S,B3,Raw right IR ADC
 SH_IMU_ACC,32,AX,10,4,mg,-511,511,512,SAT,S,B4,Accel X after offsets; imu_task writes the whole word each cycle
 SH_IMU_ACC,32,AY,10,4,mg,-511,511,512,SAT,S,B4,Accel Y after offsets
 SH_IMU_ACC,32,AZ,10,4,mg,-511,511,512,SAT,S,B4,Accel Z after offsets
+PRV_OBS_M,32,MEASURED,25,1,mask,0,33554431,0,RAW,P,B5,Scan steps measured (bit n = step n)
+PRV_OBS_M,32,STATE,3,1,code,0,7,0,ENUM,P,B5,APP_SCAN_* scanner state
+PRV_OBS_M,32,SETTLE,3,1,ping,0,4,0,RNG,P,B5,Servo settle pings left (OBS_WATCH_SETTLE_PINGS)
+PRV_OBS_M,32,ON_RAMP,1,1,flag,0,1,0,FLAG,P,B5,Pitched or just off a ramp (S5-U42)
+PRV_OBS_I,32,INFERRED,25,1,mask,0,33554431,0,RAW,P,B5,Scan steps filled from neighbours (bit n = step n)
+PRV_OBS_I,32,STEP,5,1,5 deg,0,24,0,RNG,P,B5,Current scan step (30 + 5 x step deg)
+PRV_OBS_I,32,SAMPLE_CNT,2,1,ping,0,2,0,RNG,P,B5,Pings taken at this step (OBS_SCAN_SAMPLES - 1)
+PRV_OBS_A,32,PREV,9,4,mm,0,511,0,SAT,P,B5,Previous reading; 511 = nothing (APP_DIST_NONE_MM)
+PRV_OBS_A,32,ECHO,9,4,mm,0,511,0,SAT,P,B5,Last real echo in APPROACH (S5-U38); 511 = nothing
+PRV_OBS_A,32,WARMUP,6,1,ping,0,34,0,RNG,P,B5,Power-up grace pings left (OBS_WARMUP_PINGS; S5-U30)
+PRV_OBS_A,32,SILENT,2,1,ping,0,3,0,SAT,P,B5,Silent pings in a row (OBS_NO_ECHO_PINGS)
+PRV_OBS_A,32,LOST,2,1,ping,0,3,0,SAT,P,B5,Lost echoes in APPROACH (stop at OBS_LOST_PINGS = 2)
+PRV_OBS_A,32,FAR,2,1,ping,0,3,0,SAT,P,B5,Far readings in APPROACH (clear at OBS_CLEAR_READINGS = 2)
+PRV_OBS_B,32,PASS_MARK,17,1,count,0,131071,0,RAW,P,B5,Path at PASSING entry (wrapping path)
+PRV_OBS_B,32,RAMP_HOLD,4,1,ping,0,8,0,RNG,P,B5,Ramp hold pings left (OBS_RAMP_HOLD_PINGS)
+PRV_OBS_B,32,MODE_SEEN,3,1,mask,0,7,0,RAW,P,B5,RESCAN / STOPPED / RESUME mode bits seen last cycle
+PRV_OBS_B,32,DIST_LOG,3,1,ping,0,7,0,RNG,P,B5,Bring-up distance print divider (OBS_DIST_LOG_PINGS 8)
+PRV_OBS_B,32,RAMP_LOGGED,1,1,flag,0,1,0,FLAG,P,B5,One RAMP line per approach
+PRV_OBS_B,32,CREEP_LOGGED,1,1,flag,0,1,0,FLAG,P,B5,One CREEP line per stop
+PRV_OBS_C,32,RAMP_MARK,17,1,count,0,131071,0,RAW,P,B5,Path at the last pitched cycle (wrapping path)
+PRV_OBS_SCAN,8,MM,8,4,mm,0,255,0,SAT,P,B5,Scan table point x25 (APP_SCAN_STEPS); 255 = clear (APP_PROFILE_CLEAR_MM)
+PRV_OBS_SMP,8,MM,8,4,mm,0,255,0,SAT,P,B5,Pings at one step x3 (OBS_SCAN_SAMPLES); median kept
+SH_ECHO_CNT,8,COUNT,8,1,count,0,255,0,RAW,S,B5,Accepted echo rises and falls x2 (ISR writer; one byte each); obstacle_task compares for change
+SH_PING,8,SEQ,8,1,count,0,255,0,RAW,S,B5,Ping number; obstacle_task writes; the ISR reads; wraps
+SH_ECHO_WIN,8,OPEN,1,1,flag,0,1,0,FLAG,S,B5,Echo window open; obstacle_task writes; the ISR reads (own byte: one writer)
+PRV_ECHO_ISR,8,RISE_SEQ,8,1,count,0,255,0,RAW,P,B5,Ping number captured at the rise (ISR only)
+PRV_ECHO_ARM,8,ARMED,1,1,flag,0,1,0,FLAG,P,B5,A rise is armed (ISR only)
+E_OBS_US,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 timer images x2 (echo rise time in the ISR; scan start for the scan-time log): a stuck-high echo or a scan can exceed 65 ms (bits=31 for gen_layout.py)

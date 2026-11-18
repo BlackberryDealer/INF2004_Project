@@ -15,6 +15,12 @@ ID tk_cre_sem(T_CSEM const *p); ER tk_wai_sem(ID id, INT c, TMO t); ER tk_sig_se
 ER tk_slp_tsk(TMO t); ID tk_get_tid(void);
 #include "app_program/subsystem5/obstacle.c"
 
+/* Packed private state (PRV_OBS_*): read through the module's own
+   accessors; writes below use obstacle_set().                        */
+#define g_state    (obstacle_get(OBS_F_STATE))
+#define g_inferred (obstacle_get(OBS_F_INFERRED))
+#define g_measured (obstacle_get(OBS_F_MEASURED))
+
 static int sem; static uint32_t g_now, g_safety, g_fault, g_modes, g_servo = 90;
 static bool g_echo_high;           /* echo line already high (stuck) */
 ID tk_cre_sem(T_CSEM const *p) { (void) p; return 3; }
@@ -103,15 +109,15 @@ int main(void) {
     w_mode = 2; g_fault = 0;
     for (int i = 0; i < 5; i++) { cyc(); if (g_fault & APP_FAULT_NO_ECHO) ok = 0; }
     w_mode = 0; w_dist = 1000; cyc();
-    CHECK("S5-U30", ok && 0u == (g_fault & APP_FAULT_NO_ECHO) && 0u == g_warmup_left, "5 silent pings after boot, then an echo: no NO_ECHO, grace ends");
+    CHECK("S5-U30", ok && 0u == (g_fault & APP_FAULT_NO_ECHO) && 0u == obstacle_get(OBS_F_WARMUP), "5 silent pings after boot, then an echo: no NO_ECHO, grace ends");
     w_mode = 2; cyc(); cyc(); cyc();
     CHECK("S5-U30", 0u != (g_fault & APP_FAULT_NO_ECHO), "after the first echo, 3 silent pings raise NO_ECHO as before");
-    g_fault = 0; g_silent = 0; g_warmup_left = OBS_WARMUP_PINGS; ok = 1;
+    g_fault = 0; obstacle_set(OBS_F_SILENT, 0u); obstacle_set(OBS_F_WARMUP, OBS_WARMUP_PINGS); ok = 1;
     for (uint32_t i = 0; i < OBS_WARMUP_PINGS; i++) { cyc(); if (g_fault & APP_FAULT_NO_ECHO) ok = 0; }
     CHECK("S5-U30", ok, "sensor never answers: no NO_ECHO during the 34-ping grace (~2 s)");
     cyc(); cyc(); cyc();
     CHECK("S5-U30", 0u != (g_fault & APP_FAULT_NO_ECHO), "sensor never answers: NO_ECHO 3 pings after the grace");
-    g_fault = 0; g_silent = 0; w_mode = 0; }
+    g_fault = 0; obstacle_set(OBS_F_SILENT, 0u); w_mode = 0; }
   /* S5-U31 (on-car logs 2026-10-28/29): with the motors not enabled (BOOT,
      CAL_IMU, READY) a close echo must not latch ESTOP, since nothing
      clears it before RUN and it blocked the CAL_IR sweep. Pinging and the
@@ -141,7 +147,7 @@ int main(void) {
     if (0u != (g_safety & SAFETY_ESTOP)) { ok = 0; }
     CHECK("S5-U34", ok && APP_SCAN_MONITOR == g_state && 0 == nev,
           "CAL_IR sweep: near echo then lost echoes -> no ESTOP, no events, MONITOR");
-    g_modes &= ~APP_MODE_CAL_IR; g_fault = 0; g_silent = 0;
+    g_modes &= ~APP_MODE_CAL_IR; g_fault = 0; obstacle_set(OBS_F_SILENT, 0u);
     w_mode = 0; w_dist = 100; cyc(); cyc(); cyc();  /* confirm, AHEAD, STOP */
     CHECK("S5-U34", APP_SCAN_STOPPED == g_state && 0u != (g_safety & SAFETY_ESTOP),
           "CAL_IR cleared (RUN): same 100 mm -> ESTOP, STOPPED");
@@ -197,7 +203,7 @@ int main(void) {
      next to a near coarse point is now measured, never inferred.      */
   { uint32_t near_or_next = 0u;
     for (uint32_t c = 0u; c < APP_SCAN_STEPS; c += OBS_COARSE_STRIDE) {
-      if (g_obs_scan[c] < OBS_NEAR_MM) {
+      if (obstacle_scan_mm(c) < OBS_NEAR_MM) {
         for (uint32_t k = (c >= OBS_COARSE_STRIDE) ? (c - OBS_COARSE_STRIDE + 1u) : 0u; (k < c + OBS_COARSE_STRIDE) && (k < APP_SCAN_STEPS); k++) near_or_next |= (1u << k);
       } }
     printf("   S5-U50: inferred 0x%x, near region 0x%x\n", g_inferred, near_or_next);
@@ -267,7 +273,7 @@ int main(void) {
      600 mm started APPROACH, then the open track's normal lost pings
      ("US dist 2044 mm, lost 1") were read as "too close to measure":
      OBSTACLE STOP (ESTOP), distance 2044 mm, lost echoes 2.           */
-  g_motor_en = false; cyc(); g_motor_en = true; g_fault = 0; g_silent = 0;
+  g_motor_en = false; cyc(); g_motor_en = true; g_fault = 0; obstacle_set(OBS_F_SILENT, 0u);
   w_mode = 3; g_safety = 0; nev = 0; cyc(); cyc();
   CHECK("S5-U38", APP_SCAN_MONITOR == g_state && 0 == nev && APP_DIST_NONE_MM == dist() && 0u == g_fault, "open track: lost pings in MONITOR, no event, no fault");
   w_mode = 0; w_dist = 500; log_clear(); cyc(); cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state && NULL != strstr(g_logbuf, "OBSTACLE AHEAD: distance 500 mm"), "stray echo 500 mm -> APPROACH, logged");
@@ -279,7 +285,7 @@ int main(void) {
   /* lost echoes right after an echo inside the stop distance still stop
      (too close to measure). 395 after 452 is not confirmed, so it does
      not stop by itself.                                                */
-  g_fault = 0; g_silent = 0; w_mode = 0; w_dist = 452; cyc(); w_dist = 440; cyc(); nev = 0;
+  g_fault = 0; obstacle_set(OBS_F_SILENT, 0u); w_mode = 0; w_dist = 452; cyc(); w_dist = 440; cyc(); nev = 0;
   w_dist = 452; cyc(); w_dist = 395; cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state && 0u == (g_safety & SAFETY_ESTOP), "395 unconfirmed after 452: still approaching");
   w_mode = 3; cyc(); CHECK("S5-U38", APP_SCAN_APPROACH == g_state, "1 lost ping after 395: keep approaching");
   cyc(); CHECK("S5-U38", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP) && 1 == count_ev(APP_EVT_OBSTACLE), "2 lost pings after an echo under the stop distance -> ESTOP, OBSTACLE");
@@ -363,7 +369,7 @@ int main(void) {
      echo is lost, or when two readings disagree; standing still, or
      driving backwards, it does nothing.                                */
   { status_board_motion_t mv = {0};
-    g_modes = 0; g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; g_fault = 0; g_silent = 0; nev = 0;
+    g_modes = 0; g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; g_fault = 0; obstacle_set(OBS_F_SILENT, 0u); nev = 0;
     w_mode = 0; w_dist = 1000; cyc(); cyc(); w_dist = 396; cyc(); cyc(); cyc();
     CHECK("S5-U55", APP_SCAN_STOPPED == g_state && (g_safety & SAFETY_ESTOP), "stopped at ~400 mm");
     g_modes = APP_MODE_STOPPED; g_safety = 0; log_clear();             /* mission: ESTOP off, creep */

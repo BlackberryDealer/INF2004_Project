@@ -471,4 +471,55 @@ GROUPS = {
         ('AY', 10, 512, 4, 'mg'),
         ('AZ', 10, 512, 4, 'mg'),
     ],
+    'PRV_OBS_M': [
+        ('MEASURED', 25, 0, 1, 'mask'),
+        ('STATE', 3, 0, 1, 'code'),
+        ('SETTLE', 3, 0, 1, 'ping'),
+        ('ON_RAMP', 1, 0, 1, 'flag'),
+    ],
+    'PRV_OBS_I': [
+        ('INFERRED', 25, 0, 1, 'mask'),
+        ('STEP', 5, 0, 1, '5 deg'),
+        ('SAMPLE_CNT', 2, 0, 1, 'ping'),
+    ],
+    'PRV_OBS_A': [
+        ('PREV', 9, 0, 4, 'mm'),
+        ('ECHO', 9, 0, 4, 'mm'),
+        ('WARMUP', 6, 0, 1, 'ping'),
+        ('SILENT', 2, 0, 1, 'ping'),
+        ('LOST', 2, 0, 1, 'ping'),
+        ('FAR', 2, 0, 1, 'ping'),
+    ],
+    'PRV_OBS_B': [
+        ('PASS_MARK', 17, 0, 1, 'count'),
+        ('RAMP_HOLD', 4, 0, 1, 'ping'),
+        ('MODE_SEEN', 3, 0, 1, 'mask'),
+        ('DIST_LOG', 3, 0, 1, 'ping'),
+        ('RAMP_LOGGED', 1, 0, 1, 'flag'),
+        ('CREEP_LOGGED', 1, 0, 1, 'flag'),
+    ],
+    'PRV_OBS_C': [
+        ('RAMP_MARK', 17, 0, 1, 'count'),
+    ],
+    'PRV_OBS_SCAN': [
+        ('MM', 8, 0, 4, 'mm'),
+    ],
+    'PRV_OBS_SMP': [
+        ('MM', 8, 0, 4, 'mm'),
+    ],
+    'SH_ECHO_CNT': [
+        ('COUNT', 8, 0, 1, 'count'),
+    ],
+    'SH_PING': [
+        ('SEQ', 8, 0, 1, 'count'),
+    ],
+    'SH_ECHO_WIN': [
+        ('OPEN', 1, 0, 1, 'flag'),
+    ],
+    'PRV_ECHO_ISR': [
+        ('RISE_SEQ', 8, 0, 1, 'count'),
+    ],
+    'PRV_ECHO_ARM': [
+        ('ARMED', 1, 0, 1, 'flag'),
+    ],
 }
