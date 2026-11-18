@@ -167,6 +167,26 @@ int main(void)
     odometry_window_push(&win, 5, 5, 200u);
     HOST_CHECK("S2-U11", 63u == win.dt_ms[0], "dt 200 ms clamped to 63");
 
+    /* S2-U31: wrapping 17-bit path helpers */
+    HOST_CHECK("S2-U31", 131071u == ODOMETRY_PATH_MASK,
+               "path mask is the 17-bit PATH field");
+    HOST_CHECK("S2-U31", 272u == odometry_path_since(200u, 131000u),
+               "distance across the wrap: 131000 -> 200 is 272 counts");
+    HOST_CHECK("S2-U31", (100u == odometry_path_add(131000u, 172u))
+               && (131000u == odometry_path_sub(100u, 172u)),
+               "add and sub wrap at 2^17");
+    HOST_CHECK("S2-U31", (!odometry_path_reached(130990u, 50u))
+               && odometry_path_reached(50u, 50u)
+               && odometry_path_reached(60u, 50u),
+               "a target across the wrap is reached only at or after it");
+    HOST_CHECK("S2-U31", (5000u == odometry_path_age_cap(5000u + 10u,
+                                                          5000u))
+               && (ODOMETRY_PATH_AGE_MAX
+                   == odometry_path_since(100u,
+                                          odometry_path_age_cap(
+                                              100u, 101u))),
+               "age cap keeps a young mark, pins an old one at 2^16");
+
     return (0 == HOST_SUMMARY("odometry")) ? 0 : 1;
 }
 

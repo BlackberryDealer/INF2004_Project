@@ -52,7 +52,10 @@ static bool               gb_rejoin_white = false;
 /* Path where the current both-white stretch began (S3-U19, plain:
    add to the Week 13 packing list).                                 */
 static uint32_t           g_white_mark    = 0u;
-static uint32_t           g_cross_straight_until = 0u; /* path counts */
+/* Path at the last cycle with both sensors on a stripe; steering bias
+   is cleared until LINE_JUNCTION_EXIT_MM past it (gb_cross_straight). */
+static uint32_t           g_cross_mark    = 0u;
+static bool               gb_cross_straight = false;
 static bool               gb_branch_seen  = false;
 static uint8_t            g_last_jct      = (uint8_t) APP_JCT_NONE;
 static uint32_t           g_raw_log_cnt   = 0u;
@@ -102,7 +105,7 @@ ER line_init(void)
     g_line_prv_d    = 0u;
     gb_rejoin_white = false;
     gb_branch_seen  = false;
-    g_cross_straight_until = 0u;
+    gb_cross_straight = false;
     g_last_jct      = (uint8_t) APP_JCT_NONE;
     g_raw_log_cnt   = 0u;
 
@@ -400,7 +403,7 @@ static void line_reset_run_state(uint32_t path)
     g_line_prv_d    = word_d;
     gb_rejoin_white = false;
     gb_branch_seen  = false;
-    g_cross_straight_until = 0u;
+    gb_cross_straight = false;
     g_last_jct      = (uint8_t) APP_JCT_NONE;
 }
 
@@ -587,6 +590,12 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
         {
             g_white_mark = path;          /* both white from here */
         }
+        else
+        {
+            /* A centred stretch can last any distance: keep its age at
+               the cap so it never wraps back below LINE_EXIT_LOST_MM. */
+            g_white_mark = odometry_path_age_cap(path, g_white_mark);
+        }
         if (lost_cnt < (uint32_t) PRV_LINE_A_LOST_CNT_MAX)
         {
             lost_cnt++;
@@ -601,7 +610,8 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
            limit here also fired after a barcode rewind, whose reverse
            travel counts in the path (on-car 12 Nov, S3-U44). After a
            black exit: lost after LINE_EXIT_LOST_MM (S3-U20).           */
-        white_mm     = odometry_counts_to_mm(path - g_white_mark);
+        white_mm     = odometry_counts_to_mm(
+            odometry_path_since(path, g_white_mark));
         b_is_between = line_track_steer_line_between(&g_steer);
         b_is_waiting = (!line_track_steer_line_between(&g_steer))
                        && (white_mm < LINE_EXIT_LOST_MM);
@@ -703,7 +713,8 @@ static void line_handle_rejoin(bool b_is_black, uint32_t lost_cnt,
         }
 
         if (b_run_act &&
-            (odometry_counts_to_mm(path - run_mark) >= LINE_FOUND_MAX_MM))
+            (odometry_counts_to_mm(odometry_path_since(path, run_mark))
+             >= LINE_FOUND_MAX_MM))
         {
             (void) mission_post_event(APP_EVT_LINE_FOUND, LINE_FOUND_MAX_MM);
             g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_RUN_ACTIVE_POS,
@@ -718,7 +729,8 @@ static void line_handle_rejoin(bool b_is_black, uint32_t lost_cnt,
     }
     else if (b_run_act)
     {
-        uint32_t cross_mm = odometry_counts_to_mm(path - run_mark);
+        uint32_t cross_mm = odometry_counts_to_mm(
+            odometry_path_since(path, run_mark));
 
         if (cross_mm > LINE_FOUND_MAX_MM)
         {
@@ -782,11 +794,22 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
         /* Branch counter unchanged this cycle. */
     }
 
+    if (gb_branch_seen
+        && (odometry_path_since(path, branch_path)
+            > odometry_mm_to_counts(LINE_BRANCH_EARLY_MM)))
+    {
+        gb_branch_seen = false;   /* too old to matter; mark may wrap */
+    }
+    else
+    {
+        /* Recent branch, or none. */
+    }
+
     line_jct_unpack(&jct);
 
     if (b_inhibit_jct)
     {
-        g_cross_straight_until = 0u;
+        gb_cross_straight = false;
         line_track_jct_reset(&jct);
         line_jct_pack(&jct);
     }
@@ -808,7 +831,8 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
         jct_in.confirm_counts  =
             odometry_mm_to_counts(LINE_JUNCTION_CONFIRM_MM);
         jct_in.b_branch_recent =
-            (gb_branch_seen && ((path - branch_path) <= early_cnt));
+            (gb_branch_seen
+             && (odometry_path_since(path, branch_path) <= early_cnt));
 
         jct_class = line_track_jct_step(&jct, &jct_in);
         line_jct_pack(&jct);
@@ -819,13 +843,15 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
         if ((norm_l >= LINE_BLACK_THRESHOLD)
             && (norm_r >= LINE_BLACK_THRESHOLD))
         {
-            g_cross_straight_until =
-                path + odometry_mm_to_counts(LINE_JUNCTION_EXIT_MM);
+            g_cross_mark      = path;
+            gb_cross_straight = true;
         }
-        else if ((norm_l < LINE_WHITE_THRESHOLD)
-                 && (norm_r < LINE_WHITE_THRESHOLD))
+        else if (((norm_l < LINE_WHITE_THRESHOLD)
+                  && (norm_r < LINE_WHITE_THRESHOLD))
+                 || (odometry_path_since(path, g_cross_mark)
+                     >= odometry_mm_to_counts(LINE_JUNCTION_EXIT_MM)))
         {
-            g_cross_straight_until = 0u;
+            gb_cross_straight = false;
         }
         else
         {
@@ -835,7 +861,7 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
         /* On the confirm cycle the bias is cleared only while tape is
            still under a sensor; centred and both white, steering is
            left alone.                                               */
-        b_reset_steer = (path < g_cross_straight_until)
+        b_reset_steer = gb_cross_straight
             || b_was_on_band
             || ((APP_JCT_CROSS == jct_class)
                 && ((norm_l >= LINE_WHITE_THRESHOLD)

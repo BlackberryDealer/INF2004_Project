@@ -24,7 +24,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | POS_R | MQ_STATE | -131071..131071 × 1 count | 1 | 18 | 18 | RNG | S | from SB_MOT2 |
 | LINE | MQ_STATE | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | from SB_LINE0 status |
 | STEER | MQ_STATE | -1000..1000 × 1 permille | 1 | 11 | 11 | RNG | S | from SB_LINE0 |
-| ODO_MM | MQ_STATE | 0..32767 × 1 mm | 1 | 15 | 15 | RNG | S | path x um/count / 1000 |
+| ODO_MM | MQ_STATE | 0..32767 × 1 mm | 1 | 15 | 15 | RNG | S | path x um/count / 1000; restarts from 0 when the path wraps |
 | PITCH | MQ_STATE | -450..450 × 1 0.1 deg | 1 | 10 | 10 | RNG | S | from SB_IMU0 |
 | HUMP_PEAK | MQ_STATE | 0..127 × 1 mm | 1 | 7 | 7 | RNG | S | from SB_IMU0 |
 | TURN | MQ_STATE | -360..360 × 1 deg/s | 1 | 10 | 10 | RNG | S | from SB_IMU1 |
@@ -90,7 +90,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | STATE | SB_MOT0 | 0..7 × 1 code | 1 | 3 | 3 | ENUM | S | APP_MOT_* |
 | POS_L | SB_MOT1 | -131071..131071 × 1 count | 1 | 18 | 18 | RNG | S | Left encoder position (A23) |
 | POS_R | SB_MOT2 | -131071..131071 × 1 count | 1 | 18 | 18 | RNG | S | Right encoder position (A23) |
-| PATH | SB_MOT3 | 0..131071 × 1 count | 1 | 17 | 17 | RNG | S | Path length sum of \|travel\| (A23) |
+| PATH | SB_MOT3 | 0..131071 × 1 count | 1 | 17 | 17 | RAW | S | Path length sum of \|travel\|; wraps at 2^17 counts (about 42.5 m); read only as differences (odometry_path_since) |
 | PARAM | MSG_CMD | 0..2047 × 1 mm\|deg\|mm/s | 1 | 11 | 11 | RNG | S | K5 command parameter |
 | TYPE | MSG_CMD | 0..6 × 1 code | 1 | 3 | 3 | ENUM | S | APP_CMD_* |
 | TAG | MSG_CMD | 0..3 × 1 count | 1 | 2 | 2 | RAW | S | Command tag; echoed in MOVE_DONE; wraps |
@@ -124,16 +124,16 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | SAT_R | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Right saturated seen |
 | SEQ0 | PRV_LINE_A | 0..255 × 1 count | 1 | 8 | 8 | RAW | P | Branch sequence at start |
 | LAST_SEQ | PRV_LINE_D | 0..255 × 1 count | 1 | 8 | 8 | RAW | P | Branch sequence seen last cycle |
-| BRANCH_PATH | PRV_LINE_D | 0..131071 × 1 count | 1 | 17 | 17 | RNG | P | Path when the branch sequence last changed |
+| BRANCH_PATH | PRV_LINE_D | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path when the branch sequence last changed (wrapping path) |
 | RUN_ACTIVE | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Black run in progress |
 | CAL_ACTIVE | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Calibration mode seen |
 | CALIBRATED | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Calibration valid |
-| JCT_MARK | PRV_LINE_B | 0..131071 × 1 count | 1 | 17 | 17 | RNG | P | Path at junction start |
-| RUN_MARK | PRV_LINE_C | 0..131071 × 1 count | 1 | 17 | 17 | RNG | P | Path at black run start |
+| JCT_MARK | PRV_LINE_B | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at junction start (wrapping path) |
+| RUN_MARK | PRV_LINE_C | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at black run start (wrapping path) |
 | STATE | PRV_BAR_A | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | Decoder state |
 | N_ELEM | PRV_BAR_A | 0..63 × 1 count | 1 | 6 | 6 | SAT | P | Elements captured |
 | LAST_LEVEL | PRV_BAR_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Level of the last entry |
-| MARK | PRV_BAR_B | 0..131071 × 1 count | 1 | 17 | 17 | RNG | P | Path at last edge or cooldown start |
+| MARK | PRV_BAR_B | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at last edge or cooldown start (wrapping path) |
 | WIDTH | PRV_BAR_W | 0..255 × 100 um | 100 | 8 | 8 | SAT | P | Element width x32 bytes |
 | CHAR | PRV_BAR_MAP | 0..63 × 1 code | 1 | 6 | 6 | ENUM | P | Map character (63 = empty) x8 |
 | CMD | PRV_BAR_MAP | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | Map command x8 |

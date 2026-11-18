@@ -55,6 +55,9 @@
 #define MISSION_HMI_PERIOD_US  (10000u)  /* buttons polled every 10 ms */
 #define MISSION_ODO_MAX_MM     (32767u)  /* K7_SUMM ODO_MM (A23)       */
 #define MISSION_RUN_S_MAX      (1023u)   /* K7_SUMM RUN_S (A28)        */
+/* Run odometer cap: the first count whose mm reach MISSION_ODO_MAX_MM. */
+#define MISSION_ODO_MAX_COUNTS (((MISSION_ODO_MAX_MM * 1000u)              \
+                                 / APP_UM_PER_COUNT) + 1u)
 #define MISSION_STATE_RUN_SHIFT (3u)     /* STATE_CHANGE: sys | run<<3 */
 #define MISSION_BAR_CHAR_MASK  (0x3Fu)   /* event value bits 0-5       */
 #define MISSION_BAR_CMD_SHIFT  (6u)      /* event value bits 6-7       */
@@ -163,6 +166,8 @@ static void mission_part(mission_ctx_t const * p_ctx,
                          status_board_mission_t * p_part);
 static void mission_summary(mission_ctx_t const * p_ctx,
                             status_board_t const * p_snap, uint32_t now_us);
+static void mission_odo_update(mission_ctx_t * p_ctx,
+                               status_board_t const * p_snap);
 static bool mission_part_differs(status_board_mission_t const * p_a,
                                  status_board_mission_t const * p_b);
 #if APP_TEST
@@ -545,6 +550,14 @@ static void mission_pass(mission_ctx_t * p_ctx,
         }
     }
 
+    if (APP_SYS_RUN == p_ctx->sys_state)
+    {
+        mission_odo_update(p_ctx, p_snap);
+    }
+    else
+    {
+        /* Odometer frozen outside RUN. */
+    }
     mission_part(p_ctx, &before);
     mission_timers(p_ctx, now_us);
     mission_moves(p_ctx, now_us);
@@ -636,7 +649,7 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
     if ((APP_SYS_RUN == p_ctx->sys_state) && (APP_SYS_RUN != sys_state))
     {
         p_ctx->run_end_us   = now_us;          /* frozen for snapshots */
-        p_ctx->run_end_path = status_board_path(p_snap);
+        mission_odo_update(p_ctx, p_snap);     /* odometer stops here  */
     }
     p_ctx->sys_state      = sys_state;
     p_ctx->substep        = 0u;
@@ -896,7 +909,7 @@ static void mission_cal_settle(mission_ctx_t * p_ctx,
  *          for its tagged MOVE_DONE (deadline 200 ms -> FAULT; a LIFT
  *          from here on -> FAULT LIFT), hold RUN_START >= 30 ms so line,
  *          barcode and IMU reset their per-run state, then clear it, set
- *          MOTOR_EN and enter RUN with run_start_path = 0.
+ *          MOTOR_EN and enter RUN with the run odometer at 0.
  * @context mission_task
  */
 static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
@@ -938,7 +951,8 @@ static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
         {
             mission_mode_clear(APP_MODE_RUN_START);
             p_ctx->run_start_us   = now_us;
-            p_ctx->run_start_path = 0u;           /* odometry rebased */
+            p_ctx->run_odo_mark   = 0u;           /* odometry rebased */
+            p_ctx->run_odo_counts = 0u;
             p_ctx->b_has_run      = true;
             p_ctx->end_reason     = APP_END_STOP;
             mission_mode_set(APP_MODE_MOTOR_EN);
@@ -1377,6 +1391,28 @@ static bool mission_part_differs(status_board_mission_t const * p_a,
 }
 
 /**
+ * mission_odo_update
+ * @brief   Adds the path travelled since the last pass to the run
+ *          odometer. The board path wraps at 2^17 counts (about 42.5 m),
+ *          so the run distance is summed here, pass by pass, and stops
+ *          at the summary field's maximum instead of wrapping.
+ * @param   p_ctx  mission context
+ * @param   p_snap status board snapshot of this pass
+ * @context mission_task
+ */
+static void mission_odo_update(mission_ctx_t * p_ctx,
+                               status_board_t const * p_snap)
+{
+    uint32_t const path = status_board_path(p_snap);
+    uint32_t const step = odometry_path_since(path, p_ctx->run_odo_mark);
+
+    p_ctx->run_odo_mark   = path;
+    p_ctx->run_odo_counts =
+        ((MISSION_ODO_MAX_COUNTS - p_ctx->run_odo_counts) < step)
+            ? MISSION_ODO_MAX_COUNTS : (p_ctx->run_odo_counts + step);
+}
+
+/**
  * mission_summary
  * @brief   End-of-run summary to telemetry: end reason, peak hump,
  *          distance travelled this run, faults, run time.
@@ -1391,8 +1427,7 @@ static void mission_summary(mission_ctx_t const * p_ctx,
 
     if (p_ctx->b_has_run)
     {
-        odo  = odometry_counts_to_mm(status_board_path(p_snap)
-                                     - p_ctx->run_start_path);
+        odo  = odometry_counts_to_mm(p_ctx->run_odo_counts);
         secs = (now_us - p_ctx->run_start_us) / MISSION_US_PER_S;
     }
     summ.end_reason   = p_ctx->end_reason;
@@ -1418,7 +1453,6 @@ static void mission_snapshot(mission_ctx_t const * p_ctx,
 {
     telem_bin_snapshot_t reply  = {0u, 0u, 0u, 0u, 0u, 0u};
     uint32_t             end_us = now_us;
-    uint32_t             path   = status_board_path(p_snap);
     uint32_t             odo    = 0u;
     uint32_t             secs   = 0u;
 
@@ -1429,9 +1463,8 @@ static void mission_snapshot(mission_ctx_t const * p_ctx,
             if (APP_SYS_RUN != p_ctx->sys_state)
             {
                 end_us = p_ctx->run_end_us;
-                path   = p_ctx->run_end_path;
             }
-            odo  = odometry_counts_to_mm(path - p_ctx->run_start_path);
+            odo  = odometry_counts_to_mm(p_ctx->run_odo_counts);
             secs = (end_us - p_ctx->run_start_us) / MISSION_US_PER_S;
         }
         reply.sys_state    = p_ctx->sys_state;

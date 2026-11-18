@@ -49,9 +49,11 @@ typedef struct
 
     uint32_t barcode_phase;      /* private RUN_BAR_* rewind/reread phase */
     uint32_t barcode_mark;       /* rewind target, progress, or read start */
-    uint32_t barcode_probe_mark; /* pending rewind target, 0 = none */
+    uint32_t barcode_probe_mark; /* pending rewind target (b_probe_pending) */
+    bool     b_probe_pending;    /* barcode_probe_mark holds a target */
     uint32_t barcode_since_us;   /* brake and read phase deadline origin */
-    uint32_t barcode_probe_after; /* path before another rewind is allowed */
+    uint32_t barcode_rearm_path;  /* path when the last rewind or read ended */
+    bool     b_rearm_wait;        /* no rewind until REARM mm past it */
     uint32_t barcode_follow_path; /* start of the current following stretch */
     uint32_t barcode_back_path;   /* path when the reverse command started */
     uint32_t barcode_back_left;   /* rewind mm still to send, next moves */
@@ -60,8 +62,8 @@ typedef struct
     uint32_t barcode_edges;       /* last observed ISR edge count */
     uint32_t path_at_stop;       /* path counts when the bypass started */
     int32_t  diff_at_stop;       /* pos_l - pos_r when the bypass started */
-    uint32_t run_start_path;     /* path counts at START */
-    uint32_t run_end_path;       /* path counts when the last run ended */
+    uint32_t run_odo_mark;       /* path when run_odo_counts was summed */
+    uint32_t run_odo_counts;     /* path travelled this run, saturating */
     uint32_t rejoin_start;       /* path counts at the rejoin move */
     uint32_t inhibit_mark;       /* path counts to clear the inhibits */
 

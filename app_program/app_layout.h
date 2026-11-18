@@ -97,7 +97,7 @@
 #define SB_MOT3_PATH_MIN                (0)
 #define SB_MOT3_PATH_MAX                (131071)
 #define SB_MOT3_PATH_OFFSET             (0)
-#define SB_MOT3_PATH_KIND               (APP_KIND_RNG)
+#define SB_MOT3_PATH_KIND               (APP_KIND_RAW)
 #define SB_MOT3_USED_BITS               (SB_MOT3_PATH_POS + SB_MOT3_PATH_BITS)
 #if (SB_MOT3_USED_BITS > 32u)
 #error "Group SB_MOT3 no longer fits in 32 bits"
@@ -1407,7 +1407,7 @@
 #define PRV_LINE_D_BRANCH_PATH_MIN      (0)
 #define PRV_LINE_D_BRANCH_PATH_MAX      (131071)
 #define PRV_LINE_D_BRANCH_PATH_OFFSET   (0)
-#define PRV_LINE_D_BRANCH_PATH_KIND     (APP_KIND_RNG)
+#define PRV_LINE_D_BRANCH_PATH_KIND     (APP_KIND_RAW)
 #define PRV_LINE_D_USED_BITS            (PRV_LINE_D_BRANCH_PATH_POS + PRV_LINE_D_BRANCH_PATH_BITS)
 #if (PRV_LINE_D_USED_BITS > 32u)
 #error "Group PRV_LINE_D no longer fits in 32 bits"
@@ -1419,7 +1419,7 @@
 #define PRV_LINE_B_JCT_MARK_MIN         (0)
 #define PRV_LINE_B_JCT_MARK_MAX         (131071)
 #define PRV_LINE_B_JCT_MARK_OFFSET      (0)
-#define PRV_LINE_B_JCT_MARK_KIND        (APP_KIND_RNG)
+#define PRV_LINE_B_JCT_MARK_KIND        (APP_KIND_RAW)
 #define PRV_LINE_B_USED_BITS            (PRV_LINE_B_JCT_MARK_POS + PRV_LINE_B_JCT_MARK_BITS)
 #if (PRV_LINE_B_USED_BITS > 32u)
 #error "Group PRV_LINE_B no longer fits in 32 bits"
@@ -1431,7 +1431,7 @@
 #define PRV_LINE_C_RUN_MARK_MIN         (0)
 #define PRV_LINE_C_RUN_MARK_MAX         (131071)
 #define PRV_LINE_C_RUN_MARK_OFFSET      (0)
-#define PRV_LINE_C_RUN_MARK_KIND        (APP_KIND_RNG)
+#define PRV_LINE_C_RUN_MARK_KIND        (APP_KIND_RAW)
 #define PRV_LINE_C_USED_BITS            (PRV_LINE_C_RUN_MARK_POS + PRV_LINE_C_RUN_MARK_BITS)
 #if (PRV_LINE_C_USED_BITS > 32u)
 #error "Group PRV_LINE_C no longer fits in 32 bits"
@@ -1467,7 +1467,7 @@
 #define PRV_BAR_B_MARK_MIN              (0)
 #define PRV_BAR_B_MARK_MAX              (131071)
 #define PRV_BAR_B_MARK_OFFSET           (0)
-#define PRV_BAR_B_MARK_KIND             (APP_KIND_RNG)
+#define PRV_BAR_B_MARK_KIND             (APP_KIND_RAW)
 #define PRV_BAR_B_USED_BITS             (PRV_BAR_B_MARK_POS + PRV_BAR_B_MARK_BITS)
 #if (PRV_BAR_B_USED_BITS > 32u)
 #error "Group PRV_BAR_B no longer fits in 32 bits"

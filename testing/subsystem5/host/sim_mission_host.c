@@ -181,6 +181,17 @@ static void barcode_test_back(uint32_t path_mm, uint32_t level,
   NONE();
 }
 
+/* S5-U80: as barcode_test_back, with the path given in counts (wrapped). */
+static void barcode_test_back_counts(uint32_t path_counts, uint32_t level,
+                                     uint32_t new_edges) {
+  mot.motion_state = APP_MOT_MOVE_BACK;
+  mot.speed_l_cpw = mot.speed_r_cpw = -15;
+  mot.path_counts = path_counts & 0x1FFFFu;
+  g_barcode_level = level;
+  g_barcode_edges += new_edges;
+  NONE();
+}
+
 static void barcode_test_still(void) {
   mot.motion_state = APP_MOT_BRAKE;
   mot.speed_l_cpw = mot.speed_r_cpw = 0;
@@ -217,7 +228,7 @@ int main(void) {
   idle_ms(990); CHECK("S5-U07", APP_SYS_READY == g_ctx.sys_state && !MODE(APP_MODE_RUN_START), "still warning");
   alog[0] = 0; idle_ms(20); CHECK("S5-U20", MODE(APP_MODE_RUN_START) && strstr(alog, "ZERO0") && g_ctx.b_move_pending, "run start: RUN_START set, ZERO sent");
   DONE(); CHECK("S5-U20", APP_SYS_READY == g_ctx.sys_state, "ZERO acked, RUN_START held for 30 ms");
-  alog[0] = 0; idle_ms(30); CHECK("S5-U20", APP_SYS_RUN == g_ctx.sys_state && !MODE(APP_MODE_RUN_START) && MODE(APP_MODE_MOTOR_EN) && 0u == g_ctx.run_start_path && !strcmp(alog, "FOL120 "), "-> RUN: RUN_START cleared, MOTOR_EN set, path 0, FOLLOW cruise");
+  alog[0] = 0; idle_ms(30); CHECK("S5-U20", APP_SYS_RUN == g_ctx.sys_state && !MODE(APP_MODE_RUN_START) && MODE(APP_MODE_MOTOR_EN) && 0u == g_ctx.run_odo_counts && !strcmp(alog, "FOL120 "), "-> RUN: RUN_START cleared, MOTOR_EN set, path 0, FOLLOW cruise");
   /* barcode turn */
   EV(APP_EVT_BARCODE, (1u << 6) | 11u); CHECK("S5-U07", APP_RUN_ARMED == g_ctx.run_state && !strcmp(mlog, "FOL120 "), "BARCODE(RIGHT) -> ARMED at cruise");
   EV(APP_EVT_JUNCTION, APP_JCT_CROSS); CHECK("S5-U07", !strcmp(mlog, "STOP0 F60 "), "CROSS -> stop, advance 60 (tracked)");
@@ -377,6 +388,14 @@ int main(void) {
   CHECK("S1-U41", 3 == g_snapshots && APP_SYS_FINISHED == g_snapshot.sys_state && 500u == g_snapshot.odometry_mm && 2u == g_snapshot.run_time_s, "FINISHED: distance and time frozen at the end of the run");
   fault_set(APP_FAULT_RANGE_CLAMP); EV(APP_EVT_SNAPSHOT, 0);
   CHECK("S1-U41", 4 == g_snapshots && 0u != (g_snapshot.faults & APP_FAULT_RANGE_CLAMP) && APP_SYS_FINISHED == g_ctx.sys_state, "faults reported; FINISHED kept");
+  /* S5-U79 (2026-11-16): the board path wraps at 2^17 counts (about 42.5 m)
+     because the track has no line end. The run odometer sums the travel
+     pass by pass, so it keeps counting across the wrap and stops at
+     32767 mm instead of restarting from a small value.                 */
+  to_ready(); mot.path_counts = 0u; to_run();
+  for (uint32_t i = 0u; i < 15u; i++) { mot.path_counts = (mot.path_counts + 10000u) & 0x1FFFFu; idle_ms(10); }
+  EV(APP_EVT_SNAPSHOT, 0);
+  CHECK("S5-U79", APP_SYS_RUN == g_ctx.sys_state && mot.path_counts < 20000u && 32767u == g_snapshot.odometry_mm, "48.6 m with the path wrapped once: odometer 32767 mm (capped), not ~6 m");
   /* S5-U39 (Dylan 2026-11-04): FR9 bypass limit 5 s -> 20 s. A rejoin
      that takes ~6.3 s from the end of the pass leg (slower car) must
      finish and resume following, not fault REACQUIRE_FAIL at 5 s.     */
@@ -505,6 +524,30 @@ int main(void) {
   EV(APP_EVT_OBSTACLE, 0); NONE();
   CHECK("S5-U54", !strcmp(mlog, "") && MODE(APP_MODE_STOPPED | APP_MODE_RESCAN), "268 mm (within tolerance): scan at once, no creep");
   obs.distance_mm = 0u;
+  /* S5-U80 (2026-11-16): the same rewind and slow reread with the board
+     path wrapping at 2^17 counts in the middle (following began 100 mm
+     before the wrap). Every distance is measured across the wrap.      */
+  barcode_test_follow(0u);
+  {
+    uint32_t const w0 = 131072u - odometry_mm_to_counts(100u);
+    g_ctx.barcode_follow_path = w0;
+    mot.path_counts = (w0 + odometry_mm_to_counts(235u)) & 0x1FFFFu;
+    EV(APP_EVT_BARCODE_PROBE, 35u);
+    CHECK("S5-U80", !strcmp(mlog, "STOP0 "), "probe after the path wrapped: brake for the rewind");
+    NONE();
+    mot.motion_state = APP_MOT_BRAKE;
+    mot.speed_l_cpw = mot.speed_r_cpw = 0;
+    mot.path_counts = (w0 + odometry_mm_to_counts(240u)) & 0x1FFFFu;
+    NONE();
+    CHECK("S5-U80", !strcmp(mlog, "B150 "), "rewind 150 mm, measured across the wrap");
+    barcode_test_back_counts(w0 + odometry_mm_to_counts(312u), 1u, 6u);
+    barcode_test_back_counts(w0 + odometry_mm_to_counts(335u), 0u, 1u);
+    barcode_test_back_counts(w0 + odometry_mm_to_counts(390u), 0u, 0u);
+    DONE();
+    barcode_test_still();
+    CHECK("S5-U80", !strcmp(mlog, "FOL60 ") && MODE(APP_MODE_BARCODE_REREAD),
+          "white lead-in reached across the wrap: slow reread at 60 mm/s");
+  }
   /* S5-U57: the logged prefix brakes, rewinds once, then reads slowly. */
   barcode_test_follow(235u);
   EV(APP_EVT_BARCODE_PROBE, 35u);

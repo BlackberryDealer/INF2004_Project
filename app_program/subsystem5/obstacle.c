@@ -680,7 +680,8 @@ static void obstacle_update_ramp(bool b_is_armed)
         {
             g_ramp_hold--;
         }
-        done_mm = odometry_counts_to_mm(path_now - g_ramp_mark);
+        done_mm = odometry_counts_to_mm(
+            odometry_path_since(path_now, g_ramp_mark));
         if ((0u == g_ramp_hold)
             && ((done_mm >= OBS_RAMP_CLEAR_MM) || (path_now == g_ramp_mark)))
         {
@@ -948,8 +949,8 @@ static void obstacle_step_passing(void)
 {
     uint32_t const need_mm = g_part.nearest_mm + OBS_DEPTH_ASSUMED_MM
                              + OBS_ROBOT_LEN_MM;
-    uint32_t const done_mm = odometry_counts_to_mm(obstacle_path_counts()
-                                                   - g_pass_mark);
+    uint32_t const done_mm = odometry_counts_to_mm(
+        odometry_path_since(obstacle_path_counts(), g_pass_mark));
 
     if (done_mm >= need_mm)
     {

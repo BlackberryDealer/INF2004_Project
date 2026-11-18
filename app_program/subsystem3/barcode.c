@@ -11,7 +11,6 @@
 #include "../app_bits.h"
 #include "../app_layout.h"
 #include "../board_pins.h"
-#include "../subsystem2/fault.h"
 #include "../subsystem2/odometry.h"
 #include "../subsystem5/drv_gpio_irq.h"
 #include "../subsystem5/mission.h"
@@ -337,28 +336,15 @@ static void barcode_init_state(void)
 
 /**
  * barcode_mark_set
- * @brief   Packs path into PRV_BAR_B_MARK (17-bit RNG) and flags clamp fault.
+ * @brief   Packs path into PRV_BAR_B_MARK (17-bit RAW, the wrapping path).
  * @param   path  Current odometry path in counts.
  * @return  none
  * @context barcode_task
  */
 static void barcode_mark_set(uint32_t path)
 {
-    bool           b_clamped = false;
-    uint32_t const mark_enc  = app_bits_clamp_u(
-        path, (uint32_t) PRV_BAR_B_MARK_MAX, &b_clamped);
-
-    if (b_clamped)
-    {
-        fault_set(APP_FAULT_RANGE_CLAMP);
-    }
-    else
-    {
-        /* Path fits 17-bit mark field. */
-    }
-
     g_bar_prv_b = app_bits_put(g_bar_prv_b, PRV_BAR_B_MARK_POS,
-                               PRV_BAR_B_MARK_BITS, mark_enc);
+                               PRV_BAR_B_MARK_BITS, path);
 }
 
 /**
@@ -680,7 +666,7 @@ static void barcode_settle_edge(uint32_t gap_16us, uint32_t cpw,
         if (BAR_STATE_IDLE == state)
         {
             level = (gb_bar_quiet_known
-                     || ((path - barcode_mark_get())
+                     || (odometry_path_since(path, barcode_mark_get())
                          >= odometry_mm_to_counts(BAR_QUIET_MM))) ? 1u : 0u;
             gb_bar_quiet_known = false;
         }
@@ -993,7 +979,8 @@ static void barcode_request_rewind(uint32_t path)
     if (mission_mode_is_set(APP_MODE_MOTOR_EN)
         && !mission_mode_is_set(APP_MODE_CAL_IR | APP_MODE_BARCODE_REREAD))
     {
-        uint32_t const travel = odometry_counts_to_mm(path - g_bar_start_path);
+        uint32_t const travel = odometry_counts_to_mm(
+            odometry_path_since(path, g_bar_start_path));
 
         if ((travel >= (BAR_PROBE_ELEMENTS * BAR_PROBE_MIN_01MM) / 10u)
             && (travel <= (uint32_t) MSG_EVT_VALUE_MAX))
@@ -1057,8 +1044,11 @@ static void barcode_check_timeouts(uint32_t path)
                                          PRV_BAR_A_STATE_BITS);
     uint32_t const n_elem = app_bits_get(g_bar_prv_a, PRV_BAR_A_N_ELEM_POS,
                                          PRV_BAR_A_N_ELEM_BITS);
-    uint32_t const mark   = barcode_mark_get();
+    uint32_t const mark   = odometry_path_age_cap(path, barcode_mark_get());
 
+    /* The path wraps: an IDLE mark can be kept for any distance, so keep
+       its age at the cap (it still reads as a quiet zone).          */
+    barcode_mark_set(mark);
     if ((BAR_STATE_CAPTURING == state) && (0u == n_elem)
         && !mission_mode_is_set(APP_MODE_BARCODE_REREAD)
         && ((sys_tick_now_us() - g_bar_last_us) >= BAR_SETTLE_US)
@@ -1070,7 +1060,8 @@ static void barcode_check_timeouts(uint32_t path)
         barcode_state_set(BAR_STATE_IDLE, 0u);
     }
     else if ((BAR_STATE_CAPTURING == state) &&
-             ((path - mark) >= odometry_mm_to_counts(BAR_QUIET_MM)))
+             (odometry_path_since(path, mark)
+              >= odometry_mm_to_counts(BAR_QUIET_MM)))
     {
         if (n_elem < BAR_ELEMENTS)
         {
@@ -1111,7 +1102,8 @@ static void barcode_check_timeouts(uint32_t path)
         }
     }
     else if ((BAR_STATE_COOLDOWN == state) &&
-             ((path - mark) >= odometry_mm_to_counts(BAR_COOLDOWN_MM)))
+             (odometry_path_since(path, mark)
+              >= odometry_mm_to_counts(BAR_COOLDOWN_MM)))
     {
         barcode_state_set(BAR_STATE_IDLE, 0u);
     }

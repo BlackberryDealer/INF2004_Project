@@ -13,6 +13,8 @@
 #define ODOMETRY_H
 
 #include <stdint.h>
+#include <stdbool.h>
+#include "../app_layout.h"
 
 extern uint32_t odometry_hw_to_counts(uint32_t hw_image); /* edges / 4 */
 extern uint32_t odometry_counts_to_mm(uint32_t counts);
@@ -22,6 +24,97 @@ extern int32_t  odometry_mm_s_to_cpw(int32_t speed_mm_s);
 extern uint32_t odometry_turn_counts(uint32_t angle_deg); /* per wheel  */
 extern int32_t  odometry_heading_cdeg(int32_t pos_l_counts,
                                       int32_t pos_r_counts); /* + = right */
+
+/* ---- Path counter (SB_MOT3 PATH, 17 bits, kind RAW) -----------------
+ * motion_task adds the travel of both wheels. The track has no line end,
+ * so the counter wraps at 2^17 counts (about 42.5 m) instead of stopping:
+ * a stopped counter would freeze every "travelled since" rule. Distances
+ * are taken modulo 2^17 and are right while the stretch is shorter than
+ * ODOMETRY_PATH_AGE_MAX (2^16 counts, about 21 m). Every rule measures a
+ * stretch far shorter than that; a mark that may be kept for longer is
+ * aged with odometry_path_age_cap() every cycle, so its stretch stays at
+ * the cap instead of wrapping back to a small value.                   */
+#define ODOMETRY_PATH_MASK     ((uint32_t) SB_MOT3_PATH_MAX)
+#define ODOMETRY_PATH_AGE_MAX  ((ODOMETRY_PATH_MASK + 1u) >> 1u)
+
+#if (SB_MOT3_PATH_MAX != ((1 << SB_MOT3_PATH_BITS) - 1))
+#error "PATH must use every code of its bits so that it can wrap"
+#endif
+
+/**
+ * odometry_path_since
+ * @brief   Path travelled from a mark to now, modulo 2^17 counts.
+ * @param   path_now   current path, counts
+ * @param   path_mark  path when the stretch began, counts
+ * @return  counts travelled (right below ODOMETRY_PATH_AGE_MAX)
+ * @context any
+ */
+static inline uint32_t odometry_path_since(uint32_t path_now,
+                                           uint32_t path_mark)
+{
+    return ((path_now - path_mark) & ODOMETRY_PATH_MASK);
+}
+
+/**
+ * odometry_path_add
+ * @brief   The path a given distance ahead of a path value (wraps).
+ * @param   path    path, counts
+ * @param   counts  distance ahead, counts
+ * @return  path + counts modulo 2^17
+ * @context any
+ */
+static inline uint32_t odometry_path_add(uint32_t path, uint32_t counts)
+{
+    return ((path + counts) & ODOMETRY_PATH_MASK);
+}
+
+/**
+ * odometry_path_sub
+ * @brief   The path a given distance behind a path value (wraps).
+ * @param   path    path, counts
+ * @param   counts  distance behind, counts
+ * @return  path - counts modulo 2^17
+ * @context any
+ */
+static inline uint32_t odometry_path_sub(uint32_t path, uint32_t counts)
+{
+    return ((path - counts) & ODOMETRY_PATH_MASK);
+}
+
+/**
+ * odometry_path_reached
+ * @brief   True once the path has reached a target set at most
+ *          ODOMETRY_PATH_AGE_MAX ahead with odometry_path_add(). Only for
+ *          targets inside a stage that ends within that distance.
+ * @param   path_now     current path, counts
+ * @param   path_target  target path, counts
+ * @return  true when path_now is at or past the target
+ * @context any
+ */
+static inline bool odometry_path_reached(uint32_t path_now,
+                                         uint32_t path_target)
+{
+    return (odometry_path_since(path_now, path_target)
+            < ODOMETRY_PATH_AGE_MAX);
+}
+
+/**
+ * odometry_path_age_cap
+ * @brief   Keeps a long-held mark at most ODOMETRY_PATH_AGE_MAX behind the
+ *          current path. Called every cycle for such a mark, its stretch
+ *          reads as at least that cap for as long as the mark is kept.
+ * @param   path_now   current path, counts
+ * @param   path_mark  stored mark, counts
+ * @return  the mark to store
+ * @context any
+ */
+static inline uint32_t odometry_path_age_cap(uint32_t path_now,
+                                             uint32_t path_mark)
+{
+    return (odometry_path_since(path_now, path_mark) > ODOMETRY_PATH_AGE_MAX)
+           ? odometry_path_sub(path_now, ODOMETRY_PATH_AGE_MAX)
+           : path_mark;
+}
 
 /* ---- Speed window (B2.2.1; used by motion_task only) ----------------- */
 

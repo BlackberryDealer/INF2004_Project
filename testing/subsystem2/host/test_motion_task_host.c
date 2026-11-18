@@ -1,7 +1,7 @@
 /**
  * @file    test_motion_task_host.c
  * @brief   Host simulation of motion_task (the Motion Executor): the cycle
- *          tests S2-U03, S2-U12, S2-U15..U18 and the encoder-glitch
+ *          tests S2-U03, S2-U12, S2-U15..U18, S2-U31 and the encoder-glitch
  *          regression S2-U19 (proposed), run on the laptop.
  * @owner   Buddy 2 (motion)
  * @kind    test
@@ -339,16 +339,21 @@ int main(void)
     HOST_CHECK("S2-U12", (APP_MOT_BRAKE == g_state) && gb_sim_braked,
                "STOP during MOVE: braked after one cycle");
 
-    /* S2-U15: progress is per command, never from the saturating path */
+    /* S2-U15: progress is per command, never from the board path.
+       S2-U31: the path wraps at 2^17 counts (about 42.5 m) instead of
+       stopping there: the track has no line end, and a stopped path
+       froze every "travelled since" rule (lost line, junction, barcode
+       quiet zone). No RANGE_CLAMP. 262142 = the old 2 x 131071 cap.  */
     sim_reset();
-    g_path2 = MOTION_PATH2_MAX - 1000u;
+    g_path2 = 262142u - 1000u;
     sim_send(APP_CMD_FWD, 1000u, 2u);
     b_done = sim_run_until_done(3000u, &tag);
     HOST_CHECK("S2-U15", b_done && (2u == tag),
-               "1000 mm MOVE near path saturation completes, MOVE_DONE tag 2");
-    HOST_CHECK("S2-U15", (MOTION_PATH2_MAX == g_path2)
-               && (0u != (g_sim_faults & APP_FAULT_RANGE_CLAMP)),
-               "path saturates at 2 x 131071 and reports RANGE_CLAMP");
+               "1000 mm MOVE across the path wrap completes, MOVE_DONE tag 2");
+    HOST_CHECK("S2-U31", (g_path2 > 4000u) && (g_path2 < 7000u)
+               && (g_sim_board.path_counts == (g_path2 >> 1u))
+               && (0u == (g_sim_faults & APP_FAULT_RANGE_CLAMP)),
+               "path wrapped past 2^17 counts to ~2600, no RANGE_CLAMP");
     HOST_CHECK("S2-U15", (g_sim_board.pos_l_counts >= 3086)
                && (g_sim_board.pos_l_counts <= 3086 + 30),
                "left wheel travelled the 3086 counts of 1000 mm");

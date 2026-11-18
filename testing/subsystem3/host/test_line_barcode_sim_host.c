@@ -178,7 +178,7 @@ void status_board_read(status_board_t * p_snapshot)
 uint32_t status_board_path(status_board_t const * p_snap)
 {
     (void) p_snap;
-    return g_sim_path;
+    return g_sim_path & 0x1FFFFu;   /* the 17-bit SB_MOT3 PATH field */
 }
 
 int32_t status_board_pos_l(status_board_t const * p_snap)
@@ -322,6 +322,43 @@ static uint32_t sim_feed_barcode_edges(uint32_t char_idx, uint32_t start_us)
     }
 
     return now_us;
+}
+
+/* S3-U50: '*' X '*' with the path advancing through each element
+   (mocked wheel speed) and the task running in the middle of every
+   element and after every edge, so a capture crosses the 2^17-count
+   path wrap between two edges.                                       */
+static void sim_feed_barcode_stepped(uint32_t char_idx, uint32_t start_us)
+{
+    uint32_t chars[3] = { CODE39_STAR, char_idx, CODE39_STAR };
+    uint32_t now_us   = start_us;
+
+    gb_sim_bar_pin = true;
+    barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+    barcode_cycle();
+    for (uint32_t c_idx = 0u; c_idx < 3u; c_idx++)
+    {
+        uint16_t const pat   = g_sim_patterns[chars[c_idx]];
+        uint32_t const n_bit = (c_idx < 2u) ? 10u : 9u; /* + gap */
+
+        for (uint32_t bit = 0u; bit < n_bit; bit++)
+        {
+            bool const b_wide = (bit < 9u)
+                && (0u != (pat & (uint16_t) (1u << (8u - bit))));
+            uint32_t const dur_us = b_wide ? 30000u : 12000u;
+
+            uint32_t const half = (dur_us * (uint32_t) g_sim_speed_l)
+                                  / 100000u;
+
+            g_sim_path += half;           /* mid-element task cycle */
+            barcode_cycle();
+            now_us     += dur_us;
+            g_sim_path += half;
+            gb_sim_bar_pin = !gb_sim_bar_pin;
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, now_us);
+            barcode_cycle();
+        }
+    }
 }
 
 /* Replay logged widths through the IRQ and task at the mocked wheel speed. */
@@ -1924,6 +1961,48 @@ int main(void)
     line_cycle();
     HOST_CHECK("S3-U33", g_sim_line_out.steering < 0,
                "a lasting one-sided reading steers again after the hold");
+
+    /* ---- S3-U50 (2026-11-16: the path wraps at 2^17 counts) ---------- */
+    /* The board path now wraps at 2^17 counts (about 42.5 m) instead of
+       stopping: the track has no line end. Every "travelled since" rule
+       must measure across the wrap like anywhere else.                 */
+    sim_reset();
+    g_sim_path = 131072u - 3u;   /* wraps inside the first bar, between edges */
+    sim_feed_barcode_stepped(10u, 50000u);
+    exp_val = mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u);
+    HOST_CHECK("S3-U50",
+               (1u == g_sim_evt_cnt)
+               && (APP_EVT_BARCODE == g_sim_evts[0].type)
+               && (exp_val == g_sim_evts[0].value)
+               && (g_sim_path > 131071u),
+               "*A* read while the path wraps decodes A (no quiet-zone drop)");
+
+    sim_reset();
+    sim_calibrate_line();
+    g_sim_path  = 131072u - 20u;          /* the exit crosses the wrap */
+    g_sim_raw_l = 3500u;                  /* black under the left sensor */
+    g_sim_raw_r = 500u;
+    for (uint32_t i = 0u; i < 5u; i++)
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    g_sim_raw_l = 500u;
+    for (uint32_t i = 0u; i < 30u; i++)   /* 300 ms, 30 mm both white */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U50", 0u == g_sim_evt_cnt,
+               "black exit across the path wrap: no LINE_LOST before 60 mm");
+    for (uint32_t i = 0u; i < 40u; i++)   /* to 70 mm both white */
+    {
+        g_sim_path += odometry_mm_to_counts(1u);
+        line_cycle();
+    }
+    HOST_CHECK("S3-U50", (1u == g_sim_evt_cnt)
+               && (APP_EVT_LINE_LOST == g_sim_evts[0].type),
+               "black exit across the path wrap: LINE_LOST after 60 mm");
 
     return (0 == HOST_SUMMARY("line_barcode_sim")) ? 0 : 1;
 }

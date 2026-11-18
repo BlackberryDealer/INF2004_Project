@@ -54,7 +54,8 @@
    reads around it means the task was held up, so counts and time do not
    belong together and the read is skipped (not trusted, not counted). */
 #define MOTION_READ_SKEW_US    (500u)
-#define MOTION_PATH2_MAX       (262142u)    /* 2 x 131071 (A23, PATH2 row) */
+/* path2 = 2 x path; wraps with the 17-bit PATH (odometry.h).         */
+#define MOTION_PATH2_MASK      ((ODOMETRY_PATH_MASK << 1u) | 1u)
 #define MOTION_STREAK_MAX      (3u)         /* 2-bit streak counter        */
 #define MOTION_HALF_SHIFT      (1u)         /* path = path2 / 2            */
 
@@ -337,20 +338,14 @@ static void motion_sense(void)
     odometry_window_speed(&g_window, &g_left.speed_cpw, &g_right.speed_cpw);
 
     /* Path: sum of |travel| of both wheels (half counts). Each |delta| is
-       capped at 0xFFFF, so the sum cannot wrap. Clamp is RNG (A23).     */
-    step2 = g_left.abs_delta + g_right.abs_delta;
-    if ((MOTION_PATH2_MAX - g_path2) < step2)
-    {
-        g_path2 = MOTION_PATH2_MAX;
-        fault_set(APP_FAULT_RANGE_CLAMP);
-    }
-    else
-    {
-        g_path2 += step2;
-    }
+       capped at 0xFFFF, so the sum fits 32 bits. The path wraps at 2^17
+       counts (about 42.5 m): the track has no line end, and readers
+       take distances modulo 2^17 (odometry_path_since).                */
+    step2   = g_left.abs_delta + g_right.abs_delta;
+    g_path2 = (g_path2 + step2) & MOTION_PATH2_MASK;
 
     /* Progress of a MOVE or TURN counts from 0 for this command only,
-       never from the possibly saturated path (review R03).            */
+       never from the wrapping path (review R03).                      */
     if ((APP_MOT_FOLLOW != g_state) && motion_is_moving(g_state))
     {
         g_prog2 = ((0xFFFFFFFFu - g_prog2) < step2) ? 0xFFFFFFFFu

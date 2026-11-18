@@ -86,6 +86,7 @@ static void run_finish_avoid(mission_ctx_t * p_ctx,
                              status_board_t const * p_snap, uint32_t now_us);
 static void run_background(mission_ctx_t * p_ctx,
                            status_board_t const * p_snap, uint32_t now_us);
+static void run_path_marks(mission_ctx_t * p_ctx, uint32_t path);
 static void run_follow_or_armed(mission_ctx_t * p_ctx,
                                 status_board_t const * p_snap,
                                 uint32_t now_us);
@@ -129,7 +130,7 @@ void mission_run_enter(mission_ctx_t * p_ctx, status_board_t const * p_snap,
     p_ctx->b_is_armed        = false;
     p_ctx->armed_cmd         = APP_BAR_CMD_LEFT;
     p_ctx->barcode_phase     = RUN_BAR_IDLE;
-    p_ctx->barcode_probe_after = 0u;
+    p_ctx->b_rearm_wait      = false;
     p_ctx->avoid_step        = APP_AVOID_WAIT_PLAN;
     p_ctx->no_path_cnt       = 0u;
     p_ctx->b_post_avoid_slow = false;
@@ -229,7 +230,7 @@ static void run_goto(mission_ctx_t * p_ctx, uint32_t run_state,
 {
     p_ctx->run_state          = run_state;
     p_ctx->substep            = RUN_SUB_FIRST;
-    p_ctx->barcode_probe_mark = 0u;
+    p_ctx->b_probe_pending    = false;
 
     switch (run_state)
     {
@@ -304,7 +305,7 @@ static bool run_common(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
             || (APP_EVT_BARCODE == p_evt->type)
             || (APP_EVT_UNMAPPED == p_evt->type))
         {
-            p_ctx->barcode_probe_mark = 0u;
+            p_ctx->b_probe_pending = false;
         }
         if ((APP_EVT_JUNCTION == p_evt->type)
             && (APP_JCT_CROSS == p_evt->value)
@@ -331,7 +332,7 @@ static bool run_common(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         }
         else if ((APP_EVT_BARCODE_PROBE == p_evt->type)
                  && (RUN_BAR_IDLE == p_ctx->barcode_phase)
-                 && (0u == p_ctx->barcode_probe_mark)
+                 && (!p_ctx->b_probe_pending)
                  && ((APP_RUN_FOLLOW == p_ctx->run_state)
                      || (APP_RUN_ARMED == p_ctx->run_state)))
         {
@@ -474,15 +475,18 @@ static void run_barcode_begin(mission_ctx_t * p_ctx, uint32_t advance_mm,
     uint32_t const path = status_board_path(p_snap);
 
     if ((advance_mm <= MISSION_BARCODE_REWIND_MM - MISSION_BARCODE_LEAD_MM)
-        && (path >= p_ctx->barcode_probe_after))
+        && ((!p_ctx->b_rearm_wait)
+            || (odometry_path_since(path, p_ctx->barcode_rearm_path)
+                >= odometry_mm_to_counts(MISSION_BARCODE_REARM_MM))))
     {
         uint32_t const counts = odometry_mm_to_counts(
             advance_mm + MISSION_BARCODE_LEAD_MM);
 
-        if (path >= p_ctx->barcode_follow_path + counts
-                    + odometry_mm_to_counts(MISSION_BARCODE_BACK_PAD_MM))
+        if (odometry_path_since(path, p_ctx->barcode_follow_path)
+            >= (counts + odometry_mm_to_counts(MISSION_BARCODE_BACK_PAD_MM)))
         {
-            p_ctx->barcode_probe_mark = path - counts;
+            p_ctx->barcode_probe_mark = odometry_path_sub(path, counts);
+            p_ctx->b_probe_pending    = true;
             p_ctx->barcode_since_us   = now_us;
             return;
         }
@@ -503,11 +507,11 @@ static void run_barcode_try_rewind(mission_ctx_t * p_ctx,
                                     status_board_t const * p_snap,
                                     uint32_t now_us)
 {
-    if (0u != p_ctx->barcode_probe_mark)
+    if (p_ctx->b_probe_pending)
     {
         uint32_t const path = status_board_path(p_snap);
         uint32_t const need = odometry_counts_to_mm(
-            path - p_ctx->barcode_probe_mark);
+            odometry_path_since(path, p_ctx->barcode_probe_mark));
         uint32_t const line = status_board_line_status(p_snap);
 
         if ((need > MISSION_BARCODE_REWIND_MM - MISSION_BARCODE_BACK_PAD_MM)
@@ -520,14 +524,14 @@ static void run_barcode_try_rewind(mission_ctx_t * p_ctx,
             || (!run_barcode_scan_ok(p_snap))
             || mission_mode_is_set(RUN_INHIBITS) || (0u != safety_get()))
         {
-            p_ctx->barcode_probe_mark = 0u;
+            p_ctx->b_probe_pending = false;
             run_log_event(p_ctx, "BARCODE no safe rewind (%d mm needed)\n",
                           need);
         }
         else if (APP_LINE_ON == line)
         {
             p_ctx->barcode_mark       = p_ctx->barcode_probe_mark;
-            p_ctx->barcode_probe_mark = 0u;
+            p_ctx->b_probe_pending    = false;
             p_ctx->barcode_phase      = RUN_BAR_BRAKING;
             p_ctx->barcode_since_us   = now_us;
             p_ctx->barcode_tries      = 0u;
@@ -549,8 +553,8 @@ static void run_barcode_try_rewind(mission_ctx_t * p_ctx,
 static void run_barcode_clear(mission_ctx_t * p_ctx, uint32_t path)
 {
     p_ctx->barcode_phase       = RUN_BAR_IDLE;
-    p_ctx->barcode_probe_after = path + odometry_mm_to_counts(
-                                         MISSION_BARCODE_REARM_MM);
+    p_ctx->barcode_rearm_path  = path;
+    p_ctx->b_rearm_wait        = true;
     mission_mode_clear(RUN_INHIBITS | APP_MODE_BARCODE_REREAD);
 }
 
@@ -596,9 +600,9 @@ static void run_barcode_braked(mission_ctx_t * p_ctx,
     {
         uint32_t const path = status_board_path(p_snap);
         uint32_t const need = odometry_counts_to_mm(
-            path - p_ctx->barcode_mark);
+            odometry_path_since(path, p_ctx->barcode_mark));
         uint32_t const follow_mm = odometry_counts_to_mm(
-            path - p_ctx->barcode_follow_path);
+            odometry_path_since(path, p_ctx->barcode_follow_path));
         uint32_t const available = (follow_mm > MISSION_BARCODE_BACK_PAD_MM)
             ? (follow_mm - MISSION_BARCODE_BACK_PAD_MM) : 0u;
         uint32_t const limit = (available < MISSION_BARCODE_REWIND_MM)
@@ -608,7 +612,8 @@ static void run_barcode_braked(mission_ctx_t * p_ctx,
 
         if ((need <= limit) && run_barcode_scan_ok(p_snap))
         {
-            p_ctx->barcode_mark      = path + odometry_mm_to_counts(need);
+            p_ctx->barcode_mark      = odometry_path_add(
+                path, odometry_mm_to_counts(need));
             p_ctx->barcode_back_path = path;
             p_ctx->barcode_back_left = back;
             p_ctx->barcode_edge_path = path;
@@ -683,8 +688,8 @@ static bool run_barcode_white_lead(mission_ctx_t * p_ctx, uint32_t path)
         p_ctx->barcode_edge_path = path;
         p_ctx->barcode_edges     = edges;
     }
-    return b_white && (path >= p_ctx->barcode_mark)
-           && ((path - p_ctx->barcode_edge_path)
+    return b_white && odometry_path_reached(path, p_ctx->barcode_mark)
+           && (odometry_path_since(path, p_ctx->barcode_edge_path)
                >= odometry_mm_to_counts(MISSION_BARCODE_QUIET_MM));
 }
 
@@ -703,7 +708,7 @@ static void run_barcode_settled(mission_ctx_t * p_ctx,
     if (run_barcode_still(p_snap))
     {
         uint32_t const backed = odometry_counts_to_mm(
-            path - p_ctx->barcode_back_path);
+            odometry_path_since(path, p_ctx->barcode_back_path));
 
         if (!b_lead)
         {
@@ -719,7 +724,8 @@ static void run_barcode_settled(mission_ctx_t * p_ctx,
                 /* casts: short rewind and white travel < 2047 mm */
                 app_log("BARCODE white lead-in %d mm after rewinding %d mm\n",
                         (int32_t) odometry_counts_to_mm(
-                            path - p_ctx->barcode_edge_path),
+                            odometry_path_since(
+                                path, p_ctx->barcode_edge_path)),
                         (int32_t) backed, 0);
             }
             p_ctx->barcode_mark     = path;
@@ -770,7 +776,7 @@ static void run_barcode_read(mission_ctx_t * p_ctx,
             break;
         default:
             b_finished = b_cross
-                || ((path - p_ctx->barcode_mark)
+                || (odometry_path_since(path, p_ctx->barcode_mark)
                     >= odometry_mm_to_counts(MISSION_BARCODE_READ_MM))
                 || ((now_us - p_ctx->barcode_since_us)
                     >= MISSION_BARCODE_READ_MS * RUN_US_PER_MS);
@@ -778,8 +784,8 @@ static void run_barcode_read(mission_ctx_t * p_ctx,
             {
                 run_log_event(p_ctx, "BARCODE reread ended without decode"
                               " after %d mm\n",
-                              odometry_counts_to_mm(path
-                                                    - p_ctx->barcode_mark));
+                              odometry_counts_to_mm(odometry_path_since(
+                                  path, p_ctx->barcode_mark)));
             }
             break;
     }
@@ -1153,8 +1159,8 @@ static void run_avoid_step(mission_ctx_t * p_ctx,
                 (int32_t) p_ctx->avoid_step,
                 odometry_heading_cdeg(diff_now, 0)
                 - odometry_heading_cdeg(p_ctx->diff_at_stop, 0),
-                (int32_t) odometry_counts_to_mm(status_board_path(p_snap)
-                                                - p_ctx->path_at_stop));
+                (int32_t) odometry_counts_to_mm(odometry_path_since(
+                    status_board_path(p_snap), p_ctx->path_at_stop)));
     }
 
     switch (p_ctx->avoid_step)
@@ -1328,8 +1334,8 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
     else if ((RUN_SUB_SECOND == p_ctx->substep)
              && (APP_EVT_LINE_FOUND == type))
     {
-        done = odometry_counts_to_mm(status_board_path(p_snap)
-                                     - p_ctx->rejoin_start);
+        done = odometry_counts_to_mm(odometry_path_since(
+            status_board_path(p_snap), p_ctx->rejoin_start));
         if (!p_ctx->b_is_quiet)
         {
             /* casts: distance < 2047 mm, width 0..255 mm */
@@ -1433,12 +1439,40 @@ static void run_finish_avoid(mission_ctx_t * p_ctx,
 {
     p_ctx->b_post_avoid_slow = true;
     p_ctx->b_inhibit_pending = true;
-    p_ctx->inhibit_mark      = status_board_path(p_snap)
-                               + odometry_mm_to_counts(
-                                   MISSION_INHIBIT_CLEAR_MM);
+    p_ctx->inhibit_mark      = odometry_path_add(
+                                   status_board_path(p_snap),
+                                   odometry_mm_to_counts(
+                                       MISSION_INHIBIT_CLEAR_MM));
     p_ctx->avoid_step        = APP_AVOID_WAIT_PLAN;
     mission_run_resume_pulse(p_ctx, now_us);
     run_follow_or_armed(p_ctx, p_snap, now_us);
+}
+
+/**
+ * run_path_marks
+ * @brief   Path marks that can be held for any distance: the start of the
+ *          current following stretch and the end of the last rewind. The
+ *          board path wraps at 2^17 counts, so the following mark is kept
+ *          at most ODOMETRY_PATH_AGE_MAX behind and the rewind lock is
+ *          released once REARM mm have passed.
+ * @param   p_ctx  mission context
+ * @param   path   board path of this pass, counts
+ * @context mission_task
+ */
+static void run_path_marks(mission_ctx_t * p_ctx, uint32_t path)
+{
+    p_ctx->barcode_follow_path = odometry_path_age_cap(
+        path, p_ctx->barcode_follow_path);
+    if (p_ctx->b_rearm_wait
+        && (odometry_path_since(path, p_ctx->barcode_rearm_path)
+            >= odometry_mm_to_counts(MISSION_BARCODE_REARM_MM)))
+    {
+        p_ctx->b_rearm_wait = false;
+    }
+    else
+    {
+        /* Still locked, or no lock. */
+    }
 }
 
 /**
@@ -1463,8 +1497,11 @@ static void run_background(mission_ctx_t * p_ctx,
         }
     }
 
+    run_path_marks(p_ctx, status_board_path(p_snap));
+
     if (p_ctx->b_inhibit_pending
-        && (status_board_path(p_snap) >= p_ctx->inhibit_mark))
+        && odometry_path_reached(status_board_path(p_snap),
+                                 p_ctx->inhibit_mark))
     {
         p_ctx->b_inhibit_pending = false;
         p_ctx->b_post_avoid_slow = false;

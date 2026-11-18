@@ -8,6 +8,7 @@
 
 #include "line_track.h"
 #include "cfg_line.h"
+#include "../subsystem2/odometry.h"   /* wrapping path helpers */
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -225,6 +226,17 @@ uint32_t line_track_jct_step(line_track_jct_t * p_jct,
 
     if ((LINE_JCT_NULL != p_jct) && (LINE_JCT_IN_NULL != p_in))
     {
+        if (LINE_JCT_STATE_IDLE != p_jct->state)
+        {
+            /* The path wraps: keep a held mark from wrapping back. */
+            p_jct->mark_counts = odometry_path_age_cap(p_in->path_counts,
+                                                       p_jct->mark_counts);
+        }
+        else
+        {
+            /* No mark held in IDLE. */
+        }
+
         switch (p_jct->state)
         {
             case LINE_JCT_STATE_IDLE:
@@ -335,7 +347,8 @@ static void line_track_jct_candidate(line_track_jct_t * p_jct,
 
     if (sum < LINE_JCT_SUM_MIN)
     {
-        if ((p_in->path_counts - p_jct->mark_counts) >= p_in->min_counts)
+        if (odometry_path_since(p_in->path_counts, p_jct->mark_counts)
+            >= p_in->min_counts)
         {
             p_jct->mark_counts = p_in->path_counts;
             p_jct->state       = LINE_JCT_STATE_CONFIRM;
@@ -373,7 +386,8 @@ static uint32_t line_track_jct_confirm(line_track_jct_t * p_jct,
         /* No new barcode branch sequence reported during confirm window. */
     }
 
-    if ((p_in->path_counts - p_jct->mark_counts) >= p_in->confirm_counts)
+    if (odometry_path_since(p_in->path_counts, p_jct->mark_counts)
+        >= p_in->confirm_counts)
     {
         if (p_jct->b_sat_l && p_jct->b_sat_r)
         {
