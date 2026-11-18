@@ -404,17 +404,24 @@ int main(void)
         HOST_CHECK("S4-U17", !b_any, "only one sensor high: not lifted");
         b_any = false;
         cnt   = 0u;
-        for (idx = 0u; idx < 29u; idx++)    /* a 290 ms crest, then floor */
+        for (idx = 0u; idx < 100u; idx++)   /* dark ramp 13:28: 3708/3905 */
         {
-            cnt = terrain_ir_lift_step(cnt, 3926u, 3899u, &b_lift);
+            cnt = terrain_ir_lift_step(cnt, 3708u, 3905u, &b_lift);
             b_any = b_any || b_lift;
         }
-        cnt = terrain_ir_lift_step(cnt, 3200u, 3926u, &b_lift);
+        HOST_CHECK("S4-U17", !b_any && (0u == cnt),
+                   "dark ramp (L 3708, R 3905) for 1 s: never lifted");
+        for (idx = 0u; idx < 29u; idx++)    /* a 290 ms crest, then floor */
+        {
+            cnt = terrain_ir_lift_step(cnt, 3996u, 3999u, &b_lift);
+            b_any = b_any || b_lift;
+        }
+        cnt = terrain_ir_lift_step(cnt, 3200u, 3999u, &b_lift);
         HOST_CHECK("S4-U17", !b_any && !b_lift && (0u == cnt),
                    "290 ms with no floor, then floor: no stop, count reset");
         for (idx = 0u; idx < 29u; idx++)
         {
-            cnt = terrain_ir_lift_step(cnt, 4021u, 3999u, &b_lift);
+            cnt = terrain_ir_lift_step(cnt, 4021u, 3980u, &b_lift);
         }
         HOST_CHECK("S4-U17", !b_lift && (29u == cnt),
                    "logged level lift: not yet after 29 cycles");

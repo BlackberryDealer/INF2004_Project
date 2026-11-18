@@ -57,11 +57,12 @@
 /* Level lift (car run 2026-11-18 13:19, S4-U17): a smooth level lift
    keeps |a| at 1 g, so the IMU check never fires. With no floor under
    them both IR sensors read 3890..4067 raw; the darkest tape in every
-   run that day read <= 3570. Both above IMU_LIFT_IR_RAW_MIN for
+   run that day read <= 3570, the dark ramp up to 3905 (13:28). Both
+   above IMU_LIFT_IR_RAW_MIN (3950, lifted reads 3980..4067) for
    IMU_LIFT_IR_CYCLES cycles in a row (300 ms, longer than a crest or a
    cross at cruise speed) also sets SAFETY_LIFT. IR_LIFT_CNT in PRV_IMU_A
    is 5 bits, so IMU_LIFT_IR_CYCLES must stay <= 31.                  */
-#define IMU_LIFT_IR_RAW_MIN      (3850u) /* TUNE: raw ADC, no floor above */
+#define IMU_LIFT_IR_RAW_MIN      (3950u) /* TUNE: raw ADC, no floor above */
 #define IMU_LIFT_IR_CYCLES       (30u)   /* 300 ms in a row               */
 #define IMU_TURNING_DPS          (30)  /* TUNE */
 #define IMU_ACCEL_MG             (50)  /* TUNE */
