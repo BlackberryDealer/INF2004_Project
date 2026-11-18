@@ -18,6 +18,11 @@
 #include "app_layout.h"
 #include <math.h>
 
+/* Expected one-wheel hump heights scale with TERRAIN_ROLL_GAIN_PCT. */
+#define G_LO(mm) (((mm) * TERRAIN_ROLL_GAIN_PCT) / 100u)
+#define G_HI(mm) ((((mm) * TERRAIN_ROLL_GAIN_PCT) + 99u) / 100u)
+
+
 #define HOST_PI (3.14159265358979323846)
 
 /* Synthetic-hump replay parameters */
@@ -477,8 +482,8 @@ int main(void)
             total += done;
             n_rep += (done > 0u) ? 1u : 0u;
         }
-        HOST_CHECK("S4-U18", (1u == n_rep) && (total >= 7u) && (total <= 9u),
-                   "8 mm one-wheel hump (ay 64 mg): one report, 7..9 mm");
+        HOST_CHECK("S4-U18", (1u == n_rep) && (total >= G_LO(7u)) && (total <= G_HI(9u)),
+                   "8 mm one-wheel hump (ay 64 mg): one report, 7..9 mm x gain");
 
         /* same tilt either side: the sign does not matter */
         word  = zero;
@@ -489,8 +494,8 @@ int main(void)
             word = terrain_roll_hump_step(word, ay, 6, 6, &done);
             total += done;
         }
-        HOST_CHECK("S4-U18", (total >= 14u) && (total <= 15u),
-                   "+120 mg (other mounting sign): 15 mm");
+        HOST_CHECK("S4-U18", (total >= G_LO(14u)) && (total <= G_HI(15u)),
+                   "+120 mg (other mounting sign): 15 mm x gain");
 
         /* a curve: 80 mg sideways while turning never starts a hump */
         word  = zero;

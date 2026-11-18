@@ -66,6 +66,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-18 | S4-U17 | `tribunal1-car-test` | Hanz | PASS | Terrain host test | Level-lift IR check added after the 13:19 car run (level lift did not stop). Threshold raised 3850 -> 3950 after the 13:28 ramp read up to 3905. Host only. |
 | 2026-11-18 | S4-U17 | `3e0bba7` (3850) | Hanz | PASS | Car: smooth level lift, quick lift, ramp | 13:26 smooth lift stopped on IR (3996/3999), quick lift on the IMU (az 241 mg); 13:28 ramp run, no false stop (IR max 3708/3905). |
 | 2026-11-18 | S4-U18 | `tribunal1-car-test` | Hanz | PASS | Terrain host test | One-wheel hump added after the ramp runs reported 0 mm. Car run and ruler comparison pending (TERRAIN_ROLL_GAIN_PCT). Host only. |
+| 2026-11-18 | S4-U18 | `tribunal1-car-test` | Hanz | PASS | Car run, thin strip under the right wheel | v7 reported HUMP 15 mm, ruler 10 mm, so TERRAIN_ROLL_GAIN_PCT set to 67. Host expectations scale with the gain. Re-check on the car with v8. |
 
 ## SPEC-QUESTION
 

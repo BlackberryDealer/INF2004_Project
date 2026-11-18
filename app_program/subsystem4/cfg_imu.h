@@ -91,7 +91,7 @@
 #define TERRAIN_ROLL_HYST        (3u)   /* cycles, <= 7 (3-bit HYST)   */
 #define TERRAIN_ROLL_STRAIGHT_COUNTS (3) /* |dl - dr| per 10 ms, ~10 mg */
 #define TERRAIN_ROLL_MAX_TICKS   (200u) /* TUNE: 2 s, ramp rule, <= 255 */
-#define TERRAIN_ROLL_GAIN_PCT    (100u) /* MEASURE: ruler / reported   */
+#define TERRAIN_ROLL_GAIN_PCT    (67u)  /* car 18 Nov: 15 mm vs ruler 10 */
 #define TERRAIN_REPORT_MODE      (0u)  /* 0 integ, 1 geom, 2 mean */
 /* Forward acceleration gain: a change of 1 count per 50 ms window over
    50 ms is 14.2 mg. a = dcpw x um-per-count x 1000 / window^2 mm/s^2,
