@@ -187,8 +187,8 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | LEFT | PRV_BAR_LOG | 0..48 × 1 count | 1 | 6 | 6 | RNG | P | Raw edge log entries still to print |
 | CYCLE | PRV_BAR_LOG | 0..255 × 1 count | 1 | 8 | 8 | RAW | P | barcode_task cycle number; wraps (log keeps 8 bits; print every 4 cycles) |
 | WIDTH | PRV_BAR_W | 0..255 × 100 um | 100 | 8 | 8 | SAT | P | Element width x32 bytes |
-| CHAR | PRV_BAR_MAP | 0..63 × 1 code | 1 | 6 | 6 | ENUM | P | Map character (63 = empty) x8 |
-| CMD | PRV_BAR_MAP | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | Map command x8 |
+| CHAR | PRV_BAR_MAP | 0..63 × 1 code | 1 | 6 | 6 | ENUM | S | Map character (63 = empty) x8; mission_task writes one byte per update (MAP) and barcode_task reads whole bytes |
+| CMD | PRV_BAR_MAP | 0..3 × 1 code | 1 | 2 | 2 | ENUM | S | Map command x8 (same byte as CHAR) |
 | BRANCH_SEQ | SH_BAR | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | barcode_task -> line_task; wraps |
 | OVERFLOW | SH_BAR_OVF | 0..255 × 1 count | 1 | 8 | 8 | SAT | S | Ring overflows (ISR writer) |
 | COUNT | SH_BAR_EDGES | 0..65535 × 1 count | 1 | 16 | 16 | RAW | S | Accepted DO edges (ISR writer); wraps; readers compare for change or keep the low 8 bits |

@@ -25,6 +25,14 @@
 #include "sys_tick.h"
 #include "hmi.h"
 
+/* One packer serves BARCODE and MAP events: their fields must match. */
+#if (EVT_MAP_CHAR_POS != EVT_BARCODE_CHAR_POS)                          \
+    || (EVT_MAP_CHAR_BITS != EVT_BARCODE_CHAR_BITS)                     \
+    || (EVT_MAP_CMD_POS != EVT_BARCODE_CMD_POS)                         \
+    || (EVT_MAP_CMD_BITS != EVT_BARCODE_CMD_BITS)
+#error "EVT_MAP and EVT_BARCODE layouts differ; split mission_evt_barcode_value"
+#endif
+
 /* ---- private constants and types ------------------------------------ */
 
 /* K4 message: one MSG_EVT 16-bit word (Tribunal 1 min-bit change,
@@ -287,15 +295,24 @@ bool mission_post_event(uint32_t type, uint32_t value)
 
 /**
  * mission_evt_barcode_value
- * @brief   Packs a BARCODE / MAP event value.
- * @param   cmd        APP_BAR_CMD_* (bits 6-7)
- * @param   char_index Code 39 index 0..42 (bits 0-5)
+ * @brief   Packs a BARCODE / MAP event value with the generated
+ *          EVT_BARCODE layout (EVT_MAP has the same fields, checked at
+ *          compile time above).
+ * @param   cmd        APP_BAR_CMD_* (EVT_BARCODE CMD)
+ * @param   char_index Code 39 index 0..42 (EVT_BARCODE CHAR)
  * @return  the 8-bit event value
  * @context any task
  */
 uint32_t mission_evt_barcode_value(uint32_t cmd, uint32_t char_index)
 {
-    return ((char_index & 0x3Fu) | ((cmd & 0x3u) << 6u));
+    uint32_t value = 0u;
+
+    value = app_bits_put(value, EVT_BARCODE_CHAR_POS, EVT_BARCODE_CHAR_BITS,
+                         char_index);
+    value = app_bits_put(value, EVT_BARCODE_CMD_POS, EVT_BARCODE_CMD_BITS,
+                         cmd);
+
+    return value;
 }
 
 /**

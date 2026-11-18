@@ -269,8 +269,8 @@ PRV_BAR_LOG,32,CNT,6,1,count,0,48,0,SAT,P,B3,Raw edge log entries stored
 PRV_BAR_LOG,32,LEFT,6,1,count,0,48,0,RNG,P,B3,Raw edge log entries still to print
 PRV_BAR_LOG,32,CYCLE,8,1,count,0,255,0,RAW,P,B3,barcode_task cycle number; wraps (log keeps 8 bits; print every 4 cycles)
 PRV_BAR_W,8,WIDTH,8,100,um,0,255,0,SAT,P,B3,Element width x32 bytes
-PRV_BAR_MAP,8,CHAR,6,1,code,0,63,0,ENUM,P,B3,Map character (63 = empty) x8
-PRV_BAR_MAP,8,CMD,2,1,code,0,3,0,ENUM,P,B3,Map command x8
+PRV_BAR_MAP,8,CHAR,6,1,code,0,63,0,ENUM,S,B3,Map character (63 = empty) x8; mission_task writes one byte per update (MAP) and barcode_task reads whole bytes
+PRV_BAR_MAP,8,CMD,2,1,code,0,3,0,ENUM,S,B3,Map command x8 (same byte as CHAR)
 SH_BAR,8,BRANCH_SEQ,8,1,count,0,255,0,RAW,S,B3,barcode_task -> line_task; wraps
 SH_BAR_OVF,8,OVERFLOW,8,1,count,0,255,0,SAT,S,B3,Ring overflows (ISR writer)
 SH_BAR_EDGES,16,COUNT,16,1,count,0,65535,0,RAW,S,B3,Accepted DO edges (ISR writer); wraps; readers compare for change or keep the low 8 bits
