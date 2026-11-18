@@ -1690,7 +1690,37 @@
 #define PRV_LINE_A_CALIBRATED_MAX       (1)
 #define PRV_LINE_A_CALIBRATED_OFFSET    (0)
 #define PRV_LINE_A_CALIBRATED_KIND      (APP_KIND_FLAG)
-#define PRV_LINE_A_USED_BITS            (PRV_LINE_A_CALIBRATED_POS + PRV_LINE_A_CALIBRATED_BITS)
+#define PRV_LINE_A_REJOIN_WHITE_POS     (PRV_LINE_A_CALIBRATED_POS + PRV_LINE_A_CALIBRATED_BITS)
+#define PRV_LINE_A_REJOIN_WHITE_BITS    (1u)
+#define PRV_LINE_A_REJOIN_WHITE_MIN     (0)
+#define PRV_LINE_A_REJOIN_WHITE_MAX     (1)
+#define PRV_LINE_A_REJOIN_WHITE_OFFSET  (0)
+#define PRV_LINE_A_REJOIN_WHITE_KIND    (APP_KIND_FLAG)
+#define PRV_LINE_A_CROSS_STRT_POS       (PRV_LINE_A_REJOIN_WHITE_POS + PRV_LINE_A_REJOIN_WHITE_BITS)
+#define PRV_LINE_A_CROSS_STRT_BITS      (1u)
+#define PRV_LINE_A_CROSS_STRT_MIN       (0)
+#define PRV_LINE_A_CROSS_STRT_MAX       (1)
+#define PRV_LINE_A_CROSS_STRT_OFFSET    (0)
+#define PRV_LINE_A_CROSS_STRT_KIND      (APP_KIND_FLAG)
+#define PRV_LINE_A_BRANCH_SEEN_POS      (PRV_LINE_A_CROSS_STRT_POS + PRV_LINE_A_CROSS_STRT_BITS)
+#define PRV_LINE_A_BRANCH_SEEN_BITS     (1u)
+#define PRV_LINE_A_BRANCH_SEEN_MIN      (0)
+#define PRV_LINE_A_BRANCH_SEEN_MAX      (1)
+#define PRV_LINE_A_BRANCH_SEEN_OFFSET   (0)
+#define PRV_LINE_A_BRANCH_SEEN_KIND     (APP_KIND_FLAG)
+#define PRV_LINE_A_LAST_JCT_POS         (PRV_LINE_A_BRANCH_SEEN_POS + PRV_LINE_A_BRANCH_SEEN_BITS)
+#define PRV_LINE_A_LAST_JCT_BITS        (2u)
+#define PRV_LINE_A_LAST_JCT_MIN         (0)
+#define PRV_LINE_A_LAST_JCT_MAX         (3)
+#define PRV_LINE_A_LAST_JCT_OFFSET      (0)
+#define PRV_LINE_A_LAST_JCT_KIND        (APP_KIND_ENUM)
+#define PRV_LINE_A_RAW_LOG_CNT_POS      (PRV_LINE_A_LAST_JCT_POS + PRV_LINE_A_LAST_JCT_BITS)
+#define PRV_LINE_A_RAW_LOG_CNT_BITS     (6u)
+#define PRV_LINE_A_RAW_LOG_CNT_MIN      (0)
+#define PRV_LINE_A_RAW_LOG_CNT_MAX      (49)
+#define PRV_LINE_A_RAW_LOG_CNT_OFFSET   (0)
+#define PRV_LINE_A_RAW_LOG_CNT_KIND     (APP_KIND_RNG)
+#define PRV_LINE_A_USED_BITS            (PRV_LINE_A_RAW_LOG_CNT_POS + PRV_LINE_A_RAW_LOG_CNT_BITS)
 #if (PRV_LINE_A_USED_BITS > 32u)
 #error "Group PRV_LINE_A no longer fits in 32 bits"
 #endif
@@ -1737,6 +1767,30 @@
 #error "Group PRV_LINE_C no longer fits in 32 bits"
 #endif
 
+/* PRV_LINE_E: 32-bit word */
+#define PRV_LINE_E_WHITE_MARK_POS       (0u)
+#define PRV_LINE_E_WHITE_MARK_BITS      (17u)
+#define PRV_LINE_E_WHITE_MARK_MIN       (0)
+#define PRV_LINE_E_WHITE_MARK_MAX       (131071)
+#define PRV_LINE_E_WHITE_MARK_OFFSET    (0)
+#define PRV_LINE_E_WHITE_MARK_KIND      (APP_KIND_RAW)
+#define PRV_LINE_E_USED_BITS            (PRV_LINE_E_WHITE_MARK_POS + PRV_LINE_E_WHITE_MARK_BITS)
+#if (PRV_LINE_E_USED_BITS > 32u)
+#error "Group PRV_LINE_E no longer fits in 32 bits"
+#endif
+
+/* PRV_LINE_F: 32-bit word */
+#define PRV_LINE_F_CROSS_MARK_POS       (0u)
+#define PRV_LINE_F_CROSS_MARK_BITS      (17u)
+#define PRV_LINE_F_CROSS_MARK_MIN       (0)
+#define PRV_LINE_F_CROSS_MARK_MAX       (131071)
+#define PRV_LINE_F_CROSS_MARK_OFFSET    (0)
+#define PRV_LINE_F_CROSS_MARK_KIND      (APP_KIND_RAW)
+#define PRV_LINE_F_USED_BITS            (PRV_LINE_F_CROSS_MARK_POS + PRV_LINE_F_CROSS_MARK_BITS)
+#if (PRV_LINE_F_USED_BITS > 32u)
+#error "Group PRV_LINE_F no longer fits in 32 bits"
+#endif
+
 /* PRV_BAR_A: 32-bit word */
 #define PRV_BAR_A_STATE_POS             (0u)
 #define PRV_BAR_A_STATE_BITS            (2u)
@@ -1774,9 +1828,87 @@
 #define PRV_BAR_B_MARK_MAX              (131071)
 #define PRV_BAR_B_MARK_OFFSET           (0)
 #define PRV_BAR_B_MARK_KIND             (APP_KIND_RAW)
-#define PRV_BAR_B_USED_BITS             (PRV_BAR_B_MARK_POS + PRV_BAR_B_MARK_BITS)
+#define PRV_BAR_B_CARRY_POS             (PRV_BAR_B_MARK_POS + PRV_BAR_B_MARK_BITS)
+#define PRV_BAR_B_CARRY_BITS            (15u)
+#define PRV_BAR_B_CARRY_MIN             (0)
+#define PRV_BAR_B_CARRY_MAX             (32767)
+#define PRV_BAR_B_CARRY_OFFSET          (0)
+#define PRV_BAR_B_CARRY_KIND            (APP_KIND_SAT)
+#define PRV_BAR_B_USED_BITS             (PRV_BAR_B_CARRY_POS + PRV_BAR_B_CARRY_BITS)
 #if (PRV_BAR_B_USED_BITS > 32u)
 #error "Group PRV_BAR_B no longer fits in 32 bits"
+#endif
+
+/* PRV_BAR_C: 32-bit word */
+#define PRV_BAR_C_FIX_CNT_POS           (0u)
+#define PRV_BAR_C_FIX_CNT_BITS          (2u)
+#define PRV_BAR_C_FIX_CNT_MIN           (0)
+#define PRV_BAR_C_FIX_CNT_MAX           (3)
+#define PRV_BAR_C_FIX_CNT_OFFSET        (0)
+#define PRV_BAR_C_FIX_CNT_KIND          (APP_KIND_SAT)
+#define PRV_BAR_C_SETTLE_POS            (PRV_BAR_C_FIX_CNT_POS + PRV_BAR_C_FIX_CNT_BITS)
+#define PRV_BAR_C_SETTLE_BITS           (8u)
+#define PRV_BAR_C_SETTLE_MIN            (0)
+#define PRV_BAR_C_SETTLE_MAX            (249)
+#define PRV_BAR_C_SETTLE_OFFSET         (0)
+#define PRV_BAR_C_SETTLE_KIND           (APP_KIND_RNG)
+#define PRV_BAR_C_REREAD_FIRST_POS      (PRV_BAR_C_SETTLE_POS + PRV_BAR_C_SETTLE_BITS)
+#define PRV_BAR_C_REREAD_FIRST_BITS     (1u)
+#define PRV_BAR_C_REREAD_FIRST_MIN      (0)
+#define PRV_BAR_C_REREAD_FIRST_MAX      (1)
+#define PRV_BAR_C_REREAD_FIRST_OFFSET   (0)
+#define PRV_BAR_C_REREAD_FIRST_KIND     (APP_KIND_FLAG)
+#define PRV_BAR_C_PROBE_OK_POS          (PRV_BAR_C_REREAD_FIRST_POS + PRV_BAR_C_REREAD_FIRST_BITS)
+#define PRV_BAR_C_PROBE_OK_BITS         (1u)
+#define PRV_BAR_C_PROBE_OK_MIN          (0)
+#define PRV_BAR_C_PROBE_OK_MAX          (1)
+#define PRV_BAR_C_PROBE_OK_OFFSET       (0)
+#define PRV_BAR_C_PROBE_OK_KIND         (APP_KIND_FLAG)
+#define PRV_BAR_C_QUIET_KNOWN_POS       (PRV_BAR_C_PROBE_OK_POS + PRV_BAR_C_PROBE_OK_BITS)
+#define PRV_BAR_C_QUIET_KNOWN_BITS      (1u)
+#define PRV_BAR_C_QUIET_KNOWN_MIN       (0)
+#define PRV_BAR_C_QUIET_KNOWN_MAX       (1)
+#define PRV_BAR_C_QUIET_KNOWN_OFFSET    (0)
+#define PRV_BAR_C_QUIET_KNOWN_KIND      (APP_KIND_FLAG)
+#define PRV_BAR_C_START_PATH_POS        (PRV_BAR_C_QUIET_KNOWN_POS + PRV_BAR_C_QUIET_KNOWN_BITS)
+#define PRV_BAR_C_START_PATH_BITS       (17u)
+#define PRV_BAR_C_START_PATH_MIN        (0)
+#define PRV_BAR_C_START_PATH_MAX        (131071)
+#define PRV_BAR_C_START_PATH_OFFSET     (0)
+#define PRV_BAR_C_START_PATH_KIND       (APP_KIND_RAW)
+#define PRV_BAR_C_USED_BITS             (PRV_BAR_C_START_PATH_POS + PRV_BAR_C_START_PATH_BITS)
+#if (PRV_BAR_C_USED_BITS > 32u)
+#error "Group PRV_BAR_C no longer fits in 32 bits"
+#endif
+
+/* PRV_BAR_LOG: 32-bit word */
+#define PRV_BAR_LOG_HEAD_POS            (0u)
+#define PRV_BAR_LOG_HEAD_BITS           (6u)
+#define PRV_BAR_LOG_HEAD_MIN            (0)
+#define PRV_BAR_LOG_HEAD_MAX            (47)
+#define PRV_BAR_LOG_HEAD_OFFSET         (0)
+#define PRV_BAR_LOG_HEAD_KIND           (APP_KIND_RNG)
+#define PRV_BAR_LOG_CNT_POS             (PRV_BAR_LOG_HEAD_POS + PRV_BAR_LOG_HEAD_BITS)
+#define PRV_BAR_LOG_CNT_BITS            (6u)
+#define PRV_BAR_LOG_CNT_MIN             (0)
+#define PRV_BAR_LOG_CNT_MAX             (48)
+#define PRV_BAR_LOG_CNT_OFFSET          (0)
+#define PRV_BAR_LOG_CNT_KIND            (APP_KIND_SAT)
+#define PRV_BAR_LOG_LEFT_POS            (PRV_BAR_LOG_CNT_POS + PRV_BAR_LOG_CNT_BITS)
+#define PRV_BAR_LOG_LEFT_BITS           (6u)
+#define PRV_BAR_LOG_LEFT_MIN            (0)
+#define PRV_BAR_LOG_LEFT_MAX            (48)
+#define PRV_BAR_LOG_LEFT_OFFSET         (0)
+#define PRV_BAR_LOG_LEFT_KIND           (APP_KIND_RNG)
+#define PRV_BAR_LOG_CYCLE_POS           (PRV_BAR_LOG_LEFT_POS + PRV_BAR_LOG_LEFT_BITS)
+#define PRV_BAR_LOG_CYCLE_BITS          (8u)
+#define PRV_BAR_LOG_CYCLE_MIN           (0)
+#define PRV_BAR_LOG_CYCLE_MAX           (255)
+#define PRV_BAR_LOG_CYCLE_OFFSET        (0)
+#define PRV_BAR_LOG_CYCLE_KIND          (APP_KIND_RAW)
+#define PRV_BAR_LOG_USED_BITS           (PRV_BAR_LOG_CYCLE_POS + PRV_BAR_LOG_CYCLE_BITS)
+#if (PRV_BAR_LOG_USED_BITS > 32u)
+#error "Group PRV_BAR_LOG no longer fits in 32 bits"
 #endif
 
 /* PRV_BAR_W: 8-bit word */
@@ -1831,6 +1963,18 @@
 #define SH_BAR_OVF_USED_BITS            (SH_BAR_OVF_OVERFLOW_POS + SH_BAR_OVF_OVERFLOW_BITS)
 #if (SH_BAR_OVF_USED_BITS > 8u)
 #error "Group SH_BAR_OVF no longer fits in 8 bits"
+#endif
+
+/* SH_BAR_EDGES: 16-bit word */
+#define SH_BAR_EDGES_COUNT_POS          (0u)
+#define SH_BAR_EDGES_COUNT_BITS         (16u)
+#define SH_BAR_EDGES_COUNT_MIN          (0)
+#define SH_BAR_EDGES_COUNT_MAX          (65535)
+#define SH_BAR_EDGES_COUNT_OFFSET       (0)
+#define SH_BAR_EDGES_COUNT_KIND         (APP_KIND_RAW)
+#define SH_BAR_EDGES_USED_BITS          (SH_BAR_EDGES_COUNT_POS + SH_BAR_EDGES_COUNT_BITS)
+#if (SH_BAR_EDGES_USED_BITS > 16u)
+#error "Group SH_BAR_EDGES no longer fits in 16 bits"
 #endif
 
 /* SH_IR_RAW: 32-bit word */

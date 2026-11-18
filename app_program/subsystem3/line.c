@@ -34,6 +34,16 @@
     || (APP_JCT_SIDE_R > EVT_JUNCTION_CLASS_MAX)
 #error "APP_JCT_* codes no longer fit the junction fields in tools/layout.csv"
 #endif
+#if (APP_JCT_SIDE_R > PRV_LINE_A_LAST_JCT_MAX)
+#error "PRV_LINE_A.LAST_JCT must hold every APP_JCT_* code"
+#endif
+#if ((LINE_RAW_LOG_CYCLES - 1u) != PRV_LINE_A_RAW_LOG_CNT_MAX)
+#error "PRV_LINE_A.RAW_LOG_CNT must count up to LINE_RAW_LOG_CYCLES - 1"
+#endif
+#if (SB_MOT3_PATH_MAX != PRV_LINE_E_WHITE_MARK_MAX) \
+    || (SB_MOT3_PATH_MAX != PRV_LINE_F_CROSS_MARK_MAX)
+#error "PRV_LINE_E/F marks must hold the whole wrapping path"
+#endif
 
 /* ---- private data ---------------------------------------------------- */
 
@@ -53,20 +63,22 @@ static uint32_t           g_line_prv_d    = 0u; /* PRV_LINE_D: SEQ, PATH */
 /* SH_IR_RAW: last raw ADC pair for telemetry; line_task only writes. */
 static volatile uint32_t  g_sh_ir_raw     = 0u;
 
-/* Per-cycle caches for status board, rejoin latch, and bring-up logging. */
-static bool               gb_rejoin_white = false;
-/* Path where the current both-white stretch began (S3-U19, plain:
-   add to the Week 13 packing list).                                 */
-static uint32_t           g_white_mark    = 0u;
-/* Path at the last cycle with both sensors on a stripe; steering bias
-   is cleared until LINE_JUNCTION_EXIT_MM past it (gb_cross_straight). */
-static uint32_t           g_cross_mark    = 0u;
-static bool               gb_cross_straight = false;
-static bool               gb_branch_seen  = false;
-static uint8_t            g_last_jct      = (uint8_t) APP_JCT_NONE;
-static uint32_t           g_raw_log_cnt   = 0u;
+/* PRV_LINE_A also holds the rejoin latch (REJOIN_WHITE), the stripe
+   steering hold (CROSS_STRT), BRANCH_SEEN, the last junction class
+   (LAST_JCT, read for the status board) and the bring-up print divider
+   (RAW_LOG_CNT).
+   PRV_LINE_E WHITE_MARK: path where the current both-white stretch
+   began (S3-U19). PRV_LINE_F CROSS_MARK: path at the last cycle with
+   both sensors on a stripe; steering bias is cleared until
+   LINE_JUNCTION_EXIT_MM past it (CROSS_STRT).                        */
+static uint32_t           g_line_prv_e    = 0u; /* PRV_LINE_E: WHITE_MARK */
+static uint32_t           g_line_prv_f    = 0u; /* PRV_LINE_F: CROSS_MARK */
 
 /* ---- private function prototypes ------------------------------------- */
+
+static bool     line_a_flag(uint32_t pos);
+static void     line_a_flag_set(uint32_t pos, bool b_value);
+static uint32_t line_white_mark(void);
 
 static void     line_task(INT stacd, void * p_exinf);
 static void     line_cycle(void);
@@ -109,11 +121,11 @@ ER line_init(void)
     g_line_prv_b    = 0u;
     g_line_prv_c    = 0u;
     g_line_prv_d    = 0u;
-    gb_rejoin_white = false;
-    gb_branch_seen  = false;
-    gb_cross_straight = false;
-    g_last_jct      = (uint8_t) APP_JCT_NONE;
-    g_raw_log_cnt   = 0u;
+    line_a_flag_set(PRV_LINE_A_REJOIN_WHITE_POS, false);
+    line_a_flag_set(PRV_LINE_A_BRANCH_SEEN_POS, false);
+    line_a_flag_set(PRV_LINE_A_CROSS_STRT_POS, false);
+    g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_LAST_JCT_POS,
+                                PRV_LINE_A_LAST_JCT_BITS, APP_JCT_NONE);
 
     return E_OK;
 }
@@ -206,6 +218,44 @@ static void line_jct_unpack(line_track_jct_t * p_jct)
 }
 
 /**
+ * line_a_flag
+ * @brief   Reads one 1-bit flag of PRV_LINE_A.
+ * @param   pos  flag position (PRV_LINE_A_*_POS)
+ * @return  true when the flag is set
+ * @context line_task
+ */
+static bool line_a_flag(uint32_t pos)
+{
+    return (0u != app_bits_get(g_line_prv_a, pos, 1u));
+}
+
+/**
+ * line_a_flag_set
+ * @brief   Writes one 1-bit flag of PRV_LINE_A (line_task is the only
+ *          writer after init).
+ * @param   pos      flag position (PRV_LINE_A_*_POS)
+ * @param   b_value  new flag value
+ * @return  none
+ * @context line_task, usermain (init)
+ */
+static void line_a_flag_set(uint32_t pos, bool b_value)
+{
+    g_line_prv_a = app_bits_put(g_line_prv_a, pos, 1u, b_value ? 1u : 0u);
+}
+
+/**
+ * line_white_mark
+ * @brief   Path where the current both-white stretch began (PRV_LINE_E).
+ * @return  path, counts (17-bit wrapping)
+ * @context line_task
+ */
+static uint32_t line_white_mark(void)
+{
+    return app_bits_get(g_line_prv_e, PRV_LINE_E_WHITE_MARK_POS,
+                        PRV_LINE_E_WHITE_MARK_BITS);
+}
+
+/**
  * line_jct_pack
  * @brief   Packs line_track_jct_t into g_line_prv_a and g_line_prv_b.
  * @param   p_jct  Input junction state structure.
@@ -272,10 +322,17 @@ static void line_log_bringup(status_board_t const * p_snap,
 {
     if (!mission_mode_is_set(APP_MODE_MOTOR_EN))
     {
-        g_raw_log_cnt++;
-        if (g_raw_log_cnt >= LINE_RAW_LOG_CYCLES)
+        uint32_t const log_cnt = app_bits_get(g_line_prv_a,
+                                              PRV_LINE_A_RAW_LOG_CNT_POS,
+                                              PRV_LINE_A_RAW_LOG_CNT_BITS)
+                                 + 1u;
+
+        g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_RAW_LOG_CNT_POS,
+                                    PRV_LINE_A_RAW_LOG_CNT_BITS,
+                                    (log_cnt >= LINE_RAW_LOG_CYCLES)
+                                    ? 0u : log_cnt);
+        if (log_cnt >= LINE_RAW_LOG_CYCLES)
         {
-            g_raw_log_cnt = 0u;
             /* casts: ADC codes 0..4095 and level 0..1 fit int32_t */
             app_log("IR raw L %d R %d\n", (int32_t) raw_l,
                     (int32_t) raw_r, 0);
@@ -367,7 +424,9 @@ static void line_cycle(void)
     part.steering        = steering;
     part.line_status     = status;
     /* cast: widen 8-bit cached junction class to uint32_t */
-    part.junction        = (uint32_t) g_last_jct;
+    part.junction        = app_bits_get(g_line_prv_a,
+                                        PRV_LINE_A_LAST_JCT_POS,
+                                        PRV_LINE_A_LAST_JCT_BITS);
     part.b_is_calibrated = b_cal_ok;
     status_board_write_line(&part);
 }
@@ -407,10 +466,11 @@ static void line_reset_run_state(uint32_t path)
     word_d = app_bits_put(word_d, PRV_LINE_D_BRANCH_PATH_POS,
                           PRV_LINE_D_BRANCH_PATH_BITS, path_enc);
     g_line_prv_d    = word_d;
-    gb_rejoin_white = false;
-    gb_branch_seen  = false;
-    gb_cross_straight = false;
-    g_last_jct      = (uint8_t) APP_JCT_NONE;
+    line_a_flag_set(PRV_LINE_A_REJOIN_WHITE_POS, false);
+    line_a_flag_set(PRV_LINE_A_BRANCH_SEEN_POS, false);
+    line_a_flag_set(PRV_LINE_A_CROSS_STRT_POS, false);
+    g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_LAST_JCT_POS,
+                                PRV_LINE_A_LAST_JCT_BITS, APP_JCT_NONE);
 }
 
 /**
@@ -594,13 +654,19 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
     {
         if (0u == lost_cnt)
         {
-            g_white_mark = path;          /* both white from here */
+            /* both white from here */
+            g_line_prv_e = app_bits_put(
+                g_line_prv_e, PRV_LINE_E_WHITE_MARK_POS,
+                PRV_LINE_E_WHITE_MARK_BITS, path);
         }
         else
         {
             /* A centred stretch can last any distance: keep its age at
                the cap so it never wraps back below LINE_EXIT_LOST_MM. */
-            g_white_mark = odometry_path_age_cap(path, g_white_mark);
+            g_line_prv_e = app_bits_put(
+                g_line_prv_e, PRV_LINE_E_WHITE_MARK_POS,
+                PRV_LINE_E_WHITE_MARK_BITS,
+                odometry_path_age_cap(path, line_white_mark()));
         }
         if (lost_cnt < (uint32_t) PRV_LINE_A_LOST_CNT_MAX)
         {
@@ -617,7 +683,7 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
            travel counts in the path (on-car 12 Nov, S3-U44). After a
            black exit: lost after LINE_EXIT_LOST_MM (S3-U20).           */
         white_mm     = odometry_counts_to_mm(
-            odometry_path_since(path, g_white_mark));
+            odometry_path_since(path, line_white_mark()));
         b_is_between = line_track_steer_line_between(&g_steer);
         b_is_waiting = (!line_track_steer_line_between(&g_steer))
                        && (white_mm < LINE_EXIT_LOST_MM);
@@ -653,7 +719,7 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
     }
     else
     {
-        gb_rejoin_white = false;
+        line_a_flag_set(PRV_LINE_A_REJOIN_WHITE_POS, false);
         g_line_prv_a    = app_bits_put(g_line_prv_a, PRV_LINE_A_RUN_ACTIVE_POS,
                                        PRV_LINE_A_RUN_ACTIVE_BITS, 0u);
         if (b_is_black && b_lost_snt)
@@ -673,7 +739,7 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
  * line_handle_rejoin
  * @brief   Measures every black run after >= 2 white cycles in rejoin mode
  *          and posts APP_EVT_LINE_FOUND when the run ends or reaches 255 mm.
- *          Grey cycles at a 45-deg line edge do not clear gb_rejoin_white
+ *          Grey cycles at a 45-deg line edge do not clear REJOIN_WHITE
  *          (on-car log 2026-11-03, S3-U15).
  * @param   b_is_black  true if either channel >= LINE_BLACK_THRESHOLD.
  * @param   lost_cnt    White-cycle count updated this cycle.
@@ -691,7 +757,7 @@ static void line_handle_rejoin(bool b_is_black, uint32_t lost_cnt,
 
     if (lost_cnt >= LINE_REJOIN_WHITE_MIN)
     {
-        gb_rejoin_white = true;
+        line_a_flag_set(PRV_LINE_A_REJOIN_WHITE_POS, true);
     }
     else
     {
@@ -700,13 +766,13 @@ static void line_handle_rejoin(bool b_is_black, uint32_t lost_cnt,
 
     if (b_is_black)
     {
-        if ((!b_run_act) && gb_rejoin_white)
+        if ((!b_run_act) && line_a_flag(PRV_LINE_A_REJOIN_WHITE_POS))
         {
             uint32_t const mark_enc = line_clamp_u(
                 path, (uint32_t) PRV_LINE_C_RUN_MARK_MAX);
 
             b_run_act       = true;
-            gb_rejoin_white = false;
+            line_a_flag_set(PRV_LINE_A_REJOIN_WHITE_POS, false);
             run_mark        = mark_enc;
             g_line_prv_c = app_bits_put(g_line_prv_c, PRV_LINE_C_RUN_MARK_POS,
                                         PRV_LINE_C_RUN_MARK_BITS, mark_enc);
@@ -793,18 +859,19 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
                               PRV_LINE_D_BRANCH_PATH_BITS, path_enc);
         g_line_prv_d   = word_d;
         branch_path    = path_enc;
-        gb_branch_seen = true;
+        line_a_flag_set(PRV_LINE_A_BRANCH_SEEN_POS, true);
     }
     else
     {
         /* Branch counter unchanged this cycle. */
     }
 
-    if (gb_branch_seen
+    if (line_a_flag(PRV_LINE_A_BRANCH_SEEN_POS)
         && (odometry_path_since(path, branch_path)
             > odometry_mm_to_counts(LINE_BRANCH_EARLY_MM)))
     {
-        gb_branch_seen = false;   /* too old to matter; mark may wrap */
+        /* too old to matter; mark may wrap */
+        line_a_flag_set(PRV_LINE_A_BRANCH_SEEN_POS, false);
     }
     else
     {
@@ -815,7 +882,7 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
 
     if (b_inhibit_jct)
     {
-        gb_cross_straight = false;
+        line_a_flag_set(PRV_LINE_A_CROSS_STRT_POS, false);
         line_track_jct_reset(&jct);
         line_jct_pack(&jct);
     }
@@ -837,7 +904,7 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
         jct_in.confirm_counts  =
             odometry_mm_to_counts(LINE_JUNCTION_CONFIRM_MM);
         jct_in.b_branch_recent =
-            (gb_branch_seen
+            (line_a_flag(PRV_LINE_A_BRANCH_SEEN_POS)
              && (odometry_path_since(path, branch_path) <= early_cnt));
 
         jct_class = line_track_jct_step(&jct, &jct_in);
@@ -849,15 +916,20 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
         if ((norm_l >= LINE_BLACK_THRESHOLD)
             && (norm_r >= LINE_BLACK_THRESHOLD))
         {
-            g_cross_mark      = path;
-            gb_cross_straight = true;
+            g_line_prv_f = app_bits_put(g_line_prv_f,
+                                        PRV_LINE_F_CROSS_MARK_POS,
+                                        PRV_LINE_F_CROSS_MARK_BITS, path);
+            line_a_flag_set(PRV_LINE_A_CROSS_STRT_POS, true);
         }
         else if (((norm_l < LINE_WHITE_THRESHOLD)
                   && (norm_r < LINE_WHITE_THRESHOLD))
-                 || (odometry_path_since(path, g_cross_mark)
+                 || (odometry_path_since(
+                         path, app_bits_get(g_line_prv_f,
+                                            PRV_LINE_F_CROSS_MARK_POS,
+                                            PRV_LINE_F_CROSS_MARK_BITS))
                      >= odometry_mm_to_counts(LINE_JUNCTION_EXIT_MM)))
         {
-            gb_cross_straight = false;
+            line_a_flag_set(PRV_LINE_A_CROSS_STRT_POS, false);
         }
         else
         {
@@ -867,7 +939,7 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
         /* On the confirm cycle the bias is cleared only while tape is
            still under a sensor; centred and both white, steering is
            left alone.                                               */
-        b_reset_steer = gb_cross_straight
+        b_reset_steer = line_a_flag(PRV_LINE_A_CROSS_STRT_POS)
             || b_was_on_band
             || ((APP_JCT_CROSS == jct_class)
                 && ((norm_l >= LINE_WHITE_THRESHOLD)
@@ -878,9 +950,10 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
         if (APP_JCT_NONE != jct_class)
         {
             (void) mission_post_event(APP_EVT_JUNCTION, jct_class);
-            /* cast: APP_JCT_* enum 0..3 fits in uint8_t */
-            g_last_jct     = (uint8_t) jct_class;
-            gb_branch_seen = false;
+            g_line_prv_a = app_bits_put(g_line_prv_a,
+                                        PRV_LINE_A_LAST_JCT_POS,
+                                        PRV_LINE_A_LAST_JCT_BITS, jct_class);
+            line_a_flag_set(PRV_LINE_A_BRANCH_SEEN_POS, false);
         }
         else
         {

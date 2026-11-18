@@ -375,6 +375,11 @@ GROUPS = {
         ('RUN_ACTIVE', 1, 0, 1, 'flag'),
         ('CAL_ACTIVE', 1, 0, 1, 'flag'),
         ('CALIBRATED', 1, 0, 1, 'flag'),
+        ('REJOIN_WHITE', 1, 0, 1, 'flag'),
+        ('CROSS_STRT', 1, 0, 1, 'flag'),
+        ('BRANCH_SEEN', 1, 0, 1, 'flag'),
+        ('LAST_JCT', 2, 0, 1, 'code'),
+        ('RAW_LOG_CNT', 6, 0, 1, 'tick'),
     ],
     'PRV_LINE_D': [
         ('LAST_SEQ', 8, 0, 1, 'count'),
@@ -386,6 +391,12 @@ GROUPS = {
     'PRV_LINE_C': [
         ('RUN_MARK', 17, 0, 1, 'count'),
     ],
+    'PRV_LINE_E': [
+        ('WHITE_MARK', 17, 0, 1, 'count'),
+    ],
+    'PRV_LINE_F': [
+        ('CROSS_MARK', 17, 0, 1, 'count'),
+    ],
     'PRV_BAR_A': [
         ('STATE', 2, 0, 1, 'code'),
         ('N_ELEM', 6, 0, 1, 'count'),
@@ -394,6 +405,21 @@ GROUPS = {
     ],
     'PRV_BAR_B': [
         ('MARK', 17, 0, 1, 'count'),
+        ('CARRY', 15, 0, 16, 'us'),
+    ],
+    'PRV_BAR_C': [
+        ('FIX_CNT', 2, 0, 1, 'count'),
+        ('SETTLE', 8, 0, 16, 'us'),
+        ('REREAD_FIRST', 1, 0, 1, 'flag'),
+        ('PROBE_OK', 1, 0, 1, 'flag'),
+        ('QUIET_KNOWN', 1, 0, 1, 'flag'),
+        ('START_PATH', 17, 0, 1, 'count'),
+    ],
+    'PRV_BAR_LOG': [
+        ('HEAD', 6, 0, 1, 'slot'),
+        ('CNT', 6, 0, 1, 'count'),
+        ('LEFT', 6, 0, 1, 'count'),
+        ('CYCLE', 8, 0, 1, 'count'),
     ],
     'PRV_BAR_W': [
         ('WIDTH', 8, 0, 100, 'um'),
@@ -407,6 +433,9 @@ GROUPS = {
     ],
     'SH_BAR_OVF': [
         ('OVERFLOW', 8, 0, 1, 'count'),
+    ],
+    'SH_BAR_EDGES': [
+        ('COUNT', 16, 0, 1, 'count'),
     ],
     'SH_IR_RAW': [
         ('L', 12, 0, 1, 'adc'),

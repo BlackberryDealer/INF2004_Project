@@ -232,16 +232,35 @@ PRV_LINE_A,32,CAL_ACTIVE,1,1,flag,0,1,0,FLAG,P,B3,Calibration mode seen
 PRV_LINE_A,32,CALIBRATED,1,1,flag,0,1,0,FLAG,P,B3,Calibration valid
 PRV_LINE_B,32,JCT_MARK,17,1,count,0,131071,0,RAW,P,B3,Path at junction start (wrapping path)
 PRV_LINE_C,32,RUN_MARK,17,1,count,0,131071,0,RAW,P,B3,Path at black run start (wrapping path)
+PRV_LINE_A,32,REJOIN_WHITE,1,1,flag,0,1,0,FLAG,P,B3,Rejoin latch: both sensors saw white since the last black run
+PRV_LINE_A,32,CROSS_STRT,1,1,flag,0,1,0,FLAG,P,B3,Steering bias cleared until LINE_JUNCTION_EXIT_MM past CROSS_MARK
+PRV_LINE_A,32,BRANCH_SEEN,1,1,flag,0,1,0,FLAG,P,B3,A branch sequence change is still recent
+PRV_LINE_A,32,LAST_JCT,2,1,code,0,3,0,ENUM,P,B3,APP_JCT_* last junction class posted
+PRV_LINE_A,32,RAW_LOG_CNT,6,1,tick,0,49,0,RNG,P,B3,Bring-up raw print divider (LINE_RAW_LOG_CYCLES 50)
+PRV_LINE_E,32,WHITE_MARK,17,1,count,0,131071,0,RAW,P,B3,Path where the current both-white stretch began (S3-U19; wrapping path)
+PRV_LINE_F,32,CROSS_MARK,17,1,count,0,131071,0,RAW,P,B3,Path at the last cycle with both sensors on a stripe (wrapping path)
 PRV_BAR_A,32,STATE,2,1,code,0,3,0,ENUM,P,B3,Decoder state
 PRV_BAR_A,32,N_ELEM,6,1,count,0,63,0,SAT,P,B3,Elements captured
 PRV_BAR_A,32,LAST_LEVEL,1,1,flag,0,1,0,FLAG,P,B3,Level of the last entry
 PRV_BAR_A,32,CLAMP_AGE,5,1,count,0,29,0,SAT,P,B3,Elements stored after the last clamped gap; 29 = none in the decode window (S3-U48)
 PRV_BAR_B,32,MARK,17,1,count,0,131071,0,RAW,P,B3,Path at last edge or cooldown start (wrapping path)
+PRV_BAR_B,32,CARRY,15,16,us,0,32767,0,SAT,P,B3,Flicker time carried into the next element (S3-U37); saturates like MSG_EDGE GAP
+PRV_BAR_C,32,FIX_CNT,2,1,count,0,3,0,SAT,P,B3,Level fixes in this capture (BAR_LEVEL_FIX_MAX)
+PRV_BAR_C,32,SETTLE,8,16,us,0,249,0,RNG,P,B3,Time since the last accepted DO transition while under BAR_SETTLE_US (S3-U37)
+PRV_BAR_C,32,REREAD_FIRST,1,1,flag,0,1,0,FLAG,P,B3,Verified reread lead-in: the first transition starts the capture
+PRV_BAR_C,32,PROBE_OK,1,1,flag,0,1,0,FLAG,P,B3,Probe accepted the first bars of this capture
+PRV_BAR_C,32,QUIET_KNOWN,1,1,flag,0,1,0,FLAG,P,B3,Sensor known to be on white with no edge behind it
+PRV_BAR_C,32,START_PATH,17,1,count,0,131071,0,RAW,P,B3,Path at capture start (wrapping path)
+PRV_BAR_LOG,32,HEAD,6,1,slot,0,47,0,RNG,P,B3,Raw edge log next slot (BAR_EDGE_LOG_MAX 48; bring-up log S3-U36)
+PRV_BAR_LOG,32,CNT,6,1,count,0,48,0,SAT,P,B3,Raw edge log entries stored
+PRV_BAR_LOG,32,LEFT,6,1,count,0,48,0,RNG,P,B3,Raw edge log entries still to print
+PRV_BAR_LOG,32,CYCLE,8,1,count,0,255,0,RAW,P,B3,barcode_task cycle number; wraps (log keeps 8 bits; print every 4 cycles)
 PRV_BAR_W,8,WIDTH,8,100,um,0,255,0,SAT,P,B3,Element width x32 bytes
 PRV_BAR_MAP,8,CHAR,6,1,code,0,63,0,ENUM,P,B3,Map character (63 = empty) x8
 PRV_BAR_MAP,8,CMD,2,1,code,0,3,0,ENUM,P,B3,Map command x8
 SH_BAR,8,BRANCH_SEQ,8,1,count,0,255,0,RAW,S,B3,barcode_task -> line_task; wraps
 SH_BAR_OVF,8,OVERFLOW,8,1,count,0,255,0,SAT,S,B3,Ring overflows (ISR writer)
+SH_BAR_EDGES,16,COUNT,16,1,count,0,65535,0,RAW,S,B3,Accepted DO edges (ISR writer); wraps; readers compare for change or keep the low 8 bits
 E_LINE,32,RECIP,18,1,Q16,0,0,0,RAW,E,B3,E8 precomputed reciprocals x2
 E_BAR,8,HEAD_TAIL,6,1,index,0,0,0,RAW,E,B3,E6 ring head (ISR) and tail (task): one writer per byte
 E_BAR_US,32,LAST_US,31,1,us,0,0,0,RAW,E,B3,E5 ISR-private last accepted edge time (own E group and bits=31 for gen_layout.py; SPEC-QUESTION SQ-B3-1)

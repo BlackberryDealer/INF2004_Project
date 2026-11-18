@@ -163,16 +163,35 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | CALIBRATED | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Calibration valid |
 | JCT_MARK | PRV_LINE_B | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at junction start (wrapping path) |
 | RUN_MARK | PRV_LINE_C | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at black run start (wrapping path) |
+| REJOIN_WHITE | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Rejoin latch: both sensors saw white since the last black run |
+| CROSS_STRT | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Steering bias cleared until LINE_JUNCTION_EXIT_MM past CROSS_MARK |
+| BRANCH_SEEN | PRV_LINE_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | A branch sequence change is still recent |
+| LAST_JCT | PRV_LINE_A | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | APP_JCT_* last junction class posted |
+| RAW_LOG_CNT | PRV_LINE_A | 0..49 × 1 tick | 1 | 6 | 6 | RNG | P | Bring-up raw print divider (LINE_RAW_LOG_CYCLES 50) |
+| WHITE_MARK | PRV_LINE_E | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path where the current both-white stretch began (S3-U19; wrapping path) |
+| CROSS_MARK | PRV_LINE_F | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at the last cycle with both sensors on a stripe (wrapping path) |
 | STATE | PRV_BAR_A | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | Decoder state |
 | N_ELEM | PRV_BAR_A | 0..63 × 1 count | 1 | 6 | 6 | SAT | P | Elements captured |
 | LAST_LEVEL | PRV_BAR_A | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Level of the last entry |
 | CLAMP_AGE | PRV_BAR_A | 0..29 × 1 count | 1 | 5 | 5 | SAT | P | Elements stored after the last clamped gap; 29 = none in the decode window (S3-U48) |
 | MARK | PRV_BAR_B | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at last edge or cooldown start (wrapping path) |
+| CARRY | PRV_BAR_B | 0..32767 × 16 us | 16 | 15 | 15 | SAT | P | Flicker time carried into the next element (S3-U37); saturates like MSG_EDGE GAP |
+| FIX_CNT | PRV_BAR_C | 0..3 × 1 count | 1 | 2 | 2 | SAT | P | Level fixes in this capture (BAR_LEVEL_FIX_MAX) |
+| SETTLE | PRV_BAR_C | 0..249 × 16 us | 16 | 8 | 8 | RNG | P | Time since the last accepted DO transition while under BAR_SETTLE_US (S3-U37) |
+| REREAD_FIRST | PRV_BAR_C | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Verified reread lead-in: the first transition starts the capture |
+| PROBE_OK | PRV_BAR_C | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Probe accepted the first bars of this capture |
+| QUIET_KNOWN | PRV_BAR_C | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Sensor known to be on white with no edge behind it |
+| START_PATH | PRV_BAR_C | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at capture start (wrapping path) |
+| HEAD | PRV_BAR_LOG | 0..47 × 1 slot | 1 | 6 | 6 | RNG | P | Raw edge log next slot (BAR_EDGE_LOG_MAX 48; bring-up log S3-U36) |
+| CNT | PRV_BAR_LOG | 0..48 × 1 count | 1 | 6 | 6 | SAT | P | Raw edge log entries stored |
+| LEFT | PRV_BAR_LOG | 0..48 × 1 count | 1 | 6 | 6 | RNG | P | Raw edge log entries still to print |
+| CYCLE | PRV_BAR_LOG | 0..255 × 1 count | 1 | 8 | 8 | RAW | P | barcode_task cycle number; wraps (log keeps 8 bits; print every 4 cycles) |
 | WIDTH | PRV_BAR_W | 0..255 × 100 um | 100 | 8 | 8 | SAT | P | Element width x32 bytes |
 | CHAR | PRV_BAR_MAP | 0..63 × 1 code | 1 | 6 | 6 | ENUM | P | Map character (63 = empty) x8 |
 | CMD | PRV_BAR_MAP | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | Map command x8 |
 | BRANCH_SEQ | SH_BAR | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | barcode_task -> line_task; wraps |
 | OVERFLOW | SH_BAR_OVF | 0..255 × 1 count | 1 | 8 | 8 | SAT | S | Ring overflows (ISR writer) |
+| COUNT | SH_BAR_EDGES | 0..65535 × 1 count | 1 | 16 | 16 | RAW | S | Accepted DO edges (ISR writer); wraps; readers compare for change or keep the low 8 bits |
 | RECIP | E_LINE | 0..0 × 1 Q16 | 1 | 0 | 32 | RAW | E | E8 precomputed reciprocals x2 |
 | HEAD_TAIL | E_BAR | 0..0 × 1 index | 1 | 0 | 8 | RAW | E | E6 ring head (ISR) and tail (task): one writer per byte |
 | LAST_US | E_BAR_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 ISR-private last accepted edge time (own E group and bits=31 for gen_layout.py; SPEC-QUESTION SQ-B3-1) |
@@ -360,16 +379,21 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_CMD_T | 16 | 16 |
 | PRV_CAL_L | 24 | 32 |
 | PRV_CAL_R | 24 | 32 |
-| PRV_LINE_A | 21 | 32 |
+| PRV_LINE_A | 32 | 32 |
 | PRV_LINE_D | 25 | 32 |
 | PRV_LINE_B | 17 | 32 |
 | PRV_LINE_C | 17 | 32 |
+| PRV_LINE_E | 17 | 32 |
+| PRV_LINE_F | 17 | 32 |
 | PRV_BAR_A | 14 | 32 |
-| PRV_BAR_B | 17 | 32 |
+| PRV_BAR_B | 32 | 32 |
+| PRV_BAR_C | 30 | 32 |
+| PRV_BAR_LOG | 26 | 32 |
 | PRV_BAR_W | 8 | 8 |
 | PRV_BAR_MAP | 8 | 8 |
 | SH_BAR | 8 | 8 |
 | SH_BAR_OVF | 8 | 8 |
+| SH_BAR_EDGES | 16 | 16 |
 | SH_IR_RAW | 24 | 32 |
 | SH_IMU_ACC | 30 | 32 |
 
