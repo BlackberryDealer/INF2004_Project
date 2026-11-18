@@ -540,4 +540,93 @@ GROUPS = {
     'SH_OBS_CHK': [
         ('DONE', 1, 0, 1, 'flag'),
     ],
+    'PRV_MIS_A': [
+        ('DIFF_AT_STOP', 19, 262144, 1, 'count'),
+        ('REJOIN_E', 11, 0, 1, 'mm'),
+        ('END_REASON', 2, 0, 1, 'code'),
+    ],
+    'PRV_MIS_B': [
+        ('CAL_DIFF0', 19, 262144, 1, 'count'),
+        ('LAST_FAULTS', 10, 0, 1, 'mask'),
+        ('SYS_STATE', 3, 0, 1, 'code'),
+    ],
+    'PRV_MIS_C': [
+        ('RETRY_PARAM', 18, 131072, 1, 'mm|deg'),
+        ('BAR_BACK_LEFT', 10, 0, 1, 'mm'),
+        ('SYS_REQUEST', 4, 0, 1, 'code'),
+    ],
+    'PRV_MIS_D': [
+        ('BAR_MARK', 17, 0, 1, 'count'),
+        ('MOVE_LIMIT_MS', 15, 0, 1, 'ms'),
+    ],
+    'PRV_MIS_E': [
+        ('BAR_PROBE_MARK', 17, 0, 1, 'count'),
+        ('LEG_LAT', 10, 0, 1, 'mm'),
+        ('RUN_STATE', 3, 0, 1, 'code'),
+        ('ARMED_CMD', 2, 0, 1, 'code'),
+    ],
+    'PRV_MIS_F': [
+        ('BAR_REARM_PATH', 17, 0, 1, 'count'),
+        ('LEG_FWD', 10, 0, 1, 'mm'),
+        ('AVOID_STEP', 3, 0, 1, 'code'),
+        ('NO_PATH_CNT', 2, 0, 1, 'count'),
+    ],
+    'PRV_MIS_H': [
+        ('BAR_FOLLOW', 17, 0, 1, 'count'),
+        ('ARMED_CHAR', 6, 0, 1, 'code'),
+        ('SUBSTEP', 3, 0, 1, 'step'),
+        ('BAR_PHASE', 3, 0, 1, 'code'),
+        ('RETRY_KIND', 3, 0, 1, 'code'),
+    ],
+    'PRV_MIS_J': [
+        ('BAR_BACK_PATH', 17, 0, 1, 'count'),
+        ('BAR_TRIES', 2, 0, 1, 'count'),
+        ('SEARCH_FIRST', 2, 0, 1, 'code'),
+        ('CAL_CORR_CNT', 2, 0, 1, 'count'),
+        ('WAIT_TAG', 2, 0, 1, 'count'),
+        ('ARMED', 1, 0, 1, 'flag'),
+        ('PROBE_PENDING', 1, 0, 1, 'flag'),
+        ('REARM_WAIT', 1, 0, 1, 'flag'),
+        ('SIDE', 1, 0, 1, 'flag'),
+        ('WARNING', 1, 0, 1, 'flag'),
+        ('RESUME_PENDING', 1, 0, 1, 'flag'),
+        ('INHIBIT_PEND', 1, 0, 1, 'flag'),
+    ],
+    'PRV_MIS_K': [
+        ('BAR_EDGE_PATH', 17, 0, 1, 'count'),
+        ('FR9_RUNNING', 1, 0, 1, 'flag'),
+        ('WAIT_STILL', 1, 0, 1, 'flag'),
+        ('CREEPING', 1, 0, 1, 'flag'),
+        ('CREPT', 1, 0, 1, 'flag'),
+        ('HAS_RUN', 1, 0, 1, 'flag'),
+        ('POST_AVOID', 1, 0, 1, 'flag'),
+        ('QUIET', 1, 0, 1, 'flag'),
+        ('MOVE_PENDING', 1, 0, 1, 'flag'),
+        ('RETRY_PENDING', 1, 0, 1, 'flag'),
+        ('MOTION_FAILED', 1, 0, 1, 'flag'),
+        ('IMU_VALID', 1, 0, 1, 'flag'),
+        ('IR_VALID', 1, 0, 1, 'flag'),
+        ('WDT_ENABLED', 1, 0, 1, 'flag'),
+        ('RUN_STARTING', 1, 0, 1, 'flag'),
+        ('ZERO_DONE', 1, 0, 1, 'flag'),
+    ],
+    'PRV_MIS_L': [
+        ('PATH_AT_STOP', 17, 0, 1, 'count'),
+        ('RECOVERING', 1, 0, 1, 'flag'),
+    ],
+    'PRV_MIS_M': [
+        ('RUN_ODO_MARK', 17, 0, 1, 'count'),
+    ],
+    'PRV_MIS_N': [
+        ('RUN_ODO', 17, 0, 1, 'count'),
+    ],
+    'PRV_MIS_P': [
+        ('REJOIN_START', 17, 0, 1, 'count'),
+    ],
+    'PRV_MIS_Q': [
+        ('INHIBIT_MARK', 17, 0, 1, 'count'),
+    ],
+    'PRV_MIS_R': [
+        ('BAR_EDGES', 16, 0, 1, 'count'),
+    ],
 }

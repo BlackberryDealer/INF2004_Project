@@ -359,6 +359,66 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | DONE | SH_OBS_CHK | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | obstacle_task has checked in (obstacle_task writes; mission_task reads; own byte) |
 | TIME | E_HLT_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 timer images x3 (obstacle check-in; watchdog enable; last feed): ages are compared with limits above 65 ms (bits=31 for gen_layout.py) |
 | MAX_US | E_HLT_GAP | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E7 longest gap between two watchdog feeds (bring-up latency figure; bits=31 for gen_layout.py) |
+| DIFF_AT_STOP | PRV_MIS_A | -262142..262142 × 1 count | 1 | 19 | 19 | RNG | P | pos_l - pos_r when the bypass started (A23) |
+| REJOIN_E | PRV_MIS_A | 0..1442 × 1 mm | 1 | 11 | 11 | RNG | P | Expected rejoin distance: LEG_LAT x 1.414 |
+| END_REASON | PRV_MIS_A | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | APP_END_* |
+| CAL_DIFF0 | PRV_MIS_B | -262142..262142 × 1 count | 1 | 19 | 19 | RNG | P | pos_l - pos_r when CAL_IR started (A23) |
+| LAST_FAULTS | PRV_MIS_B | 0..1023 × 1 mask | 1 | 10 | 10 | RAW | P | APP_FAULT_* mask seen last pass |
+| SYS_STATE | PRV_MIS_B | 0..7 × 1 code | 1 | 3 | 3 | ENUM | P | APP_SYS_* |
+| RETRY_PARAM | PRV_MIS_C | -131071..131071 × 1 mm\|deg | 1 | 18 | 18 | RNG | P | Parameter to retry; the largest caller is the CAL_IR return turn (\|heading\| / 100) |
+| BAR_BACK_LEFT | PRV_MIS_C | 0..600 × 1 mm | 1 | 10 | 10 | RNG | P | Rewind still to send (<= MISSION_BARCODE_REWIND_MM) |
+| SYS_REQUEST | PRV_MIS_C | 0..8 × 1 code | 1 | 4 | 4 | ENUM | P | APP_SYS_* requested by a RUN handler; 8 = none (MISSION_REQ_NONE) |
+| BAR_MARK | PRV_MIS_D | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Rewind target; progress or read start (wrapping path) |
+| MOVE_LIMIT_MS | PRV_MIS_D | 0..21469 × 1 ms | 1 | 15 | 15 | RNG | P | Deadline of the tracked move: 2047 mm at 150 mm/s x 1.5 + 1 s at most |
+| BAR_PROBE_MARK | PRV_MIS_E | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Pending rewind target (wrapping path) |
+| LEG_LAT | PRV_MIS_E | 0..1020 × 1 mm | 1 | 10 | 10 | RNG | P | Planned lateral leg (from SB_OBS2) |
+| RUN_STATE | PRV_MIS_E | 0..4 × 1 code | 1 | 3 | 3 | ENUM | P | APP_RUN_* |
+| ARMED_CMD | PRV_MIS_E | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | APP_BAR_CMD_* |
+| BAR_REARM_PATH | PRV_MIS_F | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path when the last rewind or read ended |
+| LEG_FWD | PRV_MIS_F | 0..1020 × 1 mm | 1 | 10 | 10 | RNG | P | Planned forward leg (from SB_OBS2) |
+| AVOID_STEP | PRV_MIS_F | 0..6 × 1 code | 1 | 3 | 3 | ENUM | P | APP_AVOID_* |
+| NO_PATH_CNT | PRV_MIS_F | 0..3 × 1 count | 1 | 2 | 2 | SAT | P | NO_PATH answers for this obstacle (counts to 2; not read) |
+| BAR_FOLLOW | PRV_MIS_H | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Start of the current following stretch |
+| ARMED_CHAR | PRV_MIS_H | 0..63 × 1 code | 1 | 6 | 6 | RNG | P | Decoded Code 39 index (RUN_BAR_CHAR_MASK) |
+| SUBSTEP | PRV_MIS_H | 0..5 × 1 step | 1 | 3 | 3 | RNG | P | Step in a sweep / turn / rejoin (RUN_SUB_* or MISSION_CAL_SUB_*) |
+| BAR_PHASE | PRV_MIS_H | 0..4 × 1 code | 1 | 3 | 3 | ENUM | P | RUN_BAR_* rewind / reread phase |
+| RETRY_KIND | PRV_MIS_H | 0..4 × 1 code | 1 | 3 | 3 | ENUM | P | MISSION_MV_* to retry |
+| BAR_BACK_PATH | PRV_MIS_J | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path when the reverse command started |
+| BAR_TRIES | PRV_MIS_J | 0..2 × 1 count | 1 | 2 | 2 | RNG | P | Slow passes retried for this strip (MISSION_BARCODE_RETRIES) |
+| SEARCH_FIRST | PRV_MIS_J | 0..3 × 1 code | 1 | 2 | 2 | ENUM | P | MISSION_MV_LEFT / RIGHT: first search sweep |
+| CAL_CORR_CNT | PRV_MIS_J | 0..2 × 1 count | 1 | 2 | 2 | RNG | P | Heading return turns after the sweep (MISSION_CAL_CORR_MAX) |
+| WAIT_TAG | PRV_MIS_J | 0..3 × 1 count | 1 | 2 | 2 | RAW | P | Tag of the awaited move (MSG_CMD TAG) |
+| ARMED | PRV_MIS_J | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | A barcode command is stored |
+| PROBE_PENDING | PRV_MIS_J | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | PROBE_MARK holds a target |
+| REARM_WAIT | PRV_MIS_J | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | No rewind until REARM mm past REARM_PATH |
+| SIDE | PRV_MIS_J | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Planned bypass side (APP_SIDE_*) |
+| WARNING | PRV_MIS_J | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | is warning |
+| RESUME_PENDING | PRV_MIS_J | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | resume pending |
+| INHIBIT_PEND | PRV_MIS_J | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | inhibit pending |
+| BAR_EDGE_PATH | PRV_MIS_K | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at the last edge or black sample |
+| FR9_RUNNING | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | fr9 running |
+| WAIT_STILL | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | wait standstill |
+| CREEPING | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | creeping |
+| CREPT | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | crept |
+| HAS_RUN | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | has run |
+| POST_AVOID | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | post avoid slow |
+| QUIET | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | is quiet |
+| MOVE_PENDING | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | move pending |
+| RETRY_PENDING | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | retry pending |
+| MOTION_FAILED | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | motion failed |
+| IMU_VALID | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | imu valid |
+| IR_VALID | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | ir valid |
+| WDT_ENABLED | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | wdt enabled |
+| RUN_STARTING | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | run starting |
+| ZERO_DONE | PRV_MIS_K | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | zero done |
+| PATH_AT_STOP | PRV_MIS_L | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path when the bypass started |
+| RECOVERING | PRV_MIS_L | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | recovering |
+| RUN_ODO_MARK | PRV_MIS_M | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path when RUN_ODO was last summed |
+| RUN_ODO | PRV_MIS_N | 0..131071 × 1 count | 1 | 17 | 17 | RNG | P | Path travelled this run; saturates at MISSION_ODO_MAX_COUNTS |
+| REJOIN_START | PRV_MIS_P | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at the rejoin move |
+| INHIBIT_MARK | PRV_MIS_Q | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at which the inhibits clear |
+| BAR_EDGES | PRV_MIS_R | 0..65535 × 1 count | 1 | 16 | 16 | RAW | P | Last observed SH_BAR_EDGES count |
+| TIME | E_MIS_RUN | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 mission timer images x12 (barcode phase; CAL_IR; sweep; warning; search; FR9; resume; run start / end; move; RUN_START; recovery): intervals exceed 65 ms (bits=31 for gen_layout.py) |
 
 ## Groups
 
@@ -473,6 +533,21 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_MIS_G | 22 | 32 |
 | PRV_HLT | 3 | 8 |
 | SH_OBS_CHK | 1 | 8 |
+| PRV_MIS_A | 32 | 32 |
+| PRV_MIS_B | 32 | 32 |
+| PRV_MIS_C | 32 | 32 |
+| PRV_MIS_D | 32 | 32 |
+| PRV_MIS_E | 32 | 32 |
+| PRV_MIS_F | 32 | 32 |
+| PRV_MIS_H | 32 | 32 |
+| PRV_MIS_J | 32 | 32 |
+| PRV_MIS_K | 32 | 32 |
+| PRV_MIS_L | 18 | 32 |
+| PRV_MIS_M | 17 | 32 |
+| PRV_MIS_N | 17 | 32 |
+| PRV_MIS_P | 17 | 32 |
+| PRV_MIS_Q | 17 | 32 |
+| PRV_MIS_R | 16 | 32 |
 
 ## Range assumptions
 

@@ -325,3 +325,63 @@ PRV_HLT,8,STARTED,1,1,flag,0,1,0,FLAG,P,B5,All four tasks checked in; normal win
 SH_OBS_CHK,8,DONE,1,1,flag,0,1,0,FLAG,S,B5,obstacle_task has checked in (obstacle_task writes; mission_task reads; own byte)
 E_HLT_US,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 timer images x3 (obstacle check-in; watchdog enable; last feed): ages are compared with limits above 65 ms (bits=31 for gen_layout.py)
 E_HLT_GAP,32,MAX_US,31,1,us,0,0,0,RAW,E,B5,E7 longest gap between two watchdog feeds (bring-up latency figure; bits=31 for gen_layout.py)
+PRV_MIS_A,32,DIFF_AT_STOP,19,1,count,-262142,262142,262144,RNG,P,B5,pos_l - pos_r when the bypass started (A23)
+PRV_MIS_A,32,REJOIN_E,11,1,mm,0,1442,0,RNG,P,B5,Expected rejoin distance: LEG_LAT x 1.414
+PRV_MIS_A,32,END_REASON,2,1,code,0,3,0,ENUM,P,B5,APP_END_*
+PRV_MIS_B,32,CAL_DIFF0,19,1,count,-262142,262142,262144,RNG,P,B5,pos_l - pos_r when CAL_IR started (A23)
+PRV_MIS_B,32,LAST_FAULTS,10,1,mask,0,1023,0,RAW,P,B5,APP_FAULT_* mask seen last pass
+PRV_MIS_B,32,SYS_STATE,3,1,code,0,7,0,ENUM,P,B5,APP_SYS_*
+PRV_MIS_C,32,RETRY_PARAM,18,1,mm|deg,-131071,131071,131072,RNG,P,B5,Parameter to retry; the largest caller is the CAL_IR return turn (|heading| / 100)
+PRV_MIS_C,32,BAR_BACK_LEFT,10,1,mm,0,600,0,RNG,P,B5,Rewind still to send (<= MISSION_BARCODE_REWIND_MM)
+PRV_MIS_C,32,SYS_REQUEST,4,1,code,0,8,0,ENUM,P,B5,APP_SYS_* requested by a RUN handler; 8 = none (MISSION_REQ_NONE)
+PRV_MIS_D,32,BAR_MARK,17,1,count,0,131071,0,RAW,P,B5,Rewind target; progress or read start (wrapping path)
+PRV_MIS_D,32,MOVE_LIMIT_MS,15,1,ms,0,21469,0,RNG,P,B5,Deadline of the tracked move: 2047 mm at 150 mm/s x 1.5 + 1 s at most
+PRV_MIS_E,32,BAR_PROBE_MARK,17,1,count,0,131071,0,RAW,P,B5,Pending rewind target (wrapping path)
+PRV_MIS_E,32,LEG_LAT,10,1,mm,0,1020,0,RNG,P,B5,Planned lateral leg (from SB_OBS2)
+PRV_MIS_E,32,RUN_STATE,3,1,code,0,4,0,ENUM,P,B5,APP_RUN_*
+PRV_MIS_E,32,ARMED_CMD,2,1,code,0,3,0,ENUM,P,B5,APP_BAR_CMD_*
+PRV_MIS_F,32,BAR_REARM_PATH,17,1,count,0,131071,0,RAW,P,B5,Path when the last rewind or read ended
+PRV_MIS_F,32,LEG_FWD,10,1,mm,0,1020,0,RNG,P,B5,Planned forward leg (from SB_OBS2)
+PRV_MIS_F,32,AVOID_STEP,3,1,code,0,6,0,ENUM,P,B5,APP_AVOID_*
+PRV_MIS_F,32,NO_PATH_CNT,2,1,count,0,3,0,SAT,P,B5,NO_PATH answers for this obstacle (counts to 2; not read)
+PRV_MIS_H,32,BAR_FOLLOW,17,1,count,0,131071,0,RAW,P,B5,Start of the current following stretch
+PRV_MIS_H,32,ARMED_CHAR,6,1,code,0,63,0,RNG,P,B5,Decoded Code 39 index (RUN_BAR_CHAR_MASK)
+PRV_MIS_H,32,SUBSTEP,3,1,step,0,5,0,RNG,P,B5,Step in a sweep / turn / rejoin (RUN_SUB_* or MISSION_CAL_SUB_*)
+PRV_MIS_H,32,BAR_PHASE,3,1,code,0,4,0,ENUM,P,B5,RUN_BAR_* rewind / reread phase
+PRV_MIS_H,32,RETRY_KIND,3,1,code,0,4,0,ENUM,P,B5,MISSION_MV_* to retry
+PRV_MIS_J,32,BAR_BACK_PATH,17,1,count,0,131071,0,RAW,P,B5,Path when the reverse command started
+PRV_MIS_J,32,BAR_TRIES,2,1,count,0,2,0,RNG,P,B5,Slow passes retried for this strip (MISSION_BARCODE_RETRIES)
+PRV_MIS_J,32,SEARCH_FIRST,2,1,code,0,3,0,ENUM,P,B5,MISSION_MV_LEFT / RIGHT: first search sweep
+PRV_MIS_J,32,CAL_CORR_CNT,2,1,count,0,2,0,RNG,P,B5,Heading return turns after the sweep (MISSION_CAL_CORR_MAX)
+PRV_MIS_J,32,WAIT_TAG,2,1,count,0,3,0,RAW,P,B5,Tag of the awaited move (MSG_CMD TAG)
+PRV_MIS_J,32,ARMED,1,1,flag,0,1,0,FLAG,P,B5,A barcode command is stored
+PRV_MIS_J,32,PROBE_PENDING,1,1,flag,0,1,0,FLAG,P,B5,PROBE_MARK holds a target
+PRV_MIS_J,32,REARM_WAIT,1,1,flag,0,1,0,FLAG,P,B5,No rewind until REARM mm past REARM_PATH
+PRV_MIS_J,32,SIDE,1,1,flag,0,1,0,FLAG,P,B5,Planned bypass side (APP_SIDE_*)
+PRV_MIS_J,32,WARNING,1,1,flag,0,1,0,FLAG,P,B5,is warning
+PRV_MIS_J,32,RESUME_PENDING,1,1,flag,0,1,0,FLAG,P,B5,resume pending
+PRV_MIS_J,32,INHIBIT_PEND,1,1,flag,0,1,0,FLAG,P,B5,inhibit pending
+PRV_MIS_K,32,BAR_EDGE_PATH,17,1,count,0,131071,0,RAW,P,B5,Path at the last edge or black sample
+PRV_MIS_K,32,FR9_RUNNING,1,1,flag,0,1,0,FLAG,P,B5,fr9 running
+PRV_MIS_K,32,WAIT_STILL,1,1,flag,0,1,0,FLAG,P,B5,wait standstill
+PRV_MIS_K,32,CREEPING,1,1,flag,0,1,0,FLAG,P,B5,creeping
+PRV_MIS_K,32,CREPT,1,1,flag,0,1,0,FLAG,P,B5,crept
+PRV_MIS_K,32,HAS_RUN,1,1,flag,0,1,0,FLAG,P,B5,has run
+PRV_MIS_K,32,POST_AVOID,1,1,flag,0,1,0,FLAG,P,B5,post avoid slow
+PRV_MIS_K,32,QUIET,1,1,flag,0,1,0,FLAG,P,B5,is quiet
+PRV_MIS_K,32,MOVE_PENDING,1,1,flag,0,1,0,FLAG,P,B5,move pending
+PRV_MIS_K,32,RETRY_PENDING,1,1,flag,0,1,0,FLAG,P,B5,retry pending
+PRV_MIS_K,32,MOTION_FAILED,1,1,flag,0,1,0,FLAG,P,B5,motion failed
+PRV_MIS_K,32,IMU_VALID,1,1,flag,0,1,0,FLAG,P,B5,imu valid
+PRV_MIS_K,32,IR_VALID,1,1,flag,0,1,0,FLAG,P,B5,ir valid
+PRV_MIS_K,32,WDT_ENABLED,1,1,flag,0,1,0,FLAG,P,B5,wdt enabled
+PRV_MIS_K,32,RUN_STARTING,1,1,flag,0,1,0,FLAG,P,B5,run starting
+PRV_MIS_K,32,ZERO_DONE,1,1,flag,0,1,0,FLAG,P,B5,zero done
+PRV_MIS_L,32,PATH_AT_STOP,17,1,count,0,131071,0,RAW,P,B5,Path when the bypass started
+PRV_MIS_L,32,RECOVERING,1,1,flag,0,1,0,FLAG,P,B5,recovering
+PRV_MIS_M,32,RUN_ODO_MARK,17,1,count,0,131071,0,RAW,P,B5,Path when RUN_ODO was last summed
+PRV_MIS_N,32,RUN_ODO,17,1,count,0,131071,0,RNG,P,B5,Path travelled this run; saturates at MISSION_ODO_MAX_COUNTS
+PRV_MIS_P,32,REJOIN_START,17,1,count,0,131071,0,RAW,P,B5,Path at the rejoin move
+PRV_MIS_Q,32,INHIBIT_MARK,17,1,count,0,131071,0,RAW,P,B5,Path at which the inhibits clear
+PRV_MIS_R,32,BAR_EDGES,16,1,count,0,65535,0,RAW,P,B5,Last observed SH_BAR_EDGES count
+E_MIS_RUN,32,TIME,31,1,us,0,0,0,RAW,E,B5,E5 mission timer images x12 (barcode phase; CAL_IR; sweep; warning; search; FR9; resume; run start / end; move; RUN_START; recovery): intervals exceed 65 ms (bits=31 for gen_layout.py)

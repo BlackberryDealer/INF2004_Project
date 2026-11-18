@@ -12,6 +12,88 @@
 #include <stdio.h>
 #include <string.h>
 #include "app_program/subsystem5/mission.c"
+
+/* mission.c keeps the state packed between passes (PRV_MIS_*); the
+   simulation drives the natural-type working copy and sends it through
+   the same save / load as mission_task before and after every pass.  */
+static mission_ctx_t g_ctx;
+static int g_rt_bad;
+static int ctx_differs(mission_ctx_t const * a, mission_ctx_t const * b) {
+  return (a->sys_state != b->sys_state) ||
+      (a->run_state != b->run_state) ||
+      (a->avoid_step != b->avoid_step) ||
+      (a->substep != b->substep) ||
+      (a->end_reason != b->end_reason) ||
+      (a->b_is_armed != b->b_is_armed) ||
+      (a->armed_cmd != b->armed_cmd) ||
+      (a->armed_char != b->armed_char) ||
+      (a->no_path_cnt != b->no_path_cnt) ||
+      (a->last_faults != b->last_faults) ||
+      (a->sys_request != b->sys_request) ||
+      (a->barcode_phase != b->barcode_phase) ||
+      (a->barcode_mark != b->barcode_mark) ||
+      (a->barcode_probe_mark != b->barcode_probe_mark) ||
+      (a->b_probe_pending != b->b_probe_pending) ||
+      (a->barcode_rearm_path != b->barcode_rearm_path) ||
+      (a->b_rearm_wait != b->b_rearm_wait) ||
+      (a->barcode_follow_path != b->barcode_follow_path) ||
+      (a->barcode_back_path != b->barcode_back_path) ||
+      (a->barcode_back_left != b->barcode_back_left) ||
+      (a->barcode_tries != b->barcode_tries) ||
+      (a->barcode_edge_path != b->barcode_edge_path) ||
+      (a->barcode_edges != b->barcode_edges) ||
+      (a->path_at_stop != b->path_at_stop) ||
+      (a->diff_at_stop != b->diff_at_stop) ||
+      (a->run_odo_mark != b->run_odo_mark) ||
+      (a->run_odo_counts != b->run_odo_counts) ||
+      (a->rejoin_start != b->rejoin_start) ||
+      (a->inhibit_mark != b->inhibit_mark) ||
+      (a->side != b->side) ||
+      (a->leg_lat_mm != b->leg_lat_mm) ||
+      (a->leg_fwd_mm != b->leg_fwd_mm) ||
+      (a->rejoin_e_mm != b->rejoin_e_mm) ||
+      (a->search_first != b->search_first) ||
+      (a->cal_diff0 != b->cal_diff0) ||
+      (a->cal_corr_cnt != b->cal_corr_cnt) ||
+      (a->wait_tag != b->wait_tag) ||
+      (a->move_limit_ms != b->move_limit_ms) ||
+      (a->retry_kind != b->retry_kind) ||
+      (a->retry_param != b->retry_param) ||
+      (a->b_is_warning != b->b_is_warning) ||
+      (a->b_resume_pending != b->b_resume_pending) ||
+      (a->b_inhibit_pending != b->b_inhibit_pending) ||
+      (a->b_fr9_running != b->b_fr9_running) ||
+      (a->b_wait_standstill != b->b_wait_standstill) ||
+      (a->b_creeping != b->b_creeping) ||
+      (a->b_crept != b->b_crept) ||
+      (a->b_has_run != b->b_has_run) ||
+      (a->b_post_avoid_slow != b->b_post_avoid_slow) ||
+      (a->b_is_quiet != b->b_is_quiet) ||
+      (a->b_move_pending != b->b_move_pending) ||
+      (a->b_retry_pending != b->b_retry_pending) ||
+      (a->b_motion_failed != b->b_motion_failed) ||
+      (a->b_imu_valid != b->b_imu_valid) ||
+      (a->b_ir_valid != b->b_ir_valid) ||
+      (a->b_wdt_enabled != b->b_wdt_enabled) ||
+      (a->b_run_starting != b->b_run_starting) ||
+      (a->b_zero_done != b->b_zero_done) ||
+      (a->b_recovering != b->b_recovering) ||
+      (a->barcode_since_us != b->barcode_since_us) ||
+      (a->cal_start_us != b->cal_start_us) ||
+      (a->sweep_start_us != b->sweep_start_us) ||
+      (a->warn_start_us != b->warn_start_us) ||
+      (a->search_start_us != b->search_start_us) ||
+      (a->fr9_start_us != b->fr9_start_us) ||
+      (a->resume_start_us != b->resume_start_us) ||
+      (a->run_start_us != b->run_start_us) ||
+      (a->run_end_us != b->run_end_us) ||
+      (a->move_start_us != b->move_start_us) ||
+      (a->run_start_set_us != b->run_start_set_us) ||
+      (a->recover_start_us != b->recover_start_us); }
+static void ctx_roundtrip(void) { mission_ctx_t rt;
+  mission_ctx_save(&g_ctx); mission_ctx_load(&rt);
+  if (ctx_differs(&g_ctx, &rt)) { g_rt_bad++; printf("ROUNDTRIP MISMATCH sys %u run %u sub %u\n", g_ctx.sys_state, g_ctx.run_state, g_ctx.substep); }
+  g_ctx = rt; }
 #include "app_program/app_bits.h"
 #include "app_program/app_layout.h"
 #include "app_program/subsystem2/safety.h"
@@ -121,7 +203,7 @@ static status_board_motion_t mot; static status_board_obs_t obs;
 static void step(uint32_t type, uint32_t value, bool has) {
   mission_evt_in_t e = {has, type, value}, b = {false, 0, 0}; status_board_t snap;
   g_now += 10000u; status_board_write_motion(&mot); status_board_write_obstacle(&obs);
-  status_board_read(&snap); mlog[0] = 0; mission_pass(&g_ctx, &e, &b, &snap, g_now); }
+  status_board_read(&snap); mlog[0] = 0; ctx_roundtrip(); mission_pass(&g_ctx, &e, &b, &snap, g_now); ctx_roundtrip(); }
 #define EV(t, v) step((t), (v), true)
 #define DONE() step(APP_EVT_MOVE_DONE, g_tag, true)
 #define NONE() step(0, 0, false)
@@ -964,5 +1046,87 @@ int main(void) {
       CHECK("S5-U05", 468u == cases, "468 state/event combinations tried (18 states x 26 types)");
       CHECK("S5-U05", 0u == bad, "every outcome is a defined state"); }
     printf("[TEST] S5-U04/U05 mission host tests SUMMARY %d passed, %d failed\n", pass_n - p0, fail_n - f0); }
+  { /* S5-PACK: every field of mission_ctx_t, random values over its whole
+       row range (extremes included), survives mission_ctx_save / _load. */
+    int bad = 0; uint32_t k = 0u; uint32_t seed = 12345u;
+    for (k = 0u; k < 20000u; k++) {
+      mission_ctx_t c, back;
+#define rnd32() (seed = seed * 1103515245u + 12345u, ((seed >> 8) ^ (seed << 13)))
+    c.sys_state = rnd32() % 8u;
+    c.run_state = rnd32() % 5u;
+    c.avoid_step = rnd32() % 7u;
+    c.substep = rnd32() % 6u;
+    c.end_reason = rnd32() % 4u;
+    c.b_is_armed = (0u != (rnd32() & 1u));
+    c.armed_cmd = rnd32() % 4u;
+    c.armed_char = rnd32() % 64u;
+    c.no_path_cnt = rnd32() % 4u;
+    c.last_faults = rnd32() % 1024u;
+    c.sys_request = (0u == (rnd32() % 9u)) ? MISSION_REQ_NONE : (rnd32() % 8u);
+    c.barcode_phase = rnd32() % 5u;
+    c.barcode_mark = rnd32() % 131072u;
+    c.barcode_probe_mark = rnd32() % 131072u;
+    c.b_probe_pending = (0u != (rnd32() & 1u));
+    c.barcode_rearm_path = rnd32() % 131072u;
+    c.b_rearm_wait = (0u != (rnd32() & 1u));
+    c.barcode_follow_path = rnd32() % 131072u;
+    c.barcode_back_path = rnd32() % 131072u;
+    c.barcode_back_left = rnd32() % 601u;
+    c.barcode_tries = rnd32() % 3u;
+    c.barcode_edge_path = rnd32() % 131072u;
+    c.barcode_edges = rnd32() % 65536u;
+    c.path_at_stop = rnd32() % 131072u;
+    c.diff_at_stop = (int32_t) (rnd32() % 524285u) - 262142;
+    c.run_odo_mark = rnd32() % 131072u;
+    c.run_odo_counts = rnd32() % 131072u;
+    c.rejoin_start = rnd32() % 131072u;
+    c.inhibit_mark = rnd32() % 131072u;
+    c.side = rnd32() % 2u;
+    c.leg_lat_mm = rnd32() % 1021u;
+    c.leg_fwd_mm = rnd32() % 1021u;
+    c.rejoin_e_mm = rnd32() % 1443u;
+    c.search_first = rnd32() % 4u;
+    c.cal_diff0 = (int32_t) (rnd32() % 524285u) - 262142;
+    c.cal_corr_cnt = rnd32() % 3u;
+    c.wait_tag = rnd32() % 4u;
+    c.move_limit_ms = rnd32() % 21470u;
+    c.retry_kind = rnd32() % 5u;
+    c.retry_param = (int32_t) (rnd32() % 262143u) - 131071;
+    c.b_is_warning = (0u != (rnd32() & 1u));
+    c.b_resume_pending = (0u != (rnd32() & 1u));
+    c.b_inhibit_pending = (0u != (rnd32() & 1u));
+    c.b_fr9_running = (0u != (rnd32() & 1u));
+    c.b_wait_standstill = (0u != (rnd32() & 1u));
+    c.b_creeping = (0u != (rnd32() & 1u));
+    c.b_crept = (0u != (rnd32() & 1u));
+    c.b_has_run = (0u != (rnd32() & 1u));
+    c.b_post_avoid_slow = (0u != (rnd32() & 1u));
+    c.b_is_quiet = (0u != (rnd32() & 1u));
+    c.b_move_pending = (0u != (rnd32() & 1u));
+    c.b_retry_pending = (0u != (rnd32() & 1u));
+    c.b_motion_failed = (0u != (rnd32() & 1u));
+    c.b_imu_valid = (0u != (rnd32() & 1u));
+    c.b_ir_valid = (0u != (rnd32() & 1u));
+    c.b_wdt_enabled = (0u != (rnd32() & 1u));
+    c.b_run_starting = (0u != (rnd32() & 1u));
+    c.b_zero_done = (0u != (rnd32() & 1u));
+    c.b_recovering = (0u != (rnd32() & 1u));
+    c.barcode_since_us = rnd32();
+    c.cal_start_us = rnd32();
+    c.sweep_start_us = rnd32();
+    c.warn_start_us = rnd32();
+    c.search_start_us = rnd32();
+    c.fr9_start_us = rnd32();
+    c.resume_start_us = rnd32();
+    c.run_start_us = rnd32();
+    c.run_end_us = rnd32();
+    c.move_start_us = rnd32();
+    c.run_start_set_us = rnd32();
+    c.recover_start_us = rnd32();
+#undef rnd32
+      mission_ctx_save(&c); mission_ctx_load(&back);
+      if (ctx_differs(&c, &back)) { bad++; } }
+    CHECK("S5-PACK", 0 == bad && 0 == g_rt_bad, "packed mission state: 20000 random states over every row range, and every simulated pass, round-trip unchanged"); }
+  if (0 != g_rt_bad) { printf("[TEST] S5-PACK FAIL  %d packed-state round trips changed a field\n", g_rt_bad); return 1; }
   return fail_n;
 }
