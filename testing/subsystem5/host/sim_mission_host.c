@@ -693,32 +693,32 @@ int main(void) {
   mot.speed_l_cpw = mot.speed_r_cpw = 0;
   mot.path_counts = odometry_mm_to_counts(700u);
   NONE();
-  CHECK("S5-U68", !strcmp(mlog, "B150 "), "rewind to the pass start: 310 + 70 mm");
+  CHECK("S5-U81", !strcmp(mlog, "B150 "),
+        "retry rewinds to the pass start: 310 + 10 mm (not + 70)");
   barcode_test_back(850u, 0u, 0u); DONE();
   CHECK("S5-U68", !strcmp(mlog, "B150 "), "second reverse move");
   barcode_test_back(1000u, 0u, 0u); DONE();
-  CHECK("S5-U68", !strcmp(mlog, "B80 "), "last reverse move");
-  barcode_test_back(1080u, 0u, 0u); DONE();
+  CHECK("S5-U81", !strcmp(mlog, "B20 "), "last reverse move: 320 mm in all");
+  barcode_test_back(1020u, 0u, 0u); DONE();
   barcode_test_still();
   CHECK("S5-U68", !strcmp(mlog, "FOL60 ") && MODE(APP_MODE_BARCODE_REREAD),
         "second slow pass");
-  mot.path_counts = odometry_mm_to_counts(1480u);
+  mot.path_counts = odometry_mm_to_counts(1420u);
   EV(APP_EVT_JUNCTION, APP_JCT_CROSS);
   CHECK("S5-U68", !strcmp(mlog, "STOP0 ") && 2u == g_ctx.barcode_tries
         && APP_RUN_EXECUTE_TURN != g_ctx.run_state,
         "a pass that reaches the cross undecoded also retries");
   mot.motion_state = APP_MOT_BRAKE;
   mot.speed_l_cpw = mot.speed_r_cpw = 0;
-  mot.path_counts = odometry_mm_to_counts(1490u);
+  mot.path_counts = odometry_mm_to_counts(1430u);
   NONE();
   CHECK("S5-U68", !strcmp(mlog, "B150 "), "the cross does not block the rewind");
-  barcode_test_back(1640u, 0u, 0u); DONE();
-  CHECK("S5-U68", !strcmp(mlog, "B150 "), "410 + 70 mm in 150 mm moves");
-  barcode_test_back(1790u, 0u, 0u); DONE();
-  CHECK("S5-U68", !strcmp(mlog, "B150 "), "third 150 mm move");
-  barcode_test_back(1940u, 0u, 0u); DONE();
-  CHECK("S5-U68", !strcmp(mlog, "B30 "), "last move");
-  barcode_test_back(1970u, 0u, 0u); DONE();
+  barcode_test_back(1580u, 0u, 0u); DONE();
+  CHECK("S5-U68", !strcmp(mlog, "B150 "), "410 + 10 mm in 150 mm moves");
+  barcode_test_back(1730u, 0u, 0u); DONE();
+  CHECK("S5-U81", !strcmp(mlog, "B120 "),
+        "last move: the second retry also stops 10 mm past its pass start");
+  barcode_test_back(1850u, 0u, 0u); DONE();
   barcode_test_still();
   CHECK("S5-U68", !strcmp(mlog, "FOL60 "), "third slow pass");
   obs.scanner_state = APP_SCAN_APPROACH;

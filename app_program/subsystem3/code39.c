@@ -92,11 +92,14 @@ static uint32_t code39_try_both(uint8_t const * p_widths,
                                 uint32_t * p_char_index);
 static uint32_t code39_decode_char_split(uint8_t const * p_widths,
                                          uint32_t start_idx,
+                                         uint32_t bar_ratio_x10,
                                          uint32_t * p_char_out,
                                          uint32_t * p_thr_space);
 static uint32_t code39_try_split_dir(uint8_t const * p_widths,
+                                     uint32_t bar_ratio_x10,
                                      uint32_t * p_char_index);
 static uint32_t code39_try_split_both(uint8_t const * p_widths,
+                                      uint32_t bar_ratio_x10,
                                       uint32_t * p_char_index);
 
 static bool     code39_guard_matches(uint8_t const * p_widths,
@@ -153,11 +156,26 @@ uint32_t code39_decode(uint8_t const * p_widths, uint32_t count,
 
         if (CODE39_OK != result)
         {
-            result = code39_try_split_both(adjusted, p_char_index);
+            result = code39_try_split_both(adjusted, BAR_WIDE_RATIO_X10_MIN,
+                                           p_char_index);
         }
         else
         {
             /* Pooled global threshold already decoded valid frame. */
+        }
+
+        if (CODE39_OK != result)
+        {
+            /* Last try (S3-U51): one grey bar read 12.4 mm against 18 mm
+               wide bars (on-car 18 Nov 12:24) compresses that character's
+               bar ratio to 1.47. Bars only: spaces, both guards, the gaps
+               and the data character are still checked as before.      */
+            result = code39_try_split_both(adjusted, BAR_SPLIT_RATIO_X10_LOW,
+                                           p_char_index);
+        }
+        else
+        {
+            /* Decoded with the standard ratio. */
         }
     }
     else
@@ -448,6 +466,7 @@ static uint32_t code39_try_both(uint8_t const * p_widths,
  *          its 5 bars (even offsets) and 4 spaces (odd offsets).
  * @param   p_widths     Array of 29 element widths.
  * @param   start_idx    Character start offset (0, 10, or 20).
+ * @param   bar_ratio_x10  Minimum wide/narrow bar ratio x10.
  * @param   p_char_out   Output character index (0..43).
  * @param   p_thr_space  Output space threshold for inter-char gap check.
  * @return  CODE39_OK or CODE39_INVALID.
@@ -455,6 +474,7 @@ static uint32_t code39_try_both(uint8_t const * p_widths,
  */
 static uint32_t code39_decode_char_split(uint8_t const * p_widths,
                                          uint32_t start_idx,
+                                         uint32_t bar_ratio_x10,
                                          uint32_t * p_char_out,
                                          uint32_t * p_thr_space)
 {
@@ -487,8 +507,7 @@ static uint32_t code39_decode_char_split(uint8_t const * p_widths,
         uint32_t       thr_b = 0u;
         uint32_t       thr_s = 0u;
 
-        if (((b_wid * CODE39_RATIO_SCALE) >=
-             (b_nar * BAR_WIDE_RATIO_X10_MIN)) &&
+        if (((b_wid * CODE39_RATIO_SCALE) >= (b_nar * bar_ratio_x10)) &&
             ((s_wid * CODE39_RATIO_SCALE) >=
              (s_nar * BAR_WIDE_RATIO_X10_MIN)))
         {
@@ -546,11 +565,13 @@ static uint32_t code39_decode_char_split(uint8_t const * p_widths,
  * @brief   Decodes a 29-element frame in one direction using separate
  *          per-character bar and space thresholds.
  * @param   p_widths      Array of 29 element widths.
+ * @param   bar_ratio_x10 Minimum wide/narrow bar ratio x10.
  * @param   p_char_index  Output data character index (0..42) if valid.
  * @return  CODE39_OK or CODE39_INVALID.
  * @context barcode_task
  */
 static uint32_t code39_try_split_dir(uint8_t const * p_widths,
+                                     uint32_t bar_ratio_x10,
                                      uint32_t * p_char_index)
 {
     uint32_t result = CODE39_INVALID;
@@ -562,11 +583,14 @@ static uint32_t code39_try_split_dir(uint8_t const * p_widths,
     uint32_t thr_s2 = 0u;
 
     if ((CODE39_OK == code39_decode_char_split(
-            p_widths, CODE39_CHAR0_START, &ch0, &thr_s0)) &&
+            p_widths, CODE39_CHAR0_START, bar_ratio_x10, &ch0,
+            &thr_s0)) &&
         (CODE39_OK == code39_decode_char_split(
-            p_widths, CODE39_CHAR1_START, &ch1, &thr_s1)) &&
+            p_widths, CODE39_CHAR1_START, bar_ratio_x10, &ch1,
+            &thr_s1)) &&
         (CODE39_OK == code39_decode_char_split(
-            p_widths, CODE39_CHAR2_START, &ch2, &thr_s2)))
+            p_widths, CODE39_CHAR2_START, bar_ratio_x10, &ch2,
+            &thr_s2)))
     {
         uint32_t const gap1 = (uint32_t) p_widths[CODE39_GAP1_IDX]; /* cast */
         uint32_t const gap2 = (uint32_t) p_widths[CODE39_GAP2_IDX]; /* cast */
@@ -596,14 +620,17 @@ static uint32_t code39_try_split_dir(uint8_t const * p_widths,
  * code39_try_split_both
  * @brief   Attempts split bar/space decode in forward then reverse order.
  * @param   p_widths      Array of 29 element widths.
+ * @param   bar_ratio_x10 Minimum wide/narrow bar ratio x10.
  * @param   p_char_index  Output data character index (0..42) if valid.
  * @return  CODE39_OK or CODE39_INVALID.
  * @context barcode_task
  */
 static uint32_t code39_try_split_both(uint8_t const * p_widths,
+                                      uint32_t bar_ratio_x10,
                                       uint32_t * p_char_index)
 {
-    uint32_t result = code39_try_split_dir(p_widths, p_char_index);
+    uint32_t result = code39_try_split_dir(p_widths, bar_ratio_x10,
+                                           p_char_index);
 
     if (CODE39_OK != result)
     {
@@ -614,7 +641,7 @@ static uint32_t code39_try_split_both(uint8_t const * p_widths,
         {
             rev[idx] = p_widths[(BAR_ELEMENTS - 1u) - idx];
         }
-        result = code39_try_split_dir(rev, p_char_index);
+        result = code39_try_split_dir(rev, bar_ratio_x10, p_char_index);
     }
     else
     {

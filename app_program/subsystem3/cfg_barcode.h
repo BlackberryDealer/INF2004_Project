@@ -43,6 +43,8 @@
 #define BAR_COOLDOWN_MM           (150u)
 #define BAR_BRANCH_MIN_MM         (14u) /* single long bar = branch line */
 #define BAR_WIDE_RATIO_X10_MIN    (18u) /* wide >= 1.8 x narrow */
+/* Last split try, bars only (S3-U51): a grey bar read wide-ish. */
+#define BAR_SPLIT_RATIO_X10_LOW   (14u) /* wide bar >= 1.4 x narrow */
 #define BAR_RING_ENTRIES          (64u) /* power of two */
 #define BAR_MAP_ENTRIES           (8u)
 /* Bring-up diagnosis (S3-U36): keep the last raw edges and print them

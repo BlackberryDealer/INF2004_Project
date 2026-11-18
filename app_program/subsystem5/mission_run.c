@@ -607,8 +607,11 @@ static void run_barcode_braked(mission_ctx_t * p_ctx,
             ? (follow_mm - MISSION_BARCODE_BACK_PAD_MM) : 0u;
         uint32_t const limit = (available < MISSION_BARCODE_REWIND_MM)
             ? available : MISSION_BARCODE_REWIND_MM;
-        uint32_t const back = ((need + MISSION_BARCODE_BACK_EXTRA_MM) < limit)
-            ? (need + MISSION_BARCODE_BACK_EXTRA_MM) : limit;
+        /* A retry returns to the start of its failed pass (S5-U81). */
+        uint32_t const extra = (0u == p_ctx->barcode_tries)
+            ? MISSION_BARCODE_BACK_EXTRA_MM : MISSION_BARCODE_RETRY_EXTRA_MM;
+        uint32_t const back = ((need + extra) < limit)
+            ? (need + extra) : limit;
 
         if ((need <= limit) && run_barcode_scan_ok(p_snap))
         {

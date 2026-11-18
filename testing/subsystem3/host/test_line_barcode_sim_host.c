@@ -1526,8 +1526,11 @@ int main(void)
         static uint8_t const misread[BAR_ELEMENTS] = {
             67u, 176u, 82u, 51u, 238u, 29u, 191u, 51u, 66u, 43u,
             154u, 81u, 73u, 47u, 64u, 173u, 63u, 30u, 193u, 54u,
-            55u, 114u, 100u, 49u, 180u, 42u, 175u, 36u, 57u
+            55u, 114u, 150u, 49u, 180u, 42u, 175u, 36u, 57u
         };
+        /* Element 23 was 100: since S3-U51 the logged frame decodes as A
+           (its stop guard has bar ratio 1.75), so it is made invalid here
+           (150) to keep checking the rewind after a failed read.       */
 
         sim_reset();
         g_sim_mode_mask = APP_MODE_MOTOR_EN;
