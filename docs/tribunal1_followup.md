@@ -52,15 +52,21 @@ car.
 | Change Requirement 2 document | The IR level-lift path (S4-U17) is described with its rule, threshold history and the 18 Nov car results | `docs/change_requirement_2_lift_stop.md` section 3.1 |
 | RAM evidence | Section 5 of `docs/ram_comparison.md`: car image `ae78cf5` -> `9dcc102` -> this change, with the symbol deltas | `tools/ram_report.sh`, `tools/ram_symbols.txt` |
 | Echo record uses `MSG_ECHO` (Buddy 5) | `obstacle_echo_isr` packs WIDTH / SEQ / VALID into the 16-bit `MSG_ECHO` word and stores it at once; obstacle_task reads it with one load (the read-twice loop is gone). 12 B -> 2 B | Obstacle and mission host simulations print identical output (logs included) before and after; build check ties the ISR limits to the row |
+| Only the bits needed: obstacle_task (Buddy 5) | About 25 statics in `PRV_OBS_M/I/A/B/C`; scan table and samples as 8-bit 4 mm codes; the board part kept in the board's own `SB_OBS0..2` layout (12 B instead of 44 B). Rows for the ISR-shared bytes (one writer per byte) and E5 timers | Obstacle and mission simulations identical; 20 randomized runs x 30 000 cycles of old vs new `obstacle.c` identical (board, events, ESTOP, faults, servo, logs) |
+| Only the bits needed: HMI and health (Buddy 5) | `PRV_MIS_G` (buttons, LED, buzzer, last state, beep), `PRV_HLT` (watchdog window as 1 bit, enabled, started) | Randomized old-vs-new runs of `hmi.c` (10 x 100 000 polls) and `sys_health.c` (8 x 50 000 passes) identical |
+| Only the bits needed: mission state (Buddy 5) | `mission_ctx_t` stored packed between passes (`PRV_MIS_A..R`, 15 words, 390 bits, plus 12 E5 timers); each pass works on an unpacked local copy, like the status board part structs | Mission simulation identical with every pass round-tripped; check S5-PACK: 20 000 random states over every row range round-trip unchanged |
 
-## 3. Still open (left until the car can be tested)
+## 3. Still open
 
-These change the code that drives the car, so they wait for a car run.
+The state of every task now follows the minimum-bit rule (natural types
+only for the E1-E8 exceptions and for per-pass working copies). Left:
 
-**Buddy 5 (mission, obstacle, HMI).** `mission_ctx_t` (about 70 fields),
-the obstacle-task statics and the `g_obs_scan` array, and the HMI statics
-are in natural types. (The ultrasonic echo record now uses the `MSG_ECHO`
-word: section 2a.)
+**Driver handles (Buddy 5, minor).** Set once at init and never changed:
+the buzzer and servo PWM slice / channel (`uint32_t`, 3 + 1 bits needed),
+the WS2812 state machine number and ready flag, the alive-LED flag and
+the GPIO IRQ table. Not packed; they could be, at no behaviour risk.
+
+**MAP accepted during RUN** (section 1): still needs the team's sign-off.
 
 **Buddy 3 test switch.** `gb_bar_reread_always` in `barcode.c` stays a
 `bool`: it is a build setting (`BAR_REREAD_ALWAYS`) that only the host
@@ -69,10 +75,12 @@ simulation changes, never written by the firmware.
 **Evidence.** `docs/ram_comparison.md` section 3 still needs the stack logs
 of the baseline and packed images (tests T4, T6).
 
-**Car check of the 18 Nov packing.** The B3/B4 packing is shown equal to the
-car-tested code on the host (section 2a), but has not been on the car yet:
-one barcode + turn, one obstacle, one quick and one level lift, and one
-ramp run on the new image before merging to `main`.
+**Car check of the 18 Nov packing.** The B3/B4/B5 packing is shown equal
+to the car-tested code on the host (section 2a), but has not been on the
+car yet: the checklist in the 18 Nov report (barcode + turn, obstacle
+bypass, quick and level lift, ramp and hump, buttons / LED / buzzer,
+watchdog, NO_PATH and line-lost handling) on the `tribunal1-packing`
+image before merging to `main`.
 
 Natural types kept on purpose are not in this list: they are the
 exceptions E1-E8 in `docs/BARR_C_DEVIATIONS.md` (D5), pending the

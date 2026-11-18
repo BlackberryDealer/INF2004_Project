@@ -175,3 +175,62 @@ between objects.
 
 Stack free space (section 3) still needs the `app_stack_report()` console
 lines of both images from the car.
+
+## 6. Buddy 5 packing (18 Nov 2026, `tribunal1-packing`)
+
+Car image (`make NET=lwip MQTT=1`), `e0bb32d` (before the Buddy 5
+packing, echo record already packed) vs `2032fb7`:
+
+| Image | .data B | .bss B | RAM B | .text B |
+|---|---:|---:|---:|---:|
+| `e0bb32d` | 308 | 98132 | 98440 | 388492 |
+| `2032fb7` (obstacle, HMI, health, mission state packed) | 260 | 97908 | 98168 | 391464 |
+
+Static RAM -272 B (the echo record before it: 12 B -> 2 B). Against
+`main` `ae78cf5` (99720 B) the branch now uses 98168 B: -1552 B.
+
+The mission state is unpacked into a 232 B working copy on
+mission_task's stack for each pass, so its stack frame grows from 464 B
+to 704 B (`-fstack-usage`; stack 2176 B). The deepest mission call
+chain is estimated below 1.1 KB; the `app_stack_report()` lines from
+the car (section 3) confirm the real margin.
+
+| Symbol | Before B | After B | Delta | Owner |
+|--------|---------:|--------:|------:|-------|
+| g_beep_kind | 4 | 0 | -4 | B5 |
+| g_ctx | 240 | 0 | -240 | B5 |
+| g_dist_log_cnt | 4 | 0 | -4 | B5 |
+| g_echo_mm | 4 | 0 | -4 | B5 |
+| g_far | 4 | 0 | -4 | B5 |
+| g_hlt_word | 0 | 1 | +1 | B5 |
+| g_hmi_word | 0 | 4 | +4 | B5 |
+| g_inferred | 4 | 0 | -4 | B5 |
+| g_led_code | 4 | 0 | -4 | B5 |
+| g_lost | 4 | 0 | -4 | B5 |
+| g_measured | 4 | 0 | -4 | B5 |
+| g_mis_us | 0 | 48 | +48 | B5 |
+| g_mis_w | 0 | 60 | +60 | B5 |
+| g_mode_seen | 4 | 0 | -4 | B5 |
+| g_obs_prv_a | 0 | 4 | +4 | B5 |
+| g_obs_prv_b | 0 | 4 | +4 | B5 |
+| g_obs_prv_c | 0 | 4 | +4 | B5 |
+| g_obs_prv_i | 0 | 4 | +4 | B5 |
+| g_obs_prv_m | 0 | 4 | +4 | B5 |
+| g_obs_scan | 50 | 25 | -25 | B5 |
+| g_part | 44 | 0 | -44 | B5 |
+| g_part_w | 0 | 12 | +12 | B5 |
+| g_pass_mark | 4 | 0 | -4 | B5 |
+| g_prev_mm | 4 | 0 | -4 | B5 |
+| g_prev_state | 4 | 0 | -4 | B5 |
+| g_ramp_hold | 4 | 0 | -4 | B5 |
+| g_ramp_mark | 4 | 0 | -4 | B5 |
+| g_reset_cnt | 4 | 0 | -4 | B5 |
+| g_run_cnt | 4 | 0 | -4 | B5 |
+| g_sample_cnt | 4 | 0 | -4 | B5 |
+| g_samples | 6 | 3 | -3 | B5 |
+| g_settle | 4 | 0 | -4 | B5 |
+| g_silent | 4 | 0 | -4 | B5 |
+| g_state | 4 | 0 | -4 | B5 |
+| g_step | 4 | 0 | -4 | B5 |
+| g_warmup_left | 4 | 0 | -4 | B5 |
+| g_wdt_load | 4 | 0 | -4 | B5 |
