@@ -184,6 +184,11 @@ PRV_IMU_C,32,PREV_HDG_VALID,1,1,flag,0,1,0,FLAG,P,B4,PREV_HDG is from the previo
 PRV_IMU_C,32,PITCH_MAX,10,1,0.1 deg,-450,450,512,RNG,P,B4,Max pitch this hump (A24)
 PRV_IMU_C,32,RUN_PEAK,7,1,mm,0,127,0,RNG,P,B4,Highest hump this run
 PRV_IMU_D,32,PREV_DIFF,19,1,count,-262142,262142,262144,RNG,P,B4,pos_l-pos_r 50 ms ago
+PRV_IMU_R,32,STATE,1,1,flag,0,1,0,FLAG,P,B4,One-wheel hump: 1 = on it (S4-U18)
+PRV_IMU_R,32,HYST,3,1,sample,0,7,0,SAT,P,B4,One-wheel hump: cycles in a row past the start / level threshold
+PRV_IMU_R,32,FILT,10,1,mg,-511,511,512,RNG,P,B4,One-wheel hump: smoothed sideways tilt (ay)
+PRV_IMU_R,32,PEAK,9,1,mg,0,511,0,RNG,P,B4,One-wheel hump: largest smoothed |ay| on this hump
+PRV_IMU_R,32,TICKS,8,1,tick,0,255,0,SAT,P,B4,One-wheel hump: cycles on this hump (ramp / held-tilt reject)
 PRV_IMU_E,32,PREV_POS_L,18,1,count,-131071,131071,131072,RNG,P,B4,Previous left position
 PRV_IMU_F,32,PREV_POS_R,18,1,count,-131071,131071,131072,RNG,P,B4,Previous right position
 PRV_HIST_A,32,H0,8,1,count/50ms,-127,127,128,RNG,P,B4,Speed history 0

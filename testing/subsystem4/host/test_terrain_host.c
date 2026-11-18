@@ -437,5 +437,94 @@ int main(void)
                    "count saturates at 30: fits the 5-bit IR_LIFT_CNT field");
     }
 
+    /* S4-U18 (track 2026-11-18): a thin strip only the right wheel
+       climbs tilts the car sideways; h = track x |ay| / 1000 mg. */
+    {
+        uint32_t const zero = ((uint32_t)PRV_IMU_R_FILT_OFFSET
+                               << PRV_IMU_R_FILT_POS);
+        uint32_t word  = zero;
+        uint32_t done  = 0u;
+        uint32_t total = 0u;
+        uint32_t n_rep = 0u;
+        int32_t  ay    = 0;
+        uint32_t idx   = 0u;
+
+        for (idx = 0u; idx < 300u; idx++)   /* straight, +-30 mg noise */
+        {
+            ay   = ((idx % 2u) == 0u) ? 30 : -30;
+            word = terrain_roll_hump_step(word, ay, 6, 6, &done);
+            n_rep += (done > 0u) ? 1u : 0u;
+        }
+        HOST_CHECK("S4-U18", 0u == n_rep, "flat, +-30 mg vibration: no hump");
+
+        /* 8 mm hump: ay up to -64 mg (8 / 125 x 1000), ~250 ms on it */
+        word = zero;
+        for (idx = 0u; idx < 10u; idx++)
+        {
+            word = terrain_roll_hump_step(word, -(int32_t)(idx * 64u / 10u),
+                                          6, 7, &done);
+            total += done;
+        }
+        for (idx = 0u; idx < 10u; idx++)
+        {
+            word = terrain_roll_hump_step(word, -64, 6, 7, &done);
+            total += done;
+        }
+        for (idx = 0u; idx < 30u; idx++)
+        {
+            ay   = (idx < 10u) ? -(int32_t)(64u - (idx * 64u / 10u)) : 0;
+            word = terrain_roll_hump_step(word, ay, 6, 6, &done);
+            total += done;
+            n_rep += (done > 0u) ? 1u : 0u;
+        }
+        HOST_CHECK("S4-U18", (1u == n_rep) && (total >= 7u) && (total <= 9u),
+                   "8 mm one-wheel hump (ay 64 mg): one report, 7..9 mm");
+
+        /* same tilt either side: the sign does not matter */
+        word  = zero;
+        total = 0u;
+        for (idx = 0u; idx < 60u; idx++)
+        {
+            ay   = (idx < 20u) ? 120 : 0;
+            word = terrain_roll_hump_step(word, ay, 6, 6, &done);
+            total += done;
+        }
+        HOST_CHECK("S4-U18", (total >= 14u) && (total <= 15u),
+                   "+120 mg (other mounting sign): 15 mm");
+
+        /* a curve: 80 mg sideways while turning never starts a hump */
+        word  = zero;
+        n_rep = 0u;
+        for (idx = 0u; idx < 100u; idx++)
+        {
+            ay   = (idx < 60u) ? 80 : 0;
+            word = terrain_roll_hump_step(word, ay, 4, 9, &done);
+            n_rep += (done > 0u) ? 1u : 0u;
+        }
+        HOST_CHECK("S4-U18", 0u == n_rep, "turning (dl 4, dr 9): no hump");
+
+        /* parked tilted / on a long side slope for 3 s: dropped */
+        word  = zero;
+        n_rep = 0u;
+        for (idx = 0u; idx < 320u; idx++)
+        {
+            ay   = (idx < 300u) ? 90 : 0;
+            word = terrain_roll_hump_step(word, ay, 6, 6, &done);
+            n_rep += (done > 0u) ? 1u : 0u;
+        }
+        HOST_CHECK("S4-U18", 0u == n_rep, "3 s held tilt: no report (ramp rule)");
+
+        /* not moving: no start */
+        word  = zero;
+        n_rep = 0u;
+        for (idx = 0u; idx < 60u; idx++)
+        {
+            ay   = (idx < 20u) ? 120 : 0;
+            word = terrain_roll_hump_step(word, ay, 0, 0, &done);
+            n_rep += (done > 0u) ? 1u : 0u;
+        }
+        HOST_CHECK("S4-U18", 0u == n_rep, "stationary tilt (handling): no hump");
+    }
+
     return (0 == HOST_SUMMARY("terrain")) ? 0 : 1;
 }

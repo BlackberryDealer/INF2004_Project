@@ -305,6 +305,13 @@ GROUPS = {
     'PRV_IMU_D': [
         ('PREV_DIFF', 19, 262144, 1, 'count'),
     ],
+    'PRV_IMU_R': [
+        ('STATE', 1, 0, 1, 'flag'),
+        ('HYST', 3, 0, 1, 'sample'),
+        ('FILT', 10, 512, 1, 'mg'),
+        ('PEAK', 9, 0, 1, 'mg'),
+        ('TICKS', 8, 0, 1, 'tick'),
+    ],
     'PRV_IMU_E': [
         ('PREV_POS_L', 18, 131072, 1, 'count'),
     ],

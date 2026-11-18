@@ -210,6 +210,11 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PITCH_MAX | PRV_IMU_C | -450..450 × 1 0.1 deg | 1 | 10 | 10 | RNG | P | Max pitch this hump (A24) |
 | RUN_PEAK | PRV_IMU_C | 0..127 × 1 mm | 1 | 7 | 7 | RNG | P | Highest hump this run |
 | PREV_DIFF | PRV_IMU_D | -262142..262142 × 1 count | 1 | 19 | 19 | RNG | P | pos_l-pos_r 50 ms ago |
+| STATE | PRV_IMU_R | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | One-wheel hump: 1 = on it (S4-U18) |
+| HYST | PRV_IMU_R | 0..7 × 1 sample | 1 | 3 | 3 | SAT | P | One-wheel hump: cycles in a row past the start / level threshold |
+| FILT | PRV_IMU_R | -511..511 × 1 mg | 1 | 10 | 10 | RNG | P | One-wheel hump: smoothed sideways tilt (ay) |
+| PEAK | PRV_IMU_R | 0..511 × 1 mg | 1 | 9 | 9 | RNG | P | One-wheel hump: largest smoothed \|ay\| on this hump |
+| TICKS | PRV_IMU_R | 0..255 × 1 tick | 1 | 8 | 8 | SAT | P | One-wheel hump: cycles on this hump (ramp / held-tilt reject) |
 | PREV_POS_L | PRV_IMU_E | -131071..131071 × 1 count | 1 | 18 | 18 | RNG | P | Previous left position |
 | PREV_POS_R | PRV_IMU_F | -131071..131071 × 1 count | 1 | 18 | 18 | RNG | P | Previous right position |
 | H0 | PRV_HIST_A | -127..127 × 1 count/50ms | 1 | 8 | 8 | RNG | P | Speed history 0 |
@@ -341,6 +346,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_IMU_B | 29 | 32 |
 | PRV_IMU_C | 30 | 32 |
 | PRV_IMU_D | 19 | 32 |
+| PRV_IMU_R | 31 | 32 |
 | PRV_IMU_E | 18 | 32 |
 | PRV_IMU_F | 18 | 32 |
 | PRV_HIST_A | 32 | 32 |

@@ -87,6 +87,8 @@ static uint32_t g_imu_prv_c; /* PREV_HDG, PREV_HDG_VALID, RUN_PEAK */
 static uint32_t g_imu_prv_d; /* PREV_DIFF: pos_l - pos_r, 50 ms ago */
 static uint32_t g_imu_prv_e; /* PREV_POS_L */
 static uint32_t g_imu_prv_f; /* PREV_POS_R */
+static uint32_t g_imu_prv_r =  /* one-wheel hump (S4-U18), FILT 0 */
+    ((uint32_t)PRV_IMU_R_FILT_OFFSET << PRV_IMU_R_FILT_POS);
 static uint32_t g_ofs_word_a = (2048u) | (2048u << 12); /* encoded zero
                                        offsets (value + 2048 per
                                        PRV_OFS_A row) */
@@ -363,6 +365,24 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
     in.ds_counts = terrain_ds_counts(dpos_l, dpos_r);
 
     terrain_step(&g_terrain, &in, &out);
+
+    /* S4-U18: the demo hump lifts only the right wheel (a sideways
+       tilt), which the nose-up check above never sees */
+    {
+        uint32_t roll_mm = 0u;
+
+        g_imu_prv_r = terrain_roll_hump_step(g_imu_prv_r, g_avg_ay_mg,
+                                             dpos_l, dpos_r, &roll_mm);
+        if (roll_mm > 0u)
+        {
+            app_log("HUMP (one wheel): %d mm\n", (int32_t)roll_mm, 0, 0);
+            /* cast: roll_mm <= 64 */
+        }
+        if (roll_mm > out.hump_done_mm)
+        {
+            out.hump_done_mm = roll_mm;
+        }
+    }
 
     g_pitch_ddeg  = out.pitch_ddeg;
     g_hump_now_mm = out.hump_now_mm;
@@ -794,6 +814,7 @@ static void imu_run_start(int32_t pos_l, int32_t pos_r)
 
     terrain_reset(&g_terrain);
     terrain_speed_hist_reset(&g_speed_hist);
+    g_imu_prv_r = ((uint32_t)PRV_IMU_R_FILT_OFFSET << PRV_IMU_R_FILT_POS);
     g_imu_prv_c = app_bits_put(g_imu_prv_c, PRV_IMU_C_RUN_PEAK_POS,
                                PRV_IMU_C_RUN_PEAK_BITS, 0u);
     g_imu_prv_c = app_bits_put(g_imu_prv_c, PRV_IMU_C_PREV_HDG_POS,

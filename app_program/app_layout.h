@@ -1359,6 +1359,42 @@
 #error "Group PRV_IMU_D no longer fits in 32 bits"
 #endif
 
+/* PRV_IMU_R: 32-bit word */
+#define PRV_IMU_R_STATE_POS             (0u)
+#define PRV_IMU_R_STATE_BITS            (1u)
+#define PRV_IMU_R_STATE_MIN             (0)
+#define PRV_IMU_R_STATE_MAX             (1)
+#define PRV_IMU_R_STATE_OFFSET          (0)
+#define PRV_IMU_R_STATE_KIND            (APP_KIND_FLAG)
+#define PRV_IMU_R_HYST_POS              (PRV_IMU_R_STATE_POS + PRV_IMU_R_STATE_BITS)
+#define PRV_IMU_R_HYST_BITS             (3u)
+#define PRV_IMU_R_HYST_MIN              (0)
+#define PRV_IMU_R_HYST_MAX              (7)
+#define PRV_IMU_R_HYST_OFFSET           (0)
+#define PRV_IMU_R_HYST_KIND             (APP_KIND_SAT)
+#define PRV_IMU_R_FILT_POS              (PRV_IMU_R_HYST_POS + PRV_IMU_R_HYST_BITS)
+#define PRV_IMU_R_FILT_BITS             (10u)
+#define PRV_IMU_R_FILT_MIN              (-511)
+#define PRV_IMU_R_FILT_MAX              (511)
+#define PRV_IMU_R_FILT_OFFSET           (512)
+#define PRV_IMU_R_FILT_KIND             (APP_KIND_RNG)
+#define PRV_IMU_R_PEAK_POS              (PRV_IMU_R_FILT_POS + PRV_IMU_R_FILT_BITS)
+#define PRV_IMU_R_PEAK_BITS             (9u)
+#define PRV_IMU_R_PEAK_MIN              (0)
+#define PRV_IMU_R_PEAK_MAX              (511)
+#define PRV_IMU_R_PEAK_OFFSET           (0)
+#define PRV_IMU_R_PEAK_KIND             (APP_KIND_RNG)
+#define PRV_IMU_R_TICKS_POS             (PRV_IMU_R_PEAK_POS + PRV_IMU_R_PEAK_BITS)
+#define PRV_IMU_R_TICKS_BITS            (8u)
+#define PRV_IMU_R_TICKS_MIN             (0)
+#define PRV_IMU_R_TICKS_MAX             (255)
+#define PRV_IMU_R_TICKS_OFFSET          (0)
+#define PRV_IMU_R_TICKS_KIND            (APP_KIND_SAT)
+#define PRV_IMU_R_USED_BITS             (PRV_IMU_R_TICKS_POS + PRV_IMU_R_TICKS_BITS)
+#if (PRV_IMU_R_USED_BITS > 32u)
+#error "Group PRV_IMU_R no longer fits in 32 bits"
+#endif
+
 /* PRV_IMU_E: 32-bit word */
 #define PRV_IMU_E_PREV_POS_L_POS        (0u)
 #define PRV_IMU_E_PREV_POS_L_BITS       (18u)

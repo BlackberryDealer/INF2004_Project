@@ -75,6 +75,23 @@
 #define TERRAIN_MAX_CLIMB_MM     (400u) /* TUNE: ramp rule        */
 #define TERRAIN_HUMP_MIN_MM      (5u)
 #define TERRAIN_WHEELBASE_MM     (100) /* MEASURE: axle to front contact */
+/* One-wheel hump (track 2026-11-18, S4-U18): the demo hump is a thin
+   strip only the right wheel climbs, so the car tilts sideways about the
+   line from the left wheel to the front contact, not nose up. For a
+   wheel raised h the sideways gravity component is ay = g x h / track
+   (the pitch part, g x h / wheelbase, is mixed with braking), so
+   h = track x |ay| / 1000 mg. ay is smoothed (1/4 per cycle); a hump
+   starts after TERRAIN_ROLL_HYST cycles above TERRAIN_ROLL_START_MG
+   while driving straight, ends after TERRAIN_ROLL_HYST cycles below
+   TERRAIN_ROLL_LEVEL_MG, and more than TERRAIN_ROLL_MAX_TICKS on it is a
+   ramp or a held tilt, not a hump. GAIN_PCT corrects the sensor scale
+   against a ruler. */
+#define TERRAIN_ROLL_START_MG    (45)   /* TUNE: ~2.6 deg, h ~ 5.6 mm  */
+#define TERRAIN_ROLL_LEVEL_MG    (20)   /* TUNE                        */
+#define TERRAIN_ROLL_HYST        (3u)   /* cycles, <= 7 (3-bit HYST)   */
+#define TERRAIN_ROLL_STRAIGHT_COUNTS (3) /* |dl - dr| per 10 ms, ~10 mg */
+#define TERRAIN_ROLL_MAX_TICKS   (200u) /* TUNE: 2 s, ramp rule, <= 255 */
+#define TERRAIN_ROLL_GAIN_PCT    (100u) /* MEASURE: ruler / reported   */
 #define TERRAIN_REPORT_MODE      (0u)  /* 0 integ, 1 geom, 2 mean */
 /* Forward acceleration gain: a change of 1 count per 50 ms window over
    50 ms is 14.2 mg. a = dcpw x um-per-count x 1000 / window^2 mm/s^2,
