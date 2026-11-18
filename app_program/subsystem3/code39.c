@@ -168,8 +168,9 @@ uint32_t code39_decode(uint8_t const * p_widths, uint32_t count,
         {
             /* Last try (S3-U51): one grey bar read 12.4 mm against 18 mm
                wide bars (on-car 18 Nov 12:24) compresses that character's
-               bar ratio to 1.47. Bars only: spaces, both guards, the gaps
-               and the data character are still checked as before.      */
+               bar ratio to 1.47 (1.31 at 12:33). Bars only: spaces, both
+               guards, the gaps and the data character are checked as
+               before.                                                 */
             result = code39_try_split_both(adjusted, BAR_SPLIT_RATIO_X10_LOW,
                                            p_char_index);
         }
