@@ -145,10 +145,11 @@ void obs_profile_plan(obs_profile_t const * p_prof, obs_plan_t * p_plan)
     /* cast: small positive constants */
     /* S5-U53: the bypass clears plan_left/right_mm (the estimate plus
        OBS_EST_MARGIN_MM, widened to every return that may be the box)
-       by the half width plus OBS_SIDE_MARGIN_MM, and the free gap beyond
-       it must hold the car plus OBS_SIDE_MARGIN_MM on both sides     */
+       by the half width plus OBS_BOX_MARGIN_MM (S5-U82), and the free
+       gap beyond it must hold the car plus OBS_SIDE_MARGIN_MM on both
+       sides                                                         */
     int32_t const  corridor = (int32_t) (OBS_ROBOT_HALF_W_MM
-                                         + OBS_SIDE_MARGIN_MM);
+                                         + OBS_BOX_MARGIN_MM);
     uint32_t const gap_need = 2u * (OBS_ROBOT_HALF_W_MM
                                     + OBS_SIDE_MARGIN_MM);
     uint32_t       shift_l  = 0u;
@@ -214,7 +215,7 @@ void obs_profile_plan(obs_profile_t const * p_prof, obs_plan_t * p_plan)
             p_plan->leg_lateral_mm = OBS_LEG_MIN_MM;
         }
         p_plan->leg_forward_mm = p_prof->nearest_mm + OBS_DEPTH_ASSUMED_MM
-                                 + OBS_ROBOT_LEN_MM;
+                                 + OBS_PASS_TAIL_MM;     /* S5-U82 */
         if ((p_plan->leg_lateral_mm > limit_mm)
             || (p_plan->leg_forward_mm > OBS_LEG_FWD_MAX_MM))
         {

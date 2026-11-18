@@ -45,8 +45,8 @@ static bool in_range(int32_t value, int32_t lo, int32_t hi)
 }
 
 /* S5-U53 (review 2026-11-09): after a PLAN, the car's body at the end of
-   the lateral leg plus OBS_SIDE_MARGIN_MM must clear every near return
-   the pass drives by (forward <= nearest + depth + robot length): the
+   the lateral leg plus OBS_BOX_MARGIN_MM must clear every near return
+   the pass drives by (forward <= nearest + depth + tail, S5-U82): the
    "full path plus margin" check, independent of obs_profile.c.       */
 static bool path_clear(uint16_t const * p_scan, obs_profile_t const * p_prof,
                        obs_plan_t const * p_plan)
@@ -56,7 +56,7 @@ static bool path_clear(uint16_t const * p_scan, obs_profile_t const * p_prof,
                           : (int32_t) p_plan->leg_lateral_mm;
     int32_t const reach = (int32_t) (p_prof->nearest_mm
                                      + OBS_DEPTH_ASSUMED_MM
-                                     + OBS_ROBOT_LEN_MM);
+                                     + OBS_PASS_TAIL_MM);
     bool          b_ok  = true;
 
     for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)
@@ -72,7 +72,7 @@ static bool path_clear(uint16_t const * p_scan, obs_profile_t const * p_prof,
             int32_t const  off = (x > xc) ? (x - xc) : (xc - x);
 
             if ((y <= reach) && (off < (int32_t) (OBS_ROBOT_HALF_W_MM
-                                                  + OBS_SIDE_MARGIN_MM)))
+                                                  + OBS_BOX_MARGIN_MM)))
             {
                 b_ok = false;
             }
@@ -117,11 +117,13 @@ int main(void)
     HOST_CHECK("S5-U01", APP_SIDE_LEFT == plan.side,
                "picks the smaller shift (left)");
     HOST_CHECK("S5-U01", (plan.leg_lateral_mm
-                          == (uint32_t) (175 - prof.x_left_mm)),
+                          == (uint32_t) ((int32_t) (OBS_ROBOT_HALF_W_MM + OBS_BOX_MARGIN_MM
+                                         + OBS_EST_MARGIN_MM)
+                              - prof.x_left_mm)),
                "lateral leg = corridor + uncertainty margin - x_left (S5-U48)");
     HOST_CHECK("S5-U01", plan.leg_forward_mm
-               == (prof.nearest_mm + OBS_DEPTH_ASSUMED_MM + OBS_ROBOT_LEN_MM),
-               "forward leg = nearest + depth + length");
+               == (prof.nearest_mm + OBS_DEPTH_ASSUMED_MM + OBS_PASS_TAIL_MM),
+               "forward leg = nearest + depth + tail (S5-U82)");
     HOST_CHECK("S5-U01", !plan.b_was_clamped, "legs within NFR16");
 
     /* S5-U01: same face, an object 190 mm to the left blocks that side,
@@ -183,12 +185,12 @@ int main(void)
     HOST_CHECK("S5-U03", !plan.b_was_clamped, "not a clamp case");
 
     /* S5-U03: obstacle so far ahead that the forward leg (nearest +
-       depth + robot length = 500 + 150 + 180 = 830 mm) is over the
+       depth + tail = 600 + 150 + 100 = 850 mm, S5-U82) is over the
        800 mm NFR16 limit -> clamped, NO_PATH. (2026-11-09: the old case,
        a wall 50..130 deg at 250 mm needing a 334 mm shift, is now planned
        as the 20 cm maximum obstacle, see below; S5-U45.)               */
     scan_clear(scan);
-    scan_face(scan, 11u, 13u, 500);
+    scan_face(scan, 11u, 13u, 600);
     obs_profile_build(scan, 0u, &prof);
     obs_profile_plan(&prof, &plan);
     HOST_CHECK("S5-U03", plan.b_was_clamped, "forward leg over its limit");
@@ -235,9 +237,10 @@ int main(void)
     obs_profile_build(scan, 0u, &prof);
     obs_profile_plan(&prof, &plan);
     HOST_CHECK("S5-U23", prof.b_is_valid
-               && ((int32_t) (OBS_ROBOT_HALF_W_MM + OBS_SIDE_MARGIN_MM
-                              + OBS_EST_MARGIN_MM) == prof.x_left_mm),
-               "estimate edge exactly at the shift-0 line (x_left = 175)");
+               && ((int32_t) (OBS_ROBOT_HALF_W_MM + OBS_BOX_MARGIN_MM
+                              + OBS_EST_MARGIN_MM) <= prof.x_left_mm),
+               "estimate edge at or past the shift-0 line (x_left 175,"
+               " line 155 since S5-U82)");
     HOST_CHECK("S5-U23", (OBS_OUT_PLAN == plan.outcome)
                && (APP_SIDE_LEFT == plan.side)
                && (OBS_LEG_MIN_MM == plan.leg_lateral_mm),
@@ -417,11 +420,17 @@ int main(void)
                    && in_range((prof.x_left_mm + prof.x_right_mm) / 2, -10, 10),
                    "estimate centred mid-plateau (16 mm: 50..130 deg ->"
                    " 90 deg, S5-U51), not on 75 deg");
-        /* S5-U53: the 17:00 scene does not pass: the left gap to the
-           135 deg object (568 mm) is 229 mm < 250, and the right extent
-           reaches the 40 deg echo (296 mm, x +227) -> shift 351 > 300 */
-        HOST_CHECK("S5-U48", OBS_OUT_NO_PATH == plan.outcome,
-                   "17:00 scene: no lane with path + margin clear, NO_PATH");
+        /* S5-U53: the left gap to the 135 deg object (568 mm) is 229 mm
+           < 250, so the 17:00 scene never passes left (where it hit the
+           box). S5-U82: the right extent reaches the 40 deg echo (296 mm,
+           x +227) -> shift 227 + 105 = 331 mm, inside the extended
+           350 mm pass with the body 30 mm clear of every return.      */
+        HOST_CHECK("S5-U48", (OBS_OUT_PLAN == plan.outcome)
+                   && (APP_SIDE_RIGHT == plan.side)
+                   && (331u == plan.leg_lateral_mm)
+                   && path_clear(car_scan, &prof, &plan),
+                   "17:00 scene: never left; right pass 331 mm, path +"
+                   " margin clear (S5-U82)");
     }
 
     /* S5-U49 (review 2026-11-09): every core return beside
@@ -558,13 +567,13 @@ int main(void)
             }
         }
         /* S5-U53/U54: the two scans from ~25 cm (run1_a, run2_a) plan with
-           path + margin clear; the two from ~40 cm cannot (the creep now
-           scans from ~25 cm)                                            */
-        HOST_CHECK("S5-U51", 2u == plans,
-                   "18:00 car scans from 25 cm: PLAN centred within 45 mm");
+           path + margin clear; since S5-U82 (30 mm box margin) one of the
+           two from ~40 cm also plans, still path + margin clear (S5-U53) */
+        HOST_CHECK("S5-U51", 3u == plans,
+                   "18:00 car scans: PLAN centred within 45 mm (3 of 4)");
         HOST_CHECK("S5-U53", 4u == safe,
                    "every PLAN on the real car scans keeps the car's body"
-                   " + 50 mm clear of every return");
+                   " + 30 mm clear of every return (S5-U82)");
         /* run 2 first scan: the 50 deg object (568 mm, x +365, y 435) is
            inside the pass leg and 244 mm from the estimate: right
            blocked by a REAL object, so the pass is to the left        */
@@ -588,9 +597,10 @@ int main(void)
         obs_profile_plan(&prof, &plan);
         HOST_CHECK("S5-U59", (OBS_OUT_PLAN == plan.outcome)
                    && (APP_SIDE_RIGHT == plan.side)
-                   && (334u == plan.leg_lateral_mm)
+                   && (314u == plan.leg_lateral_mm)
                    && path_clear(logged, &prof, &plan),
-                   "logged outer echo clears with the 334 mm extended pass");
+                   "logged outer echo clears with the 314 mm extended pass"
+                   " (334 before S5-U82)");
 
         prof.clear_right_mm = 250u;
         obs_profile_plan(&prof, &plan);
@@ -599,12 +609,37 @@ int main(void)
                    "a return limiting that lane keeps the 300 mm cap");
 
         prof.clear_right_mm = APP_PROFILE_CLEAR_MM;
-        prof.plan_left_mm = -226;
-        prof.plan_right_mm = 226;
+        prof.plan_left_mm = -246;   /* 246 + 105 = 351 (S5-U82) */
+        prof.plan_right_mm = 246;
         obs_profile_plan(&prof, &plan);
         HOST_CHECK("S5-U59", (OBS_OUT_NO_PATH == plan.outcome)
                    && (OBS_LEG_LAT_MAX_MM == plan.leg_lateral_mm),
                    "a required shift of 351 mm still stops");
+    }
+
+    /* S5-U82 (car run 2026-11-18 13:03 SGT): 125 mm box, nearest 224 mm,
+       right extent widened to the 55 deg echo (292 mm, x +167). The run
+       drove a 293 mm lateral and 557 mm forward leg; with the 30 mm box
+       margin and the 100 mm tail it plans 273 mm and 474 mm.          */
+    {
+        static uint16_t const run_1303[APP_SCAN_STEPS] =
+        {
+            1020u, 1020u, 1020u, 1020u, 1020u, 292u, 252u, 244u, 236u,
+            232u, 232u, 240u, 248u, 252u, 260u, 256u, 248u, 256u, 372u,
+            568u, 296u, 704u, 696u, 696u, 696u
+        };
+        obs_profile_build(run_1303, 0xC00006u, &prof);
+        obs_profile_plan(&prof, &plan);
+        HOST_CHECK("S5-U82", (OBS_OUT_PLAN == plan.outcome)
+                   && (APP_SIDE_RIGHT == plan.side)
+                   && path_clear(run_1303, &prof, &plan),
+                   "13:03 scan: passes right, path + margin clear");
+        HOST_CHECK("S5-U82", (plan.leg_lateral_mm <= 275u)
+                   && (plan.leg_forward_mm
+                       == (prof.nearest_mm + OBS_DEPTH_ASSUMED_MM
+                           + OBS_PASS_TAIL_MM)),
+                   "13:03 scan: lateral <= 275 mm (was 293), forward ="
+                   " nearest + 150 + 100 (was + 180)");
     }
 
     return (0 == HOST_SUMMARY("subsystem5 host")) ? 0 : 1;

@@ -222,8 +222,9 @@ int main(void) {
      maximum obstacle (professor: obstacles are 10..20 cm), so the
      NO_PATH / RANGE_CLAMP path is driven by a face 500 mm ahead with
      clear sides (x -150..+150; S5-U48's stricter free gap would reject
-     a wider wall first): forward leg 500 + 150 + 180 = 830 mm > 800.  */
-  g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN; w_mode = 1; w_y = 500; w_xl = -150; w_xr = 150;
+     a wider wall first): forward leg 600 + 150 + 100 = 850 mm > 800
+     (S5-U82; 500 + 150 + 180 before).                                 */
+  g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN; w_mode = 1; w_y = 600; w_xl = -150; w_xr = 150;
   for (int i = 0; i < 300 && 0 == count_ev(APP_EVT_NO_PATH); i++) cyc();  /* 3 pings per step since S5-U47 */
   CHECK("S5-U08", 1 == count_ev(APP_EVT_NO_PATH) && APP_SCAN_STOPPED == g_state && 90u == g_servo, "far obstacle -> NO_PATH, STOPPED, servo 90");
   CHECK("S5-U08", 0u != (g_fault & APP_FAULT_RANGE_CLAMP), "clipped leg sets RANGE_CLAMP");

@@ -83,7 +83,17 @@
 #define OBS_ROBOT_HALF_W_MM    (75u)     /* MEASURE */
 #define OBS_ROBOT_LEN_MM       (180u)    /* MEASURE */
 #define OBS_DEPTH_ASSUMED_MM   (150u)    /* obstacles <= 150 mm deep: ask lab */
-#define OBS_SIDE_MARGIN_MM     (50u)
+#define OBS_SIDE_MARGIN_MM     (50u)     /* free gap: other objects */
+/* Tighter bypass (car run 2026-11-18, S5-U82): 50 mm past the box's plan
+   edge gave a ~293 mm lateral leg for a 125 mm box. That edge already
+   holds OBS_EST_MARGIN_MM and every return that may be the box (S5-U53),
+   so the shift past it keeps the body 30 mm clear of all of them. The
+   free gap to other objects still needs OBS_SIDE_MARGIN_MM (S5-U46/U48). */
+#define OBS_BOX_MARGIN_MM      (30u)     /* TUNE */
+/* Forward leg past the box face: the car's tail only has to pass the
+   assumed back face, not a whole car length beyond it. Drive axle to rear
+   bumper is <= 80 mm (180 mm car, 100 mm axle to front contact) + 20. */
+#define OBS_PASS_TAIL_MM       (100u)    /* MEASURE: axle to rear + 20 */
 #define OBS_LEG_LAT_BASE_MM    (300u)    /* normal plan limit (NFR16) */
 #define OBS_LEG_LAT_MAX_MM     (350u)    /* extended track-test limit */
 #define OBS_EXT_ECHO_LEAD_MM   (12u)     /* three 4 mm range steps */
