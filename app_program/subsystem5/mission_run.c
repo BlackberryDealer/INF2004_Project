@@ -162,6 +162,8 @@ void mission_run_enter(mission_ctx_t * p_ctx, status_board_t const * p_snap,
         p_ctx->run_state = APP_RUN_FOLLOW;
         p_ctx->substep   = 0u;                    /* pass 1 */
         mission_mode_clear(RUN_INHIBITS | APP_MODE_BARCODE_REREAD);
+        app_log("BENCH: sonar does not brake in the bench: keep the"
+                " path clear, STOP ends the run\n", 0, 0, 0);
         run_bench_pass(p_ctx, p_snap, now_us);
     }
     else
@@ -439,7 +441,7 @@ static void run_bench_back(mission_ctx_t * p_ctx, uint32_t now_us)
  *          At the end of a forward pass: decoded -> FINISHED; not decoded
  *          -> back up straight to the pass start and drive it again, at
  *          most MISSION_BAR_BENCH_RETRIES times. Ends on STOP or if a move
- *          fails (stall, deadline, ESTOP). Line, junction and obstacle
+ *          fails (stall, deadline, LIFT). Line, junction and obstacle
  *          events are ignored on purpose.
  * @param   p_ctx  mission context
  * @param   p_evt  this pass's event
@@ -548,8 +550,9 @@ static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
     }
     if ((MISSION_REQ_NONE == p_ctx->sys_request) && p_ctx->b_motion_failed)
     {
-        app_log("BENCH: move did not finish (stall, obstacle stop or"
-                " deadline)\n", 0, 0, 0);
+        app_log("BENCH: move did not finish in time (wheel stall or"
+                " lifted car)\n", 0, 0, 0);
+        p_ctx->b_motion_failed = false;   /* handled: FINISHED, not FAULT */
         run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
     }
 }
