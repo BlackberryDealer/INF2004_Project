@@ -1,5 +1,7 @@
 # Buddy 5 host (laptop) tests.
 #   test_obs_profile_host : S5-U01..U03, pure obs_profile.c
+#   sim_mission_bench_host: S5-U83, the same statechart built as the barcode
+#                           bench (MISSION_BAR_BENCH=1)
 #   sim_mission_host      : statechart simulation (mission.c, mission_run.c),
 #                           plus S5-U04 and S5-U05 (-DMISSION_HOST_TEST)
 #   sim_obstacle_host     : obstacle_task simulation (obstacle.c + profile)
@@ -19,10 +21,12 @@ B       := build/app_program
 .PHONY: all clean tree
 
 all: test_obs_profile_host.out sim_mission_host.out sim_obstacle_host.out \
-     test_drv_ultrasonic_host.out test_status_board_host.out
+     test_drv_ultrasonic_host.out test_status_board_host.out \
+     sim_mission_bench_host.out
 	./test_obs_profile_host.out
 	./test_drv_ultrasonic_host.out
 	./sim_mission_host.out
+	./sim_mission_bench_host.out
 	./sim_obstacle_host.out
 	./test_status_board_host.out
 
@@ -55,6 +59,13 @@ tree:
 
 sim_mission_host.out: sim_mission_host.c tree
 	$(CC) $(SIMFLAGS) -DMISSION_HOST_TEST -o $@ sim_mission_host.c \
+	    $(B)/subsystem5/mission_run.c $(B)/subsystem5/status_board.c \
+	    $(B)/subsystem3/code39.c \
+	    $(B)/app_bits.c
+
+sim_mission_bench_host.out: sim_mission_bench_host.c sim_mission_host.c tree
+	$(CC) $(SIMFLAGS) -DMISSION_HOST_TEST -DMISSION_BAR_BENCH=1u -I. \
+	    -o $@ sim_mission_bench_host.c \
 	    $(B)/subsystem5/mission_run.c $(B)/subsystem5/status_board.c \
 	    $(B)/subsystem3/code39.c \
 	    $(B)/app_bits.c
