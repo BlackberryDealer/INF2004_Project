@@ -1350,7 +1350,19 @@ static void mission_st_cal_imu(mission_ctx_t * p_ctx, uint32_t type,
 {
     uint32_t const limit_us = MISSION_CAL_TIMEOUT_MS * MISSION_US_PER_MS;
 
-    if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IMU == value))
+    if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IMU == value)
+        && (0u != MISSION_BAR_BENCH))
+    {
+        /* Barcode bench: the reader uses the sensor's digital output, not
+           the line calibration, so skip the IR sweep (no tiles needed). */
+        p_ctx->b_imu_valid = true;
+        p_ctx->b_ir_valid  = true;
+        mission_mode_clear(APP_MODE_CAL_IMU);
+        app_log("BENCH: IR line calibration skipped (barcode bench)\n",
+                0, 0, 0);
+        mission_enter(p_ctx, APP_SYS_READY, p_snap, now_us);
+    }
+    else if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IMU == value))
     {
         p_ctx->b_imu_valid = true;
         mission_mode_clear(APP_MODE_CAL_IMU);

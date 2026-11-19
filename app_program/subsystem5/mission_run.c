@@ -25,9 +25,6 @@
 /* Barcode bench test (build option BAR_BENCH=1, bring-up only): RUN drives
    straight for MISSION_BAR_BENCH_MM and only logs what the barcode reader
    decodes. No line following, obstacle avoidance, rewind or turns. */
-#ifndef MISSION_BAR_BENCH
-#define MISSION_BAR_BENCH         (0u)
-#endif
 #define MISSION_BAR_BENCH_MM      (1200)    /* straight run length, mm */
 
 #define RUN_TURN_RIGHT_ANGLE_DEG  (90)
