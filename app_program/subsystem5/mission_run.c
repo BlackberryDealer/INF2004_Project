@@ -15,11 +15,20 @@
 #include "../subsystem2/fault.h"
 #include "../subsystem2/odometry.h"
 #include "../subsystem3/barcode.h"
+#include "../subsystem3/code39.h"
 #include "cfg_mission.h"
 #include "cfg_obstacle.h"          /* OBS_SCAN_MM, OBS_CREEP_TOL_MM */
 #include "mission.h"
 
 /* ---- private constants and types ------------------------------------ */
+
+/* Barcode bench test (build option BAR_BENCH=1, bring-up only): RUN drives
+   straight for MISSION_BAR_BENCH_MM and only logs what the barcode reader
+   decodes. No line following, obstacle avoidance, rewind or turns. */
+#ifndef MISSION_BAR_BENCH
+#define MISSION_BAR_BENCH         (0u)
+#endif
+#define MISSION_BAR_BENCH_MM      (1200)    /* straight run length, mm */
 
 #define RUN_TURN_RIGHT_ANGLE_DEG  (90)
 #define RUN_UTURN_DEG             (180)
@@ -107,6 +116,7 @@ static bool run_barcode_retry(mission_ctx_t * p_ctx,
                               status_board_t const * p_snap, uint32_t now_us);
 static void run_request(mission_ctx_t * p_ctx, uint32_t sys_state,
                         uint32_t end_reason);
+static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt);
 static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
                      uint32_t now_us);
 static void run_post_profile(mission_ctx_t const * p_ctx,
@@ -140,7 +150,25 @@ void mission_run_enter(mission_ctx_t * p_ctx, status_board_t const * p_snap,
     p_ctx->b_creeping        = false;
     p_ctx->b_crept           = false;
     p_ctx->sys_request       = MISSION_REQ_NONE;
-    run_goto(p_ctx, APP_RUN_FOLLOW, p_snap, now_us);
+    if (0u != MISSION_BAR_BENCH)
+    {
+        /* Bench: one straight move, barcode reader only. */
+        p_ctx->run_state = APP_RUN_FOLLOW;
+        mission_mode_clear(RUN_INHIBITS | APP_MODE_BARCODE_REREAD);
+        app_log("BENCH: driving straight %d mm, reading barcodes only"
+                " (no line following, no avoidance)\n",
+                MISSION_BAR_BENCH_MM, 0, 0);
+        if (!mission_send_move(p_ctx, MISSION_MV_FWD, MISSION_BAR_BENCH_MM,
+                               now_us))
+        {
+            app_log("BENCH: motion refused the move\n", 0, 0, 0);
+            run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
+        }
+    }
+    else
+    {
+        run_goto(p_ctx, APP_RUN_FOLLOW, p_snap, now_us);
+    }
 }
 
 /**
@@ -156,7 +184,17 @@ void mission_run_enter(mission_ctx_t * p_ctx, status_board_t const * p_snap,
 void mission_run_handle(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                         status_board_t const * p_snap, uint32_t now_us)
 {
-    bool b_is_done = run_common(p_ctx, p_evt, p_snap, now_us);
+    bool b_is_done = false;
+
+    if (0u != MISSION_BAR_BENCH)
+    {
+        run_bench(p_ctx, p_evt);
+        b_is_done = true;           /* nothing else runs in the bench */
+    }
+    else
+    {
+        b_is_done = run_common(p_ctx, p_evt, p_snap, now_us);
+    }
 
     if ((!b_is_done) && (RUN_BAR_IDLE != p_ctx->barcode_phase))
     {
@@ -189,7 +227,8 @@ void mission_run_handle(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
         }
     }
 
-    if (MISSION_REQ_NONE == p_ctx->sys_request)
+    if ((0u == MISSION_BAR_BENCH)
+        && (MISSION_REQ_NONE == p_ctx->sys_request))
     {
         run_barcode_try_rewind(p_ctx, p_snap, now_us);
         run_background(p_ctx, p_snap, now_us);
@@ -346,6 +385,69 @@ static bool run_common(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
     }
 
     return b_is_done;
+}
+
+/**
+ * run_bench
+ * @brief   Barcode bench test (BAR_BENCH=1): logs every barcode result
+ *          while the straight move runs; ends the run on STOP, at the end
+ *          of the move, or if the move fails (stall, deadline, ESTOP).
+ *          Line, junction and obstacle events are ignored on purpose.
+ * @param   p_ctx  mission context
+ * @param   p_evt  this pass's event
+ * @context mission_task
+ */
+static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt)
+{
+    uint32_t const char_idx = p_evt->value & RUN_BAR_CHAR_MASK;
+
+    if (p_evt->b_has_event)
+    {
+        switch (p_evt->type)
+        {
+            case APP_EVT_BARCODE:
+                /* cast: ASCII code and 2-bit command fit int32_t */
+                app_log("BENCH BARCODE: '%c' decoded (command %d)\n",
+                        (int32_t) code39_char_ascii(char_idx),
+                        (int32_t) ((p_evt->value >> RUN_BAR_CMD_SHIFT)
+                                   & RUN_BAR_CMD_MASK), 0);
+                break;
+            case APP_EVT_UNMAPPED:
+                /* cast: ASCII code fits int32_t */
+                app_log("BENCH BARCODE: '%c' decoded (valid Code 39, no"
+                        " command mapped)\n",
+                        (int32_t) code39_char_ascii(char_idx), 0, 0);
+                break;
+            case APP_EVT_INVALID:
+                /* cast: event value <= 2047 */
+                app_log("BENCH: barcode read but not valid Code 39 (%d)\n",
+                        (int32_t) p_evt->value, 0, 0);
+                break;
+            case APP_EVT_BARCODE_PROBE:
+                /* cast: event value <= 2047 */
+                app_log("BENCH: capture dropped %d mm after its start (no"
+                        " rewind in the bench)\n",
+                        (int32_t) p_evt->value, 0, 0);
+                break;
+            case APP_EVT_STOP:
+                app_log("BENCH: stopped\n", 0, 0, 0);
+                run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
+                break;
+            case APP_EVT_MOVE_DONE:
+                app_log("BENCH: end of the straight run\n", 0, 0, 0);
+                run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
+                break;
+            default:
+                /* line, junction and obstacle events: not in the bench */
+                break;
+        }
+    }
+    if ((MISSION_REQ_NONE == p_ctx->sys_request) && p_ctx->b_motion_failed)
+    {
+        app_log("BENCH: move did not finish (stall, obstacle stop or"
+                " deadline)\n", 0, 0, 0);
+        run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
+    }
 }
 
 /**
