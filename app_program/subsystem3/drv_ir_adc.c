@@ -1,6 +1,11 @@
 /**
  * @file    drv_ir_adc.c
- * @brief   ADC0/ADC1 4-sample averaging driver for IR line sensors.
+ * @brief   ADC0/ADC1 4-sample averaging driver for IR line sensors, and
+ *          (BAR_AO=1) single ADC2 samples of the barcode module's AO.
+ *          With BAR_AO=1 the R4 timer ISR also uses the ADC, so every
+ *          conversion runs under one SIO hardware spinlock: line_task
+ *          holds it with its core's interrupts masked (4 conversions,
+ *          about 8 us); R4 only tries it and skips that sample if busy.
  * @owner   Buddy 3 (line, barcode)
  * @kind    drv
  * @reqs    FR1, NFR1
@@ -8,6 +13,8 @@
 
 #include "drv_ir_adc.h"
 #include "../board_pins.h"
+#include "cfg_barcode.h"       /* BAR_AO */
+#include "hardware/sync.h"     /* SIO spinlock, interrupt mask */
 
 #ifndef DRV_IR_ADC_USE_REGS
 #define DRV_IR_ADC_USE_REGS (0)
@@ -29,9 +36,14 @@
 
 /* ---- private data ---------------------------------------------------- */
 
+/* Set last in drv_ir_adc_init(): R4 may start before line_task has
+   enabled the ADC, and must not wait on a disabled block.            */
+static volatile bool gb_adc_ready = false;
+
 /* ---- private function prototypes ------------------------------------- */
 
 static uint32_t drv_ir_adc_read_channel(uint32_t channel);
+static uint32_t drv_ir_adc_convert(uint32_t channel, uint32_t samples);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -60,6 +72,21 @@ void drv_ir_adc_init(void)
     padsbank0_hw->io[PIN_IR_LINE_L]    = PADS_BANK0_GPIO0_OD_BITS;
     padsbank0_hw->io[PIN_IR_LINE_R]    = PADS_BANK0_GPIO0_OD_BITS;
 #endif
+    if (0u != BAR_AO)
+    {
+#if (0 == DRV_IR_ADC_USE_REGS)
+        adc_gpio_init(PIN_BAR_AO);
+#else
+        iobank0_hw->io[PIN_BAR_AO].ctrl = GPIO_FUNC_NULL;
+        padsbank0_hw->io[PIN_BAR_AO]    = PADS_BANK0_GPIO0_OD_BITS;
+#endif
+        __mem_fence_release();               /* ADC set up before flag */
+        gb_adc_ready = true;
+    }
+    else
+    {
+        /* DO build: GP28 stays unused, R4 does not run. */
+    }
 }
 
 /**
@@ -94,6 +121,41 @@ void drv_ir_adc_read(uint32_t * p_left, uint32_t * p_right)
     }
 }
 
+/**
+ * drv_ir_adc_try_read_bar
+ * @brief   One ADC2 conversion of the barcode AO, if the ADC is free.
+ * @param   p_code  output: 12-bit code (0..4095), written on success only
+ * @return  true when sampled; false before init or while line_task
+ *          holds the ADC (the caller skips this sample)
+ * @context R4 timer ISR (BAR_AO=1)
+ */
+bool drv_ir_adc_try_read_bar(uint32_t * p_code)
+{
+    bool b_is_read = false;
+
+    if (gb_adc_ready && (((uint32_t *) 0) != p_code))
+    {
+        spin_lock_t * const p_lock = spin_lock_instance(BOARD_SPINLOCK_ADC);
+
+        if (spin_try_lock_unsafe(p_lock))
+        {
+            *p_code   = drv_ir_adc_convert(BOARD_ADC_CH_BAR_AO, 1u);
+            spin_unlock_unsafe(p_lock);
+            b_is_read = true;
+        }
+        else
+        {
+            /* line_task is converting: skip this sample. */
+        }
+    }
+    else
+    {
+        /* ADC not set up yet. */
+    }
+
+    return b_is_read;
+}
+
 /* ---- private functions ------------------------------------------------ */
 
 /**
@@ -106,12 +168,40 @@ void drv_ir_adc_read(uint32_t * p_left, uint32_t * p_right)
 static uint32_t drv_ir_adc_read_channel(uint32_t channel)
 {
     uint32_t sum = 0u;
+
+    if (0u != BAR_AO)
+    {
+        spin_lock_t * const p_lock = spin_lock_instance(BOARD_SPINLOCK_ADC);
+        uint32_t const      saved  = spin_lock_blocking(p_lock);
+
+        sum = drv_ir_adc_convert(channel, DRV_IR_ADC_SAMPLES_PER_CH);
+        spin_unlock(p_lock, saved);
+    }
+    else
+    {
+        sum = drv_ir_adc_convert(channel, DRV_IR_ADC_SAMPLES_PER_CH);
+    }
+
+    return (sum >> DRV_IR_ADC_AVG_SHIFT);
+}
+
+/**
+ * drv_ir_adc_convert
+ * @brief   Selects an ADC channel and sums back-to-back conversions.
+ * @param   channel ADC input channel (0 left, 1 right, 2 barcode AO).
+ * @param   samples number of conversions (1..4)
+ * @return  sum of 12-bit codes
+ * @context line_task, R4 (caller holds the ADC when BAR_AO=1)
+ */
+static uint32_t drv_ir_adc_convert(uint32_t channel, uint32_t samples)
+{
+    uint32_t sum = 0u;
     uint32_t idx = 0u;
 
 #if (0 == DRV_IR_ADC_USE_REGS)
     adc_select_input(channel);
 
-    for (idx = 0u; idx < DRV_IR_ADC_SAMPLES_PER_CH; idx++)
+    for (idx = 0u; idx < samples; idx++)
     {
         uint16_t const raw = adc_read();
 
@@ -124,7 +214,7 @@ static uint32_t drv_ir_adc_read_channel(uint32_t channel)
     adc_hw->cs =
         (cs_val | ((channel << ADC_CS_AINSEL_LSB) & ADC_CS_AINSEL_BITS));
 
-    for (idx = 0u; idx < DRV_IR_ADC_SAMPLES_PER_CH; idx++)
+    for (idx = 0u; idx < samples; idx++)
     {
         adc_hw->cs |= ADC_CS_START_ONCE_BITS;
 
@@ -137,7 +227,7 @@ static uint32_t drv_ir_adc_read_channel(uint32_t channel)
     }
 #endif
 
-    return (sum >> DRV_IR_ADC_AVG_SHIFT);
+    return sum;
 }
 
 /*** end of file ***/

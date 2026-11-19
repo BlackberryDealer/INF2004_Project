@@ -36,16 +36,20 @@
 #define PIN_BUZZER         (22u)
 #define PIN_IR_LINE_L      (26u)  /* ADC0 */
 #define PIN_IR_LINE_R      (27u)  /* ADC1 */
-#define PIN_SPARE_28       (28u)  /* ADC2, reserved for a 2nd barcode DO */
+#define PIN_BAR_AO         (28u)  /* ADC2: barcode module AO (BAR_AO=1) */
 
 #define BOARD_ADC_CH_LINE_L    (0u)
 #define BOARD_ADC_CH_LINE_R    (1u)
+#define BOARD_ADC_CH_BAR_AO    (2u)
 #define BOARD_I2C_IMU_INST     (1u)   /* i2c1 */
 #define BOARD_I2C_IMU_HZ       (400000u)
 #define BOARD_PWM_HZ_MOTOR     (10000u)
 #define BOARD_PWM_HZ_SERVO     (50u)
 #define BOARD_IRQ_GPIO_BANK0   (13u)  /* RP2040 IO_IRQ_BANK0 */
 #define BOARD_IRQ_PRI_GPIO     (2)    /* kernel interrupt level */
+#define BOARD_IRQ_TIMER0       (0u)   /* RP2040 TIMER_IRQ_0 (R4)  */
+#define BOARD_IRQ_PRI_TIMER0   (2)    /* same level as R1        */
+#define BOARD_SPINLOCK_ADC     (31u)  /* SIO lock; kernel uses 0..2 */
 
 /* Boot check: prints any pin listed twice and the GP0/GP1 functions. */
 extern void board_pins_check(void);

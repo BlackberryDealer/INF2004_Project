@@ -125,6 +125,19 @@ ifeq ($(BAR_BENCH),1)
 BAR_BENCH_SUFFIX := _barbench
 endif
 
+# BAR_AO=1 reads the barcode module's analog output on GP28 (ADC2) at
+# 2 kHz and finds bars with a relative threshold, instead of the module's
+# fixed DO comparator on GP7 (BAR_AO=1u in C, subsystem3/cfg_barcode.h).
+# Lifted or curled paper blurs the narrow white gaps below the DO
+# threshold; the analog detector still sees them as dips. Default 0.
+BAR_AO ?= 0
+ifneq ($(filter $(BAR_AO),0 1),$(BAR_AO))
+$(error Unknown BAR_AO '$(BAR_AO)'; use 0 or 1)
+endif
+ifeq ($(BAR_AO),1)
+BAR_AO_SUFFIX := _ao
+endif
+
 # PROBE=1 builds the GP14 timing probe into the image (APP_PROBE=1 in C).
 # The image gets a _probe suffix so it cannot be mistaken for the normal one.
 PROBE ?= 0
@@ -160,7 +173,7 @@ endif
 # a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
 # only the banner in the log revealed it.
 #
-EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(DEBUG_MQTT_SUFFIX)$(CRASH_SUFFIX)$(TEST_SUFFIX)$(PROBE_SUFFIX)$(BAR_BENCH_SUFFIX)
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(DEBUG_MQTT_SUFFIX)$(CRASH_SUFFIX)$(TEST_SUFFIX)$(PROBE_SUFFIX)$(BAR_BENCH_SUFFIX)$(BAR_AO_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -223,6 +236,7 @@ endif
 CFLAGS  += -DAPP_TEST=$(TEST)
 CFLAGS  += -DAPP_PROBE=$(PROBE)
 CFLAGS  += -DMISSION_BAR_BENCH=$(BAR_BENCH)u
+CFLAGS  += -DBAR_AO=$(BAR_AO)u
 CFLAGS  += -DTELEM_DEBUG_MQTT=$(DEBUG_MQTT)u
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
@@ -256,7 +270,7 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-dbg$(DEBUG_MQTT)-crash$(CRASH_REPORT)-test$(TEST)-probe$(PROBE)
+PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-dbg$(DEBUG_MQTT)-crash$(CRASH_REPORT)-test$(TEST)-probe$(PROBE)-barbench$(BAR_BENCH)-ao$(BAR_AO)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))

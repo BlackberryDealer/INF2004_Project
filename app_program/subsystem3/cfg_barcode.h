@@ -9,8 +9,30 @@
 #define CFG_BARCODE_H
 
 #include "../app_types.h"
+#include "../app_layout.h"   /* SH_BAR_AO limits for the checks */
 
 #define BAR_DO_BLACK_IS_HIGH      (true)  /* MEASURE: A3 */
+/* Analog barcode input (on-car 2026-11-19): with the paper lifted off
+   the floor the module's fixed DO threshold loses the narrow white gaps
+   (bars merge). BAR_AO=1 (make BAR_AO=1) reads the same module's AO on
+   GP28 (ADC2) every BAR_AO_PERIOD_US instead, and switches level on a
+   relative rise or dip of at least BAR_AO_DELTA_PCT of the recent swing
+   (never less than BAR_AO_DELTA_MIN), confirmed on BAR_AO_CONFIRM
+   samples. The edges go into the same K2 ring, so the decoder is the
+   same for DO and AO.                                                 */
+#ifndef BAR_AO
+#define BAR_AO                    (0u)
+#endif
+#define BAR_AO_BLACK_IS_HIGH      (true)  /* MEASURE: like DO and line AO */
+#define BAR_AO_PERIOD_US          (500u)  /* 2 kHz */
+#define BAR_AO_CONFIRM            (2u)    /* samples past the delta */
+#define BAR_AO_DELTA_MIN          (100u)  /* ADC codes, TUNE */
+#ifndef BAR_AO_DELTA_PCT
+#define BAR_AO_DELTA_PCT          (35u)   /* % of the recent swing, TUNE */
+#endif
+#define BAR_AO_AMP_INIT           (800u)  /* ADC codes, TUNE */
+#define BAR_AO_AMP_LSB            (16u)   /* SH_BAR_AO OPP / AMP step */
+#define BAR_AO_CODE_MAX           (4095u) /* 12-bit ADC */
 #define BAR_EDGE_REJECT_US        (1000u) /* chatter filter */
 /* LM393 chatter after a real transition (on-car 2026-11-10 21:09: echo
    edges 1.0-2.1 ms after it, with random DO levels). An edge this soon
@@ -52,6 +74,19 @@
 #define BAR_EDGE_LOG_ON           (1u)
 #define BAR_EDGE_LOG_MAX          (48u) /* edges kept, ~1.5 barcodes */
 #define BAR_EDGE_LOG_EVERY        (4u)  /* task cycles per printed line */
+
+#if ((BAR_AO_CONFIRM * BAR_AO_PERIOD_US) < BAR_EDGE_REJECT_US)
+#error "AO level changes must be at least the edge filter apart"
+#endif
+#if ((BAR_AO_CONFIRM - 1u) > SH_BAR_AO_PEND_MAX)
+#error "SH_BAR_AO.PEND must count to BAR_AO_CONFIRM - 1"
+#endif
+#if ((BAR_AO_CODE_MAX / BAR_AO_AMP_LSB) > SH_BAR_AO_AMP_MAX) \
+    || ((BAR_AO_CODE_MAX / BAR_AO_AMP_LSB) > SH_BAR_AO_OPP_MAX) \
+    || (BAR_AO_CODE_MAX > SH_BAR_AO_EXT_MAX) \
+    || (BAR_AO_CODE_MAX > SH_BAR_AOS_CODE_MAX)
+#error "SH_BAR_AO / SH_BAR_AOS must hold every ADC code"
+#endif
 
 #if ((2u * BAR_EDGE_REJECT_US) >                                               \
      ((BAR_NARROW_MIN_UM * 1000u) / APP_SPEED_PHYS_MAX_MM_S))
