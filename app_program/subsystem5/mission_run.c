@@ -22,10 +22,15 @@
 
 /* ---- private constants and types ------------------------------------ */
 
-/* Barcode bench test (build option BAR_BENCH=1, bring-up only): RUN drives
-   straight for MISSION_BAR_BENCH_MM and only logs what the barcode reader
-   decodes. No line following, obstacle avoidance, rewind or turns. */
-#define MISSION_BAR_BENCH_MM      (1200)    /* straight run length, mm */
+/* Barcode bench test (build option BAR_BENCH=1, bring-up only): RUN
+   drives straight passes of MISSION_BAR_BENCH_MM at the reread speed and
+   logs what the barcode reader decodes; a pass without a decode backs up
+   straight to its start and tries again, MISSION_BAR_BENCH_RETRIES times.
+   No line following, obstacle avoidance or turns. Bench state reuses
+   fields the normal RUN code does not use in the bench: substep = pass
+   number, b_is_armed = decoded this pass, barcode_phase = FORWARD (IDLE)
+   or REVERSING, barcode_back_path = pass start, barcode_back_left = mm
+   still to back up.                                                    */
 
 #define RUN_TURN_RIGHT_ANGLE_DEG  (90)
 #define RUN_UTURN_DEG             (180)
@@ -113,7 +118,11 @@ static bool run_barcode_retry(mission_ctx_t * p_ctx,
                               status_board_t const * p_snap, uint32_t now_us);
 static void run_request(mission_ctx_t * p_ctx, uint32_t sys_state,
                         uint32_t end_reason);
-static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt);
+static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
+                      status_board_t const * p_snap, uint32_t now_us);
+static void run_bench_pass(mission_ctx_t * p_ctx,
+                           status_board_t const * p_snap, uint32_t now_us);
+static void run_bench_back(mission_ctx_t * p_ctx, uint32_t now_us);
 static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
                      uint32_t now_us);
 static void run_post_profile(mission_ctx_t const * p_ctx,
@@ -149,18 +158,11 @@ void mission_run_enter(mission_ctx_t * p_ctx, status_board_t const * p_snap,
     p_ctx->sys_request       = MISSION_REQ_NONE;
     if (0u != MISSION_BAR_BENCH)
     {
-        /* Bench: one straight move, barcode reader only. */
+        /* Bench: straight passes, barcode reader only. */
         p_ctx->run_state = APP_RUN_FOLLOW;
+        p_ctx->substep   = 0u;                    /* pass 1 */
         mission_mode_clear(RUN_INHIBITS | APP_MODE_BARCODE_REREAD);
-        app_log("BENCH: driving straight %d mm, reading barcodes only"
-                " (no line following, no avoidance)\n",
-                MISSION_BAR_BENCH_MM, 0, 0);
-        if (!mission_send_move(p_ctx, MISSION_MV_FWD, MISSION_BAR_BENCH_MM,
-                               now_us))
-        {
-            app_log("BENCH: motion refused the move\n", 0, 0, 0);
-            run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
-        }
+        run_bench_pass(p_ctx, p_snap, now_us);
     }
     else
     {
@@ -185,7 +187,7 @@ void mission_run_handle(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
 
     if (0u != MISSION_BAR_BENCH)
     {
-        run_bench(p_ctx, p_evt);
+        run_bench(p_ctx, p_evt, p_snap, now_us);
         b_is_done = true;           /* nothing else runs in the bench */
     }
     else
@@ -385,24 +387,78 @@ static bool run_common(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
 }
 
 /**
- * run_bench
- * @brief   Barcode bench test (BAR_BENCH=1): logs every barcode result
- *          while the straight move runs; ends the run on STOP, at the end
- *          of the move, or if the move fails (stall, deadline, ESTOP).
- *          Line, junction and obstacle events are ignored on purpose.
- * @param   p_ctx  mission context
- * @param   p_evt  this pass's event
+ * run_bench_pass
+ * @brief   Barcode bench: starts one straight pass of MISSION_BAR_BENCH_MM
+ *          at the reread speed from where the car stands.
  * @context mission_task
  */
-static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt)
+static void run_bench_pass(mission_ctx_t * p_ctx,
+                           status_board_t const * p_snap, uint32_t now_us)
+{
+    p_ctx->b_is_armed        = false;             /* no decode yet */
+    p_ctx->barcode_phase     = RUN_BAR_IDLE;      /* driving forward */
+    mission_mode_clear(APP_MODE_BARCODE_INHIBIT); /* reader on */
+    p_ctx->barcode_back_path = status_board_path(p_snap);
+    /* cast: pass number <= MISSION_BAR_BENCH_RETRIES + 1 */
+    app_log("BENCH: pass %d of %d, straight %d mm at the reread speed\n",
+            (int32_t) p_ctx->substep + 1,
+            (int32_t) MISSION_BAR_BENCH_RETRIES + 1, MISSION_BAR_BENCH_MM);
+    if (!mission_send_move(p_ctx, MISSION_MV_FWD, MISSION_BAR_BENCH_MM,
+                           now_us))
+    {
+        app_log("BENCH: motion refused the move\n", 0, 0, 0);
+        run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
+    }
+}
+
+/**
+ * run_bench_back
+ * @brief   Barcode bench: sends the next straight back-up step (at most
+ *          MOTION_REVERSE_MAX_MM) towards the start of the failed pass.
+ * @context mission_task
+ */
+static void run_bench_back(mission_ctx_t * p_ctx, uint32_t now_us)
+{
+    uint32_t const step = (p_ctx->barcode_back_left
+                           > (uint32_t) MOTION_REVERSE_MAX_MM)
+                          ? (uint32_t) MOTION_REVERSE_MAX_MM
+                          : p_ctx->barcode_back_left;
+
+    p_ctx->barcode_back_left -= step;
+    /* cast: step <= MOTION_REVERSE_MAX_MM */
+    if (!mission_send_move(p_ctx, MISSION_MV_BACK, (int32_t) step, now_us))
+    {
+        app_log("BENCH: motion refused the back-up\n", 0, 0, 0);
+        run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
+    }
+}
+
+/**
+ * run_bench
+ * @brief   Barcode bench test (BAR_BENCH=1): logs every barcode result.
+ *          At the end of a forward pass: decoded -> FINISHED; not decoded
+ *          -> back up straight to the pass start and drive it again, at
+ *          most MISSION_BAR_BENCH_RETRIES times. Ends on STOP or if a move
+ *          fails (stall, deadline, ESTOP). Line, junction and obstacle
+ *          events are ignored on purpose.
+ * @param   p_ctx  mission context
+ * @param   p_evt  this pass's event
+ * @param   p_snap status board snapshot
+ * @param   now_us this pass
+ * @context mission_task
+ */
+static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
+                      status_board_t const * p_snap, uint32_t now_us)
 {
     uint32_t const char_idx = p_evt->value & RUN_BAR_CHAR_MASK;
+    uint32_t       travel   = 0u;
 
     if (p_evt->b_has_event)
     {
         switch (p_evt->type)
         {
             case APP_EVT_BARCODE:
+                p_ctx->b_is_armed = true;
                 /* cast: ASCII code and 2-bit command fit int32_t */
                 app_log("BENCH BARCODE: '%c' decoded (command %d)\n",
                         (int32_t) code39_char_ascii(char_idx),
@@ -410,6 +466,7 @@ static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt)
                                    & RUN_BAR_CMD_MASK), 0);
                 break;
             case APP_EVT_UNMAPPED:
+                p_ctx->b_is_armed = true;
                 /* cast: ASCII code fits int32_t */
                 app_log("BENCH BARCODE: '%c' decoded (valid Code 39, no"
                         " command mapped)\n",
@@ -422,8 +479,7 @@ static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt)
                 break;
             case APP_EVT_BARCODE_PROBE:
                 /* cast: event value <= 2047 */
-                app_log("BENCH: capture dropped %d mm after its start (no"
-                        " rewind in the bench)\n",
+                app_log("BENCH: capture dropped %d mm after its start\n",
                         (int32_t) p_evt->value, 0, 0);
                 break;
             case APP_EVT_STOP:
@@ -431,8 +487,59 @@ static void run_bench(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt)
                 run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
                 break;
             case APP_EVT_MOVE_DONE:
-                app_log("BENCH: end of the straight run\n", 0, 0, 0);
-                run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
+                if (RUN_BAR_REVERSING == p_ctx->barcode_phase)
+                {
+                    if (p_ctx->barcode_back_left > 0u)
+                    {
+                        run_bench_back(p_ctx, now_us);  /* next step back */
+                    }
+                    else
+                    {
+                        p_ctx->substep++;               /* next pass */
+                        run_bench_pass(p_ctx, p_snap, now_us);
+                    }
+                }
+                else if (p_ctx->b_is_armed)
+                {
+                    /* cast: pass number <= MISSION_BAR_BENCH_RETRIES + 1 */
+                    app_log("BENCH: read OK on pass %d\n",
+                            (int32_t) p_ctx->substep + 1, 0, 0);
+                    run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
+                }
+                else if (p_ctx->substep < MISSION_BAR_BENCH_RETRIES)
+                {
+                    travel = odometry_counts_to_mm(odometry_path_since(
+                        status_board_path(p_snap),
+                        p_ctx->barcode_back_path));
+                    p_ctx->barcode_back_left =
+                        (travel > (uint32_t) MISSION_BAR_BENCH_MM)
+                        ? (uint32_t) MISSION_BAR_BENCH_MM : travel;
+                    p_ctx->barcode_phase = RUN_BAR_REVERSING;
+                    /* reader off while backing over the strip */
+                    mission_mode_set(APP_MODE_BARCODE_INHIBIT);
+                    /* casts: retry <= 3, distance <= 600 mm */
+                    app_log("BENCH: no read on this pass: backing up %d mm"
+                            " for retry %d of %d\n",
+                            (int32_t) p_ctx->barcode_back_left,
+                            (int32_t) p_ctx->substep + 1,
+                            (int32_t) MISSION_BAR_BENCH_RETRIES);
+                    if (p_ctx->barcode_back_left > 0u)
+                    {
+                        run_bench_back(p_ctx, now_us);
+                    }
+                    else
+                    {
+                        p_ctx->substep++;
+                        run_bench_pass(p_ctx, p_snap, now_us);
+                    }
+                }
+                else
+                {
+                    /* cast: passes <= MISSION_BAR_BENCH_RETRIES + 1 */
+                    app_log("BENCH: no read after %d passes\n",
+                            (int32_t) MISSION_BAR_BENCH_RETRIES + 1, 0, 0);
+                    run_request(p_ctx, APP_SYS_FINISHED, APP_END_STOP);
+                }
                 break;
             default:
                 /* line, junction and obstacle events: not in the bench */
