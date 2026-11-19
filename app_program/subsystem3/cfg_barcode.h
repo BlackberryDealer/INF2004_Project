@@ -14,14 +14,15 @@
 #define BAR_DO_BLACK_IS_HIGH      (true)  /* MEASURE: A3 */
 /* Analog barcode input (on-car 2026-11-19): with the paper lifted off
    the floor the module's fixed DO threshold loses the narrow white gaps
-   (bars merge). BAR_AO=1 (make BAR_AO=1) reads the same module's AO on
+   (bars merge). BAR_AO=1 (the default) reads the same module's AO on
    GP28 (ADC2) every BAR_AO_PERIOD_US instead, and switches level on a
    relative rise or dip of at least BAR_AO_DELTA_PCT of the recent swing
    (never less than BAR_AO_DELTA_MIN), confirmed on BAR_AO_CONFIRM
    samples. The edges go into the same K2 ring, so the decoder is the
-   same for DO and AO.                                                 */
+   same for DO and AO. On-car bench check 19 Nov 2026 passed: AO is the
+   default; BAR_AO=0 (make BAR_AO=0) builds the old DO input.         */
 #ifndef BAR_AO
-#define BAR_AO                    (0u)
+#define BAR_AO                    (1u)
 #endif
 #define BAR_AO_BLACK_IS_HIGH      (true)  /* MEASURE: like DO and line AO */
 #define BAR_AO_PERIOD_US          (500u)  /* 2 kHz */

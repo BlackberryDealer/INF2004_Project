@@ -5,8 +5,10 @@ not flat against the floor (on the floor, but an edge or corner curled
 up), the IR sensor misses bars.
 **Owner of the change:** Buddy 3 (barcode), with a one-line note for
 Buddy 5 (shared `board_pins.h`).
-**Status:** in `main`, off by default (`BAR_AO=0`). Turn it on with
-`make ... BAR_AO=1` after the bench check in section 6.
+**Status:** on branch `barcode-analog-bench` (not yet in `main`). The
+on-car bench check of 19 Nov passed (section 6), so the analog input is
+now the **default** (`BAR_AO=1`); `make ... BAR_AO=0` still builds the
+old DO input (image suffix `_do`).
 
 ## 1. The problem
 
@@ -37,12 +39,12 @@ which the firmware did not use (`PIN_SPARE_28`).
 | `barcode_do_level()` (console, SENSORS telemetry) | DO pin | The detector's level |
 | Console `BAR DO` line (motors off, every 0.5 s) | `BAR DO 0 (1 = black), edges N` | `BAR DO 0 (1 = black), edges N, AO 1234` (the last GP28 code) |
 | `board_pins.h` | `PIN_SPARE_28` | `PIN_BAR_AO`, `BOARD_ADC_CH_BAR_AO`, `BOARD_IRQ_TIMER0`, `BOARD_IRQ_PRI_TIMER0`, `BOARD_SPINLOCK_ADC` |
-| Build | - | `BAR_AO ?= 0` in `pico_rp2040.mk`, image suffix `_ao` |
+| Build | - | `BAR_AO ?= 1` in `pico_rp2040.mk` (default); `BAR_AO=0` gives the DO image, suffix `_do` |
 
-With `BAR_AO=0` the images behave exactly as before: R4 and the analog
-state are not linked, the ADC lock is not taken, RAM is byte-identical to
-`0bfca24` and flash is 4 bytes smaller (the shared ring push), and the DO
-simulation output is identical (89 lines; section 5). The build also now tracks `BAR_BENCH` and `BAR_AO` in its
+With `BAR_AO=0` the images behave exactly as before the change: R4 and
+the analog state are not linked, the ADC lock is not taken, RAM is
+byte-identical to `4e87df5` and flash is 4 bytes smaller (the shared ring
+push), and the DO simulation output is identical (89 lines; section 5). The build also now tracks `BAR_BENCH` and `BAR_AO` in its
 profile, so switching flags rebuilds every object.
 
 ## 3. The detector (`bar_ao.c`)
@@ -80,10 +82,23 @@ New rows in `tools/layout.csv` (generated into `app_layout.h` and
 | `SH_BAR_AO` (LEVEL, PEND, EXT, OPP, AMP) | 30 of 32 | R4 -> `barcode_do_level()` (line_task, telem) |
 | `SH_BAR_AOS` (CODE) | 12 of 16 | R4 -> console line |
 | `E_BAR_AO_US` | E5 timer | R4 only (next ALARM0 time) |
+| `SH_ADC_RDY` (READY) | 1 of 8 | line_task (once, at ADC init) -> R4 |
 
 Build checks in `cfg_barcode.h` stop the build if a field cannot hold its
-range. RAM in an AO image: +15 bytes (state word, last code, alarm time,
-callback pointer, ADC-ready flag).
+range. RAM in an AO image: +11 bytes (state word, last code, alarm time,
+ADC-ready byte), measured +16 with alignment. R4 calls `barcode_ao_sample()`
+directly, so there is no callback pointer to store.
+
+**Registration (TEAM.md, BARR-C).** TEAM.md lists GP28 as `PIN_BAR_AO`,
+R4 in the handler list and the `tk_def_int` budget (2), the ADC as shared
+by line_task and R4 under spinlock 31, and TIMER ALARM0 as owned by S3
+(`sys_tick.c` still only reads the counter). BARR-C deviation D6 (plain C
+function registered with `tk_def_int`) now names R4 as well.
+
+**Timing.** R4's code path is about 640 bytes, straight-line apart from
+the 2 us ADC conversion: estimated about 5 us per interrupt including
+entry, about 1 % of one core at 2 kHz. A `PROBE=1` image toggles GP14
+around R4 like R1, so the scope can measure it (still to do on the car).
 
 ## 5. Verification (host)
 
@@ -119,10 +134,14 @@ It always fails safely: no event or INVALID, never a wrong character. Delta
 detector. Driving slower does not help, because the blur is a distance.
 
 DO path: the old and new simulations print identical output (89 lines).
-All host suites: 890 pass. All six images (`make`, MQTT, debug, debug AO,
-bench, bench AO) build with `-Werror` and 0 warnings.
+**S3-U55** builds `barcode.c` as shipped (`BAR_AO=1`): start launches R4
+and not the GP7 interrupt, `barcode_do_level()` follows the detector, and
+flat 43/43 and curled/bumped 129/129 strips decode with none wrong. The
+bench statechart has its own test, **S5-U83** (`sim_mission_bench_host`).
 
-## 6. Car check (to do)
+Host suites, image builds and checks: see the TEST_LOG rows of 19 Nov.
+
+## 6. Car check
 
 Flash the bench image built with
 `make NET=lwip MQTT=1 DEBUG_MQTT=1 BAR_BENCH=1 BAR_AO=1`.
@@ -139,8 +158,10 @@ Flash the bench image built with
 4. If a pass fails, export the console (`Car console -> Export .txt`) and
    keep the `BAR edge dump` lines.
 
-When 1-3 pass, make `BAR_AO=1` the default for the course image (or build
-the course image with it) and add a TEST_LOG row.
+**19 Nov, evening:** the tester reported that the bench image reads the
+barcodes fine (TEST_LOG S3, 19 Nov). `BAR_AO=1` became the default.
+Still to record on the car: the white / black AO values from step 1, a
+full course run with the default image, and the R4 scope timing.
 
 ## 7. Requirement text
 

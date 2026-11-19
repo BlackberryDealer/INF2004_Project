@@ -12,12 +12,10 @@
 #include <stdint.h>
 #include "../app.h"
 
-/* Runs inside R4 (interrupt context): keep it short. code = 12-bit ADC
-   sample; t_us = the alarm time it was taken for (BAR_AO_PERIOD_US
-   steps, so edge gaps are exact multiples of the period).             */
-typedef void (*drv_bar_ao_cb_t)(uint32_t code, uint32_t t_us);
-
-extern ER drv_bar_ao_start(drv_bar_ao_cb_t p_callback);
+/* Starts R4. Each sample goes to barcode_ao_sample() (barcode.h) with
+   the alarm time it was taken for (BAR_AO_PERIOD_US steps, so edge gaps
+   are exact multiples of the period).                                */
+extern ER drv_bar_ao_start(void);
 
 #endif /* DRV_BAR_AO_H */
 

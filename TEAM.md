@@ -45,7 +45,7 @@ in the firmware that names a GPIO number is `app_program/board_pins.h`.
 | GP4 | `PIN_ENC_L_A` | motion_task, S2 | Left encoder A | PIO quadrature (B = A + 1) |
 | GP5 | `PIN_ENC_L_B` | motion_task, S2 | Left encoder B | PIO quadrature |
 | GP6 | `PIN_LED_ALIVE` | mission_task, S5 | Alive LED (Grove 5) | GPIO out, **SIO only** (shares PWM 3A with the buzzer) |
-| GP7 | `PIN_BAR_DO` | R1 → barcode_task, S3 | Barcode IR sensor DO | GPIO IRQ, both edges |
+| GP7 | `PIN_BAR_DO` | R1 → barcode_task, S3 | Barcode IR sensor DO (`BAR_AO=0` images only) | GPIO IRQ, both edges |
 | GP8 | `PIN_MOTOR_L_A` | motion_task, S2 | Left motor M1A | PWM slice 4 A, 10 kHz |
 | GP9 | `PIN_MOTOR_L_B` | motion_task, S2 | Left motor M1B | PWM slice 4 B, 10 kHz |
 | GP10 | `PIN_MOTOR_R_A` | motion_task, S2 | Right motor M2A | PWM slice 5 A, 10 kHz |
@@ -64,7 +64,7 @@ in the firmware that names a GPIO number is `app_program/board_pins.h`.
 | GP23, GP24, GP25, GP29 | — | *reserved* (`cyw43_utk_task`) | Pico W radio | template only |
 | GP26 | `PIN_IR_LINE_L` | line_task, S3 | Left line sensor | ADC0 |
 | GP27 | `PIN_IR_LINE_R` | line_task, S3 | Right line sensor | ADC1 |
-| GP28 | `PIN_SPARE_28` | — | reserved for a 2nd barcode DO | ADC2 capable |
+| GP28 | `PIN_BAR_AO` | R4 → barcode_task, S3 | Barcode IR sensor AO (default since Change Requirement 3) | ADC2, sampled at 2 kHz |
 
 **Never build with `CRASH_REPORT=1` or `CONSOLE=uart`:** they put UART0 on
 GP0/GP1, which the ultrasonic owns. `board_pins.c` stops the build with an
@@ -83,7 +83,7 @@ folder, never under `device/`.
 | I2C0 | — (unused) | — | — |
 | I2C1 | S4 | imu_task (register-level driver `drv_lsm303.c`) | GP2, GP3 |
 | SPI0, SPI1 | — (unused) | — | — |
-| ADC (channels 0, 1) | S3 | line_task (`drv_ir_adc.c`, SDK `hardware_adc`) | GP26, GP27 |
+| ADC (channels 0, 1, 2) | S3 | line_task (ch 0, 1) and R4 (ch 2), both in `drv_ir_adc.c`; every conversion holds SIO spinlock 31 (`BOARD_SPINLOCK_ADC`): line_task with interrupts masked, R4 only tries it and skips that sample | GP26, GP27, GP28 |
 | PWM slice 3 A | S5 | mission_task (buzzer) | GP22 (GP6 must stay SIO) |
 | PWM slices 4, 5 | S2 | motion_task (`drv_motor.c`) | GP8–GP11 |
 | PWM slice 7 B | S5 | obstacle_task (`drv_servo.c`) | GP15 |
@@ -91,6 +91,7 @@ folder, never under `device/`.
 | PIO: WS2812 program | S5 | mission_task (`drv_ws2812.c`) | GP18 |
 | GPIO bank-0 interrupt (R1) | S5 | `drv_gpio_irq.c` dispatches to S3, S5 callbacks | GP1, GP7 |
 | Timer (1 MHz time base, read only) | S5 | `sys_tick.c` (`sys_tick_now_us()` for everyone) | — |
+| Timer ALARM0 + TIMER_IRQ_0 (R4) | S3 | `drv_bar_ao.c` (`BAR_AO=1` only); `sys_tick.c` still only reads the counter | — |
 | Watchdog | S5 | mission_task via `sys_health.c` (registers directly) | — |
 | WiFi radio, TCP/IP, MQTT | *kernel* | `cyw43_utk_task` (template; S1 code in `mqtt_utk.c`) | GP23–25, GP29 |
 
@@ -123,7 +124,10 @@ kernel's 128-byte system part.
 
 Handlers: **R1** `gpio_bank0_isr` (S5, interrupt level 2) serves GP1 and GP7
 through registered callbacks (GP19, the IMU INT1, is unused since Change
-Requirement 2). **R2** 10 ms cyclic handler wakes T1–T3.
+Requirement 2; GP7 only in `BAR_AO=0` images). **R4** `bar_ao_timer_isr`
+(S3, `drv_bar_ao.c`, interrupt level 2, TIMER ALARM0 every 500 µs) takes one
+GP28 sample and queues a barcode edge on a level change (Change Requirement
+3; `BAR_AO=1`, the default). **R2** 10 ms cyclic handler wakes T1–T3.
 **R3** 60 ms cyclic handler wakes T4. R2 and R3 live in `sys_tick.c` (S5).
 
 ## 5. Interfaces between subsystems
@@ -134,7 +138,7 @@ access API (the headers in Part D of the spec, already in the repo).
 | ID | From → To | Mechanism | Object (creator file) | Access API | Data / meaning |
 |---|---|---|---|---|---|
 | K1 | R1 → S5 obstacle_task | semaphore | `SEM_ECHO` (`obstacle.c`) | internal, R1 callback `obstacle_echo_isr` | echo edge captured |
-| K2 | R1 → S3 barcode_task | semaphore + 64-entry edge ring | `SEM_BAR` (`barcode.c`) | internal, R1 callback `barcode_edge_isr` | 16-bit edge words (`MSG_EDGE`) |
+| K2 | R4 (or R1 when `BAR_AO=0`) → S3 barcode_task | semaphore + 64-entry edge ring | `SEM_BAR` (`barcode.c`) | internal: `barcode_ao_sample` from R4, or R1 callback `barcode_edge_isr`; one producer per image | 16-bit edge words (`MSG_EDGE`) |
 | K3 | S4 imu_task, S5 → S2 motion_task | event flag | `FLG_SAFETY` (`safety.c`) | `safety_*()` | `SAFETY_ESTOP / LIFT / FAULT`: motors brake while any bit is set (LIFT = lifted or overturned, Change Requirement 2) |
 | K4 | all, radio task → S5 mission_task | message buffer | `MBF_MISSION_EVT` (`mission.c`) | `mission_post_event()` | 16-bit event word (`MSG_EVT`, Part D.13) |
 | K5 | S5 mission_task → S2 motion_task | message buffer | `MBF_MOTION_CMD` (`motion.c`) | `motion_*()` commands | 16-bit command word (`MSG_CMD`) |
@@ -167,7 +171,7 @@ complete (the Phase 0 skeleton creates only the seven tasks):
 | Variable memory pool | 12 | | | | | | 0 |
 | Cyclic handler | 12 | | | | | 2 (R2, R3) | 2 |
 | Alarm handler | 12 | | | | | | 0 |
-| Interrupt handler (`tk_def_int`) | — | | | | | 1 (R1) | 1 |
+| Interrupt handler (`tk_def_int`) | — | | | 1 (R4, `BAR_AO=1`) | | 1 (R1) | 2 |
 
 The kernel's own USB console and WiFi service tasks use a few more of these;
 every application limit above still has ample headroom. Task stacks and

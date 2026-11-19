@@ -2139,6 +2139,18 @@
 #error "Group SH_BAR_AOS no longer fits in 16 bits"
 #endif
 
+/* SH_ADC_RDY: 8-bit word */
+#define SH_ADC_RDY_READY_POS            (0u)
+#define SH_ADC_RDY_READY_BITS           (1u)
+#define SH_ADC_RDY_READY_MIN            (0)
+#define SH_ADC_RDY_READY_MAX            (1)
+#define SH_ADC_RDY_READY_OFFSET         (0)
+#define SH_ADC_RDY_READY_KIND           (APP_KIND_FLAG)
+#define SH_ADC_RDY_USED_BITS            (SH_ADC_RDY_READY_POS + SH_ADC_RDY_READY_BITS)
+#if (SH_ADC_RDY_USED_BITS > 8u)
+#error "Group SH_ADC_RDY no longer fits in 8 bits"
+#endif
+
 /* SH_IR_RAW: 32-bit word */
 #define SH_IR_RAW_L_POS                 (0u)
 #define SH_IR_RAW_L_BITS                (12u)

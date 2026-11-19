@@ -14,6 +14,8 @@
 #include "drv_ir_adc.h"
 #include "../board_pins.h"
 #include "cfg_barcode.h"       /* BAR_AO */
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "hardware/sync.h"     /* SIO spinlock, interrupt mask */
 
 #ifndef DRV_IR_ADC_USE_REGS
@@ -36,9 +38,10 @@
 
 /* ---- private data ---------------------------------------------------- */
 
-/* Set last in drv_ir_adc_init(): R4 may start before line_task has
-   enabled the ADC, and must not wait on a disabled block.            */
-static volatile bool gb_adc_ready = false;
+/* SH_ADC_RDY: set last in drv_ir_adc_init() (line_task, once); read
+   by R4, which may start before the ADC is enabled and must not wait
+   on a disabled block.                                               */
+static volatile uint8_t g_adc_ready = 0u;
 
 /* ---- private function prototypes ------------------------------------- */
 
@@ -81,7 +84,8 @@ void drv_ir_adc_init(void)
         padsbank0_hw->io[PIN_BAR_AO]    = PADS_BANK0_GPIO0_OD_BITS;
 #endif
         __mem_fence_release();               /* ADC set up before flag */
-        gb_adc_ready = true;
+        g_adc_ready = (uint8_t) app_bits_put(0u, SH_ADC_RDY_READY_POS,
+                                             SH_ADC_RDY_READY_BITS, 1u);
     }
     else
     {
@@ -133,7 +137,11 @@ bool drv_ir_adc_try_read_bar(uint32_t * p_code)
 {
     bool b_is_read = false;
 
-    if (gb_adc_ready && (((uint32_t *) 0) != p_code))
+    uint32_t const ready = app_bits_get((uint32_t) g_adc_ready,
+                                        SH_ADC_RDY_READY_POS,
+                                        SH_ADC_RDY_READY_BITS);
+
+    if ((0u != ready) && (((uint32_t *) 0) != p_code))
     {
         spin_lock_t * const p_lock = spin_lock_instance(BOARD_SPINLOCK_ADC);
 

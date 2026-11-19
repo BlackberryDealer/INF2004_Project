@@ -472,6 +472,9 @@ GROUPS = {
     'SH_BAR_AOS': [
         ('CODE', 12, 0, 1, 'code'),
     ],
+    'SH_ADC_RDY': [
+        ('READY', 1, 0, 1, 'flag'),
+    ],
     'SH_IR_RAW': [
         ('L', 12, 0, 1, 'adc'),
         ('R', 12, 0, 1, 'adc'),

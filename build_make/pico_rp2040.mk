@@ -125,17 +125,18 @@ ifeq ($(BAR_BENCH),1)
 BAR_BENCH_SUFFIX := _barbench
 endif
 
-# BAR_AO=1 reads the barcode module's analog output on GP28 (ADC2) at
-# 2 kHz and finds bars with a relative threshold, instead of the module's
-# fixed DO comparator on GP7 (BAR_AO=1u in C, subsystem3/cfg_barcode.h).
-# Lifted or curled paper blurs the narrow white gaps below the DO
-# threshold; the analog detector still sees them as dips. Default 0.
-BAR_AO ?= 0
+# BAR_AO=1 (default) reads the barcode module's analog output on GP28
+# (ADC2) at 2 kHz and finds bars with a relative threshold (Change
+# Requirement 3; BAR_AO in C, subsystem3/cfg_barcode.h). Curled or lifted
+# paper blurs the narrow white gaps below the module's fixed DO threshold;
+# the analog detector still sees them as dips. BAR_AO=0 builds the old
+# DO input on GP7 (image suffix _do).
+BAR_AO ?= 1
 ifneq ($(filter $(BAR_AO),0 1),$(BAR_AO))
 $(error Unknown BAR_AO '$(BAR_AO)'; use 0 or 1)
 endif
-ifeq ($(BAR_AO),1)
-BAR_AO_SUFFIX := _ao
+ifeq ($(BAR_AO),0)
+BAR_AO_SUFFIX := _do
 endif
 
 # PROBE=1 builds the GP14 timing probe into the image (APP_PROBE=1 in C).

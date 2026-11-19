@@ -218,7 +218,7 @@ ER barcode_start(void)
     }
     else if (0u != BAR_AO)
     {
-        ercd = drv_bar_ao_start(barcode_ao_sample);   /* GP28 analog */
+        ercd = drv_bar_ao_start();                /* R4: GP28 analog */
     }
     else
     {

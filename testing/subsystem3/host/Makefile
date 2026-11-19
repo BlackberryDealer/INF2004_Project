@@ -6,7 +6,8 @@
 #   S3-U01, U02, U06, U14, U16        test_line_track_host.c        (line_track.c)
 #   S3-U03, U04, U05, U18, U43        test_code39_host.c            (code39.c)
 #   S3-U07..U11, U14, U15, U17, U18   test_line_barcode_sim_host.c  (line.c + barcode.c)
-#   S3-U52, U53                       test_line_barcode_sim_host.c  (bar_ao.c, BAR_AO)
+#   S3-U52..U54 (BAR_AO=0 build)      test_line_barcode_sim_host.c  (bar_ao.c, both inputs)
+#   S3-U55 (BAR_AO=1, the default)    test_bar_ao_default_host.c    (barcode.c as shipped)
 ################################################################################
 
 CC      := gcc
@@ -17,8 +18,8 @@ CFLAGS  := -std=c99 -Wall -Wextra -Werror -pedantic \
            -I../../host -I$(APP_DIR) -I$(S3_DIR)
 MOCK    := -Imock
 
-.PHONY: all line_track code39 sim clean
-all: line_track code39 sim
+.PHONY: all line_track code39 sim ao_default clean
+all: line_track code39 sim ao_default
 
 test_line_track_host.out: test_line_track_host.c $(S3_DIR)/line_track.c \
                           $(S3_DIR)/line_track.h $(S3_DIR)/cfg_line.h \
@@ -35,7 +36,17 @@ test_line_barcode_sim_host.out: test_line_barcode_sim_host.c \
                                 $(S3_DIR)/line_track.c $(S3_DIR)/code39.c \
                                 $(APP_DIR)/app_bits.c $(S2_DIR)/odometry.c \
                                 $(S3_DIR)/bar_ao.c ../../host/host_test.h
-	$(CC) $(CFLAGS) $(MOCK) -o $@ test_line_barcode_sim_host.c \
+	$(CC) $(CFLAGS) $(MOCK) -DBAR_AO=0u -o $@ test_line_barcode_sim_host.c \
+	    $(S3_DIR)/line_track.c $(S3_DIR)/code39.c $(APP_DIR)/app_bits.c \
+	    $(S2_DIR)/odometry.c $(S3_DIR)/bar_ao.c
+
+test_bar_ao_default_host.out: test_bar_ao_default_host.c \
+                              test_line_barcode_sim_host.c \
+                              $(S3_DIR)/line.c $(S3_DIR)/barcode.c \
+                              $(S3_DIR)/bar_ao.c $(S3_DIR)/cfg_barcode.h \
+                              ../../host/host_test.h
+	$(CC) $(CFLAGS) $(MOCK) -I. -DBAR_AO=1u -o $@ \
+	    test_bar_ao_default_host.c \
 	    $(S3_DIR)/line_track.c $(S3_DIR)/code39.c $(APP_DIR)/app_bits.c \
 	    $(S2_DIR)/odometry.c $(S3_DIR)/bar_ao.c
 
@@ -47,6 +58,9 @@ code39: test_code39_host.out
 
 sim: test_line_barcode_sim_host.out
 	./test_line_barcode_sim_host.out
+
+ao_default: test_bar_ao_default_host.out
+	./test_bar_ao_default_host.out
 
 clean:
 	rm -f *.out

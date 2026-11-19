@@ -129,18 +129,23 @@ ID app_start_task(FP p_entry, PRI priority, uint64_t * p_stack,
     return 1;
 }
 
+static uint32_t g_sim_gpio_attaches = 0u; /* S3-U55 */
+
 ER drv_gpio_irq_attach(uint32_t pin, uint32_t edges,
                        drv_gpio_irq_cb_t p_callback)
 {
     (void) pin;
     (void) edges;
+    g_sim_gpio_attaches++;
     gp_sim_bar_cb = p_callback;
     return E_OK;
 }
 
-ER drv_bar_ao_start(drv_bar_ao_cb_t p_callback)
+static uint32_t g_sim_ao_starts = 0u;   /* S3-U55: R4 start calls */
+
+ER drv_bar_ao_start(void)
 {
-    (void) p_callback;             /* tests call barcode_ao_sample() */
+    g_sim_ao_starts++;             /* tests call barcode_ao_sample() */
     return E_OK;
 }
 

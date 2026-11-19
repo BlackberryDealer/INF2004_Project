@@ -280,6 +280,7 @@ SH_BAR_AO,32,EXT,12,1,code,0,4095,0,RAW,S,B3,Running extreme of this level (whit
 SH_BAR_AO,32,OPP,8,16,code,0,255,0,SAT,S,B3,Extreme of the previous level (ADC code / 16)
 SH_BAR_AO,32,AMP,8,16,code,0,255,0,SAT,S,B3,Smoothed swing between levels (ADC code / 16); sets the switch delta
 SH_BAR_AOS,16,CODE,12,1,code,0,4095,0,RAW,S,B3,Last GP28 ADC sample (R4 writer; console BAR DO line reader)
+SH_ADC_RDY,8,READY,1,1,flag,0,1,0,FLAG,S,B3,ADC set up (BAR_AO=1): line_task writes once at init; R4 reads before each sample
 E_LINE,32,RECIP,18,1,Q16,0,0,0,RAW,E,B3,E8 precomputed reciprocals x2
 E_BAR,8,HEAD_TAIL,6,1,index,0,0,0,RAW,E,B3,E6 ring head (ISR) and tail (task): one writer per byte
 E_BAR_US,32,LAST_US,31,1,us,0,0,0,RAW,E,B3,E5 ISR-private last accepted edge time (own E group and bits=31 for gen_layout.py; SPEC-QUESTION SQ-B3-1)
