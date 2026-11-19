@@ -1,7 +1,8 @@
 # Change Requirement 3: barcode read from the sensor's analog output
 
 **Source:** on-car bench test of 19 Nov 2026: when the barcode paper is
-not flat against the floor, the IR sensor misses bars.
+not flat against the floor (on the floor, but an edge or corner curled
+up), the IR sensor misses bars.
 **Owner of the change:** Buddy 3 (barcode), with a one-line note for
 Buddy 5 (shared `board_pins.h`).
 **Status:** in `main`, off by default (`BAR_AO=0`). Turn it on with
@@ -101,6 +102,15 @@ callback pointer, ADC-ready flag).
 | Lifted: 14 ms spot (wider than a 12 ms narrow bar), 1800 / 3300 | **0 / 43** | **43 / 43** |
 | Lifted further: 14 ms spot, 2200 / 3200 | - | 42 / 43 |
 | 440 reads, contrast 3000..500 codes x spot 4..18 ms | - | **0 wrong characters** |
+| Paper on the floor, leading edge curled (S3-U54) | **0 / 43** | **43 / 43** |
+| Paper on the floor, trailing edge curled | **0 / 43** | **43 / 43** |
+| Paper on the floor, bump in the middle | **0 / 43** | **43 / 43** |
+
+The curled cases are the reported fault: the sheet lies on the floor but
+an edge or corner is not flush. The height then changes inside one
+barcode, so no single fixed level suits both the flat and the curled part.
+The analog detector compares each bar with its neighbours, so it follows
+the change. An evenly raised sheet reads with both inputs.
 
 **Limit:** once the spot is wider than about 1.15 narrow bars, every
 threshold sees the narrow element as wide as the spot, and the read fails.
