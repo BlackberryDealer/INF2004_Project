@@ -24,6 +24,10 @@
 
 /* ---- private constants and types ------------------------------------ */
 
+/* %c in console lines: debug images only (they alone send LOG text), so
+   the course image keeps the car-tested formatter.                    */
+#define BRIDGE_FMT_C          (0u != TELEM_DEBUG_MQTT)
+
 /* Index of each command in the rate-limit table. */
 #define BRIDGE_CMD_START      (0u)
 #define BRIDGE_CMD_STOP       (1u)
@@ -557,7 +561,7 @@ static uint32_t bridge_format(char * p_out, uint32_t size,
             ch = *p_fmt;
             p_fmt++;
             arg = 0;
-            if (('d' == ch) || ('x' == ch) || ('c' == ch))
+            if (('d' == ch) || ('x' == ch) || (BRIDGE_FMT_C && ('c' == ch)))
             {
                 if (arg_idx < BRIDGE_LOG_ARGS)
                 {
@@ -569,7 +573,7 @@ static uint32_t bridge_format(char * p_out, uint32_t size,
             {
                 len = bridge_put_dec(p_out, size, len, arg);
             }
-            else if ('c' == ch)
+            else if (BRIDGE_FMT_C && ('c' == ch))
             {
                 /* cast: the caller passes a character code (ASCII) */
                 len = bridge_put_char(p_out, size, len,

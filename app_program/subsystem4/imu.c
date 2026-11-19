@@ -1162,8 +1162,12 @@ static void imu_lift_check(bool b_has_data)
                      app_bits_get(ir_word, SH_IR_RAW_L_POS, SH_IR_RAW_L_BITS),
                      app_bits_get(ir_word, SH_IR_RAW_R_POS, SH_IR_RAW_R_BITS),
                      &b_ir_lifted);
-        /* Barcode bench (no track): the IR pair may sit on a dark desk */
-        b_ir_lifted = b_ir_lifted && (0u == MISSION_BAR_BENCH);
+#if (0u != MISSION_BAR_BENCH)
+        /* Barcode bench (no track): the IR pair may sit on a dark desk.
+           Compiled only into the bench image, so every other image is
+           the car-tested imu.c.                                       */
+        b_ir_lifted = false;
+#endif
         if ((b_is_lifted || b_ir_lifted)
             && (0u == (safety_get() & SAFETY_LIFT)))
         {
