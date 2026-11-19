@@ -94,9 +94,16 @@
     || (((PRV_MIS_E_LEG_LAT_MAX * 1414) / 1000) != PRV_MIS_A_REJOIN_E_MAX)
 #error "A PRV_MIS_* row no longer covers the value it stores"
 #endif
+#if (0u == MISSION_BAR_BENCH)
 #if ((((MOTION_MOVE_MAX_MM * 1000) / MOTION_MOVE_SPEED_MM_S) * 3) / 2   \
      + MISSION_MOVE_MARGIN_MS) != PRV_MIS_D_MOVE_LIMIT_MS_MAX
 #error "PRV_MIS_D MOVE_LIMIT must hold the longest move deadline"
+#endif
+#else   /* barcode bench: its only forward move is MISSION_BAR_BENCH_MM */
+#if ((((MISSION_BAR_BENCH_MM * 1000) / MOTION_MOVE_SPEED_MM_S) * 3) / 2 \
+     + MISSION_MOVE_MARGIN_MS) > PRV_MIS_D_MOVE_LIMIT_MS_MAX
+#error "PRV_MIS_D MOVE_LIMIT must hold the bench pass deadline"
+#endif
 #endif
 
 /* ---- private data ---------------------------------------------------- */

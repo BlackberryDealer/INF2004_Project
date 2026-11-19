@@ -111,6 +111,16 @@
 #ifndef MISSION_BAR_BENCH
 #define MISSION_BAR_BENCH            (0u)
 #endif
+#define MISSION_BAR_BENCH_MM         (600)  /* one straight pass, mm   */
+#define MISSION_BAR_BENCH_RETRIES    (3u)   /* passes after the first */
+#if (MISSION_BAR_BENCH != 0u)
+#if (MOTION_MOVE_SPEED_MM_S != MISSION_BARCODE_SPEED_MM_S)
+#error "Bench passes must run at the barcode reread speed"
+#endif
+#if (MISSION_BAR_BENCH_MM > MISSION_BARCODE_REWIND_MM)
+#error "The bench back-up distance is kept in BAR_BACK_LEFT (<= rewind)"
+#endif
+#endif
 
 #endif /* CFG_MISSION_H */
 
