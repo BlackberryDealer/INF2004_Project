@@ -106,6 +106,12 @@
 #error "Recovery must cover several cycles of every 10 ms task"
 #endif
 
+/* Barcode bench test (build option BAR_BENCH=1, bring-up only; see
+   mission_run.c): no IR line calibration, one straight move per RUN. */
+#ifndef MISSION_BAR_BENCH
+#define MISSION_BAR_BENCH            (0u)
+#endif
+
 #endif /* CFG_MISSION_H */
 
 /*** end of file ***/
