@@ -2091,54 +2091,6 @@
 #error "Group SH_BAR_EDGES no longer fits in 16 bits"
 #endif
 
-/* SH_BAR_AO: 32-bit word */
-#define SH_BAR_AO_LEVEL_POS             (0u)
-#define SH_BAR_AO_LEVEL_BITS            (1u)
-#define SH_BAR_AO_LEVEL_MIN             (0)
-#define SH_BAR_AO_LEVEL_MAX             (1)
-#define SH_BAR_AO_LEVEL_OFFSET          (0)
-#define SH_BAR_AO_LEVEL_KIND            (APP_KIND_FLAG)
-#define SH_BAR_AO_PEND_POS              (SH_BAR_AO_LEVEL_POS + SH_BAR_AO_LEVEL_BITS)
-#define SH_BAR_AO_PEND_BITS             (1u)
-#define SH_BAR_AO_PEND_MIN              (0)
-#define SH_BAR_AO_PEND_MAX              (1)
-#define SH_BAR_AO_PEND_OFFSET           (0)
-#define SH_BAR_AO_PEND_KIND             (APP_KIND_SAT)
-#define SH_BAR_AO_EXT_POS               (SH_BAR_AO_PEND_POS + SH_BAR_AO_PEND_BITS)
-#define SH_BAR_AO_EXT_BITS              (12u)
-#define SH_BAR_AO_EXT_MIN               (0)
-#define SH_BAR_AO_EXT_MAX               (4095)
-#define SH_BAR_AO_EXT_OFFSET            (0)
-#define SH_BAR_AO_EXT_KIND              (APP_KIND_RAW)
-#define SH_BAR_AO_OPP_POS               (SH_BAR_AO_EXT_POS + SH_BAR_AO_EXT_BITS)
-#define SH_BAR_AO_OPP_BITS              (8u)
-#define SH_BAR_AO_OPP_MIN               (0)
-#define SH_BAR_AO_OPP_MAX               (255)
-#define SH_BAR_AO_OPP_OFFSET            (0)
-#define SH_BAR_AO_OPP_KIND              (APP_KIND_SAT)
-#define SH_BAR_AO_AMP_POS               (SH_BAR_AO_OPP_POS + SH_BAR_AO_OPP_BITS)
-#define SH_BAR_AO_AMP_BITS              (8u)
-#define SH_BAR_AO_AMP_MIN               (0)
-#define SH_BAR_AO_AMP_MAX               (255)
-#define SH_BAR_AO_AMP_OFFSET            (0)
-#define SH_BAR_AO_AMP_KIND              (APP_KIND_SAT)
-#define SH_BAR_AO_USED_BITS             (SH_BAR_AO_AMP_POS + SH_BAR_AO_AMP_BITS)
-#if (SH_BAR_AO_USED_BITS > 32u)
-#error "Group SH_BAR_AO no longer fits in 32 bits"
-#endif
-
-/* SH_BAR_AOS: 16-bit word */
-#define SH_BAR_AOS_CODE_POS             (0u)
-#define SH_BAR_AOS_CODE_BITS            (12u)
-#define SH_BAR_AOS_CODE_MIN             (0)
-#define SH_BAR_AOS_CODE_MAX             (4095)
-#define SH_BAR_AOS_CODE_OFFSET          (0)
-#define SH_BAR_AOS_CODE_KIND            (APP_KIND_RAW)
-#define SH_BAR_AOS_USED_BITS            (SH_BAR_AOS_CODE_POS + SH_BAR_AOS_CODE_BITS)
-#if (SH_BAR_AOS_USED_BITS > 16u)
-#error "Group SH_BAR_AOS no longer fits in 16 bits"
-#endif
-
 /* SH_IR_RAW: 32-bit word */
 #define SH_IR_RAW_L_POS                 (0u)
 #define SH_IR_RAW_L_BITS                (12u)

@@ -274,16 +274,9 @@ PRV_BAR_MAP,8,CMD,2,1,code,0,3,0,ENUM,S,B3,Map command x8 (same byte as CHAR)
 SH_BAR,8,BRANCH_SEQ,8,1,count,0,255,0,RAW,S,B3,barcode_task -> line_task; wraps
 SH_BAR_OVF,8,OVERFLOW,8,1,count,0,255,0,SAT,S,B3,Ring overflows (ISR writer)
 SH_BAR_EDGES,16,COUNT,16,1,count,0,65535,0,RAW,S,B3,Accepted DO edges (ISR writer); wraps; readers compare for change or keep the low 8 bits
-SH_BAR_AO,32,LEVEL,1,1,flag,0,1,0,FLAG,S,B3,Analog detector level (1 = black); BAR_AO=1 only; R4 timer ISR writer; barcode_do_level() readers
-SH_BAR_AO,32,PEND,1,1,count,0,1,0,SAT,S,B3,Samples past the switch delta so far (BAR_AO_CONFIRM 2)
-SH_BAR_AO,32,EXT,12,1,code,0,4095,0,RAW,S,B3,Running extreme of this level (white: lowest; black: highest) in black-high ADC codes
-SH_BAR_AO,32,OPP,8,16,code,0,255,0,SAT,S,B3,Extreme of the previous level (ADC code / 16)
-SH_BAR_AO,32,AMP,8,16,code,0,255,0,SAT,S,B3,Smoothed swing between levels (ADC code / 16); sets the switch delta
-SH_BAR_AOS,16,CODE,12,1,code,0,4095,0,RAW,S,B3,Last GP28 ADC sample (R4 writer; console BAR DO line reader)
 E_LINE,32,RECIP,18,1,Q16,0,0,0,RAW,E,B3,E8 precomputed reciprocals x2
 E_BAR,8,HEAD_TAIL,6,1,index,0,0,0,RAW,E,B3,E6 ring head (ISR) and tail (task): one writer per byte
 E_BAR_US,32,LAST_US,31,1,us,0,0,0,RAW,E,B3,E5 ISR-private last accepted edge time (own E group and bits=31 for gen_layout.py; SPEC-QUESTION SQ-B3-1)
-E_BAR_AO_US,32,TIME,31,1,us,0,0,0,RAW,E,B3,E5 R4-private next alarm time (TIMER ALARM0 target; own E group and bits=31 for gen_layout.py)
 SH_IR_RAW,32,L,12,1,adc,0,4095,0,RNG,S,B3,Raw left IR ADC; line_task writes the whole word each cycle; readers load it once
 SH_IR_RAW,32,R,12,1,adc,0,4095,0,RNG,S,B3,Raw right IR ADC
 SH_IMU_ACC,32,AX,10,4,mg,-511,511,512,SAT,S,B4,Accel X after offsets; imu_task writes the whole word each cycle

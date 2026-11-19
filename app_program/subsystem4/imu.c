@@ -49,10 +49,6 @@
 
 /* ---- private constants and types ------------------------------------ */
 
-/* Barcode bench test build (BAR_BENCH=1): no IR level-lift check. */
-#ifndef MISSION_BAR_BENCH
-#define MISSION_BAR_BENCH  (0u)
-#endif
 #define IMU_STACK_WORDS        (APP_STACK_IMU_BYTES / 8u)
 #define IMU_AVG_Q15_ONE        (32768)
 #define IMU_MG_NUM             (61) /* 0.122 mg/LSB at +-4 g: 61/500  */
@@ -1162,8 +1158,6 @@ static void imu_lift_check(bool b_has_data)
                      app_bits_get(ir_word, SH_IR_RAW_L_POS, SH_IR_RAW_L_BITS),
                      app_bits_get(ir_word, SH_IR_RAW_R_POS, SH_IR_RAW_R_BITS),
                      &b_ir_lifted);
-        /* Barcode bench (no track): the IR pair may sit on a dark desk */
-        b_ir_lifted = b_ir_lifted && (0u == MISSION_BAR_BENCH);
         if ((b_is_lifted || b_ir_lifted)
             && (0u == (safety_get() & SAFETY_LIFT)))
         {

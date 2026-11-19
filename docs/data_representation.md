@@ -192,16 +192,9 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | BRANCH_SEQ | SH_BAR | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | barcode_task -> line_task; wraps |
 | OVERFLOW | SH_BAR_OVF | 0..255 × 1 count | 1 | 8 | 8 | SAT | S | Ring overflows (ISR writer) |
 | COUNT | SH_BAR_EDGES | 0..65535 × 1 count | 1 | 16 | 16 | RAW | S | Accepted DO edges (ISR writer); wraps; readers compare for change or keep the low 8 bits |
-| LEVEL | SH_BAR_AO | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | S | Analog detector level (1 = black); BAR_AO=1 only; R4 timer ISR writer; barcode_do_level() readers |
-| PEND | SH_BAR_AO | 0..1 × 1 count | 1 | 1 | 1 | SAT | S | Samples past the switch delta so far (BAR_AO_CONFIRM 2) |
-| EXT | SH_BAR_AO | 0..4095 × 1 code | 1 | 12 | 12 | RAW | S | Running extreme of this level (white: lowest; black: highest) in black-high ADC codes |
-| OPP | SH_BAR_AO | 0..255 × 16 code | 16 | 8 | 8 | SAT | S | Extreme of the previous level (ADC code / 16) |
-| AMP | SH_BAR_AO | 0..255 × 16 code | 16 | 8 | 8 | SAT | S | Smoothed swing between levels (ADC code / 16); sets the switch delta |
-| CODE | SH_BAR_AOS | 0..4095 × 1 code | 1 | 12 | 12 | RAW | S | Last GP28 ADC sample (R4 writer; console BAR DO line reader) |
 | RECIP | E_LINE | 0..0 × 1 Q16 | 1 | 0 | 32 | RAW | E | E8 precomputed reciprocals x2 |
 | HEAD_TAIL | E_BAR | 0..0 × 1 index | 1 | 0 | 8 | RAW | E | E6 ring head (ISR) and tail (task): one writer per byte |
 | LAST_US | E_BAR_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 ISR-private last accepted edge time (own E group and bits=31 for gen_layout.py; SPEC-QUESTION SQ-B3-1) |
-| TIME | E_BAR_AO_US | 0..0 × 1 us | 1 | 0 | 32 | RAW | E | E5 R4-private next alarm time (TIMER ALARM0 target; own E group and bits=31 for gen_layout.py) |
 | L | SH_IR_RAW | 0..4095 × 1 adc | 1 | 12 | 12 | RNG | S | Raw left IR ADC; line_task writes the whole word each cycle; readers load it once |
 | R | SH_IR_RAW | 0..4095 × 1 adc | 1 | 12 | 12 | RNG | S | Raw right IR ADC |
 
@@ -523,8 +516,6 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | SH_BAR | 8 | 8 |
 | SH_BAR_OVF | 8 | 8 |
 | SH_BAR_EDGES | 16 | 16 |
-| SH_BAR_AO | 30 | 32 |
-| SH_BAR_AOS | 12 | 16 |
 | SH_IR_RAW | 24 | 32 |
 | SH_IMU_ACC | 30 | 32 |
 | PRV_OBS_M | 32 | 32 |

@@ -524,10 +524,9 @@ static void bridge_count_cmd_drop(void)
 /**
  * bridge_format
  * @brief   Formats one console line like app_log() does (%d signed
- *          decimal, %x hexadecimal, %c one character, %% a percent
- *          sign; at most three arguments) into p_out without a NUL.
- *          A newline or carriage return becomes nothing at the end and a
- *          space elsewhere.
+ *          decimal, %x hexadecimal, %% a percent sign; at most three
+ *          arguments) into p_out without a NUL. A newline or carriage
+ *          return becomes nothing at the end and a space elsewhere.
  *          Stops at size bytes: never writes past the buffer.
  * @param   p_out  output text
  * @param   size   bytes available
@@ -557,7 +556,7 @@ static uint32_t bridge_format(char * p_out, uint32_t size,
             ch = *p_fmt;
             p_fmt++;
             arg = 0;
-            if (('d' == ch) || ('x' == ch) || ('c' == ch))
+            if (('d' == ch) || ('x' == ch))
             {
                 if (arg_idx < BRIDGE_LOG_ARGS)
                 {
@@ -568,12 +567,6 @@ static uint32_t bridge_format(char * p_out, uint32_t size,
             if ('d' == ch)
             {
                 len = bridge_put_dec(p_out, size, len, arg);
-            }
-            else if ('c' == ch)
-            {
-                /* cast: the caller passes a character code (ASCII) */
-                len = bridge_put_char(p_out, size, len,
-                                      (char) (arg & 0x7F));
             }
             else if ('x' == ch)
             {

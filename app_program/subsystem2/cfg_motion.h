@@ -39,16 +39,7 @@
 #define MOTION_CRUISE_MM_S            (120)    /* NFR15 (revised), TUNE */
 #define MOTION_SLOW_MM_S              (100)    /* armed / after bypass  */
 #define MOTION_FOLLOW_MAX_MM_S        (300)
-/* Barcode bench build (BAR_BENCH=1): its straight passes run at the
-   barcode reread speed (MISSION_BARCODE_SPEED_MM_S), not the bypass one. */
-#ifndef MISSION_BAR_BENCH
-#define MISSION_BAR_BENCH             (0u)
-#endif
-#if (MISSION_BAR_BENCH != 0u)
-#define MOTION_MOVE_SPEED_MM_S        (60)     /* barcode bench only  */
-#else
 #define MOTION_MOVE_SPEED_MM_S        (150)    /* NFR16 bypass legs   */
-#endif
 #define MOTION_TURN_SPEED_MM_S        (150)
 #if (MOTION_SLOW_MM_S >= MOTION_CRUISE_MM_S)
 #error "The slow follow speed must stay below cruise"

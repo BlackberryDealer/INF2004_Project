@@ -13,7 +13,6 @@
 #include "../app_bits.h"
 #include "../app_layout.h"
 #include "../subsystem1/telem.h"
-#include "../subsystem1/cfg_telem.h"
 #include "../subsystem2/fault.h"
 #include "../subsystem2/safety.h"
 #include "../subsystem2/motion.h"
@@ -94,16 +93,9 @@
     || (((PRV_MIS_E_LEG_LAT_MAX * 1414) / 1000) != PRV_MIS_A_REJOIN_E_MAX)
 #error "A PRV_MIS_* row no longer covers the value it stores"
 #endif
-#if (0u == MISSION_BAR_BENCH)
 #if ((((MOTION_MOVE_MAX_MM * 1000) / MOTION_MOVE_SPEED_MM_S) * 3) / 2   \
      + MISSION_MOVE_MARGIN_MS) != PRV_MIS_D_MOVE_LIMIT_MS_MAX
 #error "PRV_MIS_D MOVE_LIMIT must hold the longest move deadline"
-#endif
-#else   /* barcode bench: its only forward move is MISSION_BAR_BENCH_MM */
-#if ((((MISSION_BAR_BENCH_MM * 1000) / MOTION_MOVE_SPEED_MM_S) * 3) / 2 \
-     + MISSION_MOVE_MARGIN_MS) > PRV_MIS_D_MOVE_LIMIT_MS_MAX
-#error "PRV_MIS_D MOVE_LIMIT must hold the bench pass deadline"
-#endif
 #endif
 
 /* ---- private data ---------------------------------------------------- */
@@ -171,7 +163,6 @@ static void mission_button_event(mission_ctx_t const * p_ctx, uint32_t press,
                                  mission_evt_in_t * p_btn);
 static void mission_note_high_water(void);
 static void mission_ctx_reset(mission_ctx_t * p_ctx);
-static void mission_stack_log(void);
 static void mission_ctx_save(mission_ctx_t const * p_ctx);
 static void mission_ctx_load(mission_ctx_t * p_ctx);
 static uint32_t mission_put(uint32_t word, uint32_t pos, uint32_t width,
@@ -1311,7 +1302,6 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
             mission_stop_motion(p_ctx);
             mission_mode_clear(APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD);
             mission_summary(p_ctx, p_snap, now_us);
-            mission_stack_log();
             break;
         case APP_SYS_FAULT:
             p_ctx->end_reason = APP_END_FAULT;
@@ -1319,7 +1309,6 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
             mission_mode_clear(APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD);
             safety_set(SAFETY_FAULT);
             mission_summary(p_ctx, p_snap, now_us);
-            mission_stack_log();
             break;
         default:
             p_ctx->sys_state = APP_SYS_FAULT;     /* unknown: fail safe */
@@ -1328,22 +1317,6 @@ static void mission_enter(mission_ctx_t * p_ctx, uint32_t sys_state,
             safety_set(SAFETY_FAULT);
             break;
     }
-}
-
-/**
- * mission_stack_log
- * @brief   Bring-up diagnosis (debug image only, DEBUG_MQTT=1): when a run
- *          ends (FINISHED, LINE_LOST_STOP or FAULT) prints the never-used
- *          bytes of every task stack, so the margin after a real course is
- *          measured (RAM report section 3). The motors are already braked.
- *          Compiled out of the normal image.
- * @context mission_task (state entry)
- */
-static void mission_stack_log(void)
-{
-#if (TELEM_DEBUG_MQTT != 0u)
-    app_stack_report();
-#endif
 }
 
 /**
@@ -1357,19 +1330,7 @@ static void mission_st_cal_imu(mission_ctx_t * p_ctx, uint32_t type,
 {
     uint32_t const limit_us = MISSION_CAL_TIMEOUT_MS * MISSION_US_PER_MS;
 
-    if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IMU == value)
-        && (0u != MISSION_BAR_BENCH))
-    {
-        /* Barcode bench: the reader uses the sensor's digital output, not
-           the line calibration, so skip the IR sweep (no tiles needed). */
-        p_ctx->b_imu_valid = true;
-        p_ctx->b_ir_valid  = true;
-        mission_mode_clear(APP_MODE_CAL_IMU);
-        app_log("BENCH: IR line calibration skipped (barcode bench)\n",
-                0, 0, 0);
-        mission_enter(p_ctx, APP_SYS_READY, p_snap, now_us);
-    }
-    else if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IMU == value))
+    if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IMU == value))
     {
         p_ctx->b_imu_valid = true;
         mission_mode_clear(APP_MODE_CAL_IMU);

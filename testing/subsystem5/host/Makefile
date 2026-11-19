@@ -44,11 +44,11 @@ tree:
 	cp mock/hardware/gpio.h build/hardware/gpio.h
 	cp $(APP)/app_types.h $(APP)/board_pins.h $(B)/
 	cp $(APP)/app_bits.h $(APP)/app_bits.c $(APP)/app_layout.h $(B)/
-	cp $(APP)/subsystem1/telem.h $(APP)/subsystem1/telem_bin.h $(APP)/subsystem1/cfg_telem.h $(B)/subsystem1/
+	cp $(APP)/subsystem1/telem.h $(APP)/subsystem1/telem_bin.h $(B)/subsystem1/
 	cp $(APP)/subsystem2/safety.h $(APP)/subsystem2/fault.h \
 	   $(APP)/subsystem2/motion.h $(APP)/subsystem2/odometry.h \
 	   $(APP)/subsystem2/cfg_motion.h $(B)/subsystem2/
-	cp $(APP)/subsystem3/barcode.h $(APP)/subsystem3/code39.h $(APP)/subsystem3/code39.c $(APP)/subsystem3/cfg_barcode.h $(B)/subsystem3/
+	cp $(APP)/subsystem3/barcode.h $(B)/subsystem3/
 	mkdir -p $(B)/subsystem4
 	cp $(APP)/subsystem4/imu.h $(B)/subsystem4/
 	cp $(S5)/*.c $(S5)/*.h $(B)/subsystem5/
@@ -56,7 +56,6 @@ tree:
 sim_mission_host.out: sim_mission_host.c tree
 	$(CC) $(SIMFLAGS) -DMISSION_HOST_TEST -o $@ sim_mission_host.c \
 	    $(B)/subsystem5/mission_run.c $(B)/subsystem5/status_board.c \
-	    $(B)/subsystem3/code39.c \
 	    $(B)/app_bits.c
 
 sim_obstacle_host.out: sim_obstacle_host.c tree
