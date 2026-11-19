@@ -22,6 +22,8 @@
  *    S3-U53  Lifted paper (blurred spot, darker white): the fixed DO
  *            threshold merges bars, BAR_AO decodes all 43 characters;
  *            no wrong character over 4 contrasts x 5 blurs
+ *    S3-U54  Paper on the floor but not flat (leading / trailing edge
+ *            curled, bump): DO fails, BAR_AO reads all 43
  *    S3-U18  Small barcode with optical bias + leading stray edges decodes
  *            via 29-element sliding window
  */
@@ -454,6 +456,87 @@ static void sim_feed_barcode_ao(uint32_t char_idx, uint32_t white_code,
             {
                 b_do           = b_now;
                 gb_sim_bar_pin = b_now;     /* BAR_DO_BLACK_IS_HIGH */
+                barcode_edge_isr(b_now ? DRV_GPIO_IRQ_RISE
+                                       : DRV_GPIO_IRQ_FALL, t0_us + t);
+            }
+        }
+        if (0u == (t % 10000u))
+        {
+            barcode_cycle();
+        }
+    }
+    barcode_cycle();
+}
+
+/* S3-U54: paper on the floor but not flat (curled edge, bump). h is the
+   local height 0..1000 along the strip: white 400 -> 2000, black
+   3400 -> 3250, spot 4 -> 14 ms as h goes 0 -> 1000.                 */
+static uint32_t sim_curl_h(uint32_t kind, int32_t c, uint32_t len)
+{
+    int32_t const  x = (c < 0) ? 0 : ((c > (int32_t) len) ? (int32_t) len : c);
+    uint32_t const f = ((uint32_t) x * 1000u) / len;
+    uint32_t       h = 0u;
+
+    if (0u == kind)                       /* leading edge curled */
+    {
+        h = (f < 350u) ? (((350u - f) * 1000u) / 350u) : 0u;
+    }
+    else if (1u == kind)                  /* trailing edge curled */
+    {
+        h = (f > 650u) ? (((f - 650u) * 1000u) / 350u) : 0u;
+    }
+    else                                  /* bump in the middle */
+    {
+        h = (f < 500u) ? (f * 2u) : ((1000u - f) * 2u);
+    }
+    return h;
+}
+
+static void sim_feed_barcode_curl(uint32_t char_idx, uint32_t kind,
+                                  bool b_use_ao)
+{
+    uint32_t       edge_us[BAR_ELEMENTS + 1u] = {0u};
+    uint32_t const t0_us = 1000000u;
+    uint32_t const path0 = g_sim_path;
+    uint32_t       len   = 0u;
+    bool           b_do  = false;
+
+    sim_ao_layout(char_idx, edge_us);
+    len = edge_us[BAR_ELEMENTS];
+    if (b_use_ao)
+    {
+        g_bar_ao = bar_ao_init();
+    }
+    gb_sim_bar_pin = false;
+    for (uint32_t t = 0u; t <= (SIM_AO_QUIET_US + len + SIM_AO_QUIET_US);
+         t += SIM_AO_STEP_US)
+    {
+        int32_t const  c     = (int32_t) t - (int32_t) SIM_AO_QUIET_US;
+        uint32_t const h     = sim_curl_h(kind, c, len);
+        uint32_t const white = 400u + ((1600u * h) / 1000u);
+        uint32_t const black = 3400u - ((150u * h) / 1000u);
+        uint32_t const spot  = 4000u + ((10000u * h) / 1000u);
+        uint32_t const bl    = sim_ao_black_us(edge_us,
+                                               c - (int32_t) (spot / 2u),
+                                               c + (int32_t) (spot / 2u));
+        int32_t        code  = (int32_t) white
+            + (int32_t) (((black - white) * bl) / spot) + sim_ao_noise(40u);
+
+        code = (code < 0) ? 0 : ((code > 4095) ? 4095 : code);
+        g_sim_path = path0 + ((t * (uint32_t) g_sim_speed_l) / 100000u);
+        if (b_use_ao)
+        {
+            barcode_ao_sample((uint32_t) code, t0_us + t);
+            gb_sim_bar_pin = (1u == bar_ao_level(g_bar_ao));
+        }
+        else
+        {
+            bool const b_now = ((uint32_t) code >= SIM_AO_DO_THRESH);
+
+            if (b_now != b_do)
+            {
+                b_do           = b_now;
+                gb_sim_bar_pin = b_now;
                 barcode_edge_isr(b_now ? DRV_GPIO_IRQ_RISE
                                        : DRV_GPIO_IRQ_FALL, t0_us + t);
             }
@@ -2409,6 +2492,49 @@ int main(void)
         HOST_CHECK("S3-U53", (440u == runs) && (0u == wrong),
                    "440 AO reads over 4 contrasts x 5 blurs: no wrong"
                    " character");
+    }
+
+    /* ---- S3-U54 (2026-11-19: paper on the floor, edge curled) -------- */
+    {
+        uint32_t ok_do[3] = {0u, 0u, 0u};
+        uint32_t ok_ao[3] = {0u, 0u, 0u};
+        uint32_t wrong    = 0u;
+
+        for (uint32_t kind = 0u; kind < 3u; kind++)
+        {
+            for (uint32_t ch = 0u; ch < CODE39_STAR; ch++)
+            {
+                sim_reset();
+                g_sim_ao_seed = 5u + ch;
+                sim_feed_barcode_curl(ch, kind, false);
+                ok_do[kind] += sim_ao_read_ok(ch) ? 1u : 0u;
+
+                sim_reset();
+                g_sim_ao_seed = 5u + ch;
+                sim_feed_barcode_curl(ch, kind, true);
+                ok_ao[kind] += sim_ao_read_ok(ch) ? 1u : 0u;
+                for (uint32_t i = 0u; i < g_sim_evt_cnt; i++)
+                {
+                    uint32_t const type = g_sim_evts[i].type;
+
+                    if (((APP_EVT_BARCODE == type)
+                         || (APP_EVT_UNMAPPED == type))
+                        && ((g_sim_evts[i].value & 0x3Fu) != ch))
+                    {
+                        wrong++;
+                    }
+                }
+            }
+        }
+        printf("[INFO] S3-U54 reads of 43 (lead curl, trail curl, bump):"
+               " DO %u %u %u, AO %u %u %u\n", ok_do[0], ok_do[1],
+               ok_do[2], ok_ao[0], ok_ao[1], ok_ao[2]);
+        HOST_CHECK("S3-U54", (ok_do[0] < 10u) && (ok_do[1] < 10u)
+                   && (ok_do[2] < 10u),
+                   "curled edge or bump: the fixed DO threshold fails");
+        HOST_CHECK("S3-U54", (43u == ok_ao[0]) && (43u == ok_ao[1])
+                   && (43u == ok_ao[2]) && (0u == wrong),
+                   "curled edge or bump: BAR_AO reads all 43, none wrong");
     }
 
     return (0 == HOST_SUMMARY("line_barcode_sim")) ? 0 : 1;
