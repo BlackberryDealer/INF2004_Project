@@ -20,6 +20,7 @@
 #include "../subsystem2/fault.h"
 #include "../subsystem2/odometry.h"
 #include "cfg_obstacle.h"
+#include "cfg_mission.h"         /* MISSION_BAR_BENCH */
 #include "obs_profile.h"
 #include "status_board.h"
 #include "mission.h"
@@ -864,7 +865,12 @@ static void obstacle_enter(uint32_t state)
  */
 static void obstacle_step_monitor(obstacle_reading_t const * p_rd)
 {
-    if (p_rd->b_is_confirmed && (p_rd->distance_mm < OBS_SLOW_MM))
+    /* Barcode bench (BAR_BENCH=1): the sonar never slows or brakes the
+       car, so a wall or bag ahead cannot cut a pass short (on-car
+       2026-11-19: ESTOP at 225 mm, pass never finished). The "US dist"
+       console lines still show the range.                            */
+    if ((0u == MISSION_BAR_BENCH) && p_rd->b_is_confirmed
+        && (p_rd->distance_mm < OBS_SLOW_MM))
     {
         (void) mission_post_event(APP_EVT_OBSTACLE_AHEAD, 0u); /* counted */
         obstacle_enter(APP_SCAN_APPROACH);
