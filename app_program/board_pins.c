@@ -34,7 +34,7 @@ static uint8_t const g_used_pins[] =
     PIN_MOTOR_L_A, PIN_MOTOR_L_B, PIN_MOTOR_R_A,  PIN_MOTOR_R_B,
     PIN_PROBE,     PIN_SERVO,     PIN_ENC_R_A,    PIN_ENC_R_B,
     PIN_RGB,       PIN_BTN_RUN,   PIN_BTN_RESET,  PIN_BUZZER,
-    PIN_IR_LINE_L, PIN_IR_LINE_R
+    PIN_IR_LINE_L, PIN_IR_LINE_R, PIN_BAR_AO
 };
 
 #define BOARD_PINS_USED_COUNT  (sizeof(g_used_pins) / sizeof(g_used_pins[0]))

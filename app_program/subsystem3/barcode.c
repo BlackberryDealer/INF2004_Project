@@ -18,6 +18,8 @@
 #include "../subsystem5/sys_tick.h"
 #include "cfg_barcode.h"
 #include "code39.h"
+#include "bar_ao.h"
+#include "drv_bar_ao.h"
 
 #if (BAR_ELEMENTS > PRV_BAR_A_CLAMP_AGE_MAX)
 #error "PRV_BAR_A.CLAMP_AGE must count up to BAR_ELEMENTS"
@@ -78,6 +80,9 @@ static uint8_t           g_bar_ovf_seen               = 0u; /* task copy */
 static volatile uint32_t g_bar_last_us               = 0u; /* ISR writes */
 static volatile uint8_t  g_bar_branch_seq             = 0u; /* SH_BAR */
 static volatile uint16_t g_bar_edge_cnt               = 0u; /* SH_BAR_EDGES */
+/* BAR_AO=1: analog detector word and last sample (R4 writes both). */
+static volatile uint32_t g_bar_ao                     = 0u; /* SH_BAR_AO */
+static volatile uint16_t g_bar_ao_code                = 0u; /* SH_BAR_AOS */
 
 /* Packed private state words (PRV_BAR_A, PRV_BAR_B, PRV_BAR_C,
    PRV_BAR_W). PRV_BAR_B also holds the flicker CARRY time; PRV_BAR_C
@@ -120,6 +125,7 @@ static volatile uint8_t g_bar_map[BAR_MAP_ENTRIES];
 
 static void     barcode_task(INT stacd, void * p_exinf);
 static void     barcode_edge_isr(uint32_t events, uint32_t now_us);
+static void     barcode_ring_push(uint32_t level, uint32_t now_us);
 static void     barcode_init_state(void);
 static void     barcode_cycle(void);
 static void     barcode_filter_reset(void);
@@ -194,7 +200,8 @@ ER barcode_init(void)
 
 /**
  * barcode_start
- * @brief   Creates barcode_task and attaches barcode_edge_isr to PIN_BAR_DO.
+ * @brief   Creates barcode_task and attaches barcode_edge_isr to PIN_BAR_DO
+ *          (BAR_AO=1: starts R4, which samples GP28 instead).
  * @return  E_OK or kernel error code.
  * @context usermain
  */
@@ -209,6 +216,10 @@ ER barcode_start(void)
     {
         ercd = tid;
     }
+    else if (0u != BAR_AO)
+    {
+        ercd = drv_bar_ao_start(barcode_ao_sample);   /* GP28 analog */
+    }
     else
     {
         ercd = drv_gpio_irq_attach(PIN_BAR_DO, DRV_GPIO_IRQ_BOTH,
@@ -216,6 +227,45 @@ ER barcode_start(void)
     }
 
     return ercd;
+}
+
+/**
+ * barcode_ao_sample
+ * @brief   BAR_AO=1: one GP28 sample through the analog detector; a
+ *          level change is queued like a DO edge (same filter, ring and
+ *          decoder).
+ * @param   code  12-bit ADC code (0..4095)
+ * @param   t_us  sample time on the BAR_AO_PERIOD_US grid
+ * @context R4 bar_ao_timer_isr
+ */
+void barcode_ao_sample(uint32_t code, uint32_t t_us)
+{
+    uint32_t const old_word = g_bar_ao;
+    uint32_t const v        = (BAR_AO_BLACK_IS_HIGH)
+                              ? code : (BAR_AO_CODE_MAX - code);
+    uint32_t const new_word = bar_ao_step(old_word, v);
+
+    g_bar_ao      = new_word;
+    g_bar_ao_code = (uint16_t) (code & BAR_AO_CODE_MAX); /* cast: 12 bits */
+    if (bar_ao_level(new_word) != bar_ao_level(old_word))
+    {
+        barcode_ring_push(bar_ao_level(new_word), t_us);
+    }
+    else
+    {
+        /* Same level: no edge. */
+    }
+}
+
+/**
+ * barcode_ao_code
+ * @brief   Bring-up diagnosis: last GP28 sample (BAR_AO=1; 0 otherwise).
+ * @return  12-bit ADC code
+ * @context line_task (console line while the motors are off)
+ */
+uint32_t barcode_ao_code(void)
+{
+    return g_bar_ao_code;
 }
 
 /**
@@ -309,15 +359,27 @@ uint32_t barcode_edge_count(void)
 
 /**
  * barcode_do_level
- * @brief   Bring-up diagnosis: the barcode DO level now.
+ * @brief   Bring-up diagnosis: the barcode DO level now (BAR_AO=1:
+ *          the analog detector's level).
  * @return  1 = black under the sensor, 0 = white.
  * @context line_task (console line while the motors are off)
  */
 uint32_t barcode_do_level(void)
 {
-    bool const b_pin_high = (0u != (in_w(GPIO_IN) & BAR_DO_PIN_MASK));
+    uint32_t level = 0u;
 
-    return (BAR_DO_BLACK_IS_HIGH == b_pin_high) ? 1u : 0u;
+    if (0u != BAR_AO)
+    {
+        level = bar_ao_level(g_bar_ao);        /* analog detector */
+    }
+    else
+    {
+        bool const b_pin_high = (0u != (in_w(GPIO_IN) & BAR_DO_PIN_MASK));
+
+        level = (BAR_DO_BLACK_IS_HIGH == b_pin_high) ? 1u : 0u;
+    }
+
+    return level;
 }
 
 /* ---- private functions ------------------------------------------------ */
@@ -340,6 +402,15 @@ static void barcode_init_state(void)
     g_bar_branch_seq = 0u;
     g_bar_prv_a      = 0u;
     g_bar_prv_b      = 0u;
+    if (0u != BAR_AO)
+    {
+        g_bar_ao      = bar_ao_init();   /* R4 not started yet */
+        g_bar_ao_code = 0u;
+    }
+    else
+    {
+        /* DO build: no analog state. */
+    }
     barcode_c_put(PRV_BAR_C_FIX_CNT_POS, PRV_BAR_C_FIX_CNT_BITS, 0u);
     barcode_carry_set(0u);
     barcode_c_flag_set(PRV_BAR_C_REREAD_FIRST_POS, false);
@@ -495,18 +566,32 @@ static void barcode_state_set(uint32_t state, uint32_t n_elem)
  */
 static void barcode_edge_isr(uint32_t events, uint32_t now_us)
 {
+    /* A single pending edge records its direction even if the pin
+       has bounced since. For both pending edges, use the pin. */
+    bool const b_pin_high = (DRV_GPIO_IRQ_RISE == events)
+        || ((DRV_GPIO_IRQ_FALL != events)
+            && (0u != (in_w(GPIO_IN) & BAR_DO_PIN_MASK)));
+
+    barcode_ring_push((BAR_DO_BLACK_IS_HIGH == b_pin_high) ? 1u : 0u,
+                      now_us);
+}
+
+/**
+ * barcode_ring_push
+ * @brief   Chatter filter, then one MSG_EDGE entry (15-bit gap + level)
+ *          into the K2 ring and a SEM_BAR signal. The only ring writer:
+ *          R1 (DO build) or R4 (BAR_AO=1), never both.
+ * @param   level   level after the edge (1 = black)
+ * @param   now_us  edge time (1 MHz)
+ * @context ISR (R1 barcode_edge_isr or R4 via barcode_ao_sample)
+ */
+static void barcode_ring_push(uint32_t level, uint32_t now_us)
+{
     uint32_t const dt_us = now_us - g_bar_last_us;
 
     if (dt_us >= BAR_EDGE_REJECT_US)
     {
         uint32_t       gap = dt_us >> BAR_GAP_SHIFT;
-        /* A single pending edge records its direction even if the pin
-           has bounced since. For both pending edges, use the pin. */
-        bool const b_pin_high = (DRV_GPIO_IRQ_RISE == events)
-            || ((DRV_GPIO_IRQ_FALL != events)
-                && (0u != (in_w(GPIO_IN) & BAR_DO_PIN_MASK)));
-        uint32_t const level =
-            (BAR_DO_BLACK_IS_HIGH == b_pin_high) ? 1u : 0u;
         uint8_t const  head = g_bar_head;
         /* cast: masked to 0..63 so fits in uint8_t */
         uint8_t const  next =

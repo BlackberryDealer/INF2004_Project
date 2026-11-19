@@ -462,6 +462,16 @@ GROUPS = {
     'SH_BAR_EDGES': [
         ('COUNT', 16, 0, 1, 'count'),
     ],
+    'SH_BAR_AO': [
+        ('LEVEL', 1, 0, 1, 'flag'),
+        ('PEND', 1, 0, 1, 'count'),
+        ('EXT', 12, 0, 1, 'code'),
+        ('OPP', 8, 0, 16, 'code'),
+        ('AMP', 8, 0, 16, 'code'),
+    ],
+    'SH_BAR_AOS': [
+        ('CODE', 12, 0, 1, 'code'),
+    ],
     'SH_IR_RAW': [
         ('L', 12, 0, 1, 'adc'),
         ('R', 12, 0, 1, 'adc'),

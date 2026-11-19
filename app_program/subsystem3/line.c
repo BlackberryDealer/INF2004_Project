@@ -17,6 +17,7 @@
 #include "../subsystem5/sys_health.h"
 #include "../subsystem5/sys_tick.h"
 #include "barcode.h"
+#include "cfg_barcode.h"       /* BAR_AO */
 #include "cfg_line.h"
 #include "drv_ir_adc.h"
 #include "line_track.h"
@@ -338,9 +339,22 @@ static void line_log_bringup(status_board_t const * p_snap,
                     (int32_t) raw_r, 0);
             app_log("ENC pos L %d R %d\n", status_board_pos_l(p_snap),
                     status_board_pos_r(p_snap), 0);
-            app_log("BAR DO %d (1 = black), edges %d\n",
-                    (int32_t) barcode_do_level(),
-                    (int32_t) (barcode_edge_count() & LINE_LOG_CNT_MASK), 0);
+            if (0u != BAR_AO)
+            {
+                /* DO = the analog detector's level, AO = the last GP28
+                   code. casts: level 0..1, count 0..255, code 0..4095 */
+                app_log("BAR DO %d (1 = black), edges %d, AO %d\n",
+                        (int32_t) barcode_do_level(),
+                        (int32_t) (barcode_edge_count() & LINE_LOG_CNT_MASK),
+                        (int32_t) barcode_ao_code());
+            }
+            else
+            {
+                app_log("BAR DO %d (1 = black), edges %d\n",
+                        (int32_t) barcode_do_level(),
+                        (int32_t) (barcode_edge_count() & LINE_LOG_CNT_MASK),
+                        0);
+            }
         }
         else
         {
