@@ -170,7 +170,9 @@ static telem_bin_snapshot_t g_snapshot; static int g_snapshots;
 bool telem_post_snapshot(telem_bin_snapshot_t const *p) { g_snapshot = *p; g_snapshots++; if (strlen(tlog) < 400) sprintf(tlog + strlen(tlog), "SNAP(sys%u odo%u s%u) ", p->sys_state, p->odometry_mm, p->run_time_s); return true; }
 static uint32_t g_map_char, g_map_cmd;
 static bool g_map_stored = true;
+static uint32_t g_map_calls;
 bool barcode_map_set(uint32_t c, uint32_t m) {
+  g_map_calls++;
   g_map_char = c;
   g_map_cmd = m;
   return g_map_stored;
@@ -959,7 +961,9 @@ int main(void) {
         && !MODE(APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD),
         "STOP ends the reread with the motors disabled");
 
-  /* S5-U61: a MAP reply confirms the stored letter and action. */
+  /* S5-U61: a MAP is stored and confirmed only outside RUN (Tribunal 1,
+     Version C gap 7: "accepted only outside RUN"). In RUN the table is
+     left unchanged and no success event is sent. */
   tlog[0] = 0;
   to_ready();
   tlog[0] = 0;
@@ -967,21 +971,29 @@ int main(void) {
   CHECK("S5-U61", APP_SYS_READY == g_ctx.sys_state && 15u == g_map_char
         && APP_BAR_CMD_LEFT == g_map_cmd && strstr(tlog, "E23:15 "),
         "READY: the F -> LEFT update sends its MAP confirmation");
-  to_run();
-  mot.motion_state = APP_MOT_FOLLOW;
-  mot.speed_l_cpw = mot.speed_r_cpw = 18;
-  tlog[0] = 0;
-  EV(APP_EVT_MAP, mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 15u));
-  CHECK("S5-U61", APP_SYS_RUN == g_ctx.sys_state && !strcmp(mlog, "")
-        && 15u == g_map_char && APP_BAR_CMD_RIGHT == g_map_cmd
-        && strstr(tlog, "E23:79 "),
-        "RUN: F -> RIGHT confirms without issuing a motion command");
   g_map_stored = false;
   tlog[0] = 0;
   EV(APP_EVT_MAP, mission_evt_barcode_value(APP_BAR_CMD_LEFT, 16u));
-  CHECK("S5-U61", NULL == strstr(tlog, "E23:"),
-        "a failed map update has no success event");
+  CHECK("S5-U61", APP_SYS_READY == g_ctx.sys_state
+        && NULL == strstr(tlog, "E23:"),
+        "READY: a failed map update has no success event");
   g_map_stored = true;
+  EV(APP_EVT_MAP, mission_evt_barcode_value(APP_BAR_CMD_LEFT, 15u));
+  to_run();
+  mot.motion_state = APP_MOT_FOLLOW;
+  mot.speed_l_cpw = mot.speed_r_cpw = 18;
+  {
+    uint32_t const calls = g_map_calls;
+    tlog[0] = 0;
+    clog[0] = 0;
+    EV(APP_EVT_MAP, mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 15u));
+    CHECK("S5-U61", APP_SYS_RUN == g_ctx.sys_state && !strcmp(mlog, "")
+          && calls == g_map_calls && 15u == g_map_char
+          && APP_BAR_CMD_LEFT == g_map_cmd && NULL == strstr(tlog, "E23:"),
+          "RUN: F -> RIGHT is refused, F stays LEFT, no confirmation");
+    CHECK("S5-U61", NULL != strstr(clog, "MAP refused in RUN"),
+          "RUN: the refused MAP is logged on the console");
+  }
 
   tlog[0] = 0;
   clog[0] = 0;

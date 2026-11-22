@@ -4,31 +4,28 @@ Status on 2026-11-18 (first written 2026-11-16) of the Tribunal 1 decisions (min
 representation, `CSC28_PostTri1.docx`) that the code does not yet follow
 word for word. Each item says why, and what is still to do.
 
-## 1. MAP is accepted during RUN (kept on purpose)
+## 1. MAP only outside RUN (fixed 2026-11-23)
 
 **Tribunal text (Version C, gap 7):** "MAP is 2 bytes and accepted only
 outside RUN. Only mission_task writes the table, one byte per update, so
 barcode_task never reads a half-written entry."
 
-**Code:** `mission_forward()` (`app_program/subsystem5/mission.c`) stores a
-MAP in every state, RUN included. Test S5-U61 (added 2026-11-09) expects
-the update to be confirmed in READY and in RUN.
+**Before:** `mission_forward()` (`app_program/subsystem5/mission.c`)
+stored a MAP in every state, RUN included, and S5-U61 expected the update
+to be confirmed in RUN.
 
-**Why it is kept:**
+**Now:** `mission_forward()` refuses a MAP while the system state is RUN.
+The table is left unchanged, no MAP confirmation is sent, and the console
+shows `MAP refused in RUN`. In every other state the update is stored and
+confirmed as before. S5-U61 checks both (failing on `3c5daac`, passing
+after the fix).
 
-- The reason the Tribunal gave still holds in RUN. `barcode_map_set()`
-  writes one byte of `g_bar_map` from mission_task, and barcode_task reads
-  whole bytes, so a half-written entry cannot be read.
-- A remap does not change a turn that is already armed: `run_arm()` copies
-  the command when the barcode is decoded, so a MAP only affects barcodes
-  read after it.
-- MAP in RUN was used in the car run of 2026-11-12 (subsystem 5 test log).
-  Refusing it would change tested behaviour (S5-U61) without a car run to
-  confirm it, so the change is left for the team to decide.
+**Operating rule:** send the MAP commands for the letters announced on
+the day while the car is in READY, before START. The decoder still
+identifies every letter A to Z during the run, mapped or not.
 
-**To do:** the team confirms this deviation, or changes `mission_forward()`
-to ignore MAP while `APP_SYS_RUN` and updates S5-U61, then re-tests on the
-car.
+**To do:** car check: map W -> LEFT in READY, start, send W -> RIGHT
+before the car reads W; W must still turn left at the next cross.
 
 ## 2. Changes made on 2026-11-16 that close Tribunal items
 
@@ -66,7 +63,7 @@ the buzzer and servo PWM slice / channel (`uint32_t`, 3 + 1 bits needed),
 the WS2812 state machine number and ready flag, the alive-LED flag and
 the GPIO IRQ table. Not packed; they could be, at no behaviour risk.
 
-**MAP accepted during RUN** (section 1): still needs the team's sign-off.
+**MAP outside RUN** (section 1): car check still to do.
 
 **Buddy 3 test switch.** `gb_bar_reread_always` in `barcode.c` stays a
 `bool`: it is a build setting (`BAR_REREAD_ALWAYS`) that only the host
