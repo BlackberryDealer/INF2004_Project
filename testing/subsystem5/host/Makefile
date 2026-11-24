@@ -2,7 +2,7 @@
 #   test_obs_profile_host : S5-U01..U03, U83, U84: pure obs_profile.c,
 #                           obs_edge.c
 #   sim_mission_host      : statechart simulation (mission.c, mission_run.c),
-#                           plus S5-U04 and S5-U05 (-DMISSION_HOST_TEST)
+#                           plus S5-U04 and S5-U05
 #   sim_obstacle_host     : obstacle_task simulation (obstacle.c + profile)
 #   test_drv_ultrasonic_host : S5-U09, trigger pulse >= 10 us when
 #                           interrupted and across the timer wrap
@@ -57,7 +57,7 @@ tree:
 	cp $(S5)/*.c $(S5)/*.h $(B)/subsystem5/
 
 sim_mission_host.out: sim_mission_host.c tree
-	$(CC) $(SIMFLAGS) -DMISSION_HOST_TEST -o $@ sim_mission_host.c \
+	$(CC) $(SIMFLAGS) -o $@ sim_mission_host.c \
 	    $(B)/subsystem5/mission_run.c $(B)/subsystem5/status_board.c \
 	    $(B)/app_bits.c
 

@@ -194,10 +194,48 @@ uint32_t hmi_poll(void) { return 0u; }
 void hmi_show(uint32_t s, uint32_t n) { (void) s; (void) n; }
 static bool g_warn; void hmi_set_warning(bool b) { g_warn = b; }
 /* S5-U05: every matrix case starts from fresh mocks (Fix 2) */
-void mission_host_case_reset(void) {
+static void mission_host_case_reset(void) {
   memset(flg, 0, sizeof(flg)); qn = 0; mbf_used = 0; g_safety = 0; g_fault = 0;
   g_refuse = 0; g_wdt_enables = 0; g_started = false; g_warn = false;
   mlog[0] = 0; alog[0] = 0; tlog[0] = 0; }
+
+/* S5-U05: feeds every event type to every state (RUN: every substate;
+   AVOID: every step) on a scratch context and checks the result is valid. */
+static uint32_t mission_test_matrix(uint32_t * p_cases) {
+  enum { SIM_SYS_STATES = 8u, SIM_RUN_STATES = 5u, SIM_AVOID_STEPS = 7u };
+  mission_ctx_t ctx = {0}; mission_evt_in_t evt = {true, 0u, 0u};
+  status_board_t snap = {0}; uint32_t const now_us = sys_tick_now_us();
+  uint32_t bad = 0u, cases = 0u, run_n = 1u, av_n = 1u;
+  status_board_read(&snap);
+  for (uint32_t sys = 0u; sys < SIM_SYS_STATES; sys++) {
+    run_n = (APP_SYS_RUN == sys) ? SIM_RUN_STATES : 1u;
+    for (uint32_t run = 0u; run < run_n; run++) {
+      av_n = ((APP_SYS_RUN == sys) && (APP_RUN_AVOID == run))
+             ? SIM_AVOID_STEPS : 1u;
+      for (uint32_t step = 0u; step < av_n; step++) {
+        for (uint32_t type = 0u; type < APP_EVT_COUNT; type++) {
+          mission_host_case_reset();
+          mission_ctx_reset(&ctx);
+          ctx.b_is_quiet  = true;
+          ctx.sys_state   = sys;
+          ctx.run_state   = run;
+          ctx.avoid_step  = step;
+          ctx.last_faults = fault_get();
+          evt.type        = type;
+          mission_dispatch(&ctx, &evt, &snap, now_us);
+          cases++;
+          if ((ctx.sys_state >= SIM_SYS_STATES)
+              || (ctx.run_state >= SIM_RUN_STATES)
+              || (ctx.avoid_step >= SIM_AVOID_STEPS)) {
+            bad++;
+          }
+        }
+      }
+    }
+  }
+  *p_cases = cases;
+  return bad;
+}
 /* ---------------- harness ---------------- */
 static int pass_n, fail_n;
 #define CHECK(id, c, d) do { if (c) { pass_n++; printf("[TEST] %s PASS  %s\n", id, d); } else { fail_n++; printf("[TEST] %s FAIL  %s (line %d) mlog='%s' sys=%u run=%u av=%u sub=%u pend=%d\n", id, d, __LINE__, mlog, g_ctx.sys_state, g_ctx.run_state, g_ctx.avoid_step, g_ctx.substep, g_ctx.b_move_pending); } } while (0)

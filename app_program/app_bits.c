@@ -187,6 +187,34 @@ void app_bits_write(app_bits_writer_t * p_writer, uint32_t value,
 }
 
 /**
+ * app_bits_write_u
+ * @brief   Clamps an unsigned value to [0, max] and writes width bits
+ *          to the stream. If clamped and pb_any is non-NULL, sets
+ *          *pb_any true (sticky: never clears an earlier clamp).
+ * @param   p_writer  writer state
+ * @param   value     value in stored LSB units
+ * @param   max       layout _MAX (non-negative)
+ * @param   width     layout _BITS (1..31)
+ * @param   pb_any    set true if clamped (may be NULL)
+ * @return  none
+ * @context any
+ */
+void app_bits_write_u(app_bits_writer_t * p_writer, uint32_t value,
+                      int32_t max, uint32_t width, bool * pb_any)
+{
+    bool           b_clamped = false;
+    /* cast: layout maxima of unsigned fields are >= 0 */
+    uint32_t const limit     = (max > 0) ? (uint32_t) max : 0u;
+    uint32_t const raw       = app_bits_clamp_u(value, limit, &b_clamped);
+
+    if (b_clamped && (NULL != pb_any))
+    {
+        *pb_any = true;
+    }
+    app_bits_write(p_writer, raw, width);
+}
+
+/**
  * app_bits_writer_bytes
  * @brief   Number of bytes written so far, the last one rounded up.
  * @param   p_writer  writer state

@@ -67,12 +67,6 @@
 #define MISSION_ODO_MAX_COUNTS (((MISSION_ODO_MAX_MM * 1000u)              \
                                  / APP_UM_PER_COUNT) + 1u)
 #define MISSION_STATE_RUN_SHIFT (3u)     /* STATE_CHANGE: sys | run<<3 */
-#define MISSION_BAR_CHAR_MASK  (0x3Fu)   /* event value bits 0-5       */
-#define MISSION_BAR_CMD_SHIFT  (6u)      /* event value bits 6-7       */
-#define MISSION_BAR_CMD_MASK   (0x3u)
-#define MISSION_SYS_STATES     (8u)
-#define MISSION_RUN_STATES     (5u)
-#define MISSION_AVOID_STEPS    (7u)
 
 /* Packed mission state (mission_ctx_save / _load). */
 #define MISSION_CTX_WORDS      (15u)
@@ -350,6 +344,30 @@ uint32_t mission_evt_barcode_value(uint32_t cmd, uint32_t char_index)
                          cmd);
 
     return value;
+}
+
+/**
+ * mission_evt_barcode_unpack
+ * @brief   Unpacks a BARCODE / MAP event value with the generated
+ *          EVT_BARCODE layout.
+ * @param   value        packed 8-bit event value
+ * @param   p_cmd        out: APP_BAR_CMD_* (may be NULL)
+ * @param   p_char_index out: Code 39 index 0..42 (may be NULL)
+ * @context any task
+ */
+void mission_evt_barcode_unpack(uint32_t value, uint32_t * p_cmd,
+                                uint32_t * p_char_index)
+{
+    if (NULL != p_char_index)
+    {
+        *p_char_index = app_bits_get(value, EVT_BARCODE_CHAR_POS,
+                                     EVT_BARCODE_CHAR_BITS);
+    }
+    if (NULL != p_cmd)
+    {
+        *p_cmd = app_bits_get(value, EVT_BARCODE_CMD_POS,
+                              EVT_BARCODE_CMD_BITS);
+    }
 }
 
 /**
@@ -1917,9 +1935,10 @@ static void mission_forward(mission_ctx_t const * p_ctx,
                 break;
             case APP_EVT_MAP:
             {
-                uint32_t const ch = p_evt->value & MISSION_BAR_CHAR_MASK;
-                uint32_t const cmd = (p_evt->value >> MISSION_BAR_CMD_SHIFT)
-                                     & MISSION_BAR_CMD_MASK;
+                uint32_t ch  = 0u;
+                uint32_t cmd = 0u;
+
+                mission_evt_barcode_unpack(p_evt->value, &cmd, &ch);
                 if (APP_SYS_RUN == p_ctx->sys_state)
                 {
                     /* casts: Code 39 index and command fit int32_t */
@@ -2136,69 +2155,5 @@ static void mission_log_ignored(mission_ctx_t const * p_ctx,
     }
 }
 #endif /* APP_TEST */
-
-#if defined(MISSION_HOST_TEST)
-/**
- * mission_test_matrix
- * @brief   S5-U05: feeds every event type to every state (RUN: every
- *          substate; AVOID: every step) on a scratch copy of the context
- *          and checks the result is a defined state. Host test only
- *          (MISSION_HOST_TEST): the side effects (motion commands, mode
- *          bits, faults, watchdog) are real on the target, so S5-U05
- *          never runs there (fix brief, Fix 2). The host harness gives
- *          each case fresh mocks through mission_host_case_reset().
- * @param   p_cases number of combinations tried
- * @return  number of combinations with an undefined outcome
- * @context host test (sim_mission_host.c)
- */
-uint32_t mission_test_matrix(uint32_t * p_cases)
-{
-    mission_ctx_t    ctx    = {0};
-    mission_evt_in_t evt    = {true, 0u, 0u};
-    status_board_t   snap   = {0};
-    uint32_t const   now_us = sys_tick_now_us();
-    uint32_t         bad    = 0u;
-    uint32_t         cases  = 0u;
-    uint32_t         run_n  = 1u;
-    uint32_t         av_n   = 1u;
-
-    status_board_read(&snap);
-    for (uint32_t sys = 0u; sys < MISSION_SYS_STATES; sys++)
-    {
-        run_n = (APP_SYS_RUN == sys) ? MISSION_RUN_STATES : 1u;
-        for (uint32_t run = 0u; run < run_n; run++)
-        {
-            av_n = ((APP_SYS_RUN == sys) && (APP_RUN_AVOID == run))
-                   ? MISSION_AVOID_STEPS : 1u;
-            for (uint32_t step = 0u; step < av_n; step++)
-            {
-                for (uint32_t type = 0u; type < APP_EVT_COUNT; type++)
-                {
-                    mission_host_case_reset();
-                    mission_ctx_reset(&ctx);
-                    ctx.b_is_quiet  = true;
-                    ctx.sys_state   = sys;
-                    ctx.run_state   = run;
-                    ctx.avoid_step  = step;
-                    ctx.last_faults = fault_get();
-                    evt.type        = type;
-                    mission_dispatch(&ctx, &evt, &snap, now_us);
-                    cases++;
-                    if ((ctx.sys_state >= MISSION_SYS_STATES)
-                        || (ctx.run_state >= MISSION_RUN_STATES)
-                        || (ctx.avoid_step >= MISSION_AVOID_STEPS))
-                    {
-                        bad++;
-                    }
-                }
-            }
-        }
-    }
-
-    *p_cases = cases;
-
-    return bad;
-}
-#endif /* MISSION_HOST_TEST */
 
 /*** end of file ***/

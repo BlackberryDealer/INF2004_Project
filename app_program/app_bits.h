@@ -54,6 +54,11 @@ extern void     app_bits_writer_init(app_bits_writer_t * p_writer,
                                      uint8_t * p_buf, uint32_t size_bytes);
 extern void     app_bits_write(app_bits_writer_t * p_writer, uint32_t value,
                                uint32_t width);          /* width 1..31 */
+/* Clamp unsigned value to [0, max] and write width bits; sets *pb_any
+   true on clamp (never clears it; pb_any may be NULL).                 */
+extern void     app_bits_write_u(app_bits_writer_t * p_writer,
+                                 uint32_t value, int32_t max,
+                                 uint32_t width, bool * pb_any);
 extern uint32_t app_bits_writer_bytes(app_bits_writer_t const * p_writer);
 
 typedef struct

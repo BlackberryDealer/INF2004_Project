@@ -31,9 +31,6 @@
 #define RUN_LEG_MIN_MM            (1)
 #define RUN_INHIBITS              (APP_MODE_BARCODE_INHIBIT          \
                                    | APP_MODE_JUNCTION_INHIBIT)
-#define RUN_BAR_CMD_SHIFT         (6u)      /* event value bits 6-7 */
-#define RUN_BAR_CMD_MASK          (0x3u)
-#define RUN_BAR_CHAR_MASK         (0x3Fu)
 
 #define RUN_BAR_IDLE              (0u)
 #define RUN_BAR_BRAKING           (1u)
@@ -1545,8 +1542,7 @@ static void run_follow_or_armed(mission_ctx_t * p_ctx,
  */
 static void run_arm(mission_ctx_t * p_ctx, uint32_t value)
 {
-    p_ctx->armed_char = value & RUN_BAR_CHAR_MASK;
-    p_ctx->armed_cmd  = (value >> RUN_BAR_CMD_SHIFT) & RUN_BAR_CMD_MASK;
+    mission_evt_barcode_unpack(value, &p_ctx->armed_cmd, &p_ctx->armed_char);
     p_ctx->b_is_armed = true;
     run_log_event(p_ctx, "BARCODE value %d: armed for the next"
                   " cross-junction\n", value);

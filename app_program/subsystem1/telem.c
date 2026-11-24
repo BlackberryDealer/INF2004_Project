@@ -123,8 +123,6 @@ static int32_t  telem_acc_mg(uint32_t word, uint32_t pos, uint32_t bits);
 #endif
 static uint32_t telem_evt_word(uint32_t type, uint32_t value);
 static uint32_t telem_evt_value_max(uint32_t type);
-static void     telem_k7_put_u(app_bits_writer_t * p_wr, uint32_t value,
-                               int32_t max, uint32_t bits, bool * pb_any);
 static uint32_t telem_tel_get(uint32_t pos, uint32_t bits);
 static void     telem_tel_put(uint32_t pos, uint32_t bits, uint32_t value);
 
@@ -245,18 +243,18 @@ bool telem_post_profile(telem_bin_profile_t const * p_profile)
     app_bits_writer_init(&wr, msg, sizeof(msg));
     app_bits_write(&wr, telem_evt_word(APP_EVT_OBSTACLE, 0u),
                    MSG_EVT_USED_BITS);
-    telem_k7_put_u(&wr, p_profile->angle_step, K7_PROF_ANGLE_STEP_MAX,
-                   K7_PROF_ANGLE_STEP_BITS, &b_clamped);
-    telem_k7_put_u(&wr, p_profile->width_mm >> TELEM_MM_STEP_SHIFT,
-                   K7_PROF_WIDTH_MAX, K7_PROF_WIDTH_BITS, NULL);
-    telem_k7_put_u(&wr, p_profile->nearest_mm >> TELEM_MM_STEP_SHIFT,
-                   K7_PROF_NEAREST_MAX, K7_PROF_NEAREST_BITS, NULL);
-    telem_k7_put_u(&wr, p_profile->clear_left_mm >> TELEM_MM_STEP_SHIFT,
-                   K7_PROF_CLEAR_L_MAX, K7_PROF_CLEAR_L_BITS, NULL);
-    telem_k7_put_u(&wr, p_profile->clear_right_mm >> TELEM_MM_STEP_SHIFT,
-                   K7_PROF_CLEAR_R_MAX, K7_PROF_CLEAR_R_BITS, NULL);
-    telem_k7_put_u(&wr, p_profile->side, K7_PROF_SIDE_MAX,
-                   K7_PROF_SIDE_BITS, NULL);
+    app_bits_write_u(&wr, p_profile->angle_step, K7_PROF_ANGLE_STEP_MAX,
+                     K7_PROF_ANGLE_STEP_BITS, &b_clamped);
+    app_bits_write_u(&wr, p_profile->width_mm >> TELEM_MM_STEP_SHIFT,
+                     K7_PROF_WIDTH_MAX, K7_PROF_WIDTH_BITS, NULL);
+    app_bits_write_u(&wr, p_profile->nearest_mm >> TELEM_MM_STEP_SHIFT,
+                     K7_PROF_NEAREST_MAX, K7_PROF_NEAREST_BITS, NULL);
+    app_bits_write_u(&wr, p_profile->clear_left_mm >> TELEM_MM_STEP_SHIFT,
+                     K7_PROF_CLEAR_L_MAX, K7_PROF_CLEAR_L_BITS, NULL);
+    app_bits_write_u(&wr, p_profile->clear_right_mm >> TELEM_MM_STEP_SHIFT,
+                     K7_PROF_CLEAR_R_MAX, K7_PROF_CLEAR_R_BITS, NULL);
+    app_bits_write_u(&wr, p_profile->side, K7_PROF_SIDE_MAX,
+                     K7_PROF_SIDE_BITS, NULL);
     if (b_clamped)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
@@ -283,16 +281,16 @@ bool telem_post_summary(telem_bin_summary_t const * p_summary)
     app_bits_writer_init(&wr, msg, sizeof(msg));
     app_bits_write(&wr, telem_evt_word(APP_EVT_SUMMARY, 0u),
                    MSG_EVT_USED_BITS);
-    telem_k7_put_u(&wr, p_summary->end_reason, K7_SUMM_END_REASON_MAX,
-                   K7_SUMM_END_REASON_BITS, NULL);
-    telem_k7_put_u(&wr, p_summary->hump_peak_mm, K7_SUMM_HUMP_PEAK_MAX,
-                   K7_SUMM_HUMP_PEAK_BITS, &b_any);
-    telem_k7_put_u(&wr, p_summary->odometry_mm, K7_SUMM_ODO_MM_MAX,
-                   K7_SUMM_ODO_MM_BITS, &b_any);
-    telem_k7_put_u(&wr, p_summary->faults, K7_SUMM_FAULTS_MAX,
-                   K7_SUMM_FAULTS_BITS, NULL);
-    telem_k7_put_u(&wr, p_summary->run_time_s, K7_SUMM_RUN_S_MAX,
-                   K7_SUMM_RUN_S_BITS, &b_any);
+    app_bits_write_u(&wr, p_summary->end_reason, K7_SUMM_END_REASON_MAX,
+                     K7_SUMM_END_REASON_BITS, NULL);
+    app_bits_write_u(&wr, p_summary->hump_peak_mm, K7_SUMM_HUMP_PEAK_MAX,
+                     K7_SUMM_HUMP_PEAK_BITS, &b_any);
+    app_bits_write_u(&wr, p_summary->odometry_mm, K7_SUMM_ODO_MM_MAX,
+                     K7_SUMM_ODO_MM_BITS, &b_any);
+    app_bits_write_u(&wr, p_summary->faults, K7_SUMM_FAULTS_MAX,
+                     K7_SUMM_FAULTS_BITS, NULL);
+    app_bits_write_u(&wr, p_summary->run_time_s, K7_SUMM_RUN_S_MAX,
+                     K7_SUMM_RUN_S_BITS, &b_any);
     if (b_any)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
@@ -319,18 +317,18 @@ bool telem_post_snapshot(telem_bin_snapshot_t const * p_snap)
     app_bits_writer_init(&wr, msg, sizeof(msg));
     app_bits_write(&wr, telem_evt_word(APP_EVT_SNAPSHOT, 0u),
                    MSG_EVT_USED_BITS);
-    telem_k7_put_u(&wr, p_snap->sys_state, K7_SNAP_SYS_MAX,
-                   K7_SNAP_SYS_BITS, NULL);
-    telem_k7_put_u(&wr, p_snap->run_state, K7_SNAP_RUN_MAX,
-                   K7_SNAP_RUN_BITS, NULL);
-    telem_k7_put_u(&wr, p_snap->hump_peak_mm, K7_SNAP_HUMP_PEAK_MAX,
-                   K7_SNAP_HUMP_PEAK_BITS, &b_any);
-    telem_k7_put_u(&wr, p_snap->odometry_mm, K7_SNAP_ODO_MM_MAX,
-                   K7_SNAP_ODO_MM_BITS, &b_any);
-    telem_k7_put_u(&wr, p_snap->faults, K7_SNAP_FAULTS_MAX,
-                   K7_SNAP_FAULTS_BITS, NULL);
-    telem_k7_put_u(&wr, p_snap->run_time_s, K7_SNAP_RUN_S_MAX,
-                   K7_SNAP_RUN_S_BITS, &b_any);
+    app_bits_write_u(&wr, p_snap->sys_state, K7_SNAP_SYS_MAX,
+                     K7_SNAP_SYS_BITS, NULL);
+    app_bits_write_u(&wr, p_snap->run_state, K7_SNAP_RUN_MAX,
+                     K7_SNAP_RUN_BITS, NULL);
+    app_bits_write_u(&wr, p_snap->hump_peak_mm, K7_SNAP_HUMP_PEAK_MAX,
+                     K7_SNAP_HUMP_PEAK_BITS, &b_any);
+    app_bits_write_u(&wr, p_snap->odometry_mm, K7_SNAP_ODO_MM_MAX,
+                     K7_SNAP_ODO_MM_BITS, &b_any);
+    app_bits_write_u(&wr, p_snap->faults, K7_SNAP_FAULTS_MAX,
+                     K7_SNAP_FAULTS_BITS, NULL);
+    app_bits_write_u(&wr, p_snap->run_time_s, K7_SNAP_RUN_S_MAX,
+                     K7_SNAP_RUN_S_BITS, &b_any);
     if (b_any)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
@@ -878,33 +876,6 @@ static uint32_t telem_evt_value_max(uint32_t type)
     }
 
     return ((1u << bits) - 1u);
-}
-
-/**
- * telem_k7_put_u
- * @brief   Clamps an unsigned value to [0, max] and writes it to a K7
- *          detail stream.
- * @param   p_wr    writer
- * @param   value   value in stored LSB units
- * @param   max     layout _MAX (non-negative)
- * @param   bits    layout _BITS
- * @param   pb_any  set true if this value was clamped (never cleared;
- *                  may be NULL)
- * @context mission_task
- */
-static void telem_k7_put_u(app_bits_writer_t * p_wr, uint32_t value,
-                           int32_t max, uint32_t bits, bool * pb_any)
-{
-    bool           b_clamped = false;
-    /* cast: layout maxima of unsigned fields are >= 0 */
-    uint32_t const raw       = app_bits_clamp_u(value, (uint32_t) max,
-                                                &b_clamped);
-
-    if (b_clamped && (NULL != pb_any))
-    {
-        *pb_any = true;
-    }
-    app_bits_write(p_wr, raw, bits);
 }
 
 /**
