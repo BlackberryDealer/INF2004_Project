@@ -86,7 +86,12 @@
    TERRAIN_ROLL_LEVEL_MG, and more than TERRAIN_ROLL_MAX_TICKS on it is a
    ramp or a held tilt, not a hump. GAIN_PCT corrects the sensor scale
    against a ruler. */
-#define TERRAIN_ROLL_START_MG    (45)   /* TUNE: ~2.6 deg, h ~ 5.6 mm  */
+/* 45 -> 30 (professor 24 Nov 2026: the hump is now 4..5 mm, S4-U19).
+   On the car 1 mm of rise reads ~12 mg (gain 67 %), so 4 mm is ~48 mg
+   and the smoothed value never held 45 mg on a thin strip. 30 mg is
+   ~2.5 mm: below the smallest demo hump, above the +-30 mg vibration
+   case of S4-U18 (its smoothed value stays under 10 mg).            */
+#define TERRAIN_ROLL_START_MG    (30)   /* TUNE: ~2.5 mm on the car    */
 #define TERRAIN_ROLL_LEVEL_MG    (20)   /* TUNE                        */
 #define TERRAIN_ROLL_HYST        (3u)   /* cycles, <= 7 (3-bit HYST)   */
 #define TERRAIN_ROLL_STRAIGHT_COUNTS (3) /* |dl - dr| per 10 ms, ~10 mg */

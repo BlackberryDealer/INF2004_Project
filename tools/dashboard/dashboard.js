@@ -530,6 +530,8 @@
         }
     }
 
+    var humpSys = null;   /* system state at the last STATE_CHANGE */
+
     function onEvent(topic, bytes, word, t) {
         var evt = D.decodeEvent(word);
         evt.word = word;
@@ -542,6 +544,20 @@
             showBarcodeCapture(BAR_FRAME_ELEMENTS, "Valid capture", t);
             $("sBarDecoded").textContent = letter === " " ? "Space" : letter;
             $("sBarDecodeDetail").textContent = action + " · " + clock(t).slice(0, 8);
+        }
+        if (evt.name === "HUMP") {
+            /* each hump as it ends, with its time; the Hump peak tile keeps
+               the run's highest */
+            $("tHumpLast").innerHTML = evt.values.PEAK_MM + "<small>mm " + clock(t).slice(0, 8) + "</small>";
+        }
+        if (evt.name === "STATE_CHANGE") {
+            /* a new run, or a RESET back to READY: no hump seen yet. RUN
+               sub-state changes (FOLLOW, AVOID, ...) keep the value.     */
+            var sysNow = SYS[evt.values.SYS];
+            if (sysNow !== humpSys && (sysNow === "RUN" || sysNow === "READY")) {
+                $("tHumpLast").textContent = "–";
+            }
+            humpSys = sysNow;
         }
         if (evt.name === "MAP" && S.pendingCmd && S.pendingCmd.name === "map") {
             resolvePending(true, "Car confirmed: " + eventFriendly(evt) + ".");
@@ -581,7 +597,7 @@
     function onProfile(v, t, bytes, topic) {
         var width = v.WIDTH * 4;
         if (width === 0 || width >= T.PROFILE_CLEAR_MM) { width = null; }
-        var size = width === null ? "width unavailable" : "estimated width " + width + " mm";
+        var size = width === null ? "width unavailable" : "measured width " + width + " mm";
         addLog({ kind: "event", topic: topic, type: "PROFILE", text: "Obstacle scanned: " + size + ", nearest " +
                  v.NEAREST * 4 + " mm, pass " + D.enumName("SIDE", v.SIDE), exact: D.lineFor(topic, bytes), bytes: bytes, t: t });
         renderProfile(v, t, width);
@@ -958,9 +974,9 @@
         var txt = function (x) { return x >= clear ? "clear" : x + " mm"; };
         var hasWidth = width !== null;
         var widthCm = hasWidth ? (width / 10).toFixed(1) + " cm" : "–";
-        var widthMm = hasWidth ? width + " mm" : "No estimate";
+        var widthMm = hasWidth ? width + " mm" : "No measurement";
         $("sObsWidth").textContent = widthCm;
-        $("sObsWidthDetail").textContent = (hasWidth ? "Last scan" : "No width estimate") +
+        $("sObsWidthDetail").textContent = (hasWidth ? "Last scan, " + width + " mm" : "No width measurement") +
             " · " + clock(t).slice(0, 8);
         /* Top view, car at the bottom centre, 1020 mm -> 150 px. The scan
            runs 30 deg (robot's right) to 150 deg (left); NEAREST is the
@@ -990,7 +1006,7 @@
             "</svg>";
         $("profile").innerHTML = svg + "<dl class=\"kv num\" style=\"margin-top:8px\">" +
             "<dt>Bearing</dt><dd>" + angle + "° (90° ahead, 30° right, 150° left)</dd>" +
-            "<dt>Estimated width</dt><dd>" + (hasWidth ? widthCm + " (" + widthMm + ")" : "Unavailable") + "</dd>" +
+            "<dt>Measured width</dt><dd>" + (hasWidth ? widthCm + " (" + widthMm + ", 1° edge scan)" : "Unavailable") + "</dd>" +
             "<dt>Forward distance</dt><dd>" + txt(nearest) + "</dd>" +
             "<dt>Clearance left / right</dt><dd>" + txt(cl) + " / " + txt(cr) + "</dd></dl>";
         $("profWhen").textContent = clock(t);

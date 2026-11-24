@@ -302,6 +302,16 @@ PRV_OBS_B,32,DIST_LOG,3,1,ping,0,7,0,RNG,P,B5,Bring-up distance print divider (O
 PRV_OBS_B,32,RAMP_LOGGED,1,1,flag,0,1,0,FLAG,P,B5,One RAMP line per approach
 PRV_OBS_B,32,CREEP_LOGGED,1,1,flag,0,1,0,FLAG,P,B5,One CREEP line per stop
 PRV_OBS_C,32,RAMP_MARK,17,1,count,0,131071,0,RAW,P,B5,Path at the last pitched cycle (wrapping path)
+PRV_OBS_C,32,EDGE_LO_D,5,4,mm,0,20,0,RNG,P,B5,Low-side corner echo below EDGE_LIMIT (0..OBS_CORE_BAND_MM; S5-U83)
+PRV_OBS_C,32,EDGE_HI_D,5,4,mm,0,20,0,RNG,P,B5,High-side corner echo below EDGE_LIMIT (0..OBS_CORE_BAND_MM; S5-U83)
+PRV_OBS_E,32,EDGE_PHASE,2,1,code,0,2,0,ENUM,P,B5,1-degree edge pass (S5-U83): 0 = off; 1 = low-angle edge; 2 = high-angle edge
+PRV_OBS_E,32,EDGE_SUB,3,1,deg,0,5,0,RNG,P,B5,Degrees past the start point now measured (1..OBS_EDGE_SUB_MAX)
+PRV_OBS_E,32,EDGE_LO,8,1,deg,0,150,0,RNG,P,B5,Outermost in-band servo angle on the low-angle side
+PRV_OBS_E,32,EDGE_HI,8,1,deg,0,150,0,RNG,P,B5,Outermost in-band servo angle on the high-angle side
+PRV_OBS_E,32,EDGE_LIMIT,8,4,mm,0,255,0,SAT,P,B5,Core band limit (shortest echo + OBS_CORE_BAND_MM); 255 = clear
+PRV_OBS_E,32,EDGE_OK_LO,1,1,flag,0,1,0,FLAG,P,B5,Low-side edge confirmed: the next degree out jumped to background
+PRV_OBS_E,32,EDGE_OK_HI,1,1,flag,0,1,0,FLAG,P,B5,High-side edge confirmed: the next degree out jumped to background
+PRV_OBS_E,32,EDGE_GRACE,1,1,flag,0,1,0,FLAG,P,B5,One more degree probed after a non-jump reading past the edge
 PRV_OBS_SCAN,8,MM,8,4,mm,0,255,0,SAT,P,B5,Scan table point x25 (APP_SCAN_STEPS); 255 = clear (APP_PROFILE_CLEAR_MM)
 PRV_OBS_SMP,8,MM,8,4,mm,0,255,0,SAT,P,B5,Pings at one step x3 (OBS_SCAN_SAMPLES); median kept
 SH_ECHO_CNT,8,COUNT,8,1,count,0,255,0,RAW,S,B5,Accepted echo rises and falls x2 (ISR writer; one byte each); obstacle_task compares for change

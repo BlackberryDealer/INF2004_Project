@@ -121,6 +121,50 @@
 #define OBS_BEAM_HALF_STEPS    (3u)      /* MEASURE: ~15 deg half-beam  */
 #define OBS_WIDTH_MIN_MM       (100u)    /* professor: 10..20 cm        */
 #define OBS_WIDTH_MAX_MM       (200u)
+/* 1-degree edge pass (S5-U83; requirement 24 Nov 2026: reported width
+   within +-10 mm). After the 5-degree scan, the servo steps 1 degree at
+   a time outward past each end of the core (up to OBS_EDGE_SUB_MAX), 3
+   pings each, and keeps
+   the outermost angle still in band and its range. That echo comes from
+   the box corner: corner direction = echo angle -+ OBS_BEAM_HALF_DDEG
+   (0.1 deg), corner distance = the range there. Width = distance between
+   the two corners, so it needs no guess of how the face is turned or
+   where the box sits. Calibrate OBS_BEAM_HALF_DDEG on the car against
+   boxes of known width (S5-I09): 1 deg = ~7 mm of width at 200 mm. The
+   bypass still plans from the 5-degree estimate above.                 */
+#define OBS_EDGE_SUB_MAX       (5u)      /* degrees past the start point  */
+/* An edge counts only if the next degree out jumps to background (clear,
+   or more than OBS_EDGE_JUMP_MM beyond the edge echo). A face that keeps
+   receding past the band, or an edge at the 30/150 deg scan limit, is
+   not confirmed: the width is then reported unavailable, never as a
+   number from a corner that was not seen.                          */
+#define OBS_EDGE_JUMP_MM       (60u)     /* TUNE: receding face < this    */
+/* A weak echo at the beam fringe reads long (review 24 Nov, sim with a
+   +30 mm fringe echo: widths 20..36 mm too wide). Near a corner a box
+   face changes ~2 mm per degree, so an in-band echo more than
+   OBS_EDGE_RISE_MM beyond the echo one degree inward is a fringe echo:
+   the edge stays, and the next degree out must jump to confirm it. A
+   5-degree core end that rises more than that past the point inside it
+   may itself be a fringe echo: the 1-degree pass then starts from the
+   point inside (up to OBS_EDGE_SUB_MAX = one step outward).          */
+#define OBS_EDGE_RISE_MM       (12u)     /* TUNE: per degree (face ~2-3)  */
+/* Corner ranges more than OBS_EDGE_SKEW_MM apart: the box is turned so
+   far (~20 deg for 200 mm) that its far corner can lie beyond the core
+   band, so the width is reported unavailable. Square boxes in front of
+   the car, 8 deg turned or 40 mm off-centre, stay below 30 mm.       */
+#define OBS_EDGE_SKEW_MM       (60u)     /* TUNE */
+#if ((OBS_EDGE_RISE_MM % 4u) != 0u) || ((OBS_EDGE_JUMP_MM % 4u) != 0u)
+#error "Edge thresholds must be whole 4 mm codes"
+#endif
+/* 150 -> 290 (car run 24 Nov 2026 21:08, 70 mm box 200 mm ahead): the
+   echoes ran from 55 to ~130 deg, a 75-degree spread for a box that is
+   only 20 degrees wide, so the sensor hears a corner ~29 degrees off its
+   axis. With 15.0 the same scan gave 170..190 mm; 29.0 gives 70 mm.
+   Re-check with 100/150/200 mm boxes (S5-I09).                       */
+#define OBS_BEAM_HALF_DDEG     (290u)    /* MEASURE: echo half-angle, 0.1 deg */
+#if (OBS_EDGE_SUB_MAX > APP_SCAN_ANGLE_STEP_DEG)
+#error "The edge pass must stay within one scan step of its start"
+#endif
 /* S5-U48 (on-car 2026-11-09 17:00: the car's side hit the box). The
    shortest echo often reads the same over several steps (252 mm from 65
    to 100 deg): the estimate is centred on the middle of those steps
@@ -158,7 +202,9 @@
    echo or disagreeing readings) and scans at standstill. Within
    OBS_CREEP_TOL_MM of OBS_SCAN_MM it scans at once. On car: check >=
    100 mm physical clearance after braking.                            */
-#define OBS_SCAN_MM            (250u)    /* TUNE: sonar range at the scan */
+/* 250 -> 200 (24 Nov 2026, width within +-10 mm, S5-U83): closer, each
+   degree of edge error is ~3.5 mm of width instead of ~4.4 mm.       */
+#define OBS_SCAN_MM            (200u)    /* TUNE: sonar range at the scan */
 #define OBS_CREEP_TOL_MM       (30u)
 
 /* ---- repeated measurements per scan step (S5-U47) ---------------------- */

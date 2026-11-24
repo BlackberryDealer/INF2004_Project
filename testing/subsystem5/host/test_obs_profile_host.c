@@ -642,5 +642,43 @@ int main(void)
                    " nearest + 150 + 100 (was + 180)");
     }
 
+    /* S5-U83: width between the corners found by the 1-degree edge
+       pass. The echo of a corner is heard OBS_BEAM_HALF_DDEG off the
+       servo axis; inputs are built from the corner positions with the
+       calibrated beam, so the check holds for any calibration.        */
+    {
+        uint32_t const beam = (OBS_BEAM_HALF_DDEG + 5u) / 10u;  /* deg */
+        uint32_t pm = 0u;
+        uint32_t w  = 0u;
+
+        /* 150 mm box 200 mm ahead: corners at 69.4 / 110.6 deg, 214 mm */
+        w = obs_profile_edge_width(69u - beam, 212u, 111u + beam, 212u,
+                                   &pm);
+        printf("   S5-U83: 150 mm box, echoes %u/%u deg at 212 mm -> %u mm +-%u\n",
+               (unsigned) (69u - beam), (unsigned) (111u + beam),
+               (unsigned) w, (unsigned) pm);
+        HOST_CHECK("S5-U83", (w >= 140u) && (w <= 160u) && (pm > 0u)
+                   && (pm <= 12u),
+                   "150 mm box from its corner echoes (+-10 mm), +- reported");
+        /* car run 24 Nov 21:08: 70 mm box, echoes 55 deg / 228 mm and
+           130 deg, scan stopped 204 mm away                          */
+        w = obs_profile_edge_width(55u, 228u, 130u, 228u, &pm);
+        printf("   S5-U83: car scan 70 mm box (55/130 deg, 228 mm) -> %u mm\n",
+               (unsigned) w);
+        HOST_CHECK("S5-U83", (w >= 60u) && (w <= 80u),
+                   "car scan of the 70 mm box reads 70 +-10 mm");
+        HOST_CHECK("S5-U83",
+                   (0u == obs_profile_edge_width(90u, 200u, 90u, 200u, &pm))
+                   && (0u == pm)
+                   && (0u == obs_profile_edge_width(60u, 1020u, 120u, 200u,
+                                                    &pm)),
+                   "no span or a clear side: 0 (width unavailable)");
+        /* echoes 20 deg apart are narrower than the beam (2 x beam):
+           taking the beam off each side would swap the corners        */
+        HOST_CHECK("S5-U83",
+                   0u == obs_profile_edge_width(80u, 200u, 100u, 200u, &pm),
+                   "span narrower than the beam (corners reversed): 0");
+    }
+
     return (0 == HOST_SUMMARY("subsystem5 host")) ? 0 : 1;
 }

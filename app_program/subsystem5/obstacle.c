@@ -88,7 +88,25 @@
 #define OBS_F_RAMP_LOGGED      (17u)
 #define OBS_F_CREEP_LOGGED     (18u)
 #define OBS_F_RAMP_MARK        (19u)
-#define OBS_F_COUNT            (20u)
+#define OBS_F_EDGE_PHASE       (20u)
+#define OBS_F_EDGE_SUB         (21u)
+#define OBS_F_EDGE_LO          (22u)
+#define OBS_F_EDGE_HI          (23u)
+#define OBS_F_EDGE_LIMIT       (24u)
+#define OBS_F_EDGE_LO_D        (25u)         /* code below EDGE_LIMIT */
+#define OBS_F_EDGE_HI_D        (26u)         /* code below EDGE_LIMIT */
+#define OBS_F_EDGE_OK_LO       (27u)
+#define OBS_F_EDGE_OK_HI       (28u)
+#define OBS_F_EDGE_GRACE       (29u)
+#define OBS_F_COUNT            (30u)
+
+/* 1-degree edge pass (S5-U83): EDGE_PHASE values */
+#define OBS_EDGE_OFF           (0u)
+#define OBS_EDGE_LO_SIDE       (1u)
+#define OBS_EDGE_HI_SIDE       (2u)
+#define OBS_SCAN_LAST_DEG      (APP_SCAN_ANGLE_MIN_DEG                 \
+                                + (APP_SCAN_ANGLE_STEP_DEG             \
+                                   * (APP_SCAN_STEPS - 1u)))  /* 150 */
 
 /* Every PRV_OBS_* row must hold the full range its code uses. */
 #if (APP_SCAN_STEPS != PRV_OBS_M_MEASURED_BITS)                         \
@@ -114,6 +132,16 @@
     || ((APP_DIST_NONE_MM % OBS_MM_STEP) != 0u)                         \
     || ((APP_PROFILE_CLEAR_MM % OBS_MM_STEP) != 0u)
 #error "Distance codes must cover the sentinels in 4 mm steps"
+#endif
+#if (OBS_EDGE_SUB_MAX != PRV_OBS_E_EDGE_SUB_MAX)                         \
+    || (OBS_SCAN_LAST_DEG != PRV_OBS_E_EDGE_LO_MAX)                     \
+    || (OBS_SCAN_LAST_DEG != PRV_OBS_E_EDGE_HI_MAX)                     \
+    || (OBS_EDGE_HI_SIDE != PRV_OBS_E_EDGE_PHASE_MAX)                   \
+    || ((APP_PROFILE_CLEAR_MM / OBS_MM_STEP) != PRV_OBS_E_EDGE_LIMIT_MAX) \
+    || ((OBS_CORE_BAND_MM / OBS_MM_STEP) != PRV_OBS_C_EDGE_LO_D_MAX)      \
+    || ((OBS_CORE_BAND_MM / OBS_MM_STEP) != PRV_OBS_C_EDGE_HI_D_MAX)      \
+    || ((OBS_CORE_BAND_MM % OBS_MM_STEP) != 0u)
+#error "PRV_OBS_E must hold the edge pass (S5-U83)"
 #endif
 #if (SB_MOT3_PATH_MAX != PRV_OBS_B_PASS_MARK_MAX)                       \
     || (SB_MOT3_PATH_MAX != PRV_OBS_C_RAMP_MARK_MAX)
@@ -173,7 +201,10 @@ static uint32_t g_obs_prv_a =   /* PREV, ECHO = nothing; WARMUP (S5-U30) */
     | ((uint32_t) OBS_WARMUP_PINGS << PRV_OBS_A_WARMUP_POS);
 static uint32_t g_obs_prv_b = 0u; /* PASS_MARK, RAMP_HOLD, MODE_SEEN,
                                      DIST_LOG, RAMP_LOGGED, CREEP_LOGGED */
-static uint32_t g_obs_prv_c = 0u; /* RAMP_MARK */
+static uint32_t g_obs_prv_c = 0u; /* RAMP_MARK, EDGE_LO_D, EDGE_HI_D */
+static uint32_t g_obs_prv_e = 0u; /* EDGE_PHASE, EDGE_SUB, EDGE_LO, EDGE_HI,
+                                     EDGE_LIMIT, EDGE_OK_LO/HI, EDGE_GRACE
+                                     (S5-U83) */
 static uint32_t g_scan_start_us = 0u; /* E_OBS_US (E5): scan-time log */
 /* Scan table and the pings at one step, 4 mm codes (PRV_OBS_SCAN,
    PRV_OBS_SMP); 255 = clear (APP_PROFILE_CLEAR_MM).                  */
@@ -221,6 +252,16 @@ static obstacle_field_t const g_obs_f[OBS_F_COUNT] =
     {&g_obs_prv_b, PRV_OBS_B_RAMP_LOGGED_POS, PRV_OBS_B_RAMP_LOGGED_BITS},
     {&g_obs_prv_b, PRV_OBS_B_CREEP_LOGGED_POS, PRV_OBS_B_CREEP_LOGGED_BITS},
     {&g_obs_prv_c, PRV_OBS_C_RAMP_MARK_POS, PRV_OBS_C_RAMP_MARK_BITS},
+    {&g_obs_prv_e, PRV_OBS_E_EDGE_PHASE_POS, PRV_OBS_E_EDGE_PHASE_BITS},
+    {&g_obs_prv_e, PRV_OBS_E_EDGE_SUB_POS, PRV_OBS_E_EDGE_SUB_BITS},
+    {&g_obs_prv_e, PRV_OBS_E_EDGE_LO_POS, PRV_OBS_E_EDGE_LO_BITS},
+    {&g_obs_prv_e, PRV_OBS_E_EDGE_HI_POS, PRV_OBS_E_EDGE_HI_BITS},
+    {&g_obs_prv_e, PRV_OBS_E_EDGE_LIMIT_POS, PRV_OBS_E_EDGE_LIMIT_BITS},
+    {&g_obs_prv_c, PRV_OBS_C_EDGE_LO_D_POS, PRV_OBS_C_EDGE_LO_D_BITS},
+    {&g_obs_prv_c, PRV_OBS_C_EDGE_HI_D_POS, PRV_OBS_C_EDGE_HI_D_BITS},
+    {&g_obs_prv_e, PRV_OBS_E_EDGE_OK_LO_POS, PRV_OBS_E_EDGE_OK_LO_BITS},
+    {&g_obs_prv_e, PRV_OBS_E_EDGE_OK_HI_POS, PRV_OBS_E_EDGE_OK_HI_BITS},
+    {&g_obs_prv_e, PRV_OBS_E_EDGE_GRACE_POS, PRV_OBS_E_EDGE_GRACE_BITS},
 };
 
 /* ---- private function prototypes ------------------------------------- */
@@ -262,6 +303,16 @@ static bool     obstacle_next_fine(void);
 static void     obstacle_scan_finish(void);
 static void     obstacle_fill_gaps(void);
 static void     obstacle_set_step(uint32_t step);
+static bool     obstacle_edge_begin(void);
+static bool     obstacle_edge_sample(uint32_t code);
+static bool     obstacle_edge_side(uint32_t side);
+static bool     obstacle_edge_jump(uint32_t code, uint32_t edge_code);
+static bool     obstacle_edge_coarse_clear(bool b_is_lo, uint32_t edge,
+                                           uint32_t edge_code);
+static uint32_t obstacle_edge_skew_mm(void);
+static uint32_t obstacle_edge_code(bool b_is_lo);
+static void     obstacle_edge_code_set(bool b_is_lo, uint32_t code);
+static void     obstacle_set_deg(uint32_t deg, uint32_t settle);
 static uint32_t obstacle_path_counts(void);
 
 /* ---- public functions ------------------------------------------------- */
@@ -967,6 +1018,7 @@ static void obstacle_step_approach(obstacle_reading_t const * p_rd)
 static void obstacle_step_scan(obstacle_reading_t const * p_rd)
 {
     bool           b_is_more  = true;
+    uint32_t       med        = 0u;
     uint32_t const settle     = obstacle_get(OBS_F_SETTLE);
     uint32_t const sample_cnt = obstacle_get(OBS_F_SAMPLE_CNT);
     uint32_t const step       = obstacle_get(OBS_F_STEP);
@@ -987,25 +1039,37 @@ static void obstacle_step_scan(obstacle_reading_t const * p_rd)
         g_samples[sample_cnt] = obstacle_mm_code(
             (p_rd->distance_mm < APP_PROFILE_CLEAR_MM)
             ? p_rd->distance_mm : APP_PROFILE_CLEAR_MM);
-        /* cast: median of three codes <= 255 */
-        g_obs_scan[step] = (uint8_t) obstacle_median3(g_samples);
-        obstacle_set(OBS_F_MEASURED,
-                     obstacle_get(OBS_F_MEASURED) | (1u << step));
-        if (APP_SCAN_COARSE == obstacle_get(OBS_F_STATE))
+        med = obstacle_median3(g_samples);
+        if (OBS_EDGE_OFF != obstacle_get(OBS_F_EDGE_PHASE))
         {
-            if ((step + OBS_COARSE_STRIDE) < APP_SCAN_STEPS)
-            {
-                obstacle_set_step(step + OBS_COARSE_STRIDE);
-            }
-            else
-            {
-                obstacle_set(OBS_F_STATE, APP_SCAN_FINE);
-                b_is_more = obstacle_next_fine();
-            }
+            b_is_more = obstacle_edge_sample(med);           /* S5-U83 */
         }
         else
         {
-            b_is_more = obstacle_next_fine();
+            /* cast: median of three codes <= 255 */
+            g_obs_scan[step] = (uint8_t) med;
+            obstacle_set(OBS_F_MEASURED,
+                         obstacle_get(OBS_F_MEASURED) | (1u << step));
+            if (APP_SCAN_COARSE == obstacle_get(OBS_F_STATE))
+            {
+                if ((step + OBS_COARSE_STRIDE) < APP_SCAN_STEPS)
+                {
+                    obstacle_set_step(step + OBS_COARSE_STRIDE);
+                }
+                else
+                {
+                    obstacle_set(OBS_F_STATE, APP_SCAN_FINE);
+                    b_is_more = obstacle_next_fine();
+                }
+            }
+            else
+            {
+                b_is_more = obstacle_next_fine();
+            }
+            if (!b_is_more)
+            {
+                b_is_more = obstacle_edge_begin();   /* same scan: edges */
+            }
         }
     }
 
@@ -1130,6 +1194,9 @@ static void obstacle_scan_begin(void)
     }
     obstacle_set(OBS_F_MEASURED, 0u);
     obstacle_set(OBS_F_INFERRED, 0u);
+    g_obs_prv_e = 0u;          /* no edge pass yet (EDGE_PHASE = OFF) */
+    obstacle_set(OBS_F_EDGE_LO_D, 0u);
+    obstacle_set(OBS_F_EDGE_HI_D, 0u);
     obstacle_part_get(&part);
     part.b_is_profile_valid = false;
     obstacle_part_put(&part);
@@ -1196,6 +1263,9 @@ static void obstacle_scan_finish(void)
     status_board_obs_t part;
     uint16_t           scan_mm[APP_SCAN_STEPS];
     uint32_t           idx  = 0u;
+    uint32_t           est  = 0u;
+    uint32_t           fine = 0u;
+    uint32_t           pm_mm = 0u;
 
     obstacle_fill_gaps();
     for (idx = 0u; idx < APP_SCAN_STEPS; idx++)
@@ -1205,6 +1275,27 @@ static void obstacle_scan_finish(void)
     }
     obs_profile_build(scan_mm, obstacle_get(OBS_F_INFERRED), &prof);
     obs_profile_plan(&prof, &plan);
+    /* S5-U83: the reported width is the 1-degree edge measurement; the
+       plan above still comes from the 5-degree estimate.             */
+    est  = prof.width_mm;
+    fine = obs_profile_edge_width(obstacle_get(OBS_F_EDGE_LO),
+                                  obstacle_edge_code(true) * OBS_MM_STEP,
+                                  obstacle_get(OBS_F_EDGE_HI),
+                                  obstacle_edge_code(false) * OBS_MM_STEP,
+                                  &pm_mm);
+    if ((0u == obstacle_get(OBS_F_EDGE_OK_LO))
+        || (0u == obstacle_get(OBS_F_EDGE_OK_HI))
+        || (obstacle_edge_skew_mm() > OBS_EDGE_SKEW_MM))
+    {
+        fine = 0u;     /* a corner was not seen, or the box is turned
+                          too far to trust the far one: no number    */
+    }
+    /* Reported width: the corner measurement or unavailable (1020 =
+       clear on the board, "width unavailable" on the dashboard); never
+       the 5-degree estimate under the 1-degree label.               */
+    prof.width_mm = ((fine > 0u) && (fine < APP_PROFILE_CLEAR_MM))
+                    ? fine : APP_PROFILE_CLEAR_MM;
+    obstacle_set(OBS_F_EDGE_PHASE, OBS_EDGE_OFF);
     /* S5-U42: a scan that saw only a narrow normal-incidence glint
        (< OBS_MIN_WIDTH_MM) off a sloped ramp face is a ramp: drive on
        (PASSING). The pitch flag alone never overrides the plan, so a
@@ -1256,8 +1347,26 @@ static void obstacle_scan_finish(void)
            casts: <= 1020 mm fit int32_t                               */
         app_log("SCAN width estimate %d mm (measured span %d mm, kept "
                 "within %d..200 mm)\n",
-                (int32_t) prof.width_mm, (int32_t) prof.raw_width_mm,
+                (int32_t) est, (int32_t) prof.raw_width_mm,
                 (int32_t) OBS_WIDTH_MIN_MM);
+        /* S5-U83 (calibration: S5-I09). casts: <= 1500 fit int32_t */
+        app_log("EDGE low %d deg at %d mm, high %d deg\n",
+                (int32_t) obstacle_get(OBS_F_EDGE_LO),
+                (int32_t) (obstacle_edge_code(true) * OBS_MM_STEP),
+                (int32_t) obstacle_get(OBS_F_EDGE_HI));
+        if (APP_PROFILE_CLEAR_MM != prof.width_mm)
+        {
+            app_log("WIDTH %d mm +-%d mm (high edge at %d mm)\n",
+                    (int32_t) prof.width_mm, (int32_t) pm_mm,
+                    (int32_t) (obstacle_edge_code(false) * OBS_MM_STEP));
+        }
+        else
+        {
+            /* casts: flags 0..1 */
+            app_log("WIDTH unavailable (edge seen: low %d, high %d)\n",
+                    (int32_t) obstacle_get(OBS_F_EDGE_OK_LO),
+                    (int32_t) obstacle_get(OBS_F_EDGE_OK_HI), 0);
+        }
         obstacle_block_log(true, prof.block_step_left, prof.clear_left_mm);
         obstacle_block_log(false, prof.block_step_right,
                            prof.clear_right_mm);
@@ -1638,6 +1747,329 @@ static void obstacle_set_step(uint32_t step)
     obstacle_set(OBS_F_SAMPLE_CNT, 0u);
     drv_servo_set_deg(APP_SCAN_ANGLE_MIN_DEG
                       + (APP_SCAN_ANGLE_STEP_DEG * step));
+}
+
+/**
+ * obstacle_edge_begin
+ * @brief   End of the 5-degree points (S5-U83): finds the obstacle core
+ *          as obs_profile_build() does, stores its end angles and band
+ *          limit, and starts the 1-degree pass on the low-angle side (or
+ *          the high side if the core starts at 30 deg).
+ * @return  true if an edge pass was started, false if the scan is done
+ * @context obstacle_task
+ */
+static bool obstacle_edge_begin(void)
+{
+    obs_profile_t prof = {0};
+    uint16_t      scan_mm[APP_SCAN_STEPS];
+    uint32_t      limit = 0u;
+    uint32_t      lo_step = 0u;
+    uint32_t      hi_step = 0u;
+    bool          b_is_more = false;
+
+    obstacle_fill_gaps();
+    for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)
+    {
+        /* cast: <= 1020 mm */
+        scan_mm[idx] = (uint16_t) obstacle_scan_mm(idx);
+    }
+    obs_profile_build(scan_mm, obstacle_get(OBS_F_INFERRED), &prof);
+
+    if (prof.b_is_valid)
+    {
+        limit = (prof.core_limit_mm < APP_PROFILE_CLEAR_MM)
+                ? prof.core_limit_mm : APP_PROFILE_CLEAR_MM;
+        obstacle_set(OBS_F_EDGE_LIMIT, obstacle_mm_code(limit));
+        /* a core end that rises past the point inside it by more than
+           OBS_EDGE_RISE_MM may be a fringe echo: start from inside   */
+        lo_step = prof.core_lo_step;
+        if ((lo_step < prof.angle_step)
+            && (g_obs_scan[lo_step] > (g_obs_scan[lo_step + 1u]
+                                       + (OBS_EDGE_RISE_MM / OBS_MM_STEP))))
+        {
+            lo_step++;
+        }
+        hi_step = prof.core_hi_step;
+        if ((hi_step > prof.angle_step)
+            && (g_obs_scan[hi_step] > (g_obs_scan[hi_step - 1u]
+                                       + (OBS_EDGE_RISE_MM / OBS_MM_STEP))))
+        {
+            hi_step--;
+        }
+        obstacle_set(OBS_F_EDGE_LO, APP_SCAN_ANGLE_MIN_DEG
+                     + (APP_SCAN_ANGLE_STEP_DEG * lo_step));
+        obstacle_set(OBS_F_EDGE_HI, APP_SCAN_ANGLE_MIN_DEG
+                     + (APP_SCAN_ANGLE_STEP_DEG * hi_step));
+        obstacle_edge_code_set(true, g_obs_scan[lo_step]);
+        obstacle_edge_code_set(false, g_obs_scan[hi_step]);
+        b_is_more = obstacle_edge_side(OBS_EDGE_LO_SIDE);
+    }
+
+    return b_is_more;
+}
+
+/**
+ * obstacle_edge_side
+ * @brief   Starts the 1-degree pass on one side (low first, then high),
+ *          skipping a side whose core end is at the scan limit.
+ * @param   side OBS_EDGE_LO_SIDE or OBS_EDGE_HI_SIDE
+ * @return  true if a probe was started, false if the edge pass is done
+ * @context obstacle_task
+ */
+static bool obstacle_edge_side(uint32_t side)
+{
+    uint32_t const lo     = obstacle_get(OBS_F_EDGE_LO);
+    uint32_t const hi     = obstacle_get(OBS_F_EDGE_HI);
+    bool           b_more = false;
+
+    if ((OBS_EDGE_LO_SIDE == side) && (lo > APP_SCAN_ANGLE_MIN_DEG))
+    {
+        obstacle_set(OBS_F_EDGE_PHASE, OBS_EDGE_LO_SIDE);
+        obstacle_set(OBS_F_EDGE_SUB, 1u);
+        /* the servo may be far away (up to 120 deg): watch settle */
+        obstacle_set_deg(lo - 1u, OBS_WATCH_SETTLE_PINGS);
+        b_more = true;
+    }
+    else if (hi < OBS_SCAN_LAST_DEG)
+    {
+        obstacle_set(OBS_F_EDGE_PHASE, OBS_EDGE_HI_SIDE);
+        obstacle_set(OBS_F_EDGE_SUB, 1u);
+        obstacle_set_deg(hi + 1u, OBS_WATCH_SETTLE_PINGS);  /* swing */
+        b_more = true;
+    }
+    else
+    {
+        obstacle_set(OBS_F_EDGE_PHASE, OBS_EDGE_OFF);
+    }
+
+    return b_more;
+}
+
+/**
+ * obstacle_edge_sample
+ * @brief   One 1-degree probe done (median of OBS_SCAN_SAMPLES pings).
+ *          In band (and at most OBS_EDGE_RISE_MM beyond the echo one
+ *          degree inward, else a fringe echo): it becomes the edge
+ *          (angle and range) and the next degree outward is probed, up
+ *          to OBS_EDGE_SUB_MAX, then one more degree (EDGE_GRACE).
+ *          Out of band or a fringe echo: a jump to
+ *          background confirms the edge; anything else gets one more
+ *          degree (EDGE_GRACE: a weak echo at the beam fringe), whose
+ *          jump decides. An edge at the scan limit is never confirmed.
+ * @param   code median, 4 mm code
+ * @return  true while probes remain, false when the edge pass is done
+ * @context obstacle_task
+ */
+static bool obstacle_edge_sample(uint32_t code)
+{
+    bool const     b_is_lo  = (OBS_EDGE_LO_SIDE
+                               == obstacle_get(OBS_F_EDGE_PHASE));
+    uint32_t const f_edge   = b_is_lo ? OBS_F_EDGE_LO : OBS_F_EDGE_HI;
+    uint32_t const sub      = obstacle_get(OBS_F_EDGE_SUB);
+    uint32_t const prev     = obstacle_edge_code(b_is_lo);
+    bool const     b_in     = (code <= obstacle_get(OBS_F_EDGE_LIMIT))
+                              && (code <= (prev + (OBS_EDGE_RISE_MM
+                                                   / OBS_MM_STEP)));
+    uint32_t       edge     = obstacle_get(f_edge);
+    bool           b_done   = false;
+    bool           b_ok     = false;
+    bool           b_more   = false;
+
+    if (0u != obstacle_get(OBS_F_EDGE_GRACE))
+    {
+        /* second degree past the edge: a jump confirms it. A patchy
+           in-band echo at the beam fringe (car 24 Nov) is confirmed by
+           background at the next 5-degree point further out; an echo
+           beyond the band (a face still receding) is not.            */
+        obstacle_set(OBS_F_EDGE_GRACE, 0u);
+        b_ok   = obstacle_edge_jump(code, prev)
+                 || ((code <= obstacle_get(OBS_F_EDGE_LIMIT))
+                     && obstacle_edge_coarse_clear(b_is_lo, edge, prev));
+        b_done = true;
+    }
+    else if (b_in)
+    {
+        edge = b_is_lo ? (edge - 1u) : (edge + 1u);  /* the probed degree */
+        obstacle_set(f_edge, edge);
+        obstacle_edge_code_set(b_is_lo, code);
+        if (b_is_lo ? (edge <= APP_SCAN_ANGLE_MIN_DEG)
+                    : (edge >= OBS_SCAN_LAST_DEG))
+        {
+            b_done = true;                   /* at the scan limit */
+        }
+        else if (sub < OBS_EDGE_SUB_MAX)
+        {
+            obstacle_set(OBS_F_EDGE_SUB, sub + 1u);
+            obstacle_set_deg(b_is_lo ? (edge - 1u) : (edge + 1u),
+                             OBS_SETTLE_SMALL_PINGS);
+            b_more = true;
+        }
+        else
+        {
+            /* last probe still in band: one more degree must jump */
+            obstacle_set(OBS_F_EDGE_GRACE, 1u);
+            obstacle_set_deg(b_is_lo ? (edge - 1u) : (edge + 1u),
+                             OBS_SETTLE_SMALL_PINGS);
+            b_more = true;
+        }
+    }
+    else if (obstacle_edge_jump(code, prev))
+    {
+        b_ok   = true;
+        b_done = true;
+    }
+    else if (b_is_lo ? (edge > (APP_SCAN_ANGLE_MIN_DEG + 1u))
+                     : (edge < (OBS_SCAN_LAST_DEG - 1u)))
+    {
+        obstacle_set(OBS_F_EDGE_GRACE, 1u);  /* one degree further out */
+        obstacle_set_deg(b_is_lo ? (edge - 2u) : (edge + 2u),
+                         OBS_SETTLE_SMALL_PINGS);
+        b_more = true;
+    }
+    else
+    {
+        b_done = true;                       /* no room left: not seen */
+    }
+
+    if (b_done)
+    {
+        obstacle_set(b_is_lo ? OBS_F_EDGE_OK_LO : OBS_F_EDGE_OK_HI,
+                     b_ok ? 1u : 0u);
+        if (b_is_lo)
+        {
+            b_more = obstacle_edge_side(OBS_EDGE_HI_SIDE);
+        }
+        else
+        {
+            obstacle_set(OBS_F_EDGE_PHASE, OBS_EDGE_OFF);
+        }
+    }
+
+    return b_more;
+}
+
+/**
+ * obstacle_edge_coarse_clear
+ * @brief   True if the 5-degree scan point beyond the grace probe (edge -+
+ *          2 deg) is background: clear, or more than OBS_EDGE_JUMP_MM
+ *          beyond the edge echo. A face that keeps receding is still
+ *          near there; past the 30/150 deg limit there is no point.
+ * @param   b_is_lo   true = low-angle side
+ * @param   edge      edge angle, deg
+ * @param   edge_code echo at the edge, 4 mm code
+ * @return  true = the edge is confirmed
+ * @context obstacle_task
+ */
+static bool obstacle_edge_coarse_clear(bool b_is_lo, uint32_t edge,
+                                       uint32_t edge_code)
+{
+    bool     b_clear = false;
+    uint32_t step    = 0u;
+
+    if (b_is_lo && (edge >= (APP_SCAN_ANGLE_MIN_DEG + 3u)))
+    {
+        /* largest 5-degree point below edge - 2 */
+        step    = (edge - 3u - APP_SCAN_ANGLE_MIN_DEG)
+                  / APP_SCAN_ANGLE_STEP_DEG;
+        b_clear = obstacle_edge_jump(g_obs_scan[step], edge_code);
+    }
+    else if ((!b_is_lo) && ((edge + 3u) <= OBS_SCAN_LAST_DEG))
+    {
+        /* smallest 5-degree point above edge + 2 */
+        step    = ((edge + 3u - APP_SCAN_ANGLE_MIN_DEG)
+                   + (APP_SCAN_ANGLE_STEP_DEG - 1u))
+                  / APP_SCAN_ANGLE_STEP_DEG;
+        b_clear = (step < APP_SCAN_STEPS)
+                  && obstacle_edge_jump(g_obs_scan[step], edge_code);
+    }
+    else
+    {
+        /* at the scan limit: no point beyond, not confirmed */
+    }
+
+    return b_clear;
+}
+
+/**
+ * obstacle_edge_skew_mm
+ * @brief   Difference between the two corner ranges (OBS_EDGE_SKEW_MM).
+ * @return  mm
+ * @context obstacle_task
+ */
+static uint32_t obstacle_edge_skew_mm(void)
+{
+    uint32_t const lo = obstacle_edge_code(true);
+    uint32_t const hi = obstacle_edge_code(false);
+
+    return ((lo > hi) ? (lo - hi) : (hi - lo)) * OBS_MM_STEP;
+}
+
+/**
+ * obstacle_edge_code
+ * @brief   Corner echo of one side as a 4 mm code (stored as its depth
+ *          below EDGE_LIMIT: an in-band echo is at most OBS_CORE_BAND_MM
+ *          below it, so 5 bits hold it).
+ * @param   b_is_lo true = low-angle side
+ * @return  4 mm code
+ * @context obstacle_task
+ */
+static uint32_t obstacle_edge_code(bool b_is_lo)
+{
+    uint32_t const limit = obstacle_get(OBS_F_EDGE_LIMIT);
+    uint32_t const depth = obstacle_get(b_is_lo ? OBS_F_EDGE_LO_D
+                                                : OBS_F_EDGE_HI_D);
+
+    return (depth <= limit) ? (limit - depth) : 0u;
+}
+
+/**
+ * obstacle_edge_code_set
+ * @brief   Stores an in-band corner echo as its depth below EDGE_LIMIT,
+ *          held within the field (an echo cannot be further below).
+ * @param   b_is_lo true = low-angle side
+ * @param   code    4 mm code, <= EDGE_LIMIT
+ * @context obstacle_task
+ */
+static void obstacle_edge_code_set(bool b_is_lo, uint32_t code)
+{
+    uint32_t const limit = obstacle_get(OBS_F_EDGE_LIMIT);
+    uint32_t       depth = (code <= limit) ? (limit - code) : 0u;
+
+    if (depth > PRV_OBS_C_EDGE_LO_D_MAX)
+    {
+        depth = PRV_OBS_C_EDGE_LO_D_MAX;
+    }
+    obstacle_set(b_is_lo ? OBS_F_EDGE_LO_D : OBS_F_EDGE_HI_D, depth);
+}
+
+/**
+ * obstacle_edge_jump
+ * @brief   True if the reading one degree past an edge is background:
+ *          clear, or more than OBS_EDGE_JUMP_MM beyond the edge echo (a
+ *          face that keeps receding changes far less per degree).
+ * @param   code      reading past the edge, 4 mm code
+ * @param   edge_code echo at the edge, 4 mm code
+ * @return  true = the edge is confirmed
+ * @context obstacle_task
+ */
+static bool obstacle_edge_jump(uint32_t code, uint32_t edge_code)
+{
+    return (code > (edge_code + (OBS_EDGE_JUMP_MM / OBS_MM_STEP)));
+}
+
+/**
+ * obstacle_set_deg
+ * @brief   Points the servo at any whole degree for the edge pass
+ *          (S5-U83), with a settle count; the 5-degree STEP is unchanged.
+ * @param   deg    30..150
+ * @param   settle pings to wait before sampling
+ * @context obstacle_task
+ */
+static void obstacle_set_deg(uint32_t deg, uint32_t settle)
+{
+    obstacle_set(OBS_F_SETTLE, settle);
+    obstacle_set(OBS_F_SAMPLE_CNT, 0u);
+    drv_servo_set_deg(deg);
 }
 
 /**

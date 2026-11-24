@@ -336,6 +336,16 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | RAMP_LOGGED | PRV_OBS_B | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | One RAMP line per approach |
 | CREEP_LOGGED | PRV_OBS_B | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | One CREEP line per stop |
 | RAMP_MARK | PRV_OBS_C | 0..131071 × 1 count | 1 | 17 | 17 | RAW | P | Path at the last pitched cycle (wrapping path) |
+| EDGE_LO_D | PRV_OBS_C | 0..20 × 4 mm | 4 | 5 | 5 | RNG | P | Low-side corner echo below EDGE_LIMIT (0..OBS_CORE_BAND_MM; S5-U83) |
+| EDGE_HI_D | PRV_OBS_C | 0..20 × 4 mm | 4 | 5 | 5 | RNG | P | High-side corner echo below EDGE_LIMIT (0..OBS_CORE_BAND_MM; S5-U83) |
+| EDGE_PHASE | PRV_OBS_E | 0..2 × 1 code | 1 | 2 | 2 | ENUM | P | 1-degree edge pass (S5-U83): 0 = off; 1 = low-angle edge; 2 = high-angle edge |
+| EDGE_SUB | PRV_OBS_E | 0..5 × 1 deg | 1 | 3 | 3 | RNG | P | Degrees past the start point now measured (1..OBS_EDGE_SUB_MAX) |
+| EDGE_LO | PRV_OBS_E | 0..150 × 1 deg | 1 | 8 | 8 | RNG | P | Outermost in-band servo angle on the low-angle side |
+| EDGE_HI | PRV_OBS_E | 0..150 × 1 deg | 1 | 8 | 8 | RNG | P | Outermost in-band servo angle on the high-angle side |
+| EDGE_LIMIT | PRV_OBS_E | 0..255 × 4 mm | 4 | 8 | 8 | SAT | P | Core band limit (shortest echo + OBS_CORE_BAND_MM); 255 = clear |
+| EDGE_OK_LO | PRV_OBS_E | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Low-side edge confirmed: the next degree out jumped to background |
+| EDGE_OK_HI | PRV_OBS_E | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | High-side edge confirmed: the next degree out jumped to background |
+| EDGE_GRACE | PRV_OBS_E | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | One more degree probed after a non-jump reading past the edge |
 | MM | PRV_OBS_SCAN | 0..255 × 4 mm | 4 | 8 | 8 | SAT | P | Scan table point x25 (APP_SCAN_STEPS); 255 = clear (APP_PROFILE_CLEAR_MM) |
 | MM | PRV_OBS_SMP | 0..255 × 4 mm | 4 | 8 | 8 | SAT | P | Pings at one step x3 (OBS_SCAN_SAMPLES); median kept |
 | COUNT | SH_ECHO_CNT | 0..255 × 1 count | 1 | 8 | 8 | RAW | S | Accepted echo rises and falls x2 (ISR writer; one byte each); obstacle_task compares for change |
@@ -522,7 +532,8 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_OBS_I | 32 | 32 |
 | PRV_OBS_A | 30 | 32 |
 | PRV_OBS_B | 29 | 32 |
-| PRV_OBS_C | 17 | 32 |
+| PRV_OBS_C | 27 | 32 |
+| PRV_OBS_E | 32 | 32 |
 | PRV_OBS_SCAN | 8 | 8 |
 | PRV_OBS_SMP | 8 | 8 |
 | SH_ECHO_CNT | 8 | 8 |

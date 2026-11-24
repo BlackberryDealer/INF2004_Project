@@ -133,7 +133,8 @@ static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
 static bool imu_read_acc(uint32_t * p_n_samples);
 static void imu_read_mag_if_due(uint32_t n_samples, bool * pb_mag_cycle,
                                 bool * pb_mag_read);
-static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw);
+static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw,
+                               bool b_on_line);
 static int32_t  imu_encoder_rate(int32_t pos_l, int32_t pos_r);
 static void     imu_i2c_result(bool b_ok, bool b_is_acc);
 static bool     imu_configure_if_needed(void);
@@ -317,7 +318,13 @@ static void imu_task(INT stacd, void * p_exinf)
         }
         else
         {
-            imu_terrain_update(pos_l, pos_r, speed_cpw);
+            /* S4-U20: one-wheel humps only while following the line */
+            imu_terrain_update(pos_l, pos_r, speed_cpw,
+                               (APP_SYS_RUN == status_board_sys_state(&snap))
+                               && ((APP_RUN_FOLLOW
+                                    == status_board_run_state(&snap))
+                                   || (APP_RUN_ARMED
+                                       == status_board_run_state(&snap))));
 
             /* 7. Turn rate, every 5th cycle (the magnetometer cycle). */
             imu_turn_rate(b_mag_cycle, b_mag_read, pos_l, pos_r);
@@ -342,10 +349,13 @@ static void imu_task(INT stacd, void * p_exinf)
  * @param   pos_l      current left position, counts
  * @param   pos_r      current right position, counts
  * @param   speed_cpw  this cycle's speed, counts per 50 ms window
+ * @param   b_on_line  RUN is following the line (one-wheel humps only
+ *                     then, S4-U20)
  * @return  none
  * @context imu_task
  */
-static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
+static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw,
+                               bool b_on_line)
 {
     terrain_input_t  in;
     terrain_output_t out;
@@ -393,8 +403,9 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw)
     {
         uint32_t roll_mm = 0u;
 
-        g_imu_prv_r = terrain_roll_hump_step(g_imu_prv_r, imu_ay_mg(),
-                                             dpos_l, dpos_r, &roll_mm);
+        g_imu_prv_r = terrain_roll_hump_line(g_imu_prv_r, imu_ay_mg(),
+                                             dpos_l, dpos_r, b_on_line,
+                                             &roll_mm);
         if (roll_mm > 0u)
         {
             app_log("HUMP (one wheel): %d mm\n", (int32_t)roll_mm, 0, 0);
