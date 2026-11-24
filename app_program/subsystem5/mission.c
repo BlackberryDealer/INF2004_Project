@@ -68,8 +68,37 @@
                                  / APP_UM_PER_COUNT) + 1u)
 #define MISSION_STATE_RUN_SHIFT (3u)     /* STATE_CHANGE: sys | run<<3 */
 
-/* Packed mission state (mission_ctx_save / _load). */
+/* Packed word indices in g_mis_w[] (matching PRV_MIS_* layout groups). */
+#define MIS_W_A                (0u)    /* PRV_MIS_A */
+#define MIS_W_B                (1u)    /* PRV_MIS_B */
+#define MIS_W_C                (2u)    /* PRV_MIS_C */
+#define MIS_W_D                (3u)    /* PRV_MIS_D */
+#define MIS_W_E                (4u)    /* PRV_MIS_E */
+#define MIS_W_F                (5u)    /* PRV_MIS_F */
+#define MIS_W_H                (6u)    /* PRV_MIS_H (G belongs to hmi.c) */
+#define MIS_W_J                (7u)    /* PRV_MIS_J */
+#define MIS_W_K                (8u)    /* PRV_MIS_K */
+#define MIS_W_L                (9u)    /* PRV_MIS_L */
+#define MIS_W_M                (10u)   /* PRV_MIS_M */
+#define MIS_W_N                (11u)   /* PRV_MIS_N */
+#define MIS_W_P                (12u)   /* PRV_MIS_P */
+#define MIS_W_Q                (13u)   /* PRV_MIS_Q */
+#define MIS_W_R                (14u)   /* PRV_MIS_R */
 #define MISSION_CTX_WORDS      (15u)
+
+/* E5 32-bit timer indices in g_mis_us[]. */
+#define MIS_US_BARCODE         (0u)
+#define MIS_US_CAL             (1u)
+#define MIS_US_SWEEP           (2u)
+#define MIS_US_WARN            (3u)
+#define MIS_US_SEARCH          (4u)
+#define MIS_US_FR9             (5u)
+#define MIS_US_RESUME          (6u)
+#define MIS_US_RUN_START       (7u)
+#define MIS_US_RUN_END         (8u)
+#define MIS_US_MOVE            (9u)
+#define MIS_US_RUN_SET         (10u)
+#define MIS_US_RECOVER         (11u)
 #define MISSION_CTX_TIMERS     (12u)
 /* stored code of MISSION_REQ_NONE */
 #define MISSION_REQ_CODE_NONE  (APP_SYS_FAULT + 1u)
@@ -157,13 +186,30 @@ static void mission_button_event(mission_ctx_t const * p_ctx, uint32_t press,
                                  mission_evt_in_t * p_btn);
 static void mission_note_high_water(void);
 static void mission_ctx_reset(mission_ctx_t * p_ctx);
-static void mission_ctx_save(mission_ctx_t const * p_ctx);
-static void mission_ctx_load(mission_ctx_t * p_ctx);
-static uint32_t mission_put(uint32_t word, uint32_t pos, uint32_t width,
-                            int32_t min, int32_t max, int32_t offset,
-                            int32_t value);
-static int32_t  mission_get(uint32_t word, uint32_t pos, uint32_t width,
-                            int32_t offset);
+static void     mission_ctx_save(mission_ctx_t const * p_ctx);
+static void     mission_ctx_load(mission_ctx_t * p_ctx);
+static void     mission_save_words_a_f(mission_ctx_t const * p_ctx,
+                                       uint32_t * p_w);
+static void     mission_save_words_h_l(mission_ctx_t const * p_ctx,
+                                       uint32_t * p_w);
+static void     mission_save_words_m_r(mission_ctx_t const * p_ctx,
+                                       uint32_t * p_w);
+static void     mission_save_timers(mission_ctx_t const * p_ctx);
+static void     mission_load_words_a_f(mission_ctx_t * p_ctx);
+static void     mission_load_words_h_l(mission_ctx_t * p_ctx);
+static void     mission_load_words_m_r(mission_ctx_t * p_ctx);
+static void     mission_load_timers(mission_ctx_t * p_ctx);
+static uint32_t mission_put_u(uint32_t word, uint32_t pos, uint32_t width,
+                              int32_t max, uint32_t value);
+static uint32_t mission_put_b(uint32_t word, uint32_t pos, uint32_t width,
+                              bool b_val);
+static uint32_t mission_put_s(uint32_t word, uint32_t pos, uint32_t width,
+                              int32_t min, int32_t max, int32_t offset,
+                              int32_t value);
+static uint32_t mission_get_u(uint32_t word, uint32_t pos, uint32_t width);
+static bool     mission_get_b(uint32_t word, uint32_t pos, uint32_t width);
+static int32_t  mission_get_s(uint32_t word, uint32_t pos, uint32_t width,
+                              int32_t offset);
 static void mission_cal_settle(mission_ctx_t * p_ctx,
                                status_board_t const * p_snap,
                                uint32_t now_us);
@@ -599,36 +645,69 @@ static void mission_ctx_reset(mission_ctx_t * p_ctx)
 }
 
 /**
- * mission_put / mission_get
- * @brief   One field of the packed mission state: clamp to [min, max],
- *          add the offset and store (put); read it back (get).
+ * mission_put_u / mission_put_b / mission_put_s
+ * @brief   Typed field packers for PRV_MIS_* words: unsigned (clamped to
+ *          [0, max]), boolean (0/1), and signed (clamped + offset).
  * @param   word   packed word
  * @param   pos    field position (_POS)
  * @param   width  field width (_BITS)
- * @param   min    row minimum (_MIN, put only)
- * @param   max    row maximum (_MAX, put only)
- * @param   offset row offset (_OFFSET)
- * @param   value  value (put only)
- * @return  updated word (put) or value (get)
+ * @param   max    row maximum (_MAX)
+ * @param   value  field value
+ * @return  updated word
  * @context mission_task, host test
  */
-static uint32_t mission_put(uint32_t word, uint32_t pos, uint32_t width,
-                            int32_t min, int32_t max, int32_t offset,
-                            int32_t value)
+static uint32_t mission_put_u(uint32_t word, uint32_t pos, uint32_t width,
+                              int32_t max, uint32_t value)
+{
+    /* cast: unsigned field maxima are non-negative */
+    uint32_t const limit = (max > 0) ? (uint32_t) max : 0u;
+
+    return app_bits_put(word, pos, width,
+                        app_bits_clamp_u(value, limit, NULL));
+}
+
+static uint32_t mission_put_b(uint32_t word, uint32_t pos, uint32_t width,
+                              bool b_val)
+{
+    return app_bits_put(word, pos, width, b_val ? 1u : 0u);
+}
+
+static uint32_t mission_put_s(uint32_t word, uint32_t pos, uint32_t width,
+                              int32_t min, int32_t max, int32_t offset,
+                              int32_t value)
 {
     return app_bits_put(word, pos, width,
                         app_bits_encode(value, min, max, offset, NULL));
 }
 
-static int32_t mission_get(uint32_t word, uint32_t pos, uint32_t width,
-                           int32_t offset)
+/**
+ * mission_get_u / mission_get_b / mission_get_s
+ * @brief   Typed field unpackers matching mission_put_u/b/s.
+ * @param   word   packed word
+ * @param   pos    field position (_POS)
+ * @param   width  field width (_BITS)
+ * @return  unpacked field value
+ * @context mission_task, host test
+ */
+static uint32_t mission_get_u(uint32_t word, uint32_t pos, uint32_t width)
+{
+    return app_bits_get(word, pos, width);
+}
+
+static bool mission_get_b(uint32_t word, uint32_t pos, uint32_t width)
+{
+    return (0u != app_bits_get(word, pos, width));
+}
+
+static int32_t mission_get_s(uint32_t word, uint32_t pos, uint32_t width,
+                             int32_t offset)
 {
     return app_bits_decode(app_bits_get(word, pos, width), offset);
 }
 
 /**
  * mission_ctx_save
- * @brief   Packs the mission state into g_mis_w (PRV_MIS_* rows) and
+ * @brief   Packs the mission state into g_mis_w (PRV_MIS_A..R rows) and
  *          g_mis_us (E5 timers). Every row covers the full range its
  *          field can take (build checks above), so nothing is clamped.
  * @param   p_ctx  state after a pass
@@ -639,291 +718,280 @@ static void mission_ctx_save(mission_ctx_t const * p_ctx)
     uint32_t w[MISSION_CTX_WORDS] = {0u};
     uint32_t idx = 0u;
 
-    w[1] = mission_put(w[1], PRV_MIS_B_SYS_STATE_POS,
-                        PRV_MIS_B_SYS_STATE_BITS, PRV_MIS_B_SYS_STATE_MIN,
-                        PRV_MIS_B_SYS_STATE_MAX, PRV_MIS_B_SYS_STATE_OFFSET,
-                        (int32_t) p_ctx->sys_state);
-    w[4] = mission_put(w[4], PRV_MIS_E_RUN_STATE_POS,
-                        PRV_MIS_E_RUN_STATE_BITS, PRV_MIS_E_RUN_STATE_MIN,
-                        PRV_MIS_E_RUN_STATE_MAX, PRV_MIS_E_RUN_STATE_OFFSET,
-                        (int32_t) p_ctx->run_state);
-    w[5] = mission_put(w[5], PRV_MIS_F_AVOID_STEP_POS,
-                        PRV_MIS_F_AVOID_STEP_BITS, PRV_MIS_F_AVOID_STEP_MIN,
-                        PRV_MIS_F_AVOID_STEP_MAX, PRV_MIS_F_AVOID_STEP_OFFSET,
-                        (int32_t) p_ctx->avoid_step);
-    w[6] = mission_put(w[6], PRV_MIS_H_SUBSTEP_POS,
-                        PRV_MIS_H_SUBSTEP_BITS, PRV_MIS_H_SUBSTEP_MIN,
-                        PRV_MIS_H_SUBSTEP_MAX, PRV_MIS_H_SUBSTEP_OFFSET,
-                        (int32_t) p_ctx->substep);
-    w[0] = mission_put(w[0], PRV_MIS_A_END_REASON_POS,
-                        PRV_MIS_A_END_REASON_BITS, PRV_MIS_A_END_REASON_MIN,
-                        PRV_MIS_A_END_REASON_MAX, PRV_MIS_A_END_REASON_OFFSET,
-                        (int32_t) p_ctx->end_reason);
-    w[7] = mission_put(w[7], PRV_MIS_J_ARMED_POS,
-                        PRV_MIS_J_ARMED_BITS, PRV_MIS_J_ARMED_MIN,
-                        PRV_MIS_J_ARMED_MAX, PRV_MIS_J_ARMED_OFFSET,
-                        p_ctx->b_is_armed ? 1 : 0);
-    w[4] = mission_put(w[4], PRV_MIS_E_ARMED_CMD_POS,
-                        PRV_MIS_E_ARMED_CMD_BITS, PRV_MIS_E_ARMED_CMD_MIN,
-                        PRV_MIS_E_ARMED_CMD_MAX, PRV_MIS_E_ARMED_CMD_OFFSET,
-                        (int32_t) p_ctx->armed_cmd);
-    w[6] = mission_put(w[6], PRV_MIS_H_ARMED_CHAR_POS,
-                        PRV_MIS_H_ARMED_CHAR_BITS, PRV_MIS_H_ARMED_CHAR_MIN,
-                        PRV_MIS_H_ARMED_CHAR_MAX, PRV_MIS_H_ARMED_CHAR_OFFSET,
-                        (int32_t) p_ctx->armed_char);
-    w[5] = mission_put(w[5], PRV_MIS_F_NO_PATH_CNT_POS,
-                        PRV_MIS_F_NO_PATH_CNT_BITS, PRV_MIS_F_NO_PATH_CNT_MIN,
-                        PRV_MIS_F_NO_PATH_CNT_MAX, PRV_MIS_F_NO_PATH_CNT_OFFSET,
-                        (int32_t) p_ctx->no_path_cnt);
-    w[1] = mission_put(w[1], PRV_MIS_B_LAST_FAULTS_POS,
-                        PRV_MIS_B_LAST_FAULTS_BITS, PRV_MIS_B_LAST_FAULTS_MIN,
-                        PRV_MIS_B_LAST_FAULTS_MAX, PRV_MIS_B_LAST_FAULTS_OFFSET,
-                        (int32_t) p_ctx->last_faults);
-    w[2] = mission_put(w[2], PRV_MIS_C_SYS_REQUEST_POS,
-                        PRV_MIS_C_SYS_REQUEST_BITS, PRV_MIS_C_SYS_REQUEST_MIN,
-                        PRV_MIS_C_SYS_REQUEST_MAX, PRV_MIS_C_SYS_REQUEST_OFFSET,
-                        (MISSION_REQ_NONE == p_ctx->sys_request)
-                        ? (int32_t) MISSION_REQ_CODE_NONE
-                        : (int32_t) p_ctx->sys_request);
-    w[6] = mission_put(w[6], PRV_MIS_H_BAR_PHASE_POS,
-                        PRV_MIS_H_BAR_PHASE_BITS, PRV_MIS_H_BAR_PHASE_MIN,
-                        PRV_MIS_H_BAR_PHASE_MAX, PRV_MIS_H_BAR_PHASE_OFFSET,
-                        (int32_t) p_ctx->barcode_phase);
-    w[3] = mission_put(w[3], PRV_MIS_D_BAR_MARK_POS,
-                        PRV_MIS_D_BAR_MARK_BITS, PRV_MIS_D_BAR_MARK_MIN,
-                        PRV_MIS_D_BAR_MARK_MAX, PRV_MIS_D_BAR_MARK_OFFSET,
-                        (int32_t) p_ctx->barcode_mark);
-    w[4] = mission_put(w[4], PRV_MIS_E_BAR_PROBE_MARK_POS,
-                        PRV_MIS_E_BAR_PROBE_MARK_BITS,
-                        PRV_MIS_E_BAR_PROBE_MARK_MIN,
-                        PRV_MIS_E_BAR_PROBE_MARK_MAX,
-                        PRV_MIS_E_BAR_PROBE_MARK_OFFSET,
-                        (int32_t) p_ctx->barcode_probe_mark);
-    w[7] = mission_put(w[7], PRV_MIS_J_PROBE_PENDING_POS,
-                        PRV_MIS_J_PROBE_PENDING_BITS,
-                        PRV_MIS_J_PROBE_PENDING_MIN,
-                        PRV_MIS_J_PROBE_PENDING_MAX,
-                        PRV_MIS_J_PROBE_PENDING_OFFSET,
-                        p_ctx->b_probe_pending ? 1 : 0);
-    w[5] = mission_put(w[5], PRV_MIS_F_BAR_REARM_PATH_POS,
-                        PRV_MIS_F_BAR_REARM_PATH_BITS,
-                        PRV_MIS_F_BAR_REARM_PATH_MIN,
-                        PRV_MIS_F_BAR_REARM_PATH_MAX,
-                        PRV_MIS_F_BAR_REARM_PATH_OFFSET,
-                        (int32_t) p_ctx->barcode_rearm_path);
-    w[7] = mission_put(w[7], PRV_MIS_J_REARM_WAIT_POS,
-                        PRV_MIS_J_REARM_WAIT_BITS, PRV_MIS_J_REARM_WAIT_MIN,
-                        PRV_MIS_J_REARM_WAIT_MAX, PRV_MIS_J_REARM_WAIT_OFFSET,
-                        p_ctx->b_rearm_wait ? 1 : 0);
-    w[6] = mission_put(w[6], PRV_MIS_H_BAR_FOLLOW_POS,
-                        PRV_MIS_H_BAR_FOLLOW_BITS, PRV_MIS_H_BAR_FOLLOW_MIN,
-                        PRV_MIS_H_BAR_FOLLOW_MAX, PRV_MIS_H_BAR_FOLLOW_OFFSET,
-                        (int32_t) p_ctx->barcode_follow_path);
-    w[7] = mission_put(w[7], PRV_MIS_J_BAR_BACK_PATH_POS,
-                        PRV_MIS_J_BAR_BACK_PATH_BITS,
-                        PRV_MIS_J_BAR_BACK_PATH_MIN,
-                        PRV_MIS_J_BAR_BACK_PATH_MAX,
-                        PRV_MIS_J_BAR_BACK_PATH_OFFSET,
-                        (int32_t) p_ctx->barcode_back_path);
-    w[2] = mission_put(w[2], PRV_MIS_C_BAR_BACK_LEFT_POS,
-                        PRV_MIS_C_BAR_BACK_LEFT_BITS,
-                        PRV_MIS_C_BAR_BACK_LEFT_MIN,
-                        PRV_MIS_C_BAR_BACK_LEFT_MAX,
-                        PRV_MIS_C_BAR_BACK_LEFT_OFFSET,
-                        (int32_t) p_ctx->barcode_back_left);
-    w[7] = mission_put(w[7], PRV_MIS_J_BAR_TRIES_POS,
-                        PRV_MIS_J_BAR_TRIES_BITS, PRV_MIS_J_BAR_TRIES_MIN,
-                        PRV_MIS_J_BAR_TRIES_MAX, PRV_MIS_J_BAR_TRIES_OFFSET,
-                        (int32_t) p_ctx->barcode_tries);
-    w[8] = mission_put(w[8], PRV_MIS_K_BAR_EDGE_PATH_POS,
-                        PRV_MIS_K_BAR_EDGE_PATH_BITS,
-                        PRV_MIS_K_BAR_EDGE_PATH_MIN,
-                        PRV_MIS_K_BAR_EDGE_PATH_MAX,
-                        PRV_MIS_K_BAR_EDGE_PATH_OFFSET,
-                        (int32_t) p_ctx->barcode_edge_path);
-    w[14] = mission_put(w[14], PRV_MIS_R_BAR_EDGES_POS,
-                        PRV_MIS_R_BAR_EDGES_BITS, PRV_MIS_R_BAR_EDGES_MIN,
-                        PRV_MIS_R_BAR_EDGES_MAX, PRV_MIS_R_BAR_EDGES_OFFSET,
-                        (int32_t) p_ctx->barcode_edges);
-    w[9] = mission_put(w[9], PRV_MIS_L_PATH_AT_STOP_POS,
-                        PRV_MIS_L_PATH_AT_STOP_BITS, PRV_MIS_L_PATH_AT_STOP_MIN,
-                        PRV_MIS_L_PATH_AT_STOP_MAX,
-                        PRV_MIS_L_PATH_AT_STOP_OFFSET,
-                        (int32_t) p_ctx->path_at_stop);
-    w[0] = mission_put(w[0], PRV_MIS_A_DIFF_AT_STOP_POS,
-                        PRV_MIS_A_DIFF_AT_STOP_BITS, PRV_MIS_A_DIFF_AT_STOP_MIN,
-                        PRV_MIS_A_DIFF_AT_STOP_MAX,
-                        PRV_MIS_A_DIFF_AT_STOP_OFFSET,
-                        p_ctx->diff_at_stop);
-    w[10] = mission_put(w[10], PRV_MIS_M_RUN_ODO_MARK_POS,
-                        PRV_MIS_M_RUN_ODO_MARK_BITS, PRV_MIS_M_RUN_ODO_MARK_MIN,
-                        PRV_MIS_M_RUN_ODO_MARK_MAX,
-                        PRV_MIS_M_RUN_ODO_MARK_OFFSET,
-                        (int32_t) p_ctx->run_odo_mark);
-    w[11] = mission_put(w[11], PRV_MIS_N_RUN_ODO_POS,
-                        PRV_MIS_N_RUN_ODO_BITS, PRV_MIS_N_RUN_ODO_MIN,
-                        PRV_MIS_N_RUN_ODO_MAX, PRV_MIS_N_RUN_ODO_OFFSET,
-                        (int32_t) p_ctx->run_odo_counts);
-    w[12] = mission_put(w[12], PRV_MIS_P_REJOIN_START_POS,
-                        PRV_MIS_P_REJOIN_START_BITS, PRV_MIS_P_REJOIN_START_MIN,
-                        PRV_MIS_P_REJOIN_START_MAX,
-                        PRV_MIS_P_REJOIN_START_OFFSET,
-                        (int32_t) p_ctx->rejoin_start);
-    w[13] = mission_put(w[13], PRV_MIS_Q_INHIBIT_MARK_POS,
-                        PRV_MIS_Q_INHIBIT_MARK_BITS, PRV_MIS_Q_INHIBIT_MARK_MIN,
-                        PRV_MIS_Q_INHIBIT_MARK_MAX,
-                        PRV_MIS_Q_INHIBIT_MARK_OFFSET,
-                        (int32_t) p_ctx->inhibit_mark);
-    w[7] = mission_put(w[7], PRV_MIS_J_SIDE_POS,
-                        PRV_MIS_J_SIDE_BITS, PRV_MIS_J_SIDE_MIN,
-                        PRV_MIS_J_SIDE_MAX, PRV_MIS_J_SIDE_OFFSET,
-                        (int32_t) p_ctx->side);
-    w[4] = mission_put(w[4], PRV_MIS_E_LEG_LAT_POS,
-                        PRV_MIS_E_LEG_LAT_BITS, PRV_MIS_E_LEG_LAT_MIN,
-                        PRV_MIS_E_LEG_LAT_MAX, PRV_MIS_E_LEG_LAT_OFFSET,
-                        (int32_t) p_ctx->leg_lat_mm);
-    w[5] = mission_put(w[5], PRV_MIS_F_LEG_FWD_POS,
-                        PRV_MIS_F_LEG_FWD_BITS, PRV_MIS_F_LEG_FWD_MIN,
-                        PRV_MIS_F_LEG_FWD_MAX, PRV_MIS_F_LEG_FWD_OFFSET,
-                        (int32_t) p_ctx->leg_fwd_mm);
-    w[0] = mission_put(w[0], PRV_MIS_A_REJOIN_E_POS,
-                        PRV_MIS_A_REJOIN_E_BITS, PRV_MIS_A_REJOIN_E_MIN,
-                        PRV_MIS_A_REJOIN_E_MAX, PRV_MIS_A_REJOIN_E_OFFSET,
-                        (int32_t) p_ctx->rejoin_e_mm);
-    w[7] = mission_put(w[7], PRV_MIS_J_SEARCH_FIRST_POS,
-                        PRV_MIS_J_SEARCH_FIRST_BITS, PRV_MIS_J_SEARCH_FIRST_MIN,
-                        PRV_MIS_J_SEARCH_FIRST_MAX,
-                        PRV_MIS_J_SEARCH_FIRST_OFFSET,
-                        (int32_t) p_ctx->search_first);
-    w[1] = mission_put(w[1], PRV_MIS_B_CAL_DIFF0_POS,
-                        PRV_MIS_B_CAL_DIFF0_BITS, PRV_MIS_B_CAL_DIFF0_MIN,
-                        PRV_MIS_B_CAL_DIFF0_MAX, PRV_MIS_B_CAL_DIFF0_OFFSET,
-                        p_ctx->cal_diff0);
-    w[7] = mission_put(w[7], PRV_MIS_J_CAL_CORR_CNT_POS,
-                        PRV_MIS_J_CAL_CORR_CNT_BITS, PRV_MIS_J_CAL_CORR_CNT_MIN,
-                        PRV_MIS_J_CAL_CORR_CNT_MAX,
-                        PRV_MIS_J_CAL_CORR_CNT_OFFSET,
-                        (int32_t) p_ctx->cal_corr_cnt);
-    w[7] = mission_put(w[7], PRV_MIS_J_WAIT_TAG_POS,
-                        PRV_MIS_J_WAIT_TAG_BITS, PRV_MIS_J_WAIT_TAG_MIN,
-                        PRV_MIS_J_WAIT_TAG_MAX, PRV_MIS_J_WAIT_TAG_OFFSET,
-                        (int32_t) p_ctx->wait_tag);
-    w[3] = mission_put(w[3], PRV_MIS_D_MOVE_LIMIT_MS_POS,
-                        PRV_MIS_D_MOVE_LIMIT_MS_BITS,
-                        PRV_MIS_D_MOVE_LIMIT_MS_MIN,
-                        PRV_MIS_D_MOVE_LIMIT_MS_MAX,
-                        PRV_MIS_D_MOVE_LIMIT_MS_OFFSET,
-                        (int32_t) p_ctx->move_limit_ms);
-    w[6] = mission_put(w[6], PRV_MIS_H_RETRY_KIND_POS,
-                        PRV_MIS_H_RETRY_KIND_BITS, PRV_MIS_H_RETRY_KIND_MIN,
-                        PRV_MIS_H_RETRY_KIND_MAX, PRV_MIS_H_RETRY_KIND_OFFSET,
-                        (int32_t) p_ctx->retry_kind);
-    w[2] = mission_put(w[2], PRV_MIS_C_RETRY_PARAM_POS,
-                        PRV_MIS_C_RETRY_PARAM_BITS, PRV_MIS_C_RETRY_PARAM_MIN,
-                        PRV_MIS_C_RETRY_PARAM_MAX, PRV_MIS_C_RETRY_PARAM_OFFSET,
-                        p_ctx->retry_param);
-    w[7] = mission_put(w[7], PRV_MIS_J_WARNING_POS,
-                        PRV_MIS_J_WARNING_BITS, PRV_MIS_J_WARNING_MIN,
-                        PRV_MIS_J_WARNING_MAX, PRV_MIS_J_WARNING_OFFSET,
-                        p_ctx->b_is_warning ? 1 : 0);
-    w[7] = mission_put(w[7], PRV_MIS_J_RESUME_PENDING_POS,
-                        PRV_MIS_J_RESUME_PENDING_BITS,
-                        PRV_MIS_J_RESUME_PENDING_MIN,
-                        PRV_MIS_J_RESUME_PENDING_MAX,
-                        PRV_MIS_J_RESUME_PENDING_OFFSET,
-                        p_ctx->b_resume_pending ? 1 : 0);
-    w[7] = mission_put(w[7], PRV_MIS_J_INHIBIT_PEND_POS,
-                        PRV_MIS_J_INHIBIT_PEND_BITS, PRV_MIS_J_INHIBIT_PEND_MIN,
-                        PRV_MIS_J_INHIBIT_PEND_MAX,
-                        PRV_MIS_J_INHIBIT_PEND_OFFSET,
-                        p_ctx->b_inhibit_pending ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_FR9_RUNNING_POS,
-                        PRV_MIS_K_FR9_RUNNING_BITS, PRV_MIS_K_FR9_RUNNING_MIN,
-                        PRV_MIS_K_FR9_RUNNING_MAX, PRV_MIS_K_FR9_RUNNING_OFFSET,
-                        p_ctx->b_fr9_running ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_WAIT_STILL_POS,
-                        PRV_MIS_K_WAIT_STILL_BITS, PRV_MIS_K_WAIT_STILL_MIN,
-                        PRV_MIS_K_WAIT_STILL_MAX, PRV_MIS_K_WAIT_STILL_OFFSET,
-                        p_ctx->b_wait_standstill ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_CREEPING_POS,
-                        PRV_MIS_K_CREEPING_BITS, PRV_MIS_K_CREEPING_MIN,
-                        PRV_MIS_K_CREEPING_MAX, PRV_MIS_K_CREEPING_OFFSET,
-                        p_ctx->b_creeping ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_CREPT_POS,
-                        PRV_MIS_K_CREPT_BITS, PRV_MIS_K_CREPT_MIN,
-                        PRV_MIS_K_CREPT_MAX, PRV_MIS_K_CREPT_OFFSET,
-                        p_ctx->b_crept ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_HAS_RUN_POS,
-                        PRV_MIS_K_HAS_RUN_BITS, PRV_MIS_K_HAS_RUN_MIN,
-                        PRV_MIS_K_HAS_RUN_MAX, PRV_MIS_K_HAS_RUN_OFFSET,
-                        p_ctx->b_has_run ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_POST_AVOID_POS,
-                        PRV_MIS_K_POST_AVOID_BITS, PRV_MIS_K_POST_AVOID_MIN,
-                        PRV_MIS_K_POST_AVOID_MAX, PRV_MIS_K_POST_AVOID_OFFSET,
-                        p_ctx->b_post_avoid_slow ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_QUIET_POS,
-                        PRV_MIS_K_QUIET_BITS, PRV_MIS_K_QUIET_MIN,
-                        PRV_MIS_K_QUIET_MAX, PRV_MIS_K_QUIET_OFFSET,
-                        p_ctx->b_is_quiet ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_MOVE_PENDING_POS,
-                        PRV_MIS_K_MOVE_PENDING_BITS, PRV_MIS_K_MOVE_PENDING_MIN,
-                        PRV_MIS_K_MOVE_PENDING_MAX,
-                        PRV_MIS_K_MOVE_PENDING_OFFSET,
-                        p_ctx->b_move_pending ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_RETRY_PENDING_POS,
-                        PRV_MIS_K_RETRY_PENDING_BITS,
-                        PRV_MIS_K_RETRY_PENDING_MIN,
-                        PRV_MIS_K_RETRY_PENDING_MAX,
-                        PRV_MIS_K_RETRY_PENDING_OFFSET,
-                        p_ctx->b_retry_pending ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_MOTION_FAILED_POS,
-                        PRV_MIS_K_MOTION_FAILED_BITS,
-                        PRV_MIS_K_MOTION_FAILED_MIN,
-                        PRV_MIS_K_MOTION_FAILED_MAX,
-                        PRV_MIS_K_MOTION_FAILED_OFFSET,
-                        p_ctx->b_motion_failed ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_IMU_VALID_POS,
-                        PRV_MIS_K_IMU_VALID_BITS, PRV_MIS_K_IMU_VALID_MIN,
-                        PRV_MIS_K_IMU_VALID_MAX, PRV_MIS_K_IMU_VALID_OFFSET,
-                        p_ctx->b_imu_valid ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_IR_VALID_POS,
-                        PRV_MIS_K_IR_VALID_BITS, PRV_MIS_K_IR_VALID_MIN,
-                        PRV_MIS_K_IR_VALID_MAX, PRV_MIS_K_IR_VALID_OFFSET,
-                        p_ctx->b_ir_valid ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_WDT_ENABLED_POS,
-                        PRV_MIS_K_WDT_ENABLED_BITS, PRV_MIS_K_WDT_ENABLED_MIN,
-                        PRV_MIS_K_WDT_ENABLED_MAX, PRV_MIS_K_WDT_ENABLED_OFFSET,
-                        p_ctx->b_wdt_enabled ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_RUN_STARTING_POS,
-                        PRV_MIS_K_RUN_STARTING_BITS, PRV_MIS_K_RUN_STARTING_MIN,
-                        PRV_MIS_K_RUN_STARTING_MAX,
-                        PRV_MIS_K_RUN_STARTING_OFFSET,
-                        p_ctx->b_run_starting ? 1 : 0);
-    w[8] = mission_put(w[8], PRV_MIS_K_ZERO_DONE_POS,
-                        PRV_MIS_K_ZERO_DONE_BITS, PRV_MIS_K_ZERO_DONE_MIN,
-                        PRV_MIS_K_ZERO_DONE_MAX, PRV_MIS_K_ZERO_DONE_OFFSET,
-                        p_ctx->b_zero_done ? 1 : 0);
-    w[9] = mission_put(w[9], PRV_MIS_L_RECOVERING_POS,
-                        PRV_MIS_L_RECOVERING_BITS, PRV_MIS_L_RECOVERING_MIN,
-                        PRV_MIS_L_RECOVERING_MAX, PRV_MIS_L_RECOVERING_OFFSET,
-                        p_ctx->b_recovering ? 1 : 0);
-    g_mis_us[0] = p_ctx->barcode_since_us;
-    g_mis_us[1] = p_ctx->cal_start_us;
-    g_mis_us[2] = p_ctx->sweep_start_us;
-    g_mis_us[3] = p_ctx->warn_start_us;
-    g_mis_us[4] = p_ctx->search_start_us;
-    g_mis_us[5] = p_ctx->fr9_start_us;
-    g_mis_us[6] = p_ctx->resume_start_us;
-    g_mis_us[7] = p_ctx->run_start_us;
-    g_mis_us[8] = p_ctx->run_end_us;
-    g_mis_us[9] = p_ctx->move_start_us;
-    g_mis_us[10] = p_ctx->run_start_set_us;
-    g_mis_us[11] = p_ctx->recover_start_us;
+    mission_save_words_a_f(p_ctx, w);
+    mission_save_words_h_l(p_ctx, w);
+    mission_save_words_m_r(p_ctx, w);
+    mission_save_timers(p_ctx);
 
     for (idx = 0u; idx < MISSION_CTX_WORDS; idx++)
     {
         g_mis_w[idx] = w[idx];
     }
+}
+
+/**
+ * mission_save_words_a_f
+ * @brief   Packs PRV_MIS_A through PRV_MIS_F into p_w[MIS_W_A..MIS_W_F].
+ * @param   p_ctx  source context
+ * @param   p_w    destination word array
+ * @context mission_task, host test
+ */
+static void mission_save_words_a_f(mission_ctx_t const * p_ctx,
+                                   uint32_t * p_w)
+{
+    uint32_t const req_code = (MISSION_REQ_NONE == p_ctx->sys_request)
+                              ? MISSION_REQ_CODE_NONE : p_ctx->sys_request;
+
+    /* PRV_MIS_A */
+    p_w[MIS_W_A] = mission_put_u(p_w[MIS_W_A], PRV_MIS_A_END_REASON_POS,
+                                 PRV_MIS_A_END_REASON_BITS,
+                                 PRV_MIS_A_END_REASON_MAX, p_ctx->end_reason);
+    p_w[MIS_W_A] = mission_put_s(p_w[MIS_W_A], PRV_MIS_A_DIFF_AT_STOP_POS,
+                                 PRV_MIS_A_DIFF_AT_STOP_BITS,
+                                 PRV_MIS_A_DIFF_AT_STOP_MIN,
+                                 PRV_MIS_A_DIFF_AT_STOP_MAX,
+                                 PRV_MIS_A_DIFF_AT_STOP_OFFSET,
+                                 p_ctx->diff_at_stop);
+    p_w[MIS_W_A] = mission_put_u(p_w[MIS_W_A], PRV_MIS_A_REJOIN_E_POS,
+                                 PRV_MIS_A_REJOIN_E_BITS,
+                                 PRV_MIS_A_REJOIN_E_MAX, p_ctx->rejoin_e_mm);
+
+    /* PRV_MIS_B */
+    p_w[MIS_W_B] = mission_put_u(p_w[MIS_W_B], PRV_MIS_B_SYS_STATE_POS,
+                                 PRV_MIS_B_SYS_STATE_BITS,
+                                 PRV_MIS_B_SYS_STATE_MAX, p_ctx->sys_state);
+    p_w[MIS_W_B] = mission_put_u(p_w[MIS_W_B], PRV_MIS_B_LAST_FAULTS_POS,
+                                 PRV_MIS_B_LAST_FAULTS_BITS,
+                                 PRV_MIS_B_LAST_FAULTS_MAX,
+                                 p_ctx->last_faults);
+    p_w[MIS_W_B] = mission_put_s(p_w[MIS_W_B], PRV_MIS_B_CAL_DIFF0_POS,
+                                 PRV_MIS_B_CAL_DIFF0_BITS,
+                                 PRV_MIS_B_CAL_DIFF0_MIN,
+                                 PRV_MIS_B_CAL_DIFF0_MAX,
+                                 PRV_MIS_B_CAL_DIFF0_OFFSET,
+                                 p_ctx->cal_diff0);
+
+    /* PRV_MIS_C */
+    p_w[MIS_W_C] = mission_put_u(p_w[MIS_W_C], PRV_MIS_C_SYS_REQUEST_POS,
+                                 PRV_MIS_C_SYS_REQUEST_BITS,
+                                 PRV_MIS_C_SYS_REQUEST_MAX, req_code);
+    p_w[MIS_W_C] = mission_put_u(p_w[MIS_W_C], PRV_MIS_C_BAR_BACK_LEFT_POS,
+                                 PRV_MIS_C_BAR_BACK_LEFT_BITS,
+                                 PRV_MIS_C_BAR_BACK_LEFT_MAX,
+                                 p_ctx->barcode_back_left);
+    p_w[MIS_W_C] = mission_put_s(p_w[MIS_W_C], PRV_MIS_C_RETRY_PARAM_POS,
+                                 PRV_MIS_C_RETRY_PARAM_BITS,
+                                 PRV_MIS_C_RETRY_PARAM_MIN,
+                                 PRV_MIS_C_RETRY_PARAM_MAX,
+                                 PRV_MIS_C_RETRY_PARAM_OFFSET,
+                                 p_ctx->retry_param);
+
+    /* PRV_MIS_D */
+    p_w[MIS_W_D] = mission_put_u(p_w[MIS_W_D], PRV_MIS_D_BAR_MARK_POS,
+                                 PRV_MIS_D_BAR_MARK_BITS,
+                                 PRV_MIS_D_BAR_MARK_MAX, p_ctx->barcode_mark);
+    p_w[MIS_W_D] = mission_put_u(p_w[MIS_W_D], PRV_MIS_D_MOVE_LIMIT_MS_POS,
+                                 PRV_MIS_D_MOVE_LIMIT_MS_BITS,
+                                 PRV_MIS_D_MOVE_LIMIT_MS_MAX,
+                                 p_ctx->move_limit_ms);
+
+    /* PRV_MIS_E */
+    p_w[MIS_W_E] = mission_put_u(p_w[MIS_W_E], PRV_MIS_E_RUN_STATE_POS,
+                                 PRV_MIS_E_RUN_STATE_BITS,
+                                 PRV_MIS_E_RUN_STATE_MAX, p_ctx->run_state);
+    p_w[MIS_W_E] = mission_put_u(p_w[MIS_W_E], PRV_MIS_E_ARMED_CMD_POS,
+                                 PRV_MIS_E_ARMED_CMD_BITS,
+                                 PRV_MIS_E_ARMED_CMD_MAX, p_ctx->armed_cmd);
+    p_w[MIS_W_E] = mission_put_u(p_w[MIS_W_E], PRV_MIS_E_BAR_PROBE_MARK_POS,
+                                 PRV_MIS_E_BAR_PROBE_MARK_BITS,
+                                 PRV_MIS_E_BAR_PROBE_MARK_MAX,
+                                 p_ctx->barcode_probe_mark);
+    p_w[MIS_W_E] = mission_put_u(p_w[MIS_W_E], PRV_MIS_E_LEG_LAT_POS,
+                                 PRV_MIS_E_LEG_LAT_BITS,
+                                 PRV_MIS_E_LEG_LAT_MAX, p_ctx->leg_lat_mm);
+
+    /* PRV_MIS_F */
+    p_w[MIS_W_F] = mission_put_u(p_w[MIS_W_F], PRV_MIS_F_AVOID_STEP_POS,
+                                 PRV_MIS_F_AVOID_STEP_BITS,
+                                 PRV_MIS_F_AVOID_STEP_MAX, p_ctx->avoid_step);
+    p_w[MIS_W_F] = mission_put_u(p_w[MIS_W_F], PRV_MIS_F_NO_PATH_CNT_POS,
+                                 PRV_MIS_F_NO_PATH_CNT_BITS,
+                                 PRV_MIS_F_NO_PATH_CNT_MAX,
+                                 p_ctx->no_path_cnt);
+    p_w[MIS_W_F] = mission_put_u(p_w[MIS_W_F], PRV_MIS_F_BAR_REARM_PATH_POS,
+                                 PRV_MIS_F_BAR_REARM_PATH_BITS,
+                                 PRV_MIS_F_BAR_REARM_PATH_MAX,
+                                 p_ctx->barcode_rearm_path);
+    p_w[MIS_W_F] = mission_put_u(p_w[MIS_W_F], PRV_MIS_F_LEG_FWD_POS,
+                                 PRV_MIS_F_LEG_FWD_BITS,
+                                 PRV_MIS_F_LEG_FWD_MAX, p_ctx->leg_fwd_mm);
+}
+
+/**
+ * mission_save_words_h_l
+ * @brief   Packs PRV_MIS_H, J, K and L into p_w[MIS_W_H..MIS_W_L].
+ * @param   p_ctx  source context
+ * @param   p_w    destination word array
+ * @context mission_task, host test
+ */
+static void mission_save_words_h_l(mission_ctx_t const * p_ctx,
+                                   uint32_t * p_w)
+{
+    uint32_t w_h = 0u;
+    uint32_t w_j = 0u;
+    uint32_t w_k = 0u;
+    uint32_t w_l = 0u;
+
+    /* PRV_MIS_H */
+    w_h = mission_put_u(w_h, PRV_MIS_H_SUBSTEP_POS, PRV_MIS_H_SUBSTEP_BITS,
+                        PRV_MIS_H_SUBSTEP_MAX, p_ctx->substep);
+    w_h = mission_put_u(w_h, PRV_MIS_H_ARMED_CHAR_POS,
+                        PRV_MIS_H_ARMED_CHAR_BITS, PRV_MIS_H_ARMED_CHAR_MAX,
+                        p_ctx->armed_char);
+    w_h = mission_put_u(w_h, PRV_MIS_H_BAR_PHASE_POS,
+                        PRV_MIS_H_BAR_PHASE_BITS, PRV_MIS_H_BAR_PHASE_MAX,
+                        p_ctx->barcode_phase);
+    w_h = mission_put_u(w_h, PRV_MIS_H_BAR_FOLLOW_POS,
+                        PRV_MIS_H_BAR_FOLLOW_BITS, PRV_MIS_H_BAR_FOLLOW_MAX,
+                        p_ctx->barcode_follow_path);
+    w_h = mission_put_u(w_h, PRV_MIS_H_RETRY_KIND_POS,
+                        PRV_MIS_H_RETRY_KIND_BITS, PRV_MIS_H_RETRY_KIND_MAX,
+                        p_ctx->retry_kind);
+
+    /* PRV_MIS_J */
+    w_j = mission_put_b(w_j, PRV_MIS_J_ARMED_POS, PRV_MIS_J_ARMED_BITS,
+                        p_ctx->b_is_armed);
+    w_j = mission_put_b(w_j, PRV_MIS_J_PROBE_PENDING_POS,
+                        PRV_MIS_J_PROBE_PENDING_BITS, p_ctx->b_probe_pending);
+    w_j = mission_put_b(w_j, PRV_MIS_J_REARM_WAIT_POS,
+                        PRV_MIS_J_REARM_WAIT_BITS, p_ctx->b_rearm_wait);
+    w_j = mission_put_u(w_j, PRV_MIS_J_BAR_BACK_PATH_POS,
+                        PRV_MIS_J_BAR_BACK_PATH_BITS,
+                        PRV_MIS_J_BAR_BACK_PATH_MAX,
+                        p_ctx->barcode_back_path);
+    w_j = mission_put_u(w_j, PRV_MIS_J_BAR_TRIES_POS,
+                        PRV_MIS_J_BAR_TRIES_BITS, PRV_MIS_J_BAR_TRIES_MAX,
+                        p_ctx->barcode_tries);
+    w_j = mission_put_u(w_j, PRV_MIS_J_SIDE_POS, PRV_MIS_J_SIDE_BITS,
+                        PRV_MIS_J_SIDE_MAX, p_ctx->side);
+    w_j = mission_put_u(w_j, PRV_MIS_J_SEARCH_FIRST_POS,
+                        PRV_MIS_J_SEARCH_FIRST_BITS,
+                        PRV_MIS_J_SEARCH_FIRST_MAX, p_ctx->search_first);
+    w_j = mission_put_u(w_j, PRV_MIS_J_CAL_CORR_CNT_POS,
+                        PRV_MIS_J_CAL_CORR_CNT_BITS,
+                        PRV_MIS_J_CAL_CORR_CNT_MAX, p_ctx->cal_corr_cnt);
+    w_j = mission_put_u(w_j, PRV_MIS_J_WAIT_TAG_POS, PRV_MIS_J_WAIT_TAG_BITS,
+                        PRV_MIS_J_WAIT_TAG_MAX, p_ctx->wait_tag);
+    w_j = mission_put_b(w_j, PRV_MIS_J_WARNING_POS, PRV_MIS_J_WARNING_BITS,
+                        p_ctx->b_is_warning);
+    w_j = mission_put_b(w_j, PRV_MIS_J_RESUME_PENDING_POS,
+                        PRV_MIS_J_RESUME_PENDING_BITS,
+                        p_ctx->b_resume_pending);
+    w_j = mission_put_b(w_j, PRV_MIS_J_INHIBIT_PEND_POS,
+                        PRV_MIS_J_INHIBIT_PEND_BITS,
+                        p_ctx->b_inhibit_pending);
+
+    /* PRV_MIS_K */
+    w_k = mission_put_u(w_k, PRV_MIS_K_BAR_EDGE_PATH_POS,
+                        PRV_MIS_K_BAR_EDGE_PATH_BITS,
+                        PRV_MIS_K_BAR_EDGE_PATH_MAX,
+                        p_ctx->barcode_edge_path);
+    w_k = mission_put_b(w_k, PRV_MIS_K_FR9_RUNNING_POS,
+                        PRV_MIS_K_FR9_RUNNING_BITS, p_ctx->b_fr9_running);
+    w_k = mission_put_b(w_k, PRV_MIS_K_WAIT_STILL_POS,
+                        PRV_MIS_K_WAIT_STILL_BITS, p_ctx->b_wait_standstill);
+    w_k = mission_put_b(w_k, PRV_MIS_K_CREEPING_POS, PRV_MIS_K_CREEPING_BITS,
+                        p_ctx->b_creeping);
+    w_k = mission_put_b(w_k, PRV_MIS_K_CREPT_POS, PRV_MIS_K_CREPT_BITS,
+                        p_ctx->b_crept);
+    w_k = mission_put_b(w_k, PRV_MIS_K_HAS_RUN_POS, PRV_MIS_K_HAS_RUN_BITS,
+                        p_ctx->b_has_run);
+    w_k = mission_put_b(w_k, PRV_MIS_K_POST_AVOID_POS,
+                        PRV_MIS_K_POST_AVOID_BITS, p_ctx->b_post_avoid_slow);
+    w_k = mission_put_b(w_k, PRV_MIS_K_QUIET_POS, PRV_MIS_K_QUIET_BITS,
+                        p_ctx->b_is_quiet);
+    w_k = mission_put_b(w_k, PRV_MIS_K_MOVE_PENDING_POS,
+                        PRV_MIS_K_MOVE_PENDING_BITS, p_ctx->b_move_pending);
+    w_k = mission_put_b(w_k, PRV_MIS_K_RETRY_PENDING_POS,
+                        PRV_MIS_K_RETRY_PENDING_BITS, p_ctx->b_retry_pending);
+    w_k = mission_put_b(w_k, PRV_MIS_K_MOTION_FAILED_POS,
+                        PRV_MIS_K_MOTION_FAILED_BITS, p_ctx->b_motion_failed);
+    w_k = mission_put_b(w_k, PRV_MIS_K_IMU_VALID_POS,
+                        PRV_MIS_K_IMU_VALID_BITS, p_ctx->b_imu_valid);
+    w_k = mission_put_b(w_k, PRV_MIS_K_IR_VALID_POS, PRV_MIS_K_IR_VALID_BITS,
+                        p_ctx->b_ir_valid);
+    w_k = mission_put_b(w_k, PRV_MIS_K_WDT_ENABLED_POS,
+                        PRV_MIS_K_WDT_ENABLED_BITS, p_ctx->b_wdt_enabled);
+    w_k = mission_put_b(w_k, PRV_MIS_K_RUN_STARTING_POS,
+                        PRV_MIS_K_RUN_STARTING_BITS, p_ctx->b_run_starting);
+    w_k = mission_put_b(w_k, PRV_MIS_K_ZERO_DONE_POS,
+                        PRV_MIS_K_ZERO_DONE_BITS, p_ctx->b_zero_done);
+
+    /* PRV_MIS_L */
+    w_l = mission_put_u(w_l, PRV_MIS_L_PATH_AT_STOP_POS,
+                        PRV_MIS_L_PATH_AT_STOP_BITS,
+                        PRV_MIS_L_PATH_AT_STOP_MAX, p_ctx->path_at_stop);
+    w_l = mission_put_b(w_l, PRV_MIS_L_RECOVERING_POS,
+                        PRV_MIS_L_RECOVERING_BITS, p_ctx->b_recovering);
+
+    p_w[MIS_W_H] = w_h;
+    p_w[MIS_W_J] = w_j;
+    p_w[MIS_W_K] = w_k;
+    p_w[MIS_W_L] = w_l;
+}
+
+/**
+ * mission_save_words_m_r
+ * @brief   Packs PRV_MIS_M, N, P, Q and R into p_w[MIS_W_M..MIS_W_R].
+ * @param   p_ctx  source context
+ * @param   p_w    destination word array
+ * @context mission_task, host test
+ */
+static void mission_save_words_m_r(mission_ctx_t const * p_ctx,
+                                   uint32_t * p_w)
+{
+    p_w[MIS_W_M] = mission_put_u(0u, PRV_MIS_M_RUN_ODO_MARK_POS,
+                                 PRV_MIS_M_RUN_ODO_MARK_BITS,
+                                 PRV_MIS_M_RUN_ODO_MARK_MAX,
+                                 p_ctx->run_odo_mark);
+    p_w[MIS_W_N] = mission_put_u(0u, PRV_MIS_N_RUN_ODO_POS,
+                                 PRV_MIS_N_RUN_ODO_BITS,
+                                 PRV_MIS_N_RUN_ODO_MAX,
+                                 p_ctx->run_odo_counts);
+    p_w[MIS_W_P] = mission_put_u(0u, PRV_MIS_P_REJOIN_START_POS,
+                                 PRV_MIS_P_REJOIN_START_BITS,
+                                 PRV_MIS_P_REJOIN_START_MAX,
+                                 p_ctx->rejoin_start);
+    p_w[MIS_W_Q] = mission_put_u(0u, PRV_MIS_Q_INHIBIT_MARK_POS,
+                                 PRV_MIS_Q_INHIBIT_MARK_BITS,
+                                 PRV_MIS_Q_INHIBIT_MARK_MAX,
+                                 p_ctx->inhibit_mark);
+    p_w[MIS_W_R] = mission_put_u(0u, PRV_MIS_R_BAR_EDGES_POS,
+                                 PRV_MIS_R_BAR_EDGES_BITS,
+                                 PRV_MIS_R_BAR_EDGES_MAX,
+                                 p_ctx->barcode_edges);
+}
+
+/**
+ * mission_save_timers
+ * @brief   Stores the 12 E5 timer images into g_mis_us[MIS_US_*].
+ * @param   p_ctx  source context
+ * @context mission_task, host test
+ */
+static void mission_save_timers(mission_ctx_t const * p_ctx)
+{
+    g_mis_us[MIS_US_BARCODE]   = p_ctx->barcode_since_us;
+    g_mis_us[MIS_US_CAL]       = p_ctx->cal_start_us;
+    g_mis_us[MIS_US_SWEEP]     = p_ctx->sweep_start_us;
+    g_mis_us[MIS_US_WARN]      = p_ctx->warn_start_us;
+    g_mis_us[MIS_US_SEARCH]    = p_ctx->search_start_us;
+    g_mis_us[MIS_US_FR9]       = p_ctx->fr9_start_us;
+    g_mis_us[MIS_US_RESUME]    = p_ctx->resume_start_us;
+    g_mis_us[MIS_US_RUN_START] = p_ctx->run_start_us;
+    g_mis_us[MIS_US_RUN_END]   = p_ctx->run_end_us;
+    g_mis_us[MIS_US_MOVE]      = p_ctx->move_start_us;
+    g_mis_us[MIS_US_RUN_SET]   = p_ctx->run_start_set_us;
+    g_mis_us[MIS_US_RECOVER]   = p_ctx->recover_start_us;
 }
 
 /**
@@ -934,205 +1002,223 @@ static void mission_ctx_save(mission_ctx_t const * p_ctx)
  */
 static void mission_ctx_load(mission_ctx_t * p_ctx)
 {
-    uint32_t code = 0u;
+    mission_load_words_a_f(p_ctx);
+    mission_load_words_h_l(p_ctx);
+    mission_load_words_m_r(p_ctx);
+    mission_load_timers(p_ctx);
+}
 
-    p_ctx->sys_state = (uint32_t)
-        mission_get(g_mis_w[1], PRV_MIS_B_SYS_STATE_POS,
-            PRV_MIS_B_SYS_STATE_BITS, PRV_MIS_B_SYS_STATE_OFFSET);
-    p_ctx->run_state = (uint32_t)
-        mission_get(g_mis_w[4], PRV_MIS_E_RUN_STATE_POS,
-            PRV_MIS_E_RUN_STATE_BITS, PRV_MIS_E_RUN_STATE_OFFSET);
-    p_ctx->avoid_step = (uint32_t)
-        mission_get(g_mis_w[5], PRV_MIS_F_AVOID_STEP_POS,
-            PRV_MIS_F_AVOID_STEP_BITS, PRV_MIS_F_AVOID_STEP_OFFSET);
-    p_ctx->substep = (uint32_t)
-        mission_get(g_mis_w[6], PRV_MIS_H_SUBSTEP_POS,
-            PRV_MIS_H_SUBSTEP_BITS, PRV_MIS_H_SUBSTEP_OFFSET);
-    p_ctx->end_reason = (uint32_t)
-        mission_get(g_mis_w[0], PRV_MIS_A_END_REASON_POS,
-            PRV_MIS_A_END_REASON_BITS, PRV_MIS_A_END_REASON_OFFSET);
-    p_ctx->b_is_armed =
-        (0 != mission_get(g_mis_w[7], PRV_MIS_J_ARMED_POS,
-                     PRV_MIS_J_ARMED_BITS, PRV_MIS_J_ARMED_OFFSET));
-    p_ctx->armed_cmd = (uint32_t)
-        mission_get(g_mis_w[4], PRV_MIS_E_ARMED_CMD_POS,
-            PRV_MIS_E_ARMED_CMD_BITS, PRV_MIS_E_ARMED_CMD_OFFSET);
-    p_ctx->armed_char = (uint32_t)
-        mission_get(g_mis_w[6], PRV_MIS_H_ARMED_CHAR_POS,
-            PRV_MIS_H_ARMED_CHAR_BITS, PRV_MIS_H_ARMED_CHAR_OFFSET);
-    p_ctx->no_path_cnt = (uint32_t)
-        mission_get(g_mis_w[5], PRV_MIS_F_NO_PATH_CNT_POS,
-            PRV_MIS_F_NO_PATH_CNT_BITS, PRV_MIS_F_NO_PATH_CNT_OFFSET);
-    p_ctx->last_faults = (uint32_t)
-        mission_get(g_mis_w[1], PRV_MIS_B_LAST_FAULTS_POS,
-            PRV_MIS_B_LAST_FAULTS_BITS, PRV_MIS_B_LAST_FAULTS_OFFSET);
-    code = (uint32_t) mission_get(g_mis_w[2], PRV_MIS_C_SYS_REQUEST_POS,
-                    PRV_MIS_C_SYS_REQUEST_BITS, PRV_MIS_C_SYS_REQUEST_OFFSET);
-    p_ctx->sys_request = (MISSION_REQ_CODE_NONE == code) ? MISSION_REQ_NONE
-                                                         : code;
-    p_ctx->barcode_phase = (uint32_t)
-        mission_get(g_mis_w[6], PRV_MIS_H_BAR_PHASE_POS,
-            PRV_MIS_H_BAR_PHASE_BITS, PRV_MIS_H_BAR_PHASE_OFFSET);
-    p_ctx->barcode_mark = (uint32_t)
-        mission_get(g_mis_w[3], PRV_MIS_D_BAR_MARK_POS,
-            PRV_MIS_D_BAR_MARK_BITS, PRV_MIS_D_BAR_MARK_OFFSET);
-    p_ctx->barcode_probe_mark = (uint32_t)
-        mission_get(g_mis_w[4], PRV_MIS_E_BAR_PROBE_MARK_POS,
-            PRV_MIS_E_BAR_PROBE_MARK_BITS, PRV_MIS_E_BAR_PROBE_MARK_OFFSET);
-    p_ctx->b_probe_pending =
-        (0 != mission_get(g_mis_w[7], PRV_MIS_J_PROBE_PENDING_POS,
-                     PRV_MIS_J_PROBE_PENDING_BITS,
-                     PRV_MIS_J_PROBE_PENDING_OFFSET));
-    p_ctx->barcode_rearm_path = (uint32_t)
-        mission_get(g_mis_w[5], PRV_MIS_F_BAR_REARM_PATH_POS,
-            PRV_MIS_F_BAR_REARM_PATH_BITS, PRV_MIS_F_BAR_REARM_PATH_OFFSET);
-    p_ctx->b_rearm_wait =
-        (0 != mission_get(g_mis_w[7], PRV_MIS_J_REARM_WAIT_POS,
-                     PRV_MIS_J_REARM_WAIT_BITS, PRV_MIS_J_REARM_WAIT_OFFSET));
-    p_ctx->barcode_follow_path = (uint32_t)
-        mission_get(g_mis_w[6], PRV_MIS_H_BAR_FOLLOW_POS,
-            PRV_MIS_H_BAR_FOLLOW_BITS, PRV_MIS_H_BAR_FOLLOW_OFFSET);
-    p_ctx->barcode_back_path = (uint32_t)
-        mission_get(g_mis_w[7], PRV_MIS_J_BAR_BACK_PATH_POS,
-            PRV_MIS_J_BAR_BACK_PATH_BITS, PRV_MIS_J_BAR_BACK_PATH_OFFSET);
-    p_ctx->barcode_back_left = (uint32_t)
-        mission_get(g_mis_w[2], PRV_MIS_C_BAR_BACK_LEFT_POS,
-            PRV_MIS_C_BAR_BACK_LEFT_BITS, PRV_MIS_C_BAR_BACK_LEFT_OFFSET);
-    p_ctx->barcode_tries = (uint32_t)
-        mission_get(g_mis_w[7], PRV_MIS_J_BAR_TRIES_POS,
-            PRV_MIS_J_BAR_TRIES_BITS, PRV_MIS_J_BAR_TRIES_OFFSET);
-    p_ctx->barcode_edge_path = (uint32_t)
-        mission_get(g_mis_w[8], PRV_MIS_K_BAR_EDGE_PATH_POS,
-            PRV_MIS_K_BAR_EDGE_PATH_BITS, PRV_MIS_K_BAR_EDGE_PATH_OFFSET);
-    p_ctx->barcode_edges = (uint32_t)
-        mission_get(g_mis_w[14], PRV_MIS_R_BAR_EDGES_POS,
-            PRV_MIS_R_BAR_EDGES_BITS, PRV_MIS_R_BAR_EDGES_OFFSET);
-    p_ctx->path_at_stop = (uint32_t)
-        mission_get(g_mis_w[9], PRV_MIS_L_PATH_AT_STOP_POS,
-            PRV_MIS_L_PATH_AT_STOP_BITS, PRV_MIS_L_PATH_AT_STOP_OFFSET);
-    p_ctx->diff_at_stop =
-        mission_get(g_mis_w[0], PRV_MIS_A_DIFF_AT_STOP_POS,
-            PRV_MIS_A_DIFF_AT_STOP_BITS, PRV_MIS_A_DIFF_AT_STOP_OFFSET);
-    p_ctx->run_odo_mark = (uint32_t)
-        mission_get(g_mis_w[10], PRV_MIS_M_RUN_ODO_MARK_POS,
-            PRV_MIS_M_RUN_ODO_MARK_BITS, PRV_MIS_M_RUN_ODO_MARK_OFFSET);
-    p_ctx->run_odo_counts = (uint32_t)
-        mission_get(g_mis_w[11], PRV_MIS_N_RUN_ODO_POS,
-            PRV_MIS_N_RUN_ODO_BITS, PRV_MIS_N_RUN_ODO_OFFSET);
-    p_ctx->rejoin_start = (uint32_t)
-        mission_get(g_mis_w[12], PRV_MIS_P_REJOIN_START_POS,
-            PRV_MIS_P_REJOIN_START_BITS, PRV_MIS_P_REJOIN_START_OFFSET);
-    p_ctx->inhibit_mark = (uint32_t)
-        mission_get(g_mis_w[13], PRV_MIS_Q_INHIBIT_MARK_POS,
-            PRV_MIS_Q_INHIBIT_MARK_BITS, PRV_MIS_Q_INHIBIT_MARK_OFFSET);
-    p_ctx->side = (uint32_t)
-        mission_get(g_mis_w[7], PRV_MIS_J_SIDE_POS,
-            PRV_MIS_J_SIDE_BITS, PRV_MIS_J_SIDE_OFFSET);
-    p_ctx->leg_lat_mm = (uint32_t)
-        mission_get(g_mis_w[4], PRV_MIS_E_LEG_LAT_POS,
-            PRV_MIS_E_LEG_LAT_BITS, PRV_MIS_E_LEG_LAT_OFFSET);
-    p_ctx->leg_fwd_mm = (uint32_t)
-        mission_get(g_mis_w[5], PRV_MIS_F_LEG_FWD_POS,
-            PRV_MIS_F_LEG_FWD_BITS, PRV_MIS_F_LEG_FWD_OFFSET);
-    p_ctx->rejoin_e_mm = (uint32_t)
-        mission_get(g_mis_w[0], PRV_MIS_A_REJOIN_E_POS,
-            PRV_MIS_A_REJOIN_E_BITS, PRV_MIS_A_REJOIN_E_OFFSET);
-    p_ctx->search_first = (uint32_t)
-        mission_get(g_mis_w[7], PRV_MIS_J_SEARCH_FIRST_POS,
-            PRV_MIS_J_SEARCH_FIRST_BITS, PRV_MIS_J_SEARCH_FIRST_OFFSET);
-    p_ctx->cal_diff0 =
-        mission_get(g_mis_w[1], PRV_MIS_B_CAL_DIFF0_POS,
-            PRV_MIS_B_CAL_DIFF0_BITS, PRV_MIS_B_CAL_DIFF0_OFFSET);
-    p_ctx->cal_corr_cnt = (uint32_t)
-        mission_get(g_mis_w[7], PRV_MIS_J_CAL_CORR_CNT_POS,
-            PRV_MIS_J_CAL_CORR_CNT_BITS, PRV_MIS_J_CAL_CORR_CNT_OFFSET);
-    p_ctx->wait_tag = (uint32_t)
-        mission_get(g_mis_w[7], PRV_MIS_J_WAIT_TAG_POS,
-            PRV_MIS_J_WAIT_TAG_BITS, PRV_MIS_J_WAIT_TAG_OFFSET);
-    p_ctx->move_limit_ms = (uint32_t)
-        mission_get(g_mis_w[3], PRV_MIS_D_MOVE_LIMIT_MS_POS,
-            PRV_MIS_D_MOVE_LIMIT_MS_BITS, PRV_MIS_D_MOVE_LIMIT_MS_OFFSET);
-    p_ctx->retry_kind = (uint32_t)
-        mission_get(g_mis_w[6], PRV_MIS_H_RETRY_KIND_POS,
-            PRV_MIS_H_RETRY_KIND_BITS, PRV_MIS_H_RETRY_KIND_OFFSET);
-    p_ctx->retry_param =
-        mission_get(g_mis_w[2], PRV_MIS_C_RETRY_PARAM_POS,
-            PRV_MIS_C_RETRY_PARAM_BITS, PRV_MIS_C_RETRY_PARAM_OFFSET);
-    p_ctx->b_is_warning =
-        (0 != mission_get(g_mis_w[7], PRV_MIS_J_WARNING_POS,
-                     PRV_MIS_J_WARNING_BITS, PRV_MIS_J_WARNING_OFFSET));
-    p_ctx->b_resume_pending =
-        (0 != mission_get(g_mis_w[7], PRV_MIS_J_RESUME_PENDING_POS,
-                     PRV_MIS_J_RESUME_PENDING_BITS,
-                     PRV_MIS_J_RESUME_PENDING_OFFSET));
-    p_ctx->b_inhibit_pending =
-        (0 != mission_get(g_mis_w[7], PRV_MIS_J_INHIBIT_PEND_POS,
-                     PRV_MIS_J_INHIBIT_PEND_BITS,
-                     PRV_MIS_J_INHIBIT_PEND_OFFSET));
-    p_ctx->b_fr9_running =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_FR9_RUNNING_POS,
-                     PRV_MIS_K_FR9_RUNNING_BITS, PRV_MIS_K_FR9_RUNNING_OFFSET));
-    p_ctx->b_wait_standstill =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_WAIT_STILL_POS,
-                     PRV_MIS_K_WAIT_STILL_BITS, PRV_MIS_K_WAIT_STILL_OFFSET));
-    p_ctx->b_creeping =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_CREEPING_POS,
-                     PRV_MIS_K_CREEPING_BITS, PRV_MIS_K_CREEPING_OFFSET));
-    p_ctx->b_crept =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_CREPT_POS,
-                     PRV_MIS_K_CREPT_BITS, PRV_MIS_K_CREPT_OFFSET));
-    p_ctx->b_has_run =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_HAS_RUN_POS,
-                     PRV_MIS_K_HAS_RUN_BITS, PRV_MIS_K_HAS_RUN_OFFSET));
-    p_ctx->b_post_avoid_slow =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_POST_AVOID_POS,
-                     PRV_MIS_K_POST_AVOID_BITS, PRV_MIS_K_POST_AVOID_OFFSET));
-    p_ctx->b_is_quiet =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_QUIET_POS,
-                     PRV_MIS_K_QUIET_BITS, PRV_MIS_K_QUIET_OFFSET));
-    p_ctx->b_move_pending =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_MOVE_PENDING_POS,
-                     PRV_MIS_K_MOVE_PENDING_BITS,
-                     PRV_MIS_K_MOVE_PENDING_OFFSET));
-    p_ctx->b_retry_pending =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_RETRY_PENDING_POS,
-                     PRV_MIS_K_RETRY_PENDING_BITS,
-                     PRV_MIS_K_RETRY_PENDING_OFFSET));
-    p_ctx->b_motion_failed =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_MOTION_FAILED_POS,
-                     PRV_MIS_K_MOTION_FAILED_BITS,
-                     PRV_MIS_K_MOTION_FAILED_OFFSET));
-    p_ctx->b_imu_valid =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_IMU_VALID_POS,
-                     PRV_MIS_K_IMU_VALID_BITS, PRV_MIS_K_IMU_VALID_OFFSET));
-    p_ctx->b_ir_valid =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_IR_VALID_POS,
-                     PRV_MIS_K_IR_VALID_BITS, PRV_MIS_K_IR_VALID_OFFSET));
-    p_ctx->b_wdt_enabled =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_WDT_ENABLED_POS,
-                     PRV_MIS_K_WDT_ENABLED_BITS, PRV_MIS_K_WDT_ENABLED_OFFSET));
-    p_ctx->b_run_starting =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_RUN_STARTING_POS,
-                     PRV_MIS_K_RUN_STARTING_BITS,
-                     PRV_MIS_K_RUN_STARTING_OFFSET));
-    p_ctx->b_zero_done =
-        (0 != mission_get(g_mis_w[8], PRV_MIS_K_ZERO_DONE_POS,
-                     PRV_MIS_K_ZERO_DONE_BITS, PRV_MIS_K_ZERO_DONE_OFFSET));
-    p_ctx->b_recovering =
-        (0 != mission_get(g_mis_w[9], PRV_MIS_L_RECOVERING_POS,
-                     PRV_MIS_L_RECOVERING_BITS, PRV_MIS_L_RECOVERING_OFFSET));
-    p_ctx->barcode_since_us = g_mis_us[0];
-    p_ctx->cal_start_us = g_mis_us[1];
-    p_ctx->sweep_start_us = g_mis_us[2];
-    p_ctx->warn_start_us = g_mis_us[3];
-    p_ctx->search_start_us = g_mis_us[4];
-    p_ctx->fr9_start_us = g_mis_us[5];
-    p_ctx->resume_start_us = g_mis_us[6];
-    p_ctx->run_start_us = g_mis_us[7];
-    p_ctx->run_end_us = g_mis_us[8];
-    p_ctx->move_start_us = g_mis_us[9];
-    p_ctx->run_start_set_us = g_mis_us[10];
-    p_ctx->recover_start_us = g_mis_us[11];
+/**
+ * mission_load_words_a_f
+ * @brief   Unpacks PRV_MIS_A through PRV_MIS_F from g_mis_w[MIS_W_A..F].
+ * @param   p_ctx  destination context
+ * @context mission_task, host test
+ */
+static void mission_load_words_a_f(mission_ctx_t * p_ctx)
+{
+    uint32_t const w_a = g_mis_w[MIS_W_A];
+    uint32_t const w_b = g_mis_w[MIS_W_B];
+    uint32_t const w_c = g_mis_w[MIS_W_C];
+    uint32_t const w_d = g_mis_w[MIS_W_D];
+    uint32_t const w_e = g_mis_w[MIS_W_E];
+    uint32_t const w_f = g_mis_w[MIS_W_F];
+    uint32_t const req = mission_get_u(w_c, PRV_MIS_C_SYS_REQUEST_POS,
+                                       PRV_MIS_C_SYS_REQUEST_BITS);
+
+    /* PRV_MIS_A */
+    p_ctx->end_reason   = mission_get_u(w_a, PRV_MIS_A_END_REASON_POS,
+                                        PRV_MIS_A_END_REASON_BITS);
+    p_ctx->diff_at_stop = mission_get_s(w_a, PRV_MIS_A_DIFF_AT_STOP_POS,
+                                        PRV_MIS_A_DIFF_AT_STOP_BITS,
+                                        PRV_MIS_A_DIFF_AT_STOP_OFFSET);
+    p_ctx->rejoin_e_mm  = mission_get_u(w_a, PRV_MIS_A_REJOIN_E_POS,
+                                        PRV_MIS_A_REJOIN_E_BITS);
+
+    /* PRV_MIS_B */
+    p_ctx->sys_state   = mission_get_u(w_b, PRV_MIS_B_SYS_STATE_POS,
+                                       PRV_MIS_B_SYS_STATE_BITS);
+    p_ctx->last_faults = mission_get_u(w_b, PRV_MIS_B_LAST_FAULTS_POS,
+                                       PRV_MIS_B_LAST_FAULTS_BITS);
+    p_ctx->cal_diff0   = mission_get_s(w_b, PRV_MIS_B_CAL_DIFF0_POS,
+                                       PRV_MIS_B_CAL_DIFF0_BITS,
+                                       PRV_MIS_B_CAL_DIFF0_OFFSET);
+
+    /* PRV_MIS_C */
+    p_ctx->sys_request       = (MISSION_REQ_CODE_NONE == req)
+                               ? MISSION_REQ_NONE : req;
+    p_ctx->barcode_back_left = mission_get_u(w_c, PRV_MIS_C_BAR_BACK_LEFT_POS,
+                                             PRV_MIS_C_BAR_BACK_LEFT_BITS);
+    p_ctx->retry_param       = mission_get_s(w_c, PRV_MIS_C_RETRY_PARAM_POS,
+                                             PRV_MIS_C_RETRY_PARAM_BITS,
+                                             PRV_MIS_C_RETRY_PARAM_OFFSET);
+
+    /* PRV_MIS_D */
+    p_ctx->barcode_mark  = mission_get_u(w_d, PRV_MIS_D_BAR_MARK_POS,
+                                         PRV_MIS_D_BAR_MARK_BITS);
+    p_ctx->move_limit_ms = mission_get_u(w_d, PRV_MIS_D_MOVE_LIMIT_MS_POS,
+                                         PRV_MIS_D_MOVE_LIMIT_MS_BITS);
+
+    /* PRV_MIS_E */
+    p_ctx->run_state          = mission_get_u(w_e, PRV_MIS_E_RUN_STATE_POS,
+                                              PRV_MIS_E_RUN_STATE_BITS);
+    p_ctx->armed_cmd          = mission_get_u(w_e, PRV_MIS_E_ARMED_CMD_POS,
+                                              PRV_MIS_E_ARMED_CMD_BITS);
+    p_ctx->barcode_probe_mark = mission_get_u(w_e,
+                                              PRV_MIS_E_BAR_PROBE_MARK_POS,
+                                              PRV_MIS_E_BAR_PROBE_MARK_BITS);
+    p_ctx->leg_lat_mm         = mission_get_u(w_e, PRV_MIS_E_LEG_LAT_POS,
+                                              PRV_MIS_E_LEG_LAT_BITS);
+
+    /* PRV_MIS_F */
+    p_ctx->avoid_step         = mission_get_u(w_f, PRV_MIS_F_AVOID_STEP_POS,
+                                              PRV_MIS_F_AVOID_STEP_BITS);
+    p_ctx->no_path_cnt        = mission_get_u(w_f, PRV_MIS_F_NO_PATH_CNT_POS,
+                                              PRV_MIS_F_NO_PATH_CNT_BITS);
+    p_ctx->barcode_rearm_path = mission_get_u(w_f,
+                                              PRV_MIS_F_BAR_REARM_PATH_POS,
+                                              PRV_MIS_F_BAR_REARM_PATH_BITS);
+    p_ctx->leg_fwd_mm         = mission_get_u(w_f, PRV_MIS_F_LEG_FWD_POS,
+                                              PRV_MIS_F_LEG_FWD_BITS);
+}
+
+/**
+ * mission_load_words_h_l
+ * @brief   Unpacks PRV_MIS_H, J, K and L from g_mis_w[MIS_W_H..MIS_W_L].
+ * @param   p_ctx  destination context
+ * @context mission_task, host test
+ */
+static void mission_load_words_h_l(mission_ctx_t * p_ctx)
+{
+    uint32_t const w_h = g_mis_w[MIS_W_H];
+    uint32_t const w_j = g_mis_w[MIS_W_J];
+    uint32_t const w_k = g_mis_w[MIS_W_K];
+    uint32_t const w_l = g_mis_w[MIS_W_L];
+
+    /* PRV_MIS_H */
+    p_ctx->substep             = mission_get_u(w_h, PRV_MIS_H_SUBSTEP_POS,
+                                               PRV_MIS_H_SUBSTEP_BITS);
+    p_ctx->armed_char          = mission_get_u(w_h, PRV_MIS_H_ARMED_CHAR_POS,
+                                               PRV_MIS_H_ARMED_CHAR_BITS);
+    p_ctx->barcode_phase       = mission_get_u(w_h, PRV_MIS_H_BAR_PHASE_POS,
+                                               PRV_MIS_H_BAR_PHASE_BITS);
+    p_ctx->barcode_follow_path = mission_get_u(w_h, PRV_MIS_H_BAR_FOLLOW_POS,
+                                               PRV_MIS_H_BAR_FOLLOW_BITS);
+    p_ctx->retry_kind          = mission_get_u(w_h, PRV_MIS_H_RETRY_KIND_POS,
+                                               PRV_MIS_H_RETRY_KIND_BITS);
+
+    /* PRV_MIS_J */
+    p_ctx->b_is_armed        = mission_get_b(w_j, PRV_MIS_J_ARMED_POS,
+                                             PRV_MIS_J_ARMED_BITS);
+    p_ctx->b_probe_pending   = mission_get_b(w_j, PRV_MIS_J_PROBE_PENDING_POS,
+                                             PRV_MIS_J_PROBE_PENDING_BITS);
+    p_ctx->b_rearm_wait      = mission_get_b(w_j, PRV_MIS_J_REARM_WAIT_POS,
+                                             PRV_MIS_J_REARM_WAIT_BITS);
+    p_ctx->barcode_back_path = mission_get_u(w_j, PRV_MIS_J_BAR_BACK_PATH_POS,
+                                             PRV_MIS_J_BAR_BACK_PATH_BITS);
+    p_ctx->barcode_tries     = mission_get_u(w_j, PRV_MIS_J_BAR_TRIES_POS,
+                                             PRV_MIS_J_BAR_TRIES_BITS);
+    p_ctx->side              = mission_get_u(w_j, PRV_MIS_J_SIDE_POS,
+                                             PRV_MIS_J_SIDE_BITS);
+    p_ctx->search_first      = mission_get_u(w_j, PRV_MIS_J_SEARCH_FIRST_POS,
+                                             PRV_MIS_J_SEARCH_FIRST_BITS);
+    p_ctx->cal_corr_cnt      = mission_get_u(w_j, PRV_MIS_J_CAL_CORR_CNT_POS,
+                                             PRV_MIS_J_CAL_CORR_CNT_BITS);
+    p_ctx->wait_tag          = mission_get_u(w_j, PRV_MIS_J_WAIT_TAG_POS,
+                                             PRV_MIS_J_WAIT_TAG_BITS);
+    p_ctx->b_is_warning      = mission_get_b(w_j, PRV_MIS_J_WARNING_POS,
+                                             PRV_MIS_J_WARNING_BITS);
+    p_ctx->b_resume_pending  = mission_get_b(w_j,
+                                             PRV_MIS_J_RESUME_PENDING_POS,
+                                             PRV_MIS_J_RESUME_PENDING_BITS);
+    p_ctx->b_inhibit_pending = mission_get_b(w_j, PRV_MIS_J_INHIBIT_PEND_POS,
+                                             PRV_MIS_J_INHIBIT_PEND_BITS);
+
+    /* PRV_MIS_K */
+    p_ctx->barcode_edge_path = mission_get_u(w_k, PRV_MIS_K_BAR_EDGE_PATH_POS,
+                                             PRV_MIS_K_BAR_EDGE_PATH_BITS);
+    p_ctx->b_fr9_running     = mission_get_b(w_k, PRV_MIS_K_FR9_RUNNING_POS,
+                                             PRV_MIS_K_FR9_RUNNING_BITS);
+    p_ctx->b_wait_standstill = mission_get_b(w_k, PRV_MIS_K_WAIT_STILL_POS,
+                                             PRV_MIS_K_WAIT_STILL_BITS);
+    p_ctx->b_creeping        = mission_get_b(w_k, PRV_MIS_K_CREEPING_POS,
+                                             PRV_MIS_K_CREEPING_BITS);
+    p_ctx->b_crept           = mission_get_b(w_k, PRV_MIS_K_CREPT_POS,
+                                             PRV_MIS_K_CREPT_BITS);
+    p_ctx->b_has_run         = mission_get_b(w_k, PRV_MIS_K_HAS_RUN_POS,
+                                             PRV_MIS_K_HAS_RUN_BITS);
+    p_ctx->b_post_avoid_slow = mission_get_b(w_k, PRV_MIS_K_POST_AVOID_POS,
+                                             PRV_MIS_K_POST_AVOID_BITS);
+    p_ctx->b_is_quiet        = mission_get_b(w_k, PRV_MIS_K_QUIET_POS,
+                                             PRV_MIS_K_QUIET_BITS);
+    p_ctx->b_move_pending    = mission_get_b(w_k, PRV_MIS_K_MOVE_PENDING_POS,
+                                             PRV_MIS_K_MOVE_PENDING_BITS);
+    p_ctx->b_retry_pending   = mission_get_b(w_k, PRV_MIS_K_RETRY_PENDING_POS,
+                                             PRV_MIS_K_RETRY_PENDING_BITS);
+    p_ctx->b_motion_failed   = mission_get_b(w_k, PRV_MIS_K_MOTION_FAILED_POS,
+                                             PRV_MIS_K_MOTION_FAILED_BITS);
+    p_ctx->b_imu_valid       = mission_get_b(w_k, PRV_MIS_K_IMU_VALID_POS,
+                                             PRV_MIS_K_IMU_VALID_BITS);
+    p_ctx->b_ir_valid        = mission_get_b(w_k, PRV_MIS_K_IR_VALID_POS,
+                                             PRV_MIS_K_IR_VALID_BITS);
+    p_ctx->b_wdt_enabled     = mission_get_b(w_k, PRV_MIS_K_WDT_ENABLED_POS,
+                                             PRV_MIS_K_WDT_ENABLED_BITS);
+    p_ctx->b_run_starting    = mission_get_b(w_k, PRV_MIS_K_RUN_STARTING_POS,
+                                             PRV_MIS_K_RUN_STARTING_BITS);
+    p_ctx->b_zero_done       = mission_get_b(w_k, PRV_MIS_K_ZERO_DONE_POS,
+                                             PRV_MIS_K_ZERO_DONE_BITS);
+
+    /* PRV_MIS_L */
+    p_ctx->path_at_stop = mission_get_u(w_l, PRV_MIS_L_PATH_AT_STOP_POS,
+                                        PRV_MIS_L_PATH_AT_STOP_BITS);
+    p_ctx->b_recovering = mission_get_b(w_l, PRV_MIS_L_RECOVERING_POS,
+                                        PRV_MIS_L_RECOVERING_BITS);
+}
+
+/**
+ * mission_load_words_m_r
+ * @brief   Unpacks PRV_MIS_M, N, P, Q and R from g_mis_w[MIS_W_M..MIS_W_R].
+ * @param   p_ctx  destination context
+ * @context mission_task, host test
+ */
+static void mission_load_words_m_r(mission_ctx_t * p_ctx)
+{
+    p_ctx->run_odo_mark   = mission_get_u(g_mis_w[MIS_W_M],
+                                          PRV_MIS_M_RUN_ODO_MARK_POS,
+                                          PRV_MIS_M_RUN_ODO_MARK_BITS);
+    p_ctx->run_odo_counts = mission_get_u(g_mis_w[MIS_W_N],
+                                          PRV_MIS_N_RUN_ODO_POS,
+                                          PRV_MIS_N_RUN_ODO_BITS);
+    p_ctx->rejoin_start   = mission_get_u(g_mis_w[MIS_W_P],
+                                          PRV_MIS_P_REJOIN_START_POS,
+                                          PRV_MIS_P_REJOIN_START_BITS);
+    p_ctx->inhibit_mark   = mission_get_u(g_mis_w[MIS_W_Q],
+                                          PRV_MIS_Q_INHIBIT_MARK_POS,
+                                          PRV_MIS_Q_INHIBIT_MARK_BITS);
+    p_ctx->barcode_edges  = mission_get_u(g_mis_w[MIS_W_R],
+                                          PRV_MIS_R_BAR_EDGES_POS,
+                                          PRV_MIS_R_BAR_EDGES_BITS);
+}
+
+/**
+ * mission_load_timers
+ * @brief   Restores the 12 E5 timer images from g_mis_us[MIS_US_*].
+ * @param   p_ctx  destination context
+ * @context mission_task, host test
+ */
+static void mission_load_timers(mission_ctx_t * p_ctx)
+{
+    p_ctx->barcode_since_us = g_mis_us[MIS_US_BARCODE];
+    p_ctx->cal_start_us     = g_mis_us[MIS_US_CAL];
+    p_ctx->sweep_start_us   = g_mis_us[MIS_US_SWEEP];
+    p_ctx->warn_start_us    = g_mis_us[MIS_US_WARN];
+    p_ctx->search_start_us  = g_mis_us[MIS_US_SEARCH];
+    p_ctx->fr9_start_us     = g_mis_us[MIS_US_FR9];
+    p_ctx->resume_start_us  = g_mis_us[MIS_US_RESUME];
+    p_ctx->run_start_us     = g_mis_us[MIS_US_RUN_START];
+    p_ctx->run_end_us       = g_mis_us[MIS_US_RUN_END];
+    p_ctx->move_start_us    = g_mis_us[MIS_US_MOVE];
+    p_ctx->run_start_set_us = g_mis_us[MIS_US_RUN_SET];
+    p_ctx->recover_start_us = g_mis_us[MIS_US_RECOVER];
 }
 
 /**
