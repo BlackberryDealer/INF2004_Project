@@ -127,7 +127,9 @@ ER tk_unl_mtx(ID id) { (void) id; return E_OK; }
 ID app_start_task(FP e, PRI p, uint64_t *s, uint32_t b, char const *n) { (void)e;(void)p;(void)s;(void)b;(void)n; return 1; }
 void app_check(ER e, char const *w) { (void) e; (void) w; }
 static char clog[4096];   /* console capture */
+static UINT g_arm_log_mode;
 void app_log(char const *f, int32_t a, int32_t b, int32_t c) { char line[256]; snprintf(line, sizeof(line), f, a, b, c); printf("   log: %s", line);
+  if (NULL != strstr(line, "armed for the next cross-junction")) { g_arm_log_mode = flg[1]; }
   if (strlen(clog) + strlen(line) < sizeof(clog)) strcat(clog, line); }
 /* ---------------- neighbour mocks ---------------- */
 static uint32_t g_safety, g_fault, g_now, g_tag; static int g_refuse;
@@ -194,10 +196,52 @@ uint32_t hmi_poll(void) { return 0u; }
 void hmi_show(uint32_t s, uint32_t n) { (void) s; (void) n; }
 static bool g_warn; void hmi_set_warning(bool b) { g_warn = b; }
 /* S5-U05: every matrix case starts from fresh mocks (Fix 2) */
-void mission_host_case_reset(void) {
+static void mission_host_case_reset(void) {
   memset(flg, 0, sizeof(flg)); qn = 0; mbf_used = 0; g_safety = 0; g_fault = 0;
   g_refuse = 0; g_wdt_enables = 0; g_started = false; g_warn = false;
   mlog[0] = 0; alog[0] = 0; tlog[0] = 0; }
+
+/* S5-U05: feeds every event type to every state (RUN: every substate;
+   AVOID: every step) on a scratch context and checks the result is valid. */
+static uint32_t mission_test_matrix(uint32_t * p_cases) {
+  enum {
+    SIM_SYS_STATES  = APP_SYS_FAULT + 1u,
+    SIM_RUN_STATES  = APP_RUN_AVOID + 1u,
+    SIM_AVOID_STEPS = APP_AVOID_REVERSE + 1u
+  };
+  mission_ctx_t ctx = {0}; mission_evt_in_t evt = {true, 0u, 0u};
+  status_board_t snap = {0}; uint32_t const now_us = sys_tick_now_us();
+  uint32_t bad = 0u, cases = 0u, run_n = 1u, av_n = 1u;
+  status_board_read(&snap);
+  for (uint32_t sys = 0u; sys < SIM_SYS_STATES; sys++) {
+    run_n = (APP_SYS_RUN == sys) ? SIM_RUN_STATES : 1u;
+    for (uint32_t run = 0u; run < run_n; run++) {
+      av_n = ((APP_SYS_RUN == sys) && (APP_RUN_AVOID == run))
+             ? SIM_AVOID_STEPS : 1u;
+      for (uint32_t step = 0u; step < av_n; step++) {
+        for (uint32_t type = 0u; type < APP_EVT_COUNT; type++) {
+          mission_host_case_reset();
+          mission_ctx_reset(&ctx);
+          ctx.b_is_quiet  = true;
+          ctx.sys_state   = sys;
+          ctx.run_state   = run;
+          ctx.avoid_step  = step;
+          ctx.last_faults = fault_get();
+          evt.type        = type;
+          mission_dispatch(&ctx, &evt, &snap, now_us);
+          cases++;
+          if ((ctx.sys_state >= SIM_SYS_STATES)
+              || (ctx.run_state >= SIM_RUN_STATES)
+              || (ctx.avoid_step >= SIM_AVOID_STEPS)) {
+            bad++;
+          }
+        }
+      }
+    }
+  }
+  *p_cases = cases;
+  return bad;
+}
 /* ---------------- harness ---------------- */
 static int pass_n, fail_n;
 #define CHECK(id, c, d) do { if (c) { pass_n++; printf("[TEST] %s PASS  %s\n", id, d); } else { fail_n++; printf("[TEST] %s FAIL  %s (line %d) mlog='%s' sys=%u run=%u av=%u sub=%u pend=%d\n", id, d, __LINE__, mlog, g_ctx.sys_state, g_ctx.run_state, g_ctx.avoid_step, g_ctx.substep, g_ctx.b_move_pending); } } while (0)
@@ -666,10 +710,13 @@ int main(void) {
   EV(APP_EVT_BARCODE_PROBE, 35u);
   CHECK("S5-U57", !strcmp(mlog, ""), "no second rewind during the slow pass");
   mot.path_counts += odometry_mm_to_counts(245u);
+  g_arm_log_mode = 0u;
   EV(APP_EVT_BARCODE, mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 15u));
   CHECK("S5-U57", !strcmp(mlog, "FOL120 ") && APP_RUN_ARMED == g_ctx.run_state
         && 15u == g_ctx.armed_char && !MODE(APP_MODE_BARCODE_REREAD),
         "mapped F is stored and cruise resumes");
+  CHECK("S5-U57", 0u != (g_arm_log_mode & APP_MODE_BARCODE_REREAD),
+        "reread arms the command before clearing APP_MODE_BARCODE_REREAD");
   EV(APP_EVT_JUNCTION, APP_JCT_SIDE_L);
   CHECK("S5-U57", !strcmp(mlog, "") && g_ctx.b_is_armed, "ignore a side branch");
   mot.path_counts += odometry_mm_to_counts(1100u);

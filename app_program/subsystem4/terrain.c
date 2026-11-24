@@ -45,13 +45,11 @@
 #define TERRAIN_DS_DELTA_MAX (4u * APP_TICK_COUNTS_MAX)
 
 #define TERRAIN_DDEG_CIRCLE    (3600)
+#define TERRAIN_DDEG_THREE_Q   (2700)
 #define TERRAIN_DDEG_HALF      (1800)
 #define TERRAIN_DDEG_QUADRANT  (900)
 #define TERRAIN_DDEG_PER_DEG   (10)
-#define TERRAIN_DEG_QUADRANT   (90)
-#define TERRAIN_DEG_HALF       (180)
-#define TERRAIN_DEG_THREE_Q    (270)
-#define TERRAIN_DEG_CIRCLE     (360)
+#define TERRAIN_DEG_QUADRANT   (90u)
 #define TERRAIN_Q14_ONE        (16384)
 #define TERRAIN_ATAN_K_MAX     (32)
 #define TERRAIN_ATAN_SCALE     (1024)
@@ -229,6 +227,8 @@ int32_t terrain_atan2_ddeg(int32_t y_value, int32_t x_value)
  */
 int32_t terrain_sin_q14(int32_t ddeg)
 {
+    uint32_t ddeg_u    = 0u;
+    uint32_t fold_ddeg = 0u;
     uint32_t deg       = 0u;
     uint32_t frac      = 0u;
     uint32_t q14_value = 0u;
@@ -239,28 +239,32 @@ int32_t terrain_sin_q14(int32_t ddeg)
     {
         ddeg += TERRAIN_DDEG_CIRCLE; /* remainder is > -3600: one add */
     }
+    ddeg_u = (uint32_t)ddeg; /* cast: 0 <= ddeg < 3600 */
 
-    deg  = (uint32_t)ddeg / TERRAIN_DDEG_PER_DEG; /* cast: ddeg >= 0 */
-    frac = (uint32_t)ddeg % TERRAIN_DDEG_PER_DEG;
-
-    if (deg < TERRAIN_DEG_QUADRANT)
+    /* Fold in 0.1 deg units before splitting degree + fraction so Q2/Q4
+       interpolate downward from 90 deg and never index past 90. */
+    if (ddeg_u <= (uint32_t)TERRAIN_DDEG_QUADRANT)
     {
-        q14_value = terrain_sin_q14_deg(deg, frac);
+        fold_ddeg = ddeg_u;
     }
-    else if (deg < TERRAIN_DEG_HALF)
+    else if (ddeg_u < (uint32_t)TERRAIN_DDEG_HALF)
     {
-        q14_value = terrain_sin_q14_deg(TERRAIN_DEG_HALF - deg, frac);
+        fold_ddeg = (uint32_t)TERRAIN_DDEG_HALF - ddeg_u;
     }
-    else if (deg < TERRAIN_DEG_THREE_Q)
+    else if (ddeg_u <= (uint32_t)TERRAIN_DDEG_THREE_Q)
     {
         b_is_neg  = true;
-        q14_value = terrain_sin_q14_deg(deg - TERRAIN_DEG_HALF, frac);
+        fold_ddeg = ddeg_u - (uint32_t)TERRAIN_DDEG_HALF;
     }
     else
     {
         b_is_neg  = true;
-        q14_value = terrain_sin_q14_deg(TERRAIN_DEG_CIRCLE - deg, frac);
+        fold_ddeg = (uint32_t)TERRAIN_DDEG_CIRCLE - ddeg_u;
     }
+
+    deg       = fold_ddeg / (uint32_t)TERRAIN_DDEG_PER_DEG;
+    frac      = fold_ddeg % (uint32_t)TERRAIN_DDEG_PER_DEG;
+    q14_value = terrain_sin_q14_deg(deg, frac);
 
     if (b_is_neg)
     {
@@ -586,7 +590,7 @@ uint32_t terrain_ir_lift_step(uint32_t ir_cnt, uint32_t raw_l,
  *          g x h / track at the top; h = track x peak / 1000 mg (scaled
  *          by TERRAIN_ROLL_GAIN_PCT). A hump only starts while driving
  *          straight (a turn's sideways acceleration also shows in ay)
- *          and forward; on it, more than TERRAIN_ROLL_MAX_MM of travel
+ *          and forward; on it, more than TERRAIN_ROLL_MAX_TICKS cycles
  *          is a ramp or a held tilt and is dropped without a report.
  * @param   word       PRV_IMU_R word
  * @param   ay_mg      calibrated sideways average this cycle
@@ -1032,15 +1036,19 @@ static uint32_t terrain_sin_q14_deg(uint32_t deg, uint32_t frac_ddeg)
 {
     uint32_t base = 0u;
 
-    if (0u == frac_ddeg)
+    if (deg >= TERRAIN_DEG_QUADRANT)
     {
-        return (uint32_t)g_sin_tab[deg]; /* cast: entry >= 0 */
+        return (uint32_t)g_sin_tab[TERRAIN_DEG_QUADRANT]; /* cast: >= 0 */
     }
     base = (uint32_t)g_sin_tab[deg]; /* cast: entry >= 0 */
+    if (0u == frac_ddeg)
+    {
+        return base;
+    }
     return base +
            (((uint32_t)(g_sin_tab[deg + 1u] - g_sin_tab[deg]) * frac_ddeg) /
-            TERRAIN_DDEG_PER_DEG);
-    /* signed division by 10, event-time */
+            (uint32_t)TERRAIN_DDEG_PER_DEG);
+    /* unsigned division by 10, event-time */
 }
 
 /**

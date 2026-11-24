@@ -95,10 +95,10 @@
 
 /* ---- Constant-versus-field checks (Part C.4b) ------------------------ */
 
-#if (MOTION_STALL_TICKS > 31u)   /* PRV_MOT_A STALL_L/R are 5 bits */
+#if (MOTION_STALL_TICKS > 31u)   /* PRV_MOT_B STALL_L/R are 5 bits */
 #error "MOTION_STALL_TICKS no longer fits the stall counter: widen it"
 #endif
-#if (MOTION_ENC_FAULT_STREAK > 3u)   /* PRV_MOT_A ENC_STRK_L/R: 2 bits */
+#if (MOTION_ENC_FAULT_STREAK > 3u)   /* PRV_MOT_C STRK_L/R: 2 bits */
 #error "MOTION_ENC_FAULT_STREAK no longer fits the streak counter"
 #endif
 #if ((MOTION_MOVE_MAX_MM > 2047) || (MOTION_TURN_MAX_DEG > 2047) \

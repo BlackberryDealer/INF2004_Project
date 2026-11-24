@@ -20,8 +20,10 @@ extern ER   mission_start(void);   /* starts mission_task (call last) */
    sets APP_FAULT_QUEUE_OVERFLOW if K4 is full.                       */
 extern bool     mission_post_event(uint32_t type, uint32_t value);
 
-/* Builds the BARCODE / MAP event value: char index bits 0-5, cmd 6-7. */
+/* Builds / unpacks a BARCODE or MAP event value (EVT_BARCODE layout). */
 extern uint32_t mission_evt_barcode_value(uint32_t cmd, uint32_t char_index);
+extern void     mission_evt_barcode_unpack(uint32_t value, uint32_t * p_cmd,
+                                           uint32_t * p_char_index);
 
 extern void     mission_mode_set(uint32_t bits);     /* mission_task only */
 extern void     mission_mode_clear(uint32_t bits);   /* mission_task only */

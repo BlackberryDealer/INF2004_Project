@@ -113,7 +113,6 @@ extern uint32_t sys_tick_now_us(void);
 #define LSM303_STEP_TIMEOUT_US (1000u)     /* per bus step (byte, STOP)  */
 #define LSM303_ENABLE_WAIT_US (100u) /* IC_ENABLE / ABORT settle bound */
 #define LSM303_SYS_HZ         (125000000u) /* template fixed clock  */
-#define LSM303_BUS_HZ         (400000u)
 #define LSM303_RESET_HALF_US  (5u) /* SCL half period, 100 kHz   */
 
 /* Driver error codes */
@@ -142,6 +141,7 @@ static void    lsm303_set_enable(bool b_on);
 static void    lsm303_rx_drain(void);
 static void    lsm303_delay_us(uint32_t delay_us);
 static void    lsm303_hw_setup(void);
+static int16_t lsm303_le16(uint8_t lo, uint8_t hi);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -260,18 +260,11 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
 
     for (idx = 0u; idx < take; idx++)
     {
-        uint32_t base  = idx * 6u;
-        uint16_t raw_x = (uint16_t)((uint16_t)burst[base] |
-                                    ((uint16_t)burst[base + 1u] << 8));
-        uint16_t raw_y = (uint16_t)((uint16_t)burst[base + 2u] |
-                                    ((uint16_t)burst[base + 3u] << 8));
-        uint16_t raw_z = (uint16_t)((uint16_t)burst[base + 4u] |
-                                    ((uint16_t)burst[base + 5u] << 8));
-        /* casts: 16-bit image, no bits lost */
+        uint32_t const base = idx * 6u;
 
-        p_samples[idx].acc_x = (int16_t)raw_x; /* cast: 16-bit image   */
-        p_samples[idx].acc_y = (int16_t)raw_y; /* cast: 16-bit image   */
-        p_samples[idx].acc_z = (int16_t)raw_z; /* cast: 16-bit image   */
+        p_samples[idx].acc_x = lsm303_le16(burst[base], burst[base + 1u]);
+        p_samples[idx].acc_y = lsm303_le16(burst[base + 2u], burst[base + 3u]);
+        p_samples[idx].acc_z = lsm303_le16(burst[base + 4u], burst[base + 5u]);
     }
 
     return (int32_t)take; /* cast: <= 4 */
@@ -302,10 +295,9 @@ int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my, int16_t * p_mz)
         return ercd;
     }
 
-    *p_mx = (int16_t)((uint16_t)buf[0] | ((uint16_t)buf[1] << 8));
-    *p_my = (int16_t)((uint16_t)buf[2] | ((uint16_t)buf[3] << 8));
-    *p_mz = (int16_t)((uint16_t)buf[4] | ((uint16_t)buf[5] << 8));
-    /* casts: 16-bit register image */
+    *p_mx = lsm303_le16(buf[0], buf[1]);
+    *p_my = lsm303_le16(buf[2], buf[3]);
+    *p_mz = lsm303_le16(buf[4], buf[5]);
 
     return 0;
 }
@@ -403,7 +395,8 @@ int32_t drv_lsm303_last_error(void)
 static void lsm303_hw_setup(void)
 {
     uint32_t period =
-        (LSM303_SYS_HZ + (LSM303_BUS_HZ / 2u)) / LSM303_BUS_HZ;  /* 313 */
+        (LSM303_SYS_HZ + (BOARD_I2C_IMU_HZ / 2u))
+        / BOARD_I2C_IMU_HZ;                                      /* 313 */
     uint32_t lcnt     = (period * 3u) / 5u;                      /* 187 */
     uint32_t hcnt     = period - lcnt;                           /* 126 */
     uint32_t spklen   = lcnt / 16u;                              /* 11 */
@@ -743,6 +736,22 @@ static void lsm303_delay_us(uint32_t delay_us)
     {
         /* bounded wait: LSM303_RESET_HALF_US is 5 us */
     }
+}
+
+/**
+ * lsm303_le16
+ * @brief   Decodes one little-endian signed 16-bit register pair.
+ * @param   lo  low byte (OUT_*_L)
+ * @param   hi  high byte (OUT_*_H)
+ * @return  signed 16-bit axis sample
+ * @context imu_task
+ */
+static int16_t lsm303_le16(uint8_t lo, uint8_t hi)
+{
+    /* casts: 16-bit little-endian register image, no bits lost */
+    uint16_t const raw = (uint16_t)((uint32_t)lo | ((uint32_t)hi << 8u));
+
+    return (int16_t)raw;
 }
 
 /*** end of file ***/

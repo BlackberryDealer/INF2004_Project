@@ -161,11 +161,11 @@ void app_check(ER ercd, char const * p_what)
 
 /**
  * app_log
- * @brief   One console line through T-Monitor. Up to three %d arguments.
- * @param   p_format  format string (only %d conversions)
- * @param   arg_a     first %d argument (ignored if unused)
- * @param   arg_b     second %d argument (ignored if unused)
- * @param   arg_c     third %d argument (ignored if unused)
+ * @brief   One console line through T-Monitor. Up to three %d/%x args.
+ * @param   p_format  format string (%d, %x and %% conversions)
+ * @param   arg_a     first argument (ignored if unused)
+ * @param   arg_b     second argument (ignored if unused)
+ * @param   arg_c     third argument (ignored if unused)
  * @return  none
  * @context any task; never an ISR, handler, or the radio task in RUN
  */

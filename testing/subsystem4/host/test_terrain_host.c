@@ -151,6 +151,41 @@ static bool host_sin_cos_ok(void)
             (0 == terrain_cos_q14(900)) && (8192 == terrain_cos_q14(600)));
 }
 
+static bool host_sin_cos_quadrants_ok(void)
+{
+    int32_t d = 0;
+
+    /* Boundary and small-angle symmetry checks (90.1 / 270.1 deg stay
+       within g_sin_tab[0..90]; +0.1 and -0.1 deg are exact opposites). */
+    if ((28 != terrain_sin_q14(1)) || (-28 != terrain_sin_q14(-1)) ||
+        (terrain_sin_q14(901) != terrain_sin_q14(899)) ||
+        (terrain_sin_q14(2701) != -terrain_sin_q14(899)) ||
+        (28 != terrain_sin_q14(1799)) || (-28 != terrain_sin_q14(1801)) ||
+        (-28 != terrain_sin_q14(3599)) ||
+        (terrain_cos_q14(1) != terrain_sin_q14(899)) ||
+        (terrain_cos_q14(-1) != terrain_cos_q14(1)))
+    {
+        return false;
+    }
+
+    for (d = 0; d < 3600; d++)
+    {
+        double const  rad   = ((double)d / 1800.0) * HOST_PI;
+        int32_t const s     = terrain_sin_q14(d);
+        int32_t const c     = terrain_cos_q14(d);
+        double const  s_ref = sin(rad) * 16384.0;
+        double const  c_ref = cos(rad) * 16384.0;
+
+        if ((terrain_sin_q14(-d) != -s) || (terrain_sin_q14(d + 3600) != s) ||
+            (terrain_cos_q14(-d) != c) || (fabs((double)s - s_ref) > 2.5) ||
+            (fabs((double)c - c_ref) > 2.5))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool host_heading_math_ok(void)
 {
     return ((3599 == terrain_heading_wrap_ddeg(3599)) &&
@@ -209,6 +244,12 @@ int main(void)
         bool b_ok = host_sin_cos_ok();
 
         HOST_CHECK("S4-U03", b_ok, "sin/cos table points at 0, 30, 60, 90 deg");
+    }
+    {
+        bool b_ok = host_sin_cos_quadrants_ok();
+
+        HOST_CHECK("S4-U03", b_ok,
+                   "sin/cos full-circle quadrant bounds, symmetry and Q14 accuracy");
     }
     {
         bool b_ok = host_heading_math_ok();

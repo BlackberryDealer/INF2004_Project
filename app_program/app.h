@@ -49,7 +49,7 @@ extern ID   app_start_task(FP p_entry, PRI priority, uint64_t * p_stack,
 extern void app_check(ER ercd, char const * p_what);
 
 /* Console output (never from an ISR, a handler or the radio task in RUN).
-   p_format may use up to three %d; unused arguments are ignored.      */
+   p_format may use up to three %d or %x; unused arguments are ignored. */
 extern void app_log(char const * p_format, int32_t arg_a, int32_t arg_b,
                     int32_t arg_c);
 
