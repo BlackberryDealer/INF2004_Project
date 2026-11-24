@@ -389,6 +389,44 @@ int main(void) {
     mv.speed_l_cpw = -15; mv.speed_r_cpw = -15; status_board_write_motion(&mv); w_mode = 0; w_dist = 200; cyc(); cyc();
     CHECK("S5-U55", 0u == (g_safety & SAFETY_ESTOP), "driving backwards: the guard does nothing");
     mv.speed_l_cpw = 0; mv.speed_r_cpw = 0; status_board_write_motion(&mv); g_modes = 0; }
+  /* S5-U83: path wrap (2^17 = 131072 counts) across ON_RAMP hold/clear
+     and APP_SCAN_PASSING -> APP_SCAN_MONITOR distance tracking.          */
+  { status_board_imu_t    imu_p = {0};
+    status_board_imu_t    flat_p = {0};
+    status_board_motion_t mv_p = {0};
+    flat_p.motion_class = APP_MCLASS_CRUISING;
+    imu_p.pitch_ddeg    = 40;
+    imu_p.motion_class  = APP_MCLASS_CLIMBING;
+    g_modes = 0; g_motor_en = false; cyc(); g_motor_en = true; g_safety = 0; nev = 0;
+    mv_p.path_counts = 131072u - 10u; /* 10 counts before wrap */
+    status_board_write_motion(&mv_p);
+    status_board_write_imu(&imu_p);
+    w_mode = 0; w_dist = 1000; cyc();
+    CHECK("S5-U83", 1u == obstacle_get(OBS_F_ON_RAMP), "pitched near 2^17 wrap sets ON_RAMP");
+    status_board_write_imu(&flat_p);
+    /* Advance across wrap by < OBS_RAMP_CLEAR_MM while hold ticks down */
+    mv_p.path_counts = 10u;
+    status_board_write_motion(&mv_p);
+    for (uint32_t i = 0u; i < OBS_RAMP_HOLD_PINGS; i++) { cyc(); }
+    CHECK("S5-U83", 1u == obstacle_get(OBS_F_ON_RAMP), "across wrap but < OBS_RAMP_CLEAR_MM keeps ON_RAMP");
+    mv_p.path_counts = ((131072u - 10u) + ((OBS_RAMP_CLEAR_MM * 1000u) / APP_UM_PER_COUNT) + 20u) & 0x1FFFFu;
+    status_board_write_motion(&mv_p);
+    cyc();
+    CHECK("S5-U83", 0u == obstacle_get(OBS_F_ON_RAMP), "ON_RAMP clears cleanly across 2^17 path wrap");
+
+    /* PASSING -> MONITOR across 2^17 path wrap */
+    mv_p.path_counts = 131072u - 15u;
+    status_board_write_motion(&mv_p);
+    obstacle_enter(APP_SCAN_PASSING);
+    mv_p.path_counts = 20u; /* wrapped by 35 counts (~11 mm < OBS_PASSING_CLEAR_MM) */
+    status_board_write_motion(&mv_p);
+    cyc();
+    CHECK("S5-U83", APP_SCAN_PASSING == g_state, "PASSING stays active across wrap before clearance distance");
+    mv_p.path_counts = ((131072u - 15u) + 5000u) & 0x1FFFFu; /* > nearest + depth + robot_len */
+    status_board_write_motion(&mv_p);
+    cyc();
+    CHECK("S5-U83", APP_SCAN_MONITOR == g_state, "PASSING returns to MONITOR cleanly across 2^17 path wrap");
+    mv_p.path_counts = 0u; status_board_write_motion(&mv_p); }
   printf("[TEST] S5-U08 obstacle simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
   return fail_n;
 }

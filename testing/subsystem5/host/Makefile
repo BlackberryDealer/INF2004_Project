@@ -19,12 +19,14 @@ B       := build/app_program
 .PHONY: all clean tree
 
 all: test_obs_profile_host.out sim_mission_host.out sim_obstacle_host.out \
-     test_drv_ultrasonic_host.out test_status_board_host.out
+     test_drv_ultrasonic_host.out test_status_board_host.out \
+     test_hmi_health_host.out
 	./test_obs_profile_host.out
 	./test_drv_ultrasonic_host.out
 	./sim_mission_host.out
 	./sim_obstacle_host.out
 	./test_status_board_host.out
+	./test_hmi_health_host.out
 
 test_obs_profile_host.out: test_obs_profile_host.c $(S5)/obs_profile.c \
                            $(S5)/obs_profile.h $(S5)/cfg_obstacle.h
@@ -66,6 +68,9 @@ sim_obstacle_host.out: sim_obstacle_host.c tree
 test_status_board_host.out: test_status_board_host.c tree
 	$(CC) $(SIMFLAGS) -o $@ test_status_board_host.c \
 	    $(B)/subsystem5/status_board.c $(B)/app_bits.c
+
+test_hmi_health_host.out: test_hmi_health_host.c tree
+	$(CC) $(SIMFLAGS) -o $@ test_hmi_health_host.c $(B)/app_bits.c
 
 clean:
 	rm -rf *.out build

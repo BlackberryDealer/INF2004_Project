@@ -74,6 +74,35 @@ static volatile uint32_t  g_sh_ir_raw     = 0u;
 static uint32_t           g_line_prv_e    = 0u; /* PRV_LINE_E: WHITE_MARK */
 static uint32_t           g_line_prv_f    = 0u; /* PRV_LINE_F: CROSS_MARK */
 
+#if (0 != APP_TEST)
+#define LINE_TEST_WCET_CYCLES (1000u)
+#define LINE_TEST_NOISE_SHIFT (10u)
+#define LINE_TEST_NOISE_N     (1u << LINE_TEST_NOISE_SHIFT) /* 1024 samples */
+
+typedef struct
+{
+    uint32_t count;
+    uint32_t ref_l;
+    uint32_t ref_r;
+    uint32_t min_l;
+    uint32_t max_l;
+    uint32_t min_r;
+    uint32_t max_r;
+    int32_t  sum_dl;
+    int32_t  sum_dr;
+    uint64_t sum_dl2;
+    uint64_t sum_dr2;
+} line_test_noise_t;
+
+static line_test_noise_t  g_line_noise     = {0u, 0u, 0u, 0u, 0u, 0u, 0u,
+                                              0, 0, 0u, 0u};
+static uint32_t           g_line_wcet_cnt  = 0u;
+static uint32_t           g_line_prev_us   = 0u;
+static uint32_t           g_line_dt_min_us = 0u;
+static uint32_t           g_line_dt_max_us = 0u;
+static uint32_t           g_line_wcet_us   = 0u;
+#endif /* APP_TEST */
+
 /* ---- private function prototypes ------------------------------------- */
 
 static bool     line_a_flag(uint32_t pos);
@@ -101,6 +130,11 @@ static bool     line_step_junction(uint32_t norm_l, uint32_t norm_r,
 static void     line_jct_unpack(line_track_jct_t * p_jct);
 static void     line_jct_pack(line_track_jct_t const * p_jct);
 static uint32_t line_clamp_u(uint32_t val, uint32_t max_val);
+#if (0 != APP_TEST)
+static uint32_t line_test_isqrt(uint32_t val);
+static void     line_test_noise_step(uint32_t raw_l, uint32_t raw_r);
+static void     line_test_timing_step(uint32_t start_us, uint32_t end_us);
+#endif /* APP_TEST */
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -126,6 +160,14 @@ ER line_init(void)
     line_a_flag_set(PRV_LINE_A_CROSS_STRT_POS, false);
     g_line_prv_a = app_bits_put(g_line_prv_a, PRV_LINE_A_LAST_JCT_POS,
                                 PRV_LINE_A_LAST_JCT_BITS, APP_JCT_NONE);
+#if (0 != APP_TEST)
+    g_line_noise.count = 0u;
+    g_line_wcet_cnt    = 0u;
+    g_line_prev_us     = 0u;
+    g_line_dt_min_us   = 0u;
+    g_line_dt_max_us   = 0u;
+    g_line_wcet_us     = 0u;
+#endif /* APP_TEST */
 
     return E_OK;
 }
@@ -370,11 +412,17 @@ static void line_cycle(void)
     int32_t             steering = 0;
     uint32_t            status   = APP_LINE_LOST;
     bool                b_cal_ok = false;
+#if (0 != APP_TEST)
+    uint32_t const      start_us = sys_tick_now_us();
+#endif /* APP_TEST */
 
     drv_ir_adc_read(&raw_l, &raw_r);
     line_raw_publish(raw_l, raw_r);
     status_board_read(&snap);
     line_log_bringup(&snap, raw_l, raw_r);
+#if (0 != APP_TEST)
+    line_test_noise_step(raw_l, raw_r);
+#endif /* APP_TEST */
     path = status_board_path(&snap);
 
     if (line_handle_modes(raw_l, raw_r, path, &status))
@@ -429,6 +477,9 @@ static void line_cycle(void)
                                         PRV_LINE_A_LAST_JCT_BITS);
     part.b_is_calibrated = b_cal_ok;
     status_board_write_line(&part);
+#if (0 != APP_TEST)
+    line_test_timing_step(start_us, sys_tick_now_us());
+#endif /* APP_TEST */
 }
 
 /**
@@ -993,5 +1044,187 @@ static void line_raw_publish(uint32_t raw_l, uint32_t raw_r)
     /* casts above: the layout maxima are the positive constant 4095 */
     g_sh_ir_raw = word;
 }
+
+#if (0 != APP_TEST)
+/**
+ * line_test_isqrt
+ * @brief   Integer floor(sqrt(val)) for TEST=1 ADC standard deviation.
+ * @param   val  Variance in ADC codes squared.
+ * @return  Floor square root.
+ * @context line_task (TEST=1)
+ */
+static uint32_t line_test_isqrt(uint32_t val)
+{
+    uint32_t rem  = val;
+    uint32_t root = 0u;
+    uint32_t bit  = 1u << 30u;
+
+    while (bit > rem)
+    {
+        bit >>= 2u;
+    }
+
+    while (0u != bit)
+    {
+        if (rem >= (root + bit))
+        {
+            rem  -= (root + bit);
+            root  = (root >> 1u) + bit;
+        }
+        else
+        {
+            root >>= 1u;
+        }
+        bit >>= 2u;
+    }
+
+    return root;
+}
+
+/**
+ * line_test_noise_step
+ * @brief   Accumulates 1024 stationary IR ADC samples while ultrasonic pings
+ *          and prints S3-I05/I06 min, max, and std-dev (TEST=1 only).
+ * @param   raw_l  Left raw ADC reading (0..4095).
+ * @param   raw_r  Right raw ADC reading (0..4095).
+ * @return  none
+ * @context line_task (TEST=1)
+ */
+static void line_test_noise_step(uint32_t raw_l, uint32_t raw_r)
+{
+    uint32_t const cl_l = (raw_l <= 4095u) ? raw_l : 4095u;
+    uint32_t const cl_r = (raw_r <= 4095u) ? raw_r : 4095u;
+
+    if (mission_mode_is_set(APP_MODE_MOTOR_EN))
+    {
+        g_line_noise.count = 0u;
+    }
+    else
+    {
+        if (0u == g_line_noise.count)
+        {
+            g_line_noise.ref_l   = cl_l;
+            g_line_noise.ref_r   = cl_r;
+            g_line_noise.min_l   = cl_l;
+            g_line_noise.max_l   = cl_l;
+            g_line_noise.min_r   = cl_r;
+            g_line_noise.max_r   = cl_r;
+            g_line_noise.sum_dl  = 0;
+            g_line_noise.sum_dr  = 0;
+            g_line_noise.sum_dl2 = 0u;
+            g_line_noise.sum_dr2 = 0u;
+        }
+        else
+        {
+            if (cl_l < g_line_noise.min_l)
+            {
+                g_line_noise.min_l = cl_l;
+            }
+            if (cl_l > g_line_noise.max_l)
+            {
+                g_line_noise.max_l = cl_l;
+            }
+            if (cl_r < g_line_noise.min_r)
+            {
+                g_line_noise.min_r = cl_r;
+            }
+            if (cl_r > g_line_noise.max_r)
+            {
+                g_line_noise.max_r = cl_r;
+            }
+        }
+
+        {
+            /* casts: 0..4095 codes and differences fit int32_t / uint64_t */
+            int32_t const  dl  = (int32_t) cl_l - (int32_t) g_line_noise.ref_l;
+            int32_t const  dr  = (int32_t) cl_r - (int32_t) g_line_noise.ref_r;
+            uint32_t const adl = (dl < 0) ? (uint32_t) (-dl) : (uint32_t) dl;
+            uint32_t const adr = (dr < 0) ? (uint32_t) (-dr) : (uint32_t) dr;
+
+            g_line_noise.sum_dl  += dl;
+            g_line_noise.sum_dr  += dr;
+            g_line_noise.sum_dl2 += (uint64_t) (adl * adl);
+            g_line_noise.sum_dr2 += (uint64_t) (adr * adr);
+            g_line_noise.count++;
+        }
+
+        if (g_line_noise.count >= LINE_TEST_NOISE_N)
+        {
+            int32_t const  ml   = g_line_noise.sum_dl
+                                  / (int32_t) LINE_TEST_NOISE_N;
+            int32_t const  mr   = g_line_noise.sum_dr
+                                  / (int32_t) LINE_TEST_NOISE_N;
+            uint32_t const aml  = (ml < 0) ? (uint32_t) (-ml) : (uint32_t) ml;
+            uint32_t const amr  = (mr < 0) ? (uint32_t) (-mr) : (uint32_t) mr;
+            /* casts: mean square of 12-bit delta fits 24 bits */
+            uint32_t const ms_l =
+                (uint32_t) (g_line_noise.sum_dl2 >> LINE_TEST_NOISE_SHIFT);
+            uint32_t const ms_r =
+                (uint32_t) (g_line_noise.sum_dr2 >> LINE_TEST_NOISE_SHIFT);
+            uint32_t const vl   = (ms_l > (aml * aml))
+                                  ? (ms_l - (aml * aml)) : 0u;
+            uint32_t const vr   = (ms_r > (amr * amr))
+                                  ? (ms_r - (amr * amr)) : 0u;
+            uint32_t const sd_l = line_test_isqrt(vl);
+            uint32_t const sd_r = line_test_isqrt(vr);
+
+            /* casts: 0..4095 ADC bounds and std-dev fit int32_t */
+            app_log("[S3-I05/I06] 1024-smp L: min %d max %d sd %d\n",
+                    (int32_t) g_line_noise.min_l,
+                    (int32_t) g_line_noise.max_l, (int32_t) sd_l);
+            app_log("[S3-I05/I06] 1024-smp R: min %d max %d sd %d\n",
+                    (int32_t) g_line_noise.min_r,
+                    (int32_t) g_line_noise.max_r, (int32_t) sd_r);
+            g_line_noise.count = 0u;
+        }
+    }
+}
+
+/**
+ * line_test_timing_step
+ * @brief   Tracks line_task period (dt) and WCET over 1000 cycles (S3-I01).
+ * @param   start_us  Timestamp at start of line_cycle().
+ * @param   end_us    Timestamp at end of line_cycle().
+ * @return  none
+ * @context line_task (TEST=1)
+ */
+static void line_test_timing_step(uint32_t start_us, uint32_t end_us)
+{
+    uint32_t const exec_us = end_us - start_us;
+
+    if (0u != g_line_prev_us)
+    {
+        uint32_t const dt_us = start_us - g_line_prev_us;
+
+        if ((0u == g_line_wcet_cnt) || (dt_us < g_line_dt_min_us))
+        {
+            g_line_dt_min_us = dt_us;
+        }
+        if (dt_us > g_line_dt_max_us)
+        {
+            g_line_dt_max_us = dt_us;
+        }
+        if (exec_us > g_line_wcet_us)
+        {
+            g_line_wcet_us = exec_us;
+        }
+        g_line_wcet_cnt++;
+
+        if (g_line_wcet_cnt >= LINE_TEST_WCET_CYCLES)
+        {
+            /* casts: masked us intervals fit int32_t */
+            app_log("[S3-I01] line 1000-cyc: dt %d..%d us, wcet %d us\n",
+                    (int32_t) (g_line_dt_min_us & LINE_LOG_CNT_MASK),
+                    (int32_t) (g_line_dt_max_us & LINE_LOG_CNT_MASK),
+                    (int32_t) (g_line_wcet_us & LINE_LOG_CNT_MASK));
+            g_line_wcet_cnt  = 0u;
+            g_line_dt_min_us = 0u;
+            g_line_dt_max_us = 0u;
+            g_line_wcet_us   = 0u;
+        }
+    }
+    g_line_prev_us = start_us;
+}
+#endif /* APP_TEST */
 
 /*** end of file ***/

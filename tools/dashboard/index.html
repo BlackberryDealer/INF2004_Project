@@ -245,7 +245,9 @@ details.map summary { cursor: pointer; color: var(--text-2); }
 /* ---- scan results ----------------------------------------------------- */
 .scan-results { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .scan-value { font-size: 36px; font-weight: 700; line-height: 1.15; }
+.scan-value small { font-size: 19px; font-weight: 600; color: var(--text-2); margin-left: 6px; }
 .scan-caption { margin-top: 5px; font-size: 13px; color: var(--text-2); }
+.scan-hist { margin-top: 4px; font-size: 12px; color: var(--text-3); }
 @media (max-width: 700px) {
     .scan-results { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 }
@@ -355,6 +357,34 @@ details.map summary { cursor: pointer; color: var(--text-2); }
 <main>
     <div class="banner" id="banner"></div>
 
+    <!-- key course measurements -->
+    <div class="scan-results span-12">
+        <section class="card" aria-labelledby="humpHeightHeading">
+            <h2 id="humpHeightHeading">Hump height</h2>
+            <div role="status">
+                <div class="scan-value num" id="sHumpHeight">–</div>
+                <div class="scan-caption" id="sHumpDetail">Waiting for a hump</div>
+                <div class="scan-hist num" id="sHumpHist"></div>
+            </div>
+        </section>
+        <section class="card" aria-labelledby="obstacleWidthHeading">
+            <h2 id="obstacleWidthHeading">Obstacle width</h2>
+            <div role="status">
+                <div class="scan-value num" id="sObsWidth">–</div>
+                <div class="scan-caption" id="sObsWidthDetail">Waiting for an obstacle scan</div>
+                <div class="scan-hist num" id="sObsHist"></div>
+            </div>
+        </section>
+        <section class="card" aria-labelledby="barcodeDecodeHeading">
+            <h2 id="barcodeDecodeHeading">Barcode result</h2>
+            <div role="status">
+                <div class="scan-value" id="sBarDecoded">–</div>
+                <div class="scan-caption" id="sBarDecodeDetail">Waiting for a barcode read</div>
+                <div class="scan-hist" id="sBarHist"></div>
+            </div>
+        </section>
+    </div>
+
     <!-- state -->
     <section class="card span-7" id="stateCard" aria-live="polite">
         <h2>Car state <span class="spacer"></span><span class="muted num" id="stateAge"></span></h2>
@@ -396,30 +426,6 @@ details.map summary { cursor: pointer; color: var(--text-2); }
             </div>
         </details>
     </section>
-
-    <div class="scan-results span-12">
-        <section class="card" aria-labelledby="obstacleWidthHeading">
-            <h2 id="obstacleWidthHeading">Estimated obstacle width</h2>
-            <div role="status">
-                <div class="scan-value num" id="sObsWidth">–</div>
-                <div class="scan-caption" id="sObsWidthDetail">Waiting for an obstacle scan</div>
-            </div>
-        </section>
-        <section class="card" aria-labelledby="barcodeCountHeading">
-            <h2 id="barcodeCountHeading">Latest barcode element count</h2>
-            <div role="status">
-                <div class="scan-value num" id="sBarCount">–</div>
-                <div class="scan-caption" id="sBarResult">Waiting for a reported capture</div>
-            </div>
-        </section>
-        <section class="card" aria-labelledby="barcodeDecodeHeading">
-            <h2 id="barcodeDecodeHeading">Last decoded character</h2>
-            <div role="status">
-                <div class="scan-value" id="sBarDecoded">–</div>
-                <div class="scan-caption" id="sBarDecodeDetail">Waiting for a valid decode</div>
-            </div>
-        </section>
-    </div>
 
     <!-- live tiles -->
     <section class="card span-8">

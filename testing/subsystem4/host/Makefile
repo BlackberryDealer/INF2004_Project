@@ -15,8 +15,8 @@ CFLAGS  := -std=c99 -Wall -Wextra -Werror -pedantic -Wconversion \
            -Wsign-conversion -I../../host -I$(APP_DIR) -I$(S4_DIR) \
            -I$(S2_DIR)
 
-.PHONY: all terrain fifo
-all: terrain fifo
+.PHONY: all terrain fifo imu_diag
+all: terrain fifo imu_diag
 
 test_terrain_host.out: test_terrain_host.c $(S4_DIR)/terrain.c \
                        $(S4_DIR)/terrain.h $(S4_DIR)/cfg_imu.h \
@@ -36,3 +36,14 @@ test_drv_lsm303_host.out: test_drv_lsm303_host.c $(S4_DIR)/drv_lsm303.h \
 
 fifo: test_drv_lsm303_host.out
 	./test_drv_lsm303_host.out
+
+test_imu_diag_host.out: test_imu_diag_host.c $(S4_DIR)/imu.c \
+                        $(S4_DIR)/test_imu.c $(S4_DIR)/terrain.c \
+                        $(S2_DIR)/odometry.c $(APP_DIR)/app_bits.c \
+                        ../../host/host_test.h
+	$(CC) $(CFLAGS) -DAPP_TEST=1 -I../../subsystem3/host/mock -o $@ \
+	    test_imu_diag_host.c $(S4_DIR)/test_imu.c $(S4_DIR)/terrain.c \
+	    $(S2_DIR)/odometry.c $(APP_DIR)/app_bits.c
+
+imu_diag: test_imu_diag_host.out
+	./test_imu_diag_host.out

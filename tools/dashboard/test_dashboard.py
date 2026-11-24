@@ -36,6 +36,7 @@ import gen_tables    # noqa: E402
 import telem_decode  # noqa: E402
 
 TEST_JS = os.path.join(DASH_DIR, "test_decode.js")
+TEST_UI_JS = os.path.join(DASH_DIR, "test_ui.js")
 SEED = 2004
 RANDOM_PER_TYPE = 250
 
@@ -101,6 +102,13 @@ def main(argv):
         sys.stderr.write(res.stderr)
         if res.returncode != 0:
             fails += 1
+
+    res_ui = subprocess.run([node, TEST_UI_JS], capture_output=True,
+                            text=True)
+    sys.stdout.write(res_ui.stdout)
+    sys.stderr.write(res_ui.stderr)
+    if res_ui.returncode != 0:
+        fails += 1
 
     cases = fuzz_cases()
     stdin = "".join("%s %s\n" % (t, p.hex()) for t, p in cases)

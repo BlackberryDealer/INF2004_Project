@@ -13,6 +13,7 @@ typedef int32_t  ID;
 typedef int32_t  ER;
 typedef int32_t  INT;
 typedef int32_t  TMO;
+typedef int32_t  RELTIM;
 typedef int32_t  PRI;
 typedef uint32_t UINT;
 typedef uint32_t UW;
@@ -35,6 +36,7 @@ extern ID tk_cre_sem(T_CSEM const * pk_csem);
 extern ER tk_sig_sem(ID semid, INT cnt);
 extern ER tk_wai_sem(ID semid, INT cnt, TMO tmout);
 extern ER tk_slp_tsk(TMO tmout);
+extern ER tk_dly_tsk(RELTIM dlytim);
 extern ID tk_get_tid(void);
 extern UW in_w(UW port);
 

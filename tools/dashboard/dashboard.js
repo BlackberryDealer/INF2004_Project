@@ -118,6 +118,18 @@
         maxGap: 0,
         msgs: 0,
         rejects: 0,
+        inRun: false,
+        humpPeak: 0,
+        lastHumpMm: null,
+        humpRun: [],
+        obsRun: [],
+        avoidStartedAt: null,
+        lastFr9Ms: null,
+        runSubName: null,
+        hasBarDecode: false,
+        barRun: [],
+        armedLabel: null,
+        jctRun: [],
         pendingCmd: null,
         lastSend: {}
     };
@@ -396,9 +408,75 @@
         download(lines.join("\r\n") + "\r\n", "text/csv", "c28_sensors_", ".csv");
     }
 
+    function renderRunEvidence() {
+        $("sHumpHist").textContent = S.humpRun.length
+            ? "Run humps (" + S.humpRun.length + "): " + S.humpRun.map(function (mm) { return mm + " mm"; }).join(", ")
+            : "";
+        $("sObsHist").textContent = S.obsRun.length
+            ? "Run bypass (" + S.obsRun.length + "): " + S.obsRun.map(function (o) {
+                var w = o.widthMm !== null ? (o.widthMm / 10).toFixed(1) + " cm " : "";
+                var tail = o.fr9Ms !== null ? "FR9 " + (o.fr9Ms / 1000).toFixed(2) + " s"
+                    : (o.rejoined ? "rejoined" + (o.bypassS !== null ? " (" + o.bypassS.toFixed(1) + " s)" : "") : "bypassing…");
+                return w + (o.side || "") + (o.side ? " · " : "") + tail;
+            }).join(" | ")
+            : "";
+        var barParts = [];
+        if (S.barRun.length) {
+            barParts.push("Run reads (" + S.barRun.length + "): " + S.barRun.join(", "));
+        }
+        if (S.jctRun.length) {
+            barParts.push(S.jctRun.join(", "));
+        }
+        $("sBarHist").textContent = barParts.join(" · ");
+    }
+
+    function noteRunSubstate(runName, t) {
+        if (runName === S.runSubName) { return; }
+        var prev = S.runSubName;
+        S.runSubName = runName;
+        if (runName === "AVOID") {
+            S.avoidStartedAt = t;
+            if (!S.obsRun.length || S.obsRun[S.obsRun.length - 1].rejoined) {
+                S.obsRun.push({ widthMm: null, side: "", bypassS: null, fr9Ms: null, rejoined: false });
+            }
+            renderRunEvidence();
+        } else if (prev === "AVOID" && (runName === "FOLLOW" || runName === "ARMED")) {
+            var cur = S.obsRun.length ? S.obsRun[S.obsRun.length - 1] : null;
+            if (cur && !cur.rejoined) {
+                cur.rejoined = true;
+                if (S.avoidStartedAt !== null) {
+                    cur.bypassS = Math.max(0, (t - S.avoidStartedAt) / 1000);
+                }
+            }
+            S.avoidStartedAt = null;
+            renderRunEvidence();
+        } else if (runName === "EXECUTE_TURN") {
+            S.jctRun.push(S.armedLabel ? "Cross: " + S.armedLabel : "Cross turn");
+            S.armedLabel = null;
+            renderRunEvidence();
+        }
+    }
+
+    function showHump(mm, peakMm, source, t) {
+        S.lastHumpMm = mm;
+        if (peakMm > S.humpPeak) { S.humpPeak = peakMm; }
+        if (source === "Last hump") {
+            S.humpRun.push(mm);
+        }
+        $("sHumpHeight").innerHTML = mm + "<small>mm</small>";
+        $("sHumpDetail").textContent = source +
+            (S.humpPeak > 0 && S.humpPeak !== mm ? " · run peak " + S.humpPeak + " mm" : "") +
+            " · " + clock(t).slice(0, 8);
+        renderRunEvidence();
+    }
+
     function showBarcodeCapture(count, result, t) {
-        $("sBarCount").textContent = count > 0 ? count + " / " + BAR_FRAME_ELEMENTS : "–";
-        $("sBarResult").textContent = result + " · " + clock(t).slice(0, 8);
+        var elems = count > 0 ? count + " / " + BAR_FRAME_ELEMENTS + " elements · " : "";
+        if (!S.hasBarDecode) {
+            $("sBarDecoded").textContent = "–";
+        }
+        $("sBarDecodeDetail").textContent = (S.hasBarDecode ? "Last attempt: " : "") +
+            elems + result + " · " + clock(t).slice(0, 8);
     }
 
     function onConsole(text, t) {
@@ -410,10 +488,20 @@
         var dropped = /^BAR capture dropped: (edge missed after )?(\d+) elements(?: \(a barcode has \d+\))?$/.exec(text);
         var invalid = /^BARCODE reread invalid \((\d+) elements\)$/.exec(text) ||
                       /^BARCODE read but not valid Code 39 \((\d+)\): ignored$/.exec(text);
+        var fr9 = /^FR9 (\d+) ms$/.exec(text);
         if (dropped) {
             showBarcodeCapture(Number(dropped[2]), dropped[1] ? "Edge missed" : "Incomplete capture", t);
         } else if (invalid) {
             showBarcodeCapture(Number(invalid[1]), "Rejected capture", t);
+        } else if (fr9) {
+            S.lastFr9Ms = Number(fr9[1]);
+            if (!S.obsRun.length) {
+                S.obsRun.push({ widthMm: null, side: "", bypassS: null, fr9Ms: S.lastFr9Ms, rejoined: true });
+            } else {
+                S.obsRun[S.obsRun.length - 1].fr9Ms = S.lastFr9Ms;
+                S.obsRun[S.obsRun.length - 1].rejoined = true;
+            }
+            renderRunEvidence();
         }
     }
 
@@ -467,6 +555,21 @@
         setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     }
 
+    function beginRunIfNeeded(t) {
+        if (S.inRun) { return; }
+        S.inRun = true;
+        S.humpRun = [];
+        S.obsRun = [];
+        S.avoidStartedAt = null;
+        S.lastFr9Ms = null;
+        S.runSubName = null;
+        S.barRun = [];
+        S.armedLabel = null;
+        S.jctRun = [];
+        renderRunEvidence();
+        void t;
+    }
+
     function onState(v, t) {
         var name = SYS[v.SYS] || "?";
         if (S.stateAt) {
@@ -478,10 +581,23 @@
         while (S.stateTimes.length && S.stateTimes[0] < t - 5000) { S.stateTimes.shift(); }
         if (name !== S.sysName) {
             S.prevSys = S.sysName;
-            if (name === "RUN") { S.runStartedAt = t; }
+            if (name === "RUN") {
+                S.runStartedAt = t;
+                S.humpPeak = v.HUMP_PEAK || 0;
+                beginRunIfNeeded(t);
+            } else {
+                S.inRun = false;
+                S.runSubName = null;
+            }
             if (S.sysName !== null) {
                 addLog({ kind: "state", topic: TOPIC.STATE, type: "STATE", text: "State " + S.sysName + " → " + name, t: t });
             }
+        }
+        if (name === "RUN") {
+            noteRunSubstate(D.enumName("RUN", v.RUN), t);
+        }
+        if (v.HUMP_PEAK > 0 && (S.lastHumpMm === null || v.HUMP_PEAK > S.humpPeak)) {
+            showHump(v.HUMP_PEAK, v.HUMP_PEAK, "Run peak", t);
         }
         S.sysName = name;
         S.state = v;
@@ -536,12 +652,33 @@
         var kind = (evt.name === "SENSOR_FAULT" || evt.name === "STALL") ? "fault" :
                    (evt.name === "STATE_CHANGE" ? "state" : "event");
         addLog({ kind: kind, topic: topic, type: evt.name, text: eventFriendly(evt), exact: D.lineFor(topic, bytes), bytes: bytes, t: t });
-        if (evt.name === "BARCODE" || evt.name === "UNMAPPED") {
+        if (evt.name === "STATE_CHANGE") {
+            var stName = SYS[evt.values.SYS] || "?";
+            if (stName === "RUN") {
+                beginRunIfNeeded(t);
+                noteRunSubstate(D.enumName("RUN", evt.values.RUN), t);
+            } else {
+                S.inRun = false;
+                S.runSubName = null;
+            }
+        } else if (evt.name === "BARCODE" || evt.name === "UNMAPPED") {
             var letter = c39(evt.values.CHAR);
-            var action = evt.name === "BARCODE" ? "Mapped to " + barName(evt.values.CMD) : "Unmapped";
-            showBarcodeCapture(BAR_FRAME_ELEMENTS, "Valid capture", t);
-            $("sBarDecoded").textContent = letter === " " ? "Space" : letter;
-            $("sBarDecodeDetail").textContent = action + " · " + clock(t).slice(0, 8);
+            var disp = letter === " " ? "Space" : letter;
+            var action = evt.name === "BARCODE" ? "→ " + barName(evt.values.CMD) : "unmapped";
+            var compact = evt.name === "BARCODE" ? disp + "→" + barName(evt.values.CMD) : disp + " (unmapped)";
+            S.hasBarDecode = true;
+            S.barRun.push(compact);
+            if (evt.name === "BARCODE") {
+                S.armedLabel = disp + "→" + barName(evt.values.CMD);
+            }
+            $("sBarDecoded").innerHTML = esc(disp) + "<small>" + esc(action) + "</small>";
+            $("sBarDecodeDetail").textContent = BAR_FRAME_ELEMENTS + " / " + BAR_FRAME_ELEMENTS +
+                " elements · " + clock(t).slice(0, 8);
+            renderRunEvidence();
+        } else if (evt.name === "INVALID") {
+            showBarcodeCapture(evt.values.N_ELEM || 0, "Invalid capture", t);
+        } else if (evt.name === "HUMP") {
+            showHump(evt.values.PEAK_MM, Math.max(S.humpPeak, evt.values.PEAK_MM), "Last hump", t);
         }
         if (evt.name === "MAP" && S.pendingCmd && S.pendingCmd.name === "map") {
             resolvePending(true, "Car confirmed: " + eventFriendly(evt) + ".");
@@ -563,6 +700,9 @@
 
     function onSummary(v, t, bytes, topic) {
         lastSummary = { v: v, t: t };
+        if (v.HUMP_PEAK > 0 && (S.lastHumpMm === null || v.HUMP_PEAK > S.humpPeak)) {
+            showHump(v.HUMP_PEAK, v.HUMP_PEAK, "Run peak", t);
+        }
         addLog({ kind: "state", topic: topic, type: "SUMMARY", text: "Run ended (" + D.enumName("END", v.END_REASON) + "): " +
                  fmtDist(v.ODO_MM) + " in " + v.RUN_S + " s", exact: D.lineFor(topic, bytes), bytes: bytes, t: t });
         renderSummary();
@@ -570,6 +710,9 @@
 
     function onSnapshot(v, t, bytes, topic) {
         lastSnap = { v: v, t: t };
+        if (v.HUMP_PEAK > 0 && (S.lastHumpMm === null || v.HUMP_PEAK > S.humpPeak)) {
+            showHump(v.HUMP_PEAK, v.HUMP_PEAK, "Run peak", t);
+        }
         addLog({ kind: "event", topic: topic, type: "SNAPSHOT", text: D.snapshotText(bytes).replace(/\n/g, " · ").replace(/\s{2,}/g, " "),
                  bytes: bytes, t: t });
         if (S.pendingCmd && S.pendingCmd.name === "summary") {
@@ -959,9 +1102,19 @@
         var hasWidth = width !== null;
         var widthCm = hasWidth ? (width / 10).toFixed(1) + " cm" : "–";
         var widthMm = hasWidth ? width + " mm" : "No estimate";
-        $("sObsWidth").textContent = widthCm;
-        $("sObsWidthDetail").textContent = (hasWidth ? "Last scan" : "No width estimate") +
-            " · " + clock(t).slice(0, 8);
+        $("sObsWidth").innerHTML = hasWidth
+            ? (width / 10).toFixed(1) + "<small>cm (" + width + " mm)</small>"
+            : "–";
+        $("sObsWidthDetail").textContent = (hasWidth
+            ? "Nearest " + txt(nearest) + " · pass " + side
+            : "No width estimate") + " · " + clock(t).slice(0, 8);
+        if (!S.obsRun.length || S.obsRun[S.obsRun.length - 1].rejoined) {
+            S.obsRun.push({ widthMm: width, side: side, bypassS: null, fr9Ms: null, rejoined: false });
+        } else {
+            S.obsRun[S.obsRun.length - 1].widthMm = width;
+            S.obsRun[S.obsRun.length - 1].side = side;
+        }
+        renderRunEvidence();
         /* Top view, car at the bottom centre, 1020 mm -> 150 px. The scan
            runs 30 deg (robot's right) to 150 deg (left); NEAREST is the
            forward distance, so the obstacle sits at y = NEAREST on its
