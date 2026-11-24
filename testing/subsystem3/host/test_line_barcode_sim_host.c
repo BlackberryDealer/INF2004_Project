@@ -2094,5 +2094,113 @@ int main(void)
                && (APP_EVT_LINE_LOST == g_sim_evts[0].type),
                "black exit across the path wrap: LINE_LOST after 60 mm");
 
+    /* ---- S3-U55: continuous single-run full-scale + half-scale barcodes - */
+    /* Proves that one continuous track run (without RUN_START reset)
+       cleanly decodes a full-scale barcode, classifies cross-junction #1,
+       exits the 150 mm cooldown, decodes a half-scale barcode, and
+       classifies cross-junction #2 so S3-I02 + S3-I04 fit in 1 clip.     */
+    {
+        uint32_t t_end    = 0u;
+        uint32_t exp_a    = mission_evt_barcode_value(APP_BAR_CMD_LEFT, 10u);
+        uint32_t exp_b    = mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 11u);
+        uint32_t dur_half[BAR_ELEMENTS] = {0u};
+        uint32_t chars_b[3] = { CODE39_STAR, 11u, CODE39_STAR };
+        uint32_t idx      = 0u;
+
+        sim_reset();
+        sim_calibrate_line();
+        g_sim_mode_mask = APP_MODE_MOTOR_EN;
+        (void) barcode_map_set(10u, APP_BAR_CMD_LEFT);   /* 'A' -> LEFT  */
+        (void) barcode_map_set(11u, APP_BAR_CMD_RIGHT);  /* 'B' -> RIGHT */
+        g_sim_evt_cnt = 0u;
+
+        /* 1. Full-scale '*A*' at cruise (narrow 12 ms, wide 30 ms). */
+        t_end = sim_feed_barcode_edges(10u, 50000u);
+        barcode_cycle();
+        HOST_CHECK("S3-U55", (g_sim_evt_cnt >= 1u)
+                   && (APP_EVT_BARCODE == g_sim_evts[g_sim_evt_cnt - 1u].type)
+                   && (exp_a == g_sim_evts[g_sim_evt_cnt - 1u].value),
+                   "continuous run step 1: full-scale *A* decodes -> LEFT");
+
+        /* 2. Cross-junction #1 (both sensors black 15 mm, then white 35 mm)
+              while advancing > 150 mm past barcode cooldown. */
+        g_sim_evt_cnt = 0u;
+        g_sim_raw_l   = 3500u;
+        g_sim_raw_r   = 3500u;
+        for (uint32_t i = 0u; i < 6u; i++)
+        {
+            g_sim_path += odometry_mm_to_counts(3u);
+            line_cycle();
+        }
+        g_sim_raw_l = 500u;
+        g_sim_raw_r = 500u;
+        for (uint32_t i = 0u; i < 60u; i++)
+        {
+            g_sim_path += odometry_mm_to_counts(3u);
+            line_cycle();
+            barcode_cycle();
+        }
+        HOST_CHECK("S3-U55", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_JUNCTION == g_sim_evts[0].type)
+                   && (APP_JCT_CROSS == g_sim_evts[0].value),
+                   "continuous run step 2: cross-junction #1 classified");
+
+        /* 3. Half-scale '*B*' (narrow 6 ms, wide 15 ms at ~233 mm/s) in the
+              same run after cooldown cleared. */
+        g_sim_evt_cnt = 0u;
+        for (uint32_t c_idx = 0u; c_idx < 3u; c_idx++)
+        {
+            uint16_t const pat = g_sim_patterns[chars_b[c_idx]];
+
+            for (uint32_t bit = 0u; bit < 9u; bit++)
+            {
+                bool const b_w = (0u != (pat & (uint16_t) (1u << (8u - bit))));
+
+                dur_half[idx] = b_w ? 15000u : 6000u;
+                idx++;
+            }
+            if (c_idx < 2u)
+            {
+                dur_half[idx] = 6000u;
+                idx++;
+            }
+        }
+        t_end += 500000u;
+        gb_sim_bar_pin = true;
+        barcode_edge_isr(DRV_GPIO_IRQ_BOTH, t_end);
+        for (uint32_t elem = 0u; elem < BAR_ELEMENTS; elem++)
+        {
+            t_end += dur_half[elem];
+            gb_sim_bar_pin = !gb_sim_bar_pin;
+            barcode_edge_isr(DRV_GPIO_IRQ_BOTH, t_end);
+        }
+        barcode_cycle();
+        HOST_CHECK("S3-U55", (g_sim_evt_cnt >= 1u)
+                   && (APP_EVT_BARCODE == g_sim_evts[g_sim_evt_cnt - 1u].type)
+                   && (exp_b == g_sim_evts[g_sim_evt_cnt - 1u].value),
+                   "continuous run step 3: half-scale *B* decodes -> RIGHT");
+
+        /* 4. Cross-junction #2 in the same run. */
+        g_sim_evt_cnt = 0u;
+        g_sim_raw_l   = 3500u;
+        g_sim_raw_r   = 3500u;
+        for (uint32_t i = 0u; i < 6u; i++)
+        {
+            g_sim_path += odometry_mm_to_counts(3u);
+            line_cycle();
+        }
+        g_sim_raw_l = 500u;
+        g_sim_raw_r = 500u;
+        for (uint32_t i = 0u; i < 15u; i++)
+        {
+            g_sim_path += odometry_mm_to_counts(3u);
+            line_cycle();
+        }
+        HOST_CHECK("S3-U55", (1u == g_sim_evt_cnt)
+                   && (APP_EVT_JUNCTION == g_sim_evts[0].type)
+                   && (APP_JCT_CROSS == g_sim_evts[0].value),
+                   "continuous run step 4: cross-junction #2 classified");
+    }
+
     return (0 == HOST_SUMMARY("line_barcode_sim")) ? 0 : 1;
 }

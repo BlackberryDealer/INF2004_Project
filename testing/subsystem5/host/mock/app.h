@@ -42,4 +42,7 @@ void app_log(char const *f, int32_t a, int32_t b, int32_t c);
 /* Kernel register access used by obstacle.c (SIO GPIO_IN read). */
 #define GPIO_IN (0xD0000004u)
 uint32_t in_w(uint32_t port);
+void out_w(uint32_t port, uint32_t val);
+void set_w(uint32_t port, uint32_t val);
+void clr_w(uint32_t port, uint32_t val);
 #endif

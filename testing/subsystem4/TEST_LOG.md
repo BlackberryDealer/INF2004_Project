@@ -21,6 +21,7 @@ Define a test here before running it. Test IDs never change (spec B4).
 | S4-U12 | `a_fwd` on a logged speed trace | B4.2.2 step 5 | auto (host) | speed history replay | Matches the hand calculation |
 | S4-U13 | Run start: peak reset and odometry rebase | R03 / B4.2.2 step 4 | auto (target) | `test_imu.c`, `APP_MODE_RUN_START` 30 ms | Run peak returns to 0; `ds = 0`, no false climb |
 | S4-U14 | FIFO overrun and backlog handling | R14 / B4.1.1 | auto (host) | `drv_lsm303_fifo_plan` on FIFO_SRC images | Overrun: no samples used, counter +1; backlog of 6 → 4 now and 2 next cycle |
+| S4-U15 | Dual LSM303D SA0 I2C address selection (`0x1D` high / `0x1E` low) | SQ-B4-2, B4.1.1 | auto (host) | `test_drv_lsm303_host.c` | Keeps answering address, switches cleanly between `0x1D` and `0x1E` on valid `0x49` WHO_AM_I, rejects wrong IDs |
 | S4-U10 | Packed pitch pack/unpack (Phase 4) | SB_IMU0_PITCH | auto (host) | `app_bits_encode`/`decode` at −45, 0, +45 deg, clamp beyond | Exact stored values; clamp sets the flag |
 | S4-U11 | Hump 127/128 clamp sets RANGE_CLAMP (Phase 4) | SB_IMU0_HUMP_* | auto (target) | `test_imu.c` with the packed status board | 127 passes; 128 sets `APP_FAULT_RANGE_CLAMP` |
 | S4-I01 | Flat cruise, no false hump | NFR7 | track | 3 runs at cruise | No hump event |
@@ -39,6 +40,8 @@ Define a test here before running it. Test IDs never change (spec B4).
 | S4-U18 | One-wheel hump `terrain_roll_hump_step`: the demo hump lifts only the right wheel, so the car tilts sideways; h = track (125 mm) x peak smoothed |ay| / 1000 mg. Starts after 3 cycles above 45 mg while straight and moving, ends after 3 cycles below 20 mg; > 2 s on it latches (no report) until level (on-car 18 Nov 13:28 / 13:34: HUMP_PEAK 0, ay -84..-132 mg on the strip) | FR (hump height) | auto (host) | `test_terrain_host.c`: vibration, 8 mm hump, other sign, turning, 3 s held tilt, stationary tilt | No report on vibration, a curve, a held tilt or handling; 8 mm hump reports 7..9 mm once; +120 mg reports 15 mm |
 | S4-I12 | Lift-stop on the car (Change Requirement 2) | FR13 (lift-stop), NFR10a | car | RUN on the track; lift the car straight up, then tilted, then turn it over on a soft surface; 10 lifts in all; console + dashboard; optional GP14 probe on the motor pins | Every lift: `LIFT STOP` log, motors stop within 100 ms of the lift (50 ms confirm + ≤ 10 ms imu cycle + ≤ 11 ms motion), state FINISHED with end reason STOP; RESET → READY |
 | S4-I13 | No false lift-stop on humps and ramps (Change Requirement 2) | FR4, FR13 | track | 3 full runs over every hump and ramp at cruise, plus 3 obstacle stops | No `LIFT STOP` line; if one trips, raise `IMU_LIFT_DG_MG` or `IMU_LIFT_CONFIRM_CYCLES` (≤ 7) and repeat S4-I12 |
+| S4-U19 | Ramp-latch recovery & `TERRAIN_HUMP_MIN_MM` (5 mm) boundary | FR4, FR5, NFR7 | auto (host) | `test_terrain_host.c`: 500 mm ramp climb + level-off followed by 12 mm hump in same run; 4 mm vs 6 mm bumps | Ramp reports 0 humps, latch clears on flat, subsequent 12 mm hump detected once; 4 mm bump rejected |
+| S4-U20 | `imu.c` task simulation & `TEST=1` diagnostics (`S4-I04/I05/I09/I10/I11`) | FR13, A7, B4.2.2 | auto (host) | `test_imu_diag_host.c` (`-DAPP_TEST=1`): target `test_imu_run()`, 1000-cycle WCET & mag logs, >10% turn-rate encoder fallback, 3-error `TERRAIN_FAULT` + IR-lift fallback + 5-read recovery | All 13 checks (`test_imu` 6/6 + `imu_diag` 7/7) pass |
 
 *Method:* **auto** = `TEST_CHECK` / `HOST_CHECK` in code, result printed;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -69,6 +72,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-18 | S4-U18 | `tribunal1-car-test` | Hanz | PASS | Car run, thin strip under the right wheel | v7 reported HUMP 15 mm, ruler 10 mm, so TERRAIN_ROLL_GAIN_PCT set to 67. Host expectations scale with the gain. Re-check on the car with v8. |
 | 2026-11-18 | S4-U18 | `9dcc102` (v8, gain 67 %) | Hanz | PASS | Car run, thin strip under the right wheel | 13:50: `HUMP (one wheel): 10 mm`, SUMMARY HUMP_PEAK 10 = ruler 10 mm. Calibrated. |
 | 2026-11-18 | S4 packing check | `9dcc102` + B4 late packing | Hanz | PASS | Differential host run of `imu_task` | Late `imu.c` statics packed (`PRV_IMU_G`..`PRV_IMU_M`). Old and new `imu.c` built against the same mocks and driven with the same random sensor / encoder / IR / mode streams (23 runs, 20 000-30 000 cycles, with calibration, lifts, one-wheel humps, I2C failures, full-scale samples): board writes, events, `SAFETY_LIFT`, faults and console lines identical. Car check still to do. |
+| 2026-11-24 | S4-U01..U20 | `c96481d` | Lucas | PASS | [`2026-11-24_host_s4_diag.txt`](logs/2026-11-24_host_s4_diag.txt) | `terrain` 48/48 (new `S4-U19` ramp-latch recovery & 5 mm boundary), `drv_lsm303` 14/14 (`S4-U15`), `imu_diag` (`-DAPP_TEST=1`) 7/7 + `test_imu` 6/6 (`S4-U20`, 75/75 checks pass). |
 
 ## SPEC-QUESTION
 

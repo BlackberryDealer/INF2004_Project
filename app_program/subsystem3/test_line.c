@@ -10,8 +10,11 @@
 #include "../app.h"
 
 #if (0 != APP_TEST)
+#include "../app_bits.h"
+#include "../app_layout.h"
 #include "../test_report.h"
 #include "cfg_line.h"
+#include "line.h"
 #include "line_track.h"
 
 /* ---- private constants and types ------------------------------------ */
@@ -21,13 +24,17 @@
 #define TEST_CAL_MID       (2000u)
 #define TEST_MIN_COUNTS    (29u)
 #define TEST_CONF_COUNTS   (86u)
+#define TEST_RAW_SAMPLES   (16u)    /* 160 ms during stationary CAL_IMU */
+#define TEST_RAW_DELAY_MS  (10)
 
 /* ---- private data ---------------------------------------------------- */
 
 /* ---- private function prototypes ------------------------------------- */
 
-static bool test_line_early_branch(void);
-static bool test_line_late_branch(void);
+static bool     test_line_early_branch(void);
+static bool     test_line_late_branch(void);
+static uint32_t test_line_isqrt(uint32_t val);
+static bool     test_line_raw_stats_smoke(void);
 
 #endif /* APP_TEST */
 
@@ -71,6 +78,8 @@ void test_line_run(void)
                "early barcode branch + right sat classifies T");
     TEST_CHECK("S3-U02", test_line_late_branch(),
                "late barcode branch + right sat + line present -> CROSS");
+    TEST_CHECK("S3-U56", test_line_raw_stats_smoke(),
+               "SH_IR_RAW stationary ADC sampling & std-dev under US ping");
 
     TEST_SUMMARY("line");
 #endif
@@ -142,6 +151,119 @@ static bool test_line_late_branch(void)
     cls            = line_track_jct_step(&jct, &in);
 
     return (APP_JCT_CROSS == cls);
+}
+
+/**
+ * test_line_isqrt
+ * @brief   Integer floor(sqrt(val)) for S3-U56 / S3-I06 std-dev check.
+ * @param   val  Input variance in ADC codes squared.
+ * @return  Floor square root.
+ * @context usermain (APP_PRI_TEST)
+ */
+static uint32_t test_line_isqrt(uint32_t val)
+{
+    uint32_t rem  = val;
+    uint32_t root = 0u;
+    uint32_t bit  = 1u << 30u;
+
+    while (bit > rem)
+    {
+        bit >>= 2u;
+    }
+
+    while (0u != bit)
+    {
+        if (rem >= (root + bit))
+        {
+            rem  -= (root + bit);
+            root  = (root >> 1u) + bit;
+        }
+        else
+        {
+            root >>= 1u;
+        }
+        bit >>= 2u;
+    }
+
+    return root;
+}
+
+/**
+ * test_line_raw_stats_smoke
+ * @brief   Samples SH_IR_RAW across 16 line_task cycles while obstacle_task
+ *          pings and logs boot min/max/std-dev for S3-I05 / S3-I06.
+ * @return  true if isqrt math and all 12-bit ADC samples are valid.
+ * @context usermain (APP_PRI_TEST)
+ */
+static bool test_line_raw_stats_smoke(void)
+{
+    bool     b_ok  = (0u == test_line_isqrt(0u))
+                     && (10u == test_line_isqrt(100u));
+    uint32_t idx   = 0u;
+    uint32_t min_l = 4095u;
+    uint32_t max_l = 0u;
+    uint32_t min_r = 4095u;
+    uint32_t max_r = 0u;
+    uint32_t sum_l = 0u;
+    uint32_t sum_r = 0u;
+    uint32_t raw_l[TEST_RAW_SAMPLES] = {0u};
+    uint32_t raw_r[TEST_RAW_SAMPLES] = {0u};
+
+    for (idx = 0u; idx < TEST_RAW_SAMPLES; idx++)
+    {
+        uint32_t const word = line_raw_word();
+        uint32_t const cl   = app_bits_get(word, SH_IR_RAW_L_POS,
+                                           SH_IR_RAW_L_BITS);
+        uint32_t const cr   = app_bits_get(word, SH_IR_RAW_R_POS,
+                                           SH_IR_RAW_R_BITS);
+
+        raw_l[idx] = cl;
+        raw_r[idx] = cr;
+        sum_l     += cl;
+        sum_r     += cr;
+        min_l      = (cl < min_l) ? cl : min_l;
+        max_l      = (cl > max_l) ? cl : max_l;
+        min_r      = (cr < min_r) ? cr : min_r;
+        max_r      = (cr > max_r) ? cr : max_r;
+        if ((cl > (uint32_t) SH_IR_RAW_L_MAX)
+            || (cr > (uint32_t) SH_IR_RAW_R_MAX))
+        {
+            b_ok = false;
+        }
+        (void) tk_dly_tsk(TEST_RAW_DELAY_MS);
+    }
+
+    {
+        uint32_t const mean_l = sum_l / TEST_RAW_SAMPLES;
+        uint32_t const mean_r = sum_r / TEST_RAW_SAMPLES;
+        uint32_t       var_l  = 0u;
+        uint32_t       var_r  = 0u;
+
+        for (idx = 0u; idx < TEST_RAW_SAMPLES; idx++)
+        {
+            uint32_t const dl = (raw_l[idx] > mean_l)
+                                ? (raw_l[idx] - mean_l)
+                                : (mean_l - raw_l[idx]);
+            uint32_t const dr = (raw_r[idx] > mean_r)
+                                ? (raw_r[idx] - mean_r)
+                                : (mean_r - raw_r[idx]);
+
+            var_l += (dl * dl);
+            var_r += (dr * dr);
+        }
+        var_l /= TEST_RAW_SAMPLES;
+        var_r /= TEST_RAW_SAMPLES;
+
+        /* casts: 12-bit ADC stats fit int32_t */
+        app_log("[S3-I05/I06 boot] 16-smp L %d..%d sd %d\n",
+                (int32_t) min_l, (int32_t) max_l,
+                (int32_t) test_line_isqrt(var_l));
+        app_log("[S3-I05/I06 boot] 16-smp R %d..%d sd %d\n",
+                (int32_t) min_r, (int32_t) max_r,
+                (int32_t) test_line_isqrt(var_r));
+    }
+
+    return b_ok;
 }
 #endif /* APP_TEST */
 

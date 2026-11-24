@@ -531,5 +531,67 @@ int main(void)
         HOST_CHECK("S4-U18", 0u == n_rep, "stationary tilt (handling): no hump");
     }
 
+    /* S4-U19: ramp-latch recovery (a rejected > 400 mm ramp levels off, then
+       a subsequent 10 mm hump is cleanly detected in the same track run) and
+       TERRAIN_HUMP_MIN_MM (5 mm) boundary checks. */
+    {
+        terrain_t        ter;
+        terrain_input_t  in  = {0, HOST_AZ_FLAT_MG, 0, 8u};
+        terrain_output_t out = {0, 0u, 0u, 0u};
+        uint32_t         idx = 0u;
+        uint32_t         ramp_humps = 0u;
+        uint32_t         after_mm   = 0u;
+        uint32_t         after_cnt  = 0u;
+        host_replay_result_t r_4mm  = host_replay_hump(4u, 70u, 8u, 2u);
+        host_replay_result_t r_6mm  = host_replay_hump(6u, 70u, 8u, 2u);
+
+        terrain_reset(&ter);
+        /* 1. Long 500 mm climb (~200 cycles at 2.59 mm/cycle, ax = 90 mg):
+              exceeds 400 mm ramp limit -> 0 humps reported. */
+        in.ax_mg = 90;
+        for (idx = 0u; idx < 220u; idx++)
+        {
+            terrain_step(&ter, &in, &out);
+            ramp_humps += (out.hump_done_mm > 0u) ? 1u : 0u;
+        }
+        /* 2. Return to flat for 30 cycles -> ramp latch clears. */
+        in.ax_mg = 0;
+        for (idx = 0u; idx < 30u; idx++)
+        {
+            terrain_step(&ter, &in, &out);
+            ramp_humps += (out.hump_done_mm > 0u) ? 1u : 0u;
+        }
+        HOST_CHECK("S4-U19", 0u == ramp_humps,
+                   "500 mm ramp climb + level-off reports 0 humps");
+
+        /* 3. Immediately cross a 12 mm hump (half-len 120 mm, ~46 cycles at
+              ax = 100 mg, then descend -100 mg, then flat) in the same run. */
+        in.ax_mg = 100;
+        for (idx = 0u; idx < 46u; idx++)
+        {
+            terrain_step(&ter, &in, &out);
+            if (out.hump_done_mm > 0u) { after_mm = out.hump_done_mm; after_cnt++; }
+        }
+        in.ax_mg = -100;
+        for (idx = 0u; idx < 46u; idx++)
+        {
+            terrain_step(&ter, &in, &out);
+            if (out.hump_done_mm > 0u) { after_mm = out.hump_done_mm; after_cnt++; }
+        }
+        in.ax_mg = 0;
+        for (idx = 0u; idx < 20u; idx++)
+        {
+            terrain_step(&ter, &in, &out);
+            if (out.hump_done_mm > 0u) { after_mm = out.hump_done_mm; after_cnt++; }
+        }
+        HOST_CHECK("S4-U19",
+                   (1u == after_cnt) && (after_mm >= G_LO(10u)) && (after_mm <= 14u),
+                   "ramp latch clears on flat: subsequent 12 mm hump detected in same run");
+        HOST_CHECK("S4-U19", 0u == r_4mm.hump_events,
+                   "4 mm two-wheel bump (< TERRAIN_HUMP_MIN_MM = 5 mm) rejected");
+        HOST_CHECK("S4-U19", (1u == r_6mm.hump_events) || (r_6mm.max_hump_now_mm <= 6u),
+                   "6 mm shallow bump obeys 3.5 deg pitch / 5 mm threshold cleanly");
+    }
+
     return (0 == HOST_SUMMARY("terrain")) ? 0 : 1;
 }
