@@ -7,6 +7,7 @@
 #ifndef MOCK_TKERNEL_H
 #define MOCK_TKERNEL_H
 
+#include <stddef.h> /* NULL, as the real tk/typedef.h defines it */
 #include <stdint.h>
 
 typedef int32_t  ID;
