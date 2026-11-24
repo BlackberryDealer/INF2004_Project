@@ -23,7 +23,9 @@ typedef struct
     int32_t  x_left_mm;      /* lateral extent, + = right of centre */
     int32_t  x_right_mm;
     uint32_t width_mm;       /* beam-corrected estimate, kept within
-                                OBS_WIDTH_MIN_MM..OBS_WIDTH_MAX_MM */
+                                OBS_WIDTH_MIN_MM..OBS_WIDTH_MAX_MM;
+                                obstacle.c reports the 1-degree corner
+                                measurement instead (S5-U83) */
     uint32_t raw_width_mm;   /* measured span of the whole run (before
                                 beam correction; S5-U45 uncertainty) */
     uint32_t clear_left_mm;  /* free lateral gap left of the obstacle,
@@ -41,6 +43,10 @@ typedef struct
     uint32_t ext_step_right;
     bool     b_extended_left;   /* outer echo projects ahead of the face */
     bool     b_extended_right;
+    uint32_t core_lo_step;      /* S5-U83: first step of the core      */
+    uint32_t core_hi_step;      /* last step of the core               */
+    uint32_t core_limit_mm;     /* in band: range <= this (shortest echo
+                                   + OBS_CORE_BAND_MM)                  */
 } obs_profile_t;
 
 typedef struct
@@ -59,6 +65,13 @@ extern void obs_profile_build(uint16_t const * p_scan_mm, uint32_t inferred,
                               obs_profile_t * p_prof);
 extern void obs_profile_plan(obs_profile_t const * p_prof,
                              obs_plan_t * p_plan);
+/* S5-U83: width between the two box corners found by the 1-degree edge
+   pass: outermost in-band servo angle and its range on each side.
+   0 = not plausible. *p_pm_mm: the +- error the 1-degree and 4 mm steps
+   alone allow.                                                        */
+extern uint32_t obs_profile_edge_width(uint32_t lo_deg, uint32_t lo_mm,
+                                       uint32_t hi_deg, uint32_t hi_mm,
+                                       uint32_t * p_pm_mm);
 
 #endif /* OBS_PROFILE_H */
 

@@ -30,6 +30,15 @@
 #include "../subsystem2/odometry.h"
 
 /* ---- private constants and types ------------------------------------ */
+/* One-wheel tilt smoothing (1/4 per cycle, rounded) and height scale */
+#define TERRAIN_ROLL_EMA_DIV    (4)
+#define TERRAIN_ROLL_EMA_HALF   (TERRAIN_ROLL_EMA_DIV / 2)
+#define TERRAIN_ROLL_UM_PER_MM  (1000u)
+#define TERRAIN_ROLL_MG_PER_G   (1000u)
+#define TERRAIN_ROLL_PCT_SCALE  (100u)
+#define TERRAIN_ROLL_SCALE_DEN  (TERRAIN_ROLL_MG_PER_G \
+                                 * TERRAIN_ROLL_PCT_SCALE)
+#define TERRAIN_ROLL_SCALE_HALF (TERRAIN_ROLL_SCALE_DEN / 2u)
 
 /* Rebase/glitch guard for terrain_ds_counts: a plausible per-cycle delta
    is at most APP_TICK_COUNTS_MAX counts. */
@@ -608,12 +617,19 @@ uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
                               && (turn >= -TERRAIN_ROLL_STRAIGHT_COUNTS)
                               && (fwd > 0);
     uint32_t       mag      = 0u;
+    int32_t        diff     = 0;
     bool           b_now_on = b_on;
 
     *p_done_mm = 0u;
 
-    /* EMA 1/4 per cycle; a signed division, never >> (BARR-C 5.3) */
-    filt = filt + ((terrain_lift_clamp(ay_mg) - filt) / 4);
+    /* EMA 1/TERRAIN_ROLL_EMA_DIV per cycle; a signed division, never
+       >> (BARR-C 5.3). The step is rounded to nearest (S4-U19):
+       truncation stopped the smoothed value 3 mg short of a steady tilt,
+       0.25 mm of a 4 mm hump.                                         */
+    diff = terrain_lift_clamp(ay_mg) - filt;
+    filt = filt + ((diff + ((diff >= 0) ? TERRAIN_ROLL_EMA_HALF
+                                        : -TERRAIN_ROLL_EMA_HALF))
+                   / TERRAIN_ROLL_EMA_DIV);
     if (filt > PRV_IMU_R_FILT_MAX)
     {
         filt = PRV_IMU_R_FILT_MAX;
@@ -669,9 +685,10 @@ uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
             {
                 if (!b_latched)
                 {
-                    *p_done_mm = (((APP_TRACK_UM / 1000u) * peak
-                                   * TERRAIN_ROLL_GAIN_PCT) + 50000u)
-                                 / 100000u;
+                    *p_done_mm = (((APP_TRACK_UM / TERRAIN_ROLL_UM_PER_MM)
+                                   * peak * TERRAIN_ROLL_GAIN_PCT)
+                                  + TERRAIN_ROLL_SCALE_HALF)
+                                 / TERRAIN_ROLL_SCALE_DEN;
                 }
                 b_now_on = false;
                 hyst     = 0u;
@@ -709,6 +726,38 @@ uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
                         ticks);
 
     return word;
+}
+
+/**
+ * terrain_roll_hump_line
+ * @brief   terrain_roll_hump_step() gated to line following (S4-U20): off
+ *          the line the encoder steps are passed as 0 (no new hump can
+ *          start: it needs forward travel) and a hump that ends is not
+ *          reported. The smoothed tilt keeps running either way.
+ * @param   word       PRV_IMU_R word
+ * @param   ay_mg      calibrated sideways average this cycle
+ * @param   dpos_l     left encoder steps this cycle
+ * @param   dpos_r     right encoder steps this cycle
+ * @param   b_on_line  true while RUN follows the line (FOLLOW, ARMED)
+ * @param   p_done_mm  out: height of a hump that ended now, else 0
+ * @return  the new PRV_IMU_R word
+ * @context imu_task, host test
+ */
+uint32_t terrain_roll_hump_line(uint32_t word, int32_t ay_mg, int32_t dpos_l,
+                                int32_t dpos_r, bool b_on_line,
+                                uint32_t * p_done_mm)
+{
+    uint32_t const next = terrain_roll_hump_step(word, ay_mg,
+                                                 b_on_line ? dpos_l : 0,
+                                                 b_on_line ? dpos_r : 0,
+                                                 p_done_mm);
+
+    if (!b_on_line)
+    {
+        *p_done_mm = 0u;
+    }
+
+    return next;
 }
 
 /* ---- private functions ------------------------------------------------ */

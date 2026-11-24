@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 #include "app_program/app.h"
 typedef struct { void *exinf; ATR sematr; INT isemcnt; INT maxsem; } T_CSEM;
 ID tk_cre_sem(T_CSEM const *p); ER tk_wai_sem(ID id, INT c, TMO t); ER tk_sig_sem(ID id, INT c);
@@ -69,8 +70,33 @@ static uint32_t w_dist = 1000;
    w_spike_at-th ping after each servo move reads w_spike_mm.          */
 static uint32_t w_spike_at = 0u, w_spike_mm = 120u, w_pings_since = 0u, w_last_servo = 90u;
 static int32_t w_y = 240, w_xl = -60, w_xr = 80;
+/* S5-U83: w_mode 4 = a box face seen through a cone. The echo is the
+   nearest face point whose direction lies within +-w_cone_deg of the
+   servo direction (no specular loss), plus +-2 mm of ping noise. The
+   face: centre (w_cx, w_y), width w_w, turned w_yaw_deg.             */
+static double w_cx = 0.0, w_w = 150.0, w_yaw_deg = 0.0, w_cone_deg = (double) OBS_BEAM_HALF_DDEG / 10.0;  /* the calibrated beam */
+static uint32_t w_noise_n = 0u;
+/* review 24 Nov: w_fringe = a weak grazing echo one degree past the
+   cone edge, w_fringe_mm further than the corner (a real HC-SR04 often
+   gives one transitional echo before the background).               */
+static int w_fringe = 0; static double w_fringe_mm = 30.0;
+static uint32_t world_cone_mm(void) {
+  double const pi = 3.14159265358979, yaw = w_yaw_deg * pi / 180.0;
+  double best = 1.0e9, fringe = 1.0e9;
+  for (int i = 0; i <= 400; i++) {
+    double const t = -w_w / 2.0 + w_w * (double) i / 400.0;
+    double const x = w_cx + t * cos(yaw), y = (double) w_y + t * sin(yaw);
+    double const dir = atan2(y, x) * 180.0 / pi, r = sqrt(x * x + y * y);
+    if (fabs(dir - (double) g_servo) <= w_cone_deg && r < best) best = r;
+    if (fabs(dir - (double) g_servo) <= w_cone_deg + 1.0 && r < fringe) fringe = r;
+  }
+  if ((best > 5000.0) && w_fringe && (fringe < 5000.0)) best = fringe + w_fringe_mm;
+  if (best > 5000.0) return 6000u;
+  w_noise_n++;
+  return (uint32_t) (best + 0.5) + (w_noise_n % 5u) - 2u; }
 static uint32_t world_mm(void) {
   if (0 == w_mode) return w_dist;
+  if (4 == w_mode) return world_cone_mm();
   { double th = (double) g_servo * 3.14159265 / 180.0, s = sin(th), c = cos(th);
     double x = (double) w_y * c / s;
     if (x >= w_xl && x <= w_xr) return (uint32_t) ((double) w_y / s); }
@@ -197,7 +223,8 @@ int main(void) {
   { int scan_ms = -1; char const *q = g_logbuf;
     while ((q = strstr(q, "SCAN ")) != NULL) { int v; if (1 == sscanf(q, "SCAN %d ms", &v)) { scan_ms = v; break; } q += 5; }
     printf("   S5-U52: scan took %d ms\n", scan_ms);
-    CHECK("S5-U52", (scan_ms > 0) && (scan_ms <= 4000), "scan of a 140 mm box in <= 4.0 s (was 5.4 s)"); }
+    /* S5-U83 adds the 1-degree edge pass (up to 2 x 4 probes, ~2.2 s) */
+    CHECK("S5-U52", (scan_ms > 0) && (scan_ms <= 6500), "scan of a 140 mm box in <= 6.5 s incl. the edge pass (4.0 s before S5-U83)"); }
   /* S5-U50 (review 2026-11-09): the 17:00 car scan had 14 of 25 steps
      inferred, including returns in the bypass lane. Every 5 deg step
      next to a near coarse point is now measured, never inferred.      */
@@ -214,7 +241,10 @@ int main(void) {
   CHECK("S5-U08", evlegs[nev - 1] > 0u && 0u == (evlegs[nev - 1] % 4u), "legs on the board (4 mm steps) before PLAN");
   status_board_read(&snap);
   printf("   profile: width %u nearest %u legs %u/%u step %u inferred 0x%x\n", status_board_width(&snap), status_board_nearest(&snap), status_board_leg_lateral(&snap), status_board_leg_forward(&snap), status_board_angle_step(&snap), g_inferred);
-  CHECK("S5-U08", status_board_is_profile_valid(&snap) && status_board_width(&snap) >= 100 && status_board_width(&snap) <= 145, "width at 5 deg resolution (face -60..+80)");
+  /* the pencil-beam face has no beam spread to take off, so the corner
+     width is not plausible: reported unavailable (S5-U83 review), not
+     the 5-degree estimate under the 1-degree label                     */
+  CHECK("S5-U08", status_board_is_profile_valid(&snap) && APP_PROFILE_CLEAR_MM == status_board_width(&snap), "pencil-beam face: profile valid, width reported unavailable");
   CHECK("S5-U08", 0u != g_inferred && 0u == (g_inferred & g_measured), "unmeasured steps marked inferred");
   g_modes = 0; w_mode = 0; w_dist = 200; g_safety = 0; cyc(); cyc();
   CHECK("S5-U08", 0 == count_ev(APP_EVT_SIDE_TOO_CLOSE), "side 200 mm: fine");
@@ -375,10 +405,10 @@ int main(void) {
     g_modes = APP_MODE_STOPPED; g_safety = 0; log_clear();             /* mission: ESTOP off, creep */
     mv.speed_l_cpw = 15; mv.speed_r_cpw = 15; status_board_write_motion(&mv);
     /* ~150 mm/s creep: ~9 mm per 60 ms ping; 16 mm steps here */
-    for (uint32_t d = 380u; d >= 252u; d -= 16u) { w_dist = d; cyc(); }
-    CHECK("S5-U55", 0u == (g_safety & SAFETY_ESTOP) && APP_SCAN_STOPPED == g_state, "creeping, agreeing readings > 250 mm: no brake");
-    w_dist = 248; cyc();
-    CHECK("S5-U55", (g_safety & SAFETY_ESTOP) && NULL != strstr(g_logbuf, "CREEP stop at 248 mm"), "confirmed 248 mm <= OBS_SCAN_MM: ESTOP, logged");
+    for (uint32_t d = 380u; d >= 204u; d -= 16u) { w_dist = d; cyc(); }
+    CHECK("S5-U55", 0u == (g_safety & SAFETY_ESTOP) && APP_SCAN_STOPPED == g_state, "creeping, agreeing readings > 200 mm: no brake");
+    w_dist = 196; cyc();
+    CHECK("S5-U55", (g_safety & SAFETY_ESTOP) && NULL != strstr(g_logbuf, "CREEP stop at 196 mm"), "confirmed 196 mm <= OBS_SCAN_MM (200 since S5-U83): ESTOP, logged");
     g_safety = 0; w_dist = 252; cyc(); cyc(); w_mode = 2; cyc();
     CHECK("S5-U55", 0u != (g_safety & SAFETY_ESTOP), "echo lost while creeping: ESTOP");
     g_safety = 0; w_mode = 0; w_dist = 256; cyc(); cyc(); g_safety = 0; w_dist = 320; cyc();
@@ -389,6 +419,68 @@ int main(void) {
     mv.speed_l_cpw = -15; mv.speed_r_cpw = -15; status_board_write_motion(&mv); w_mode = 0; w_dist = 200; cyc(); cyc();
     CHECK("S5-U55", 0u == (g_safety & SAFETY_ESTOP), "driving backwards: the guard does nothing");
     mv.speed_l_cpw = 0; mv.speed_r_cpw = 0; status_board_write_motion(&mv); g_modes = 0; }
+  /* S5-U83 (requirement 24 Nov 2026: reported width within +-10 mm).
+     The whole scan (5-degree points + 1-degree edge pass) of boxes
+     100..200 mm wide, 200 mm ahead (OBS_SCAN_MM), centred, off-centre
+     and turned, through a 15-degree cone. The board width is what the
+     dashboard shows.                                                  */
+  { static const struct { double w, cx, yaw; } box[] = {
+      {100, 0, 0}, {125, 0, 0}, {150, 0, 0}, {175, 0, 0}, {200, 0, 0},
+      {100, 30, 0}, {150, -40, 0}, {200, 10, 0},
+      {125, 0, 8}, {150, 20, -6}, {175, -20, 5}, {200, 0, -8},
+      {70, 0, 0}, {70, 15, 0},             /* car 24 Nov: 7 cm box */
+      /* review 24 Nov: a corner the scan cannot see (face receding past
+         the band, or past the 30/150 deg limit) must give "unavailable",
+         never a wrong number                                         */
+      {200, 0, 30}, {200, 0, 35}, {200, 125, 0}, {200, -125, 0},
+      /* car 24 Nov: with the ~29 deg beam a 200 mm box's far corner echo
+         passes the 30/150 deg limit once it is ~20 mm off-centre at
+         200 mm: unavailable (or right), never wrong                    */
+      {200, 25, 0}, {200, -40, 0} };
+    size_t const n_normal = 14u;
+    int worst = 0, n_ok = 0, n_wrong = 0, n_unavail_normal = 0, n_no_plan = 0;
+    static double const fringe_mm[4] = {0.0, 20.0, 40.0, 70.0};
+    for (size_t i = 0; i < 4u * (sizeof(box) / sizeof(box[0])); i++) {
+      size_t const nb = sizeof(box) / sizeof(box[0]);
+      bool const b_fringe = (i >= nb);
+      size_t const bi = i % nb;
+      w_fringe_mm = fringe_mm[i / nb];
+      status_board_t sb; int width, err; int est = -1; char const *q;
+      g_modes = APP_MODE_RESUME; w_mode = 0; w_dist = 1000; cyc(); g_modes = 0; cyc();
+      w_dist = 380; cyc(); cyc(); w_dist = 196; cyc(); cyc();      /* -> STOPPED */
+      if (APP_SCAN_STOPPED != g_state) printf("   S5-U83: not STOPPED before the scan (%u)\n", g_state);
+      w_fringe = b_fringe ? 1 : 0;
+      w_mode = 4; w_y = 200; w_w = box[bi].w; w_cx = box[bi].cx; w_yaw_deg = box[bi].yaw; w_spike_at = 0u;
+      log_clear(); g_safety = 0; g_fault = 0;
+      g_modes = APP_MODE_STOPPED | APP_MODE_RESCAN;
+      for (int k = 0; k < 400; k++) { cyc(); if (APP_SCAN_COARSE != g_state && APP_SCAN_FINE != g_state && k > 2) break; }
+      /* a 70 mm fringe echo looks like other objects 80 mm behind the
+         face at both sides: the (unchanged) bypass planner rightly says
+         NO_PATH there, so the PLAN check covers fringes up to 40 mm  */
+      if ((bi < n_normal) && (w_fringe_mm < 50.0 || !b_fringe) && (APP_SCAN_WATCH_SETTLE != g_state)) { n_no_plan++; printf("   S5-U83: no PLAN for box %3.0f centre %+4.0f turned %+2.0f fringe %.0f (state %u)\n", box[bi].w, box[bi].cx, box[bi].yaw, b_fringe ? w_fringe_mm : 0.0, (unsigned) g_state); }  /* PLAN follows WATCH_SETTLE */
+      status_board_read(&sb);
+      width = (int) status_board_width(&sb);
+      if (NULL != (q = strstr(g_logbuf, "SCAN width estimate "))) { (void) sscanf(q, "SCAN width estimate %d", &est); }
+      err = width - (int) box[bi].w;
+      if (APP_PROFILE_CLEAR_MM == (uint32_t) width) {
+        if (bi < n_normal) n_unavail_normal++;
+        printf("   S5-U83: %s%sbox %3.0f mm, centre %+4.0f, turned %+2.0f deg -> unavailable, 5-deg estimate %3d\n",
+               b_fringe ? "fringe+" : "", b_fringe ? (w_fringe_mm < 30.0 ? "20 " : (w_fringe_mm < 50.0 ? "40 " : "70 ")) : "", box[bi].w, box[bi].cx, box[bi].yaw, est);
+        continue; }
+      if (abs(err) > worst) worst = abs(err);
+      if (abs(err) <= 10) n_ok++; else n_wrong++;
+      printf("   S5-U83: %s%sbox %3.0f mm, centre %+4.0f, turned %+2.0f deg -> board %3d mm (error %+3d), 5-deg estimate %3d\n",
+             b_fringe ? "fringe+" : "", b_fringe ? (w_fringe_mm < 30.0 ? "20 " : (w_fringe_mm < 50.0 ? "40 " : "70 ")) : "", box[bi].w, box[bi].cx, box[bi].yaw, width, err, est);
+    }
+    printf("   S5-U83: plain + fringe-echo runs: worst error %d mm, %d within +-10 mm, %d outside, %d normal boxes unavailable, %d without PLAN\n", worst, n_ok, n_wrong, n_unavail_normal, n_no_plan);
+    CHECK("S5-U83", (0 == n_unavail_normal) && (worst <= 10), "70..200 mm boxes at 200 mm, centred/off-centre/turned, with and without a fringe echo: every one measured within +-10 mm");
+    CHECK("S5-U83", 0 == n_wrong, "a box turned 30-35 deg or 125 mm off-centre: within +-10 mm or unavailable, never a wrong number");
+    CHECK("S5-U83", 0 == n_no_plan, "every normal box at the 200 mm scan distance gets a bypass PLAN (fringe echoes up to 40 mm)");
+    w_fringe = 0;
+    { int scan_ms = -1; char const *q = g_logbuf;
+      while ((q = strstr(q, "SCAN ")) != NULL) { int v; if (1 == sscanf(q, "SCAN %d ms", &v)) { scan_ms = v; break; } q += 5; }
+      printf("   S5-U83: last scan took %d ms\n", scan_ms); }
+    g_modes = APP_MODE_RESUME; w_mode = 0; w_dist = 1000; cyc(); g_modes = 0; }
   printf("[TEST] S5-U08 obstacle simulation SUMMARY %d passed, %d failed\n", pass_n, fail_n);
   return fail_n;
 }

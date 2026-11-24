@@ -794,6 +794,23 @@ uint32_t status_board_run_state(status_board_t const * p_snap)
 }
 
 /**
+ * status_board_is_line_following
+ * @brief   True in RUN while the car follows the line (FOLLOW, or ARMED
+ *          with a barcode command waiting for the junction); false in
+ *          every other state and RUN sub-state (turns, search, bypass).
+ * @param   p_snap snapshot filled by status_board_read()
+ * @return  true while following the line
+ * @context any task
+ */
+bool status_board_is_line_following(status_board_t const * p_snap)
+{
+    uint32_t const run = status_board_run_state(p_snap);
+
+    return (APP_SYS_RUN == status_board_sys_state(p_snap))
+           && ((APP_RUN_FOLLOW == run) || (APP_RUN_ARMED == run));
+}
+
+/**
  * status_board_avoid_step
  * @brief   Bypass step, APP_AVOID_*.
  * @param   p_snap snapshot filled by status_board_read()

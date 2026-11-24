@@ -200,7 +200,8 @@ static void mission_faults(mission_ctx_t * p_ctx,
                            status_board_t const * p_snap, uint32_t now_us);
 static void mission_timers(mission_ctx_t * p_ctx, uint32_t now_us);
 static void mission_clear_stale_safety(void);
-static void mission_forward(mission_evt_in_t const * p_evt);
+static void mission_forward(mission_ctx_t const * p_ctx,
+                            mission_evt_in_t const * p_evt);
 static void mission_snapshot(mission_ctx_t const * p_ctx,
                              mission_evt_in_t const * p_evt,
                              status_board_t const * p_snap, uint32_t now_us);
@@ -1179,7 +1180,7 @@ static void mission_pass(mission_ctx_t * p_ctx,
     }
     p_ctx->b_motion_failed = false;
     mission_publish(p_ctx, &before);                    /* 5 */
-    mission_forward(p_evt);                             /* 6 */
+    mission_forward(p_ctx, p_evt);                      /* 6 */
     mission_snapshot(p_ctx, p_evt, p_snap, now_us);
 #if APP_TEST
     mission_log_ignored(p_ctx, p_evt, &before);
@@ -1878,10 +1879,15 @@ static void mission_timers(mission_ctx_t * p_ctx, uint32_t now_us)
 /**
  * mission_forward
  * @brief   Step 6: copies selected events to telemetry and confirms MAP
- *          updates after they are stored.
+ *          updates after they are stored. A MAP is stored only outside
+ *          RUN (Tribunal 1, Version C gap 7); in RUN the table is left
+ *          unchanged and no confirmation is sent.
+ * @param   p_ctx mission context (system state after this pass)
+ * @param   p_evt event taken this pass
  * @context mission_task
  */
-static void mission_forward(mission_evt_in_t const * p_evt)
+static void mission_forward(mission_ctx_t const * p_ctx,
+                            mission_evt_in_t const * p_evt)
 {
     if (p_evt->b_has_event)
     {
@@ -1914,7 +1920,14 @@ static void mission_forward(mission_evt_in_t const * p_evt)
                 uint32_t const ch = p_evt->value & MISSION_BAR_CHAR_MASK;
                 uint32_t const cmd = (p_evt->value >> MISSION_BAR_CMD_SHIFT)
                                      & MISSION_BAR_CMD_MASK;
-                if (barcode_map_set(ch, cmd))
+                if (APP_SYS_RUN == p_ctx->sys_state)
+                {
+                    /* casts: Code 39 index and command fit int32_t */
+                    app_log("MAP refused in RUN: char index %d, command %d"
+                            " (send it before START)\n",
+                            (int32_t) ch, (int32_t) cmd, 0);
+                }
+                else if (barcode_map_set(ch, cmd))
                 {
                     (void) telem_post_event(APP_EVT_MAP, p_evt->value);
                     /* casts: Code 39 index and command fit int32_t */

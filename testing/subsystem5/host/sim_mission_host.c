@@ -170,7 +170,9 @@ static telem_bin_snapshot_t g_snapshot; static int g_snapshots;
 bool telem_post_snapshot(telem_bin_snapshot_t const *p) { g_snapshot = *p; g_snapshots++; if (strlen(tlog) < 400) sprintf(tlog + strlen(tlog), "SNAP(sys%u odo%u s%u) ", p->sys_state, p->odometry_mm, p->run_time_s); return true; }
 static uint32_t g_map_char, g_map_cmd;
 static bool g_map_stored = true;
+static uint32_t g_map_calls;
 bool barcode_map_set(uint32_t c, uint32_t m) {
+  g_map_calls++;
   g_map_char = c;
   g_map_cmd = m;
   return g_map_stored;
@@ -543,7 +545,7 @@ int main(void) {
       to_run();
       safety_set(SAFETY_ESTOP);
       mot.motion_state = APP_MOT_ESTOP;
-      obs.distance_mm = 244u;
+      obs.distance_mm = 204u;   /* within OBS_SCAN_MM + tolerance: no creep */
       EV(APP_EVT_OBSTACLE, 0);
       NONE();
       idle_ms(200);
@@ -581,10 +583,10 @@ int main(void) {
   to_ready(); mot.motion_state = APP_MOT_BRAKE; to_run(); g_fault = 0;
   safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP; obs.distance_mm = 400u; clog[0] = 0;
   EV(APP_EVT_OBSTACLE, 0); NONE();
-  CHECK("S5-U54", !strcmp(mlog, "F150 ") && MODE(APP_MODE_STOPPED) && !MODE(APP_MODE_RESCAN) && !(g_safety & SAFETY_ESTOP),
-        "stopped at 400 mm: ESTOP released, creep 150 mm to the 250 mm scan distance, no scan yet");
-  CHECK("S5-U54", NULL != strstr(clog, "CREEP: obstacle at 400 mm, moving 150 mm closer to scan"), "creep logged");
-  mot.motion_state = APP_MOT_BRAKE; obs.distance_mm = 252u; DONE();
+  CHECK("S5-U54", !strcmp(mlog, "F200 ") && MODE(APP_MODE_STOPPED) && !MODE(APP_MODE_RESCAN) && !(g_safety & SAFETY_ESTOP),
+        "stopped at 400 mm: ESTOP released, creep 200 mm to the 200 mm scan distance (S5-U83), no scan yet");
+  CHECK("S5-U54", NULL != strstr(clog, "CREEP: obstacle at 400 mm, moving 200 mm closer to scan"), "creep logged");
+  mot.motion_state = APP_MOT_BRAKE; obs.distance_mm = 202u; DONE();
   CHECK("S5-U54", MODE(APP_MODE_STOPPED | APP_MODE_RESCAN) && (g_safety & SAFETY_ESTOP) && !strcmp(mlog, ""),
         "creep done: ESTOP holds the car, scan requested");
   clog[0] = 0; EV(APP_EVT_NO_PATH, 0);
@@ -594,7 +596,7 @@ int main(void) {
      starts from wherever it stopped, the move is cancelled              */
   EV(APP_EVT_RESET, 0); idle_ms(110); to_ready(); mot.motion_state = APP_MOT_BRAKE; to_run(); g_fault = 0;
   safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP; obs.distance_mm = 400u;
-  EV(APP_EVT_OBSTACLE, 0); NONE(); CHECK("S5-U54", !strcmp(mlog, "F150 "), "creep started again");
+  EV(APP_EVT_OBSTACLE, 0); NONE(); CHECK("S5-U54", !strcmp(mlog, "F200 "), "creep started again");
   mot.motion_state = APP_MOT_ESTOP; safety_set(SAFETY_ESTOP); NONE();
   CHECK("S5-U54", MODE(APP_MODE_STOPPED | APP_MODE_RESCAN) && !strcmp(mlog, "STOP0 ") && !g_ctx.b_move_pending,
         "guard ESTOP at standstill ends the creep: move cancelled, scan requested");
@@ -602,9 +604,9 @@ int main(void) {
   EV(APP_EVT_PLAN, APP_SIDE_LEFT); CHECK("S5-U54", !strcmp(mlog, "L90 ") && !(g_safety & SAFETY_ESTOP), "PLAN after the creep: bypass as before");
   /* already near the scan distance: no creep */
   to_ready(); mot.motion_state = APP_MOT_BRAKE; to_run(); g_fault = 0;
-  safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP; obs.distance_mm = 268u;
+  safety_set(SAFETY_ESTOP); mot.motion_state = APP_MOT_ESTOP; obs.distance_mm = 218u;
   EV(APP_EVT_OBSTACLE, 0); NONE();
-  CHECK("S5-U54", !strcmp(mlog, "") && MODE(APP_MODE_STOPPED | APP_MODE_RESCAN), "268 mm (within tolerance): scan at once, no creep");
+  CHECK("S5-U54", !strcmp(mlog, "") && MODE(APP_MODE_STOPPED | APP_MODE_RESCAN), "218 mm (within tolerance): scan at once, no creep");
   obs.distance_mm = 0u;
   /* S5-U80 (2026-11-16): the same rewind and slow reread with the board
      path wrapping at 2^17 counts in the middle (following began 100 mm
@@ -947,7 +949,7 @@ int main(void) {
   barcode_test_read();
   safety_set(SAFETY_ESTOP);
   mot.motion_state = APP_MOT_ESTOP;
-  obs.distance_mm = 244u;
+  obs.distance_mm = 204u;   /* within OBS_SCAN_MM + tolerance: no creep */
   EV(APP_EVT_OBSTACLE, 0u);
   NONE();
   CHECK("S5-U57", APP_RUN_AVOID == g_ctx.run_state && MODE(APP_MODE_RESCAN)
@@ -959,7 +961,9 @@ int main(void) {
         && !MODE(APP_MODE_MOTOR_EN | APP_MODE_BARCODE_REREAD),
         "STOP ends the reread with the motors disabled");
 
-  /* S5-U61: a MAP reply confirms the stored letter and action. */
+  /* S5-U61: a MAP is stored and confirmed only outside RUN (Tribunal 1,
+     Version C gap 7: "accepted only outside RUN"). In RUN the table is
+     left unchanged and no success event is sent. */
   tlog[0] = 0;
   to_ready();
   tlog[0] = 0;
@@ -967,21 +971,29 @@ int main(void) {
   CHECK("S5-U61", APP_SYS_READY == g_ctx.sys_state && 15u == g_map_char
         && APP_BAR_CMD_LEFT == g_map_cmd && strstr(tlog, "E23:15 "),
         "READY: the F -> LEFT update sends its MAP confirmation");
-  to_run();
-  mot.motion_state = APP_MOT_FOLLOW;
-  mot.speed_l_cpw = mot.speed_r_cpw = 18;
-  tlog[0] = 0;
-  EV(APP_EVT_MAP, mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 15u));
-  CHECK("S5-U61", APP_SYS_RUN == g_ctx.sys_state && !strcmp(mlog, "")
-        && 15u == g_map_char && APP_BAR_CMD_RIGHT == g_map_cmd
-        && strstr(tlog, "E23:79 "),
-        "RUN: F -> RIGHT confirms without issuing a motion command");
   g_map_stored = false;
   tlog[0] = 0;
   EV(APP_EVT_MAP, mission_evt_barcode_value(APP_BAR_CMD_LEFT, 16u));
-  CHECK("S5-U61", NULL == strstr(tlog, "E23:"),
-        "a failed map update has no success event");
+  CHECK("S5-U61", APP_SYS_READY == g_ctx.sys_state
+        && NULL == strstr(tlog, "E23:"),
+        "READY: a failed map update has no success event");
   g_map_stored = true;
+  EV(APP_EVT_MAP, mission_evt_barcode_value(APP_BAR_CMD_LEFT, 15u));
+  to_run();
+  mot.motion_state = APP_MOT_FOLLOW;
+  mot.speed_l_cpw = mot.speed_r_cpw = 18;
+  {
+    uint32_t const calls = g_map_calls;
+    tlog[0] = 0;
+    clog[0] = 0;
+    EV(APP_EVT_MAP, mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 15u));
+    CHECK("S5-U61", APP_SYS_RUN == g_ctx.sys_state && !strcmp(mlog, "")
+          && calls == g_map_calls && 15u == g_map_char
+          && APP_BAR_CMD_LEFT == g_map_cmd && NULL == strstr(tlog, "E23:"),
+          "RUN: F -> RIGHT is refused, F stays LEFT, no confirmation");
+    CHECK("S5-U61", NULL != strstr(clog, "MAP refused in RUN"),
+          "RUN: the refused MAP is logged on the console");
+  }
 
   tlog[0] = 0;
   clog[0] = 0;

@@ -1,5 +1,6 @@
 # Buddy 5 host (laptop) tests.
-#   test_obs_profile_host : S5-U01..U03, pure obs_profile.c
+#   test_obs_profile_host : S5-U01..U03, U83, U84: pure obs_profile.c,
+#                           obs_edge.c
 #   sim_mission_host      : statechart simulation (mission.c, mission_run.c),
 #                           plus S5-U04 and S5-U05 (-DMISSION_HOST_TEST)
 #   sim_obstacle_host     : obstacle_task simulation (obstacle.c + profile)
@@ -27,8 +28,10 @@ all: test_obs_profile_host.out sim_mission_host.out sim_obstacle_host.out \
 	./test_status_board_host.out
 
 test_obs_profile_host.out: test_obs_profile_host.c $(S5)/obs_profile.c \
-                           $(S5)/obs_profile.h $(S5)/cfg_obstacle.h
-	$(CC) $(CFLAGS) -o $@ test_obs_profile_host.c $(S5)/obs_profile.c
+                           $(S5)/obs_profile.h $(S5)/obs_edge.c \
+                           $(S5)/obs_edge.h $(S5)/cfg_obstacle.h
+	$(CC) $(CFLAGS) -Wconversion -Wsign-conversion -o $@ \
+	    test_obs_profile_host.c $(S5)/obs_profile.c $(S5)/obs_edge.c
 
 test_drv_ultrasonic_host.out: test_drv_ultrasonic_host.c $(S5)/drv_ultrasonic.c \
                               $(S5)/drv_ultrasonic.h mock_us/hardware/gpio.h \
@@ -60,7 +63,8 @@ sim_mission_host.out: sim_mission_host.c tree
 
 sim_obstacle_host.out: sim_obstacle_host.c tree
 	$(CC) $(SIMFLAGS) -o $@ sim_obstacle_host.c \
-	    $(B)/subsystem5/obs_profile.c $(B)/subsystem5/status_board.c \
+	    $(B)/subsystem5/obs_profile.c $(B)/subsystem5/obs_edge.c \
+	    $(B)/subsystem5/status_board.c \
 	    $(B)/app_bits.c -lm
 
 test_status_board_host.out: test_status_board_host.c tree

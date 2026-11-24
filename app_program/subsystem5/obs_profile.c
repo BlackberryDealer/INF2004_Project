@@ -21,6 +21,14 @@
 #define OBS_STEP_IDX_BASE  (6u)    /* scan step 0 = 30 deg = index 6   */
 #define OBS_Q14_ONE        (16384)  /* 1.0 in Q14 (signed division) */
 #define OBS_STEP_LAST      (APP_SCAN_STEPS - 1u)
+#define OBS_SIN1_ENTRIES   (91u)   /* sin(0..90 deg), 1 deg apart      */
+#define OBS_DDEG_PER_DEG   (10u)
+#define OBS_DDEG_90        (900u)
+#define OBS_DDEG_180       (1800u)
+#define OBS_HALF_DEG_DDEG  (5u)    /* half of a 1-degree edge step     */
+#define OBS_HALF_DEG_Q14   (143)   /* 0.5 deg in radians, Q14          */
+#define OBS_HALF_CODE_MM   (2u)    /* +- rounding of a 4 mm range      */
+#define OBS_ISQRT_TOP_BIT  (0x40000000u) /* highest even bit, 2^30     */
 
 typedef struct
 {
@@ -40,6 +48,21 @@ static int16_t const g_obs_sin_q14[OBS_SIN_ENTRIES] =
     12551, 13421, 14189, 14849, 15396, 15826, 16135, 16322, 16384,
     16322, 16135, 15826, 15396, 14849, 14189, 13421, 12551, 11585,
     10531, 9397, 8192, 6924, 5604, 4240, 2845, 1428, 0
+};
+
+/* sin(k deg) in Q14 for k = 0..90 (S5-U83, corner positions) */
+static int16_t const g_obs_sin1_q14[OBS_SIN1_ENTRIES] =
+{
+    0, 286, 572, 857, 1143, 1428, 1713, 1997, 2280, 2563,
+    2845, 3126, 3406, 3686, 3964, 4240, 4516, 4790, 5063, 5334,
+    5604, 5872, 6138, 6402, 6664, 6924, 7182, 7438, 7692, 7943,
+    8192, 8438, 8682, 8923, 9162, 9397, 9630, 9860, 10087, 10311,
+    10531, 10749, 10963, 11174, 11381, 11585, 11786, 11982, 12176, 12365,
+    12551, 12733, 12911, 13085, 13255, 13421, 13583, 13741, 13894, 14044,
+    14189, 14330, 14466, 14598, 14726, 14849, 14968, 15082, 15191, 15296,
+    15396, 15491, 15582, 15668, 15749, 15826, 15897, 15964, 16026, 16083,
+    16135, 16182, 16225, 16262, 16294, 16322, 16344, 16362, 16374, 16382,
+    16384
 };
 
 /* ---- private function prototypes ------------------------------------- */
@@ -66,6 +89,10 @@ static bool     obs_is_smear(obs_point_t const * p_pts, uint32_t idx,
                              uint32_t inferred, uint32_t best,
                              int32_t x_edge, uint32_t y_edge);
 static uint32_t obs_min_u(uint32_t value_a, uint32_t value_b);
+static int32_t  obs_sin_ddeg(uint32_t ddeg);
+static void     obs_corner(uint32_t ddeg, uint32_t range_mm,
+                           int32_t * p_x_mm, int32_t * p_y_mm);
+static uint32_t obs_isqrt(uint32_t value);
 static bool     obs_is_joined(obs_point_t const * p_pts, uint32_t step);
 
 /* ---- public functions ------------------------------------------------- */
@@ -111,6 +138,9 @@ void obs_profile_build(uint16_t const * p_scan_mm, uint32_t inferred,
     p_prof->ext_step_right   = APP_SCAN_STEPS;
     p_prof->b_extended_left  = false;
     p_prof->b_extended_right = false;
+    p_prof->core_lo_step     = APP_SCAN_STEPS;
+    p_prof->core_hi_step     = APP_SCAN_STEPS;
+    p_prof->core_limit_mm    = 0u;
 
     obs_make_points(p_scan_mm, pts);
     best = obs_pick_blocking(pts);
@@ -127,6 +157,9 @@ void obs_profile_build(uint16_t const * p_scan_mm, uint32_t inferred,
         /* cast: raw_r >= raw_l, difference < 2 x OBS_NEAR_MM */
         p_prof->raw_width_mm = obs_min_u((uint32_t) (raw_r - raw_l),
                                          APP_PROFILE_CLEAR_MM);
+        p_prof->core_lo_step  = core_lo;                     /* S5-U83 */
+        p_prof->core_hi_step  = core_hi;
+        p_prof->core_limit_mm = pts[best].r_mm + OBS_CORE_BAND_MM;
         obs_estimate(pts, best, core_lo, core_hi, p_prof);
         obs_clearances(pts, inferred, best, core_lo, core_hi, p_prof);
     }
@@ -227,6 +260,69 @@ void obs_profile_plan(obs_profile_t const * p_prof, obs_plan_t * p_plan)
             p_plan->outcome        = OBS_OUT_NO_PATH;
         }
     }
+}
+
+/**
+ * obs_profile_edge_width
+ * @brief   Width between the box corners (S5-U83). On each side the
+ *          outermost in-band echo comes from the corner: its direction is
+ *          the servo angle moved half a degree outward (the corner lies
+ *          between it and the next, out-of-band, degree) and then inward
+ *          by the beam half-angle OBS_BEAM_HALF_DDEG; its distance is the
+ *          range measured there. No assumption about which way the face
+ *          is turned or where the box sits in front of the car.
+ * @param   lo_deg   outermost in-band servo angle, low-angle side
+ * @param   lo_mm    range measured there (4 mm code x 4)
+ * @param   hi_deg   outermost in-band servo angle, high-angle side
+ * @param   hi_mm    range measured there
+ * @param   p_pm_mm  out: +- width error of the 1-degree and 4 mm steps
+ * @return  width in mm; 0 = not plausible (reported as unavailable)
+ * @context obstacle_task (once per scan), host test
+ */
+uint32_t obs_profile_edge_width(uint32_t lo_deg, uint32_t lo_mm,
+                                uint32_t hi_deg, uint32_t hi_mm,
+                                uint32_t * p_pm_mm)
+{
+    uint32_t const lo_dd  = (lo_deg * OBS_DDEG_PER_DEG) + OBS_BEAM_HALF_DDEG
+                            - OBS_HALF_DEG_DDEG;
+    uint32_t const hi_dd  = (hi_deg * OBS_DDEG_PER_DEG) + OBS_HALF_DEG_DDEG;
+    uint32_t       result = 0u;
+    int32_t        x_lo   = 0;
+    int32_t        y_lo   = 0;
+    int32_t        x_hi   = 0;
+    int32_t        y_hi   = 0;
+    int32_t        d_x    = 0;
+    int32_t        d_y    = 0;
+
+    *p_pm_mm = 0u;
+    /* the low corner must lie below the high one once the beam is
+       taken off both: a span narrower than the beam has no corners  */
+    if ((hi_deg > lo_deg) && (hi_dd >= OBS_BEAM_HALF_DDEG)
+        && (lo_dd < (hi_dd - OBS_BEAM_HALF_DDEG))
+        && (lo_mm < APP_PROFILE_CLEAR_MM) && (hi_mm < APP_PROFILE_CLEAR_MM))
+    {
+        /* ranges are already rounded to the nearest 4 mm: no offset */
+        obs_corner(lo_dd, lo_mm, &x_lo, &y_lo);
+        obs_corner(hi_dd - OBS_BEAM_HALF_DDEG, hi_mm, &x_hi, &y_hi);
+        d_x = x_lo - x_hi;
+        d_y = y_lo - y_hi;
+        /* casts: |d| < 2100 mm, so d^2 + d^2 < 2^24 */
+        result = obs_isqrt((uint32_t) ((d_x * d_x) + (d_y * d_y)));
+        if (result < OBS_MIN_WIDTH_MM)
+        {
+            result = 0u;
+        }
+        else
+        {
+            /* 0.5 deg at each corner (range x 0.5 deg in rad) plus half a
+               4 mm code at each; casts: ranges <= 1020 mm               */
+            *p_pm_mm = (uint32_t) ((((int32_t) (lo_mm + hi_mm))
+                                    * OBS_HALF_DEG_Q14) / OBS_Q14_ONE)
+                       + (2u * OBS_HALF_CODE_MM);
+        }
+    }
+
+    return result;
 }
 
 /* ---- private functions ------------------------------------------------ */
@@ -691,6 +787,91 @@ static void obs_estimate(obs_point_t const * p_pts, uint32_t best,
     p_prof->x_left_mm  = x_l;
     p_prof->x_right_mm = x_r;
     p_prof->width_mm   = target;
+}
+
+/**
+ * obs_sin_ddeg
+ * @brief   sin of 0..180 deg given in 0.1 deg, Q14, linear between whole
+ *          degrees (S5-U83).
+ * @param   ddeg 0..1800
+ * @return  sin in Q14 (>= 0)
+ * @context any
+ */
+static int32_t obs_sin_ddeg(uint32_t ddeg)
+{
+    uint32_t const held = (ddeg > OBS_DDEG_180) ? OBS_DDEG_180 : ddeg;
+    uint32_t const fold = (held > OBS_DDEG_90) ? (OBS_DDEG_180 - held)
+                                               : held;
+    uint32_t const deg  = fold / OBS_DDEG_PER_DEG;
+    uint32_t const frac = fold % OBS_DDEG_PER_DEG;
+    int32_t        val  = g_obs_sin1_q14[deg];
+
+    if (0u != frac)         /* deg < 90 here, so deg + 1 is in the table */
+    {
+        /* cast: frac 1..9 */
+        val += ((g_obs_sin1_q14[deg + 1u] - g_obs_sin1_q14[deg])
+                * (int32_t) frac) / (int32_t) OBS_DDEG_PER_DEG;
+    }
+
+    return val;
+}
+
+/**
+ * obs_corner
+ * @brief   Point at a servo direction (0.1 deg, 0..180) and range: x = r
+ *          cos, y = r sin, the same frame as the scan points.
+ * @param   ddeg     direction, 0.1 deg
+ * @param   range_mm distance
+ * @param   p_x_mm   out: + = right of the robot's centre line
+ * @param   p_y_mm   out: forward
+ * @context any
+ */
+static void obs_corner(uint32_t ddeg, uint32_t range_mm,
+                       int32_t * p_x_mm, int32_t * p_y_mm)
+{
+    uint32_t const held = (ddeg > OBS_DDEG_180) ? OBS_DDEG_180 : ddeg;
+    int32_t const  cos_q14 = (held <= OBS_DDEG_90)
+                             ? obs_sin_ddeg(OBS_DDEG_90 - held)
+                             : -obs_sin_ddeg(held - OBS_DDEG_90);
+    int32_t const  dist = (int32_t) range_mm;   /* cast: <= 1020 mm */
+
+    /* signed division, truncates toward zero (review R19); |d x q| < 2^24 */
+    *p_x_mm = (dist * cos_q14) / OBS_Q14_ONE;
+    *p_y_mm = (dist * obs_sin_ddeg(held)) / OBS_Q14_ONE;
+}
+
+/**
+ * obs_isqrt
+ * @brief   Integer square root (largest r with r x r <= value).
+ * @param   value input
+ * @return  floor(sqrt(value))
+ * @context any
+ */
+static uint32_t obs_isqrt(uint32_t value)
+{
+    uint32_t root = 0u;
+    uint32_t bit  = OBS_ISQRT_TOP_BIT;
+    uint32_t rem  = value;
+
+    while (bit > rem)
+    {
+        bit /= 4u;
+    }
+    while (0u != bit)
+    {
+        if (rem >= (root + bit))
+        {
+            rem  -= root + bit;
+            root  = (root / 2u) + bit;
+        }
+        else
+        {
+            root /= 2u;
+        }
+        bit /= 4u;
+    }
+
+    return root;
 }
 
 /**

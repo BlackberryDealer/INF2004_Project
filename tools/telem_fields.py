@@ -500,6 +500,18 @@ GROUPS = {
     ],
     'PRV_OBS_C': [
         ('RAMP_MARK', 17, 0, 1, 'count'),
+        ('EDGE_LO_D', 5, 0, 4, 'mm'),
+        ('EDGE_HI_D', 5, 0, 4, 'mm'),
+    ],
+    'PRV_OBS_E': [
+        ('EDGE_PHASE', 2, 0, 1, 'code'),
+        ('EDGE_SUB', 3, 0, 1, 'deg'),
+        ('EDGE_LO', 8, 0, 1, 'deg'),
+        ('EDGE_HI', 8, 0, 1, 'deg'),
+        ('EDGE_LIMIT', 8, 0, 4, 'mm'),
+        ('EDGE_OK_LO', 1, 0, 1, 'flag'),
+        ('EDGE_OK_HI', 1, 0, 1, 'flag'),
+        ('EDGE_GRACE', 1, 0, 1, 'flag'),
     ],
     'PRV_OBS_SCAN': [
         ('MM', 8, 0, 4, 'mm'),

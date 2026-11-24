@@ -123,6 +123,9 @@ extern uint32_t status_board_leg_lateral(status_board_t const * p_snap);
 extern uint32_t status_board_leg_forward(status_board_t const * p_snap);
 extern uint32_t status_board_sys_state(status_board_t const * p_snap);
 extern uint32_t status_board_run_state(status_board_t const * p_snap);
+/* RUN and following the line (FOLLOW or ARMED): readers that must not
+   know the mission's sub-states use this (imu_task, S4-U20).          */
+extern bool     status_board_is_line_following(status_board_t const * p_snap);
 extern uint32_t status_board_avoid_step(status_board_t const * p_snap);
 extern uint32_t status_board_end_reason(status_board_t const * p_snap);
 extern bool     status_board_is_armed(status_board_t const * p_snap);

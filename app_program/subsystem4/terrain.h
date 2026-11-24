@@ -131,6 +131,15 @@ extern uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg,
                                        int32_t dpos_l, int32_t dpos_r,
                                        uint32_t * p_done_mm);
 
+/* S4-U20: the same step, but a hump only starts and is only reported
+   while the car follows the line (b_on_line); the track's hump is on
+   the line, and the turns and stops of an obstacle bypass tilt the car
+   too (car run 24 Nov 2026 13:08, 3..18 mm "humps" while avoiding).  */
+extern uint32_t terrain_roll_hump_line(uint32_t word, int32_t ay_mg,
+                                       int32_t dpos_l, int32_t dpos_r,
+                                       bool b_on_line,
+                                       uint32_t * p_done_mm);
+
 #endif /* TERRAIN_H */
 
 /*** end of file ***/

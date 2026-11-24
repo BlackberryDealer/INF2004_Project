@@ -531,5 +531,157 @@ int main(void)
         HOST_CHECK("S4-U18", 0u == n_rep, "stationary tilt (handling): no hump");
     }
 
+    /* S4-U19 (professor, 24 Nov 2026: the hump is now 4..5 mm): a thin
+       strip under the right wheel only. On the car 1 mm reads about
+       12 mg (h = 125 mm x ay x 67 % / 1000, S4-U18), so 4 mm is ~48 mg
+       and 5 mm ~60 mg. Profile: 3 cycles up, 8 on top (10 mm of travel
+       at cruise), 3 down, then level; also with +-10 mg vibration.   */
+    {
+        static int32_t const s_noise[4] = {10, -10, 6, -6};
+        uint32_t const zero   = ((uint32_t)PRV_IMU_R_FILT_OFFSET
+                                 << PRV_IMU_R_FILT_POS);
+        uint32_t const h_mm[2] = {4u, 5u};
+        uint32_t idx  = 0u;
+        uint32_t k    = 0u;
+        uint32_t pass = 0u;
+
+        for (pass = 0u; pass < 4u; pass++)
+        {
+            uint32_t const h     = h_mm[pass % 2u];
+            int32_t const  top   = (int32_t)(((h * 100000u)
+                                   + ((APP_TRACK_UM / 1000u)
+                                      * TERRAIN_ROLL_GAIN_PCT / 2u))
+                                   / ((APP_TRACK_UM / 1000u)
+                                      * TERRAIN_ROLL_GAIN_PCT));
+            bool const     b_vib = (pass >= 2u);
+            uint32_t       word  = zero;
+            uint32_t       done  = 0u;
+            uint32_t       total = 0u;
+            uint32_t       n_rep = 0u;
+            int32_t        ay    = 0;
+
+            for (idx = 0u; idx < 44u; idx++)
+            {
+                if (idx < 3u)
+                {
+                    ay = (top * (int32_t)(idx + 1u)) / 3;
+                }
+                else if (idx < 11u)
+                {
+                    ay = top;
+                }
+                else if (idx < 14u)
+                {
+                    ay = (top * (int32_t)(13u - idx)) / 3;
+                }
+                else
+                {
+                    ay = 0;
+                }
+                if (b_vib)
+                {
+                    ay += s_noise[idx % 4u];
+                }
+                word = terrain_roll_hump_step(word, -ay, 6, 7, &done);
+                total += done;
+                n_rep += (done > 0u) ? 1u : 0u;
+            }
+            printf("   S4-U19: %u mm strip%s (top %d mg): %u report(s), %u mm\n",
+                   (unsigned)h, b_vib ? " +vibration" : "", (int)top,
+                   (unsigned)n_rep, (unsigned)total);
+            k = (1u == n_rep) && (total + 1u >= h) && (total <= h + 1u);
+            HOST_CHECK("S4-U19", 0u != k,
+                       b_vib ? "4/5 mm strip with +-10 mg vibration: one report within 1 mm"
+                             : "4/5 mm strip: one report within 1 mm");
+        }
+    }
+
+    /* S4-U19 (review 24 Nov: does a short strip still read right?): the
+       real shape of a 66 mm wheel rolling over a strip. The wheel centre
+       starts to rise sqrt(r^2 - (r - h)^2) (~16 mm for 4 mm) before the
+       strip and is level again that far after it, so even a thin strip
+       lifts the wheel for ~260 ms at 120 mm/s. Strips 10 and 20 mm wide,
+       4 and 5 mm high, at 120 mm/s (1.2 mm per 10 ms cycle).          */
+    {
+        uint32_t const zero = ((uint32_t)PRV_IMU_R_FILT_OFFSET
+                               << PRV_IMU_R_FILT_POS);
+        uint32_t       k    = 0u;
+
+        for (k = 0u; k < 4u; k++)
+        {
+            double const r_mm   = 33.0;
+            double const h_mm   = (0u == (k % 2u)) ? 4.0 : 5.0;
+            double const w_mm   = (k < 2u) ? 10.0 : 20.0;
+            double const mg_per = 1000000.0 / ((double)(APP_TRACK_UM / 1000u)
+                                               * (double)TERRAIN_ROLL_GAIN_PCT * 10.0);
+            uint32_t     word   = zero;
+            uint32_t     done   = 0u;
+            uint32_t     total  = 0u;
+            uint32_t     n_rep  = 0u;
+            uint32_t     idx    = 0u;
+
+            for (idx = 0u; idx < 80u; idx++)
+            {
+                double const x    = -40.0 + (1.2 * (double)idx); /* centre vs strip start */
+                double       d    = 0.0;
+                double       lift = 0.0;
+
+                if ((x >= 0.0) && (x <= w_mm))
+                {
+                    lift = h_mm;
+                }
+                else
+                {
+                    d = (x < 0.0) ? -x : (x - w_mm);
+                    if (d < r_mm)
+                    {
+                        lift = sqrt((r_mm * r_mm) - (d * d)) - (r_mm - h_mm);
+                        lift = (lift < 0.0) ? 0.0 : lift;
+                    }
+                }
+                word = terrain_roll_hump_step(word, -(int32_t)((lift * mg_per) + 0.5),
+                                              6, 7, &done);
+                total += done;
+                n_rep += (done > 0u) ? 1u : 0u;
+            }
+            printf("   S4-U19: wheel over a %.0f mm x %.0f mm strip at 120 mm/s: %u report(s), %u mm\n",
+                   h_mm, w_mm, (unsigned)n_rep, (unsigned)total);
+            HOST_CHECK("S4-U19", (1u == n_rep)
+                       && ((double)total + 1.0 >= h_mm) && ((double)total <= h_mm + 1.0),
+                       "real wheel shape over a 10/20 mm wide strip: one report within 1 mm");
+        }
+    }
+
+    /* S4-U20 (car run 24 Nov 2026 13:08:30: "HUMP (one wheel)" 3, 8,
+       6 and 18 mm during the obstacle bypass, after the 30 mg start).
+       The same 8 mm-like tilt while driving straight: reported on the
+       line, never off it (AVOID legs, turns, stops).                  */
+    {
+        uint32_t const zero = ((uint32_t)PRV_IMU_R_FILT_OFFSET
+                               << PRV_IMU_R_FILT_POS);
+        uint32_t k = 0u;
+
+        for (k = 0u; k < 2u; k++)
+        {
+            bool const b_line = (0u == k);
+            uint32_t   word   = zero;
+            uint32_t   done   = 0u;
+            uint32_t   n_rep  = 0u;
+            uint32_t   idx    = 0u;
+            int32_t    ay     = 0;
+
+            for (idx = 0u; idx < 60u; idx++)
+            {
+                ay   = ((idx >= 5u) && (idx < 25u)) ? -96 : 0;
+                word = terrain_roll_hump_line(word, ay, 6, 7, b_line,
+                                              &done);
+                n_rep += (done > 0u) ? 1u : 0u;
+            }
+            HOST_CHECK("S4-U20", b_line ? (1u == n_rep) : (0u == n_rep),
+                       b_line ? "on the line: the tilt is reported once"
+                              : "off the line (obstacle bypass): no hump");
+        }
+    }
+
     return (0 == HOST_SUMMARY("terrain")) ? 0 : 1;
 }
