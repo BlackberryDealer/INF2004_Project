@@ -127,7 +127,9 @@ ER tk_unl_mtx(ID id) { (void) id; return E_OK; }
 ID app_start_task(FP e, PRI p, uint64_t *s, uint32_t b, char const *n) { (void)e;(void)p;(void)s;(void)b;(void)n; return 1; }
 void app_check(ER e, char const *w) { (void) e; (void) w; }
 static char clog[4096];   /* console capture */
+static UINT g_arm_log_mode;
 void app_log(char const *f, int32_t a, int32_t b, int32_t c) { char line[256]; snprintf(line, sizeof(line), f, a, b, c); printf("   log: %s", line);
+  if (NULL != strstr(line, "armed for the next cross-junction")) { g_arm_log_mode = flg[1]; }
   if (strlen(clog) + strlen(line) < sizeof(clog)) strcat(clog, line); }
 /* ---------------- neighbour mocks ---------------- */
 static uint32_t g_safety, g_fault, g_now, g_tag; static int g_refuse;
@@ -708,10 +710,13 @@ int main(void) {
   EV(APP_EVT_BARCODE_PROBE, 35u);
   CHECK("S5-U57", !strcmp(mlog, ""), "no second rewind during the slow pass");
   mot.path_counts += odometry_mm_to_counts(245u);
+  g_arm_log_mode = 0u;
   EV(APP_EVT_BARCODE, mission_evt_barcode_value(APP_BAR_CMD_RIGHT, 15u));
   CHECK("S5-U57", !strcmp(mlog, "FOL120 ") && APP_RUN_ARMED == g_ctx.run_state
         && 15u == g_ctx.armed_char && !MODE(APP_MODE_BARCODE_REREAD),
         "mapped F is stored and cruise resumes");
+  CHECK("S5-U57", 0u != (g_arm_log_mode & APP_MODE_BARCODE_REREAD),
+        "reread arms the command before clearing APP_MODE_BARCODE_REREAD");
   EV(APP_EVT_JUNCTION, APP_JCT_SIDE_L);
   CHECK("S5-U57", !strcmp(mlog, "") && g_ctx.b_is_armed, "ignore a side branch");
   mot.path_counts += odometry_mm_to_counts(1100u);

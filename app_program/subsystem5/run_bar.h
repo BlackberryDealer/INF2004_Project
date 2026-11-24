@@ -18,7 +18,7 @@
 /* Outcomes returned by run_bar_step() to mission_run_handle(). */
 #define RUN_BAR_OUT_ACTIVE     (0u)  /* recovery still running */
 #define RUN_BAR_OUT_RESUME     (1u)  /* recovery ended: follow or armed */
-#define RUN_BAR_OUT_ARMED      (2u)  /* barcode decoded: arm, then follow */
+#define RUN_BAR_OUT_ARMED      (2u)  /* barcode decoded: arm, clear, follow */
 #define RUN_BAR_OUT_CROSS      (3u)  /* cross reached while already armed */
 #define RUN_BAR_OUT_SEARCH     (4u)  /* LINE_LOST: enter SEARCH_LINE */
 #define RUN_BAR_OUT_FAULT      (5u)  /* brake timeout or motion refused */
@@ -37,6 +37,11 @@ extern void     run_bar_try_rewind(mission_ctx_t * p_ctx,
 extern uint32_t run_bar_step(mission_ctx_t * p_ctx,
                              mission_evt_in_t const * p_evt,
                              status_board_t const * p_snap, uint32_t now_us);
+
+/* Releases recovery mode flags and suppresses nearby duplicate probes.
+   Called by mission_run.c after arming a decoded barcode on
+   RUN_BAR_OUT_ARMED so APP_MODE_BARCODE_REREAD stays set while arming. */
+extern void     run_bar_clear(mission_ctx_t * p_ctx, uint32_t path);
 
 #endif /* RUN_BAR_H */
 

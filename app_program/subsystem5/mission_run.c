@@ -468,6 +468,7 @@ static void run_barcode_outcome(mission_ctx_t * p_ctx, uint32_t outcome,
             break;
         case RUN_BAR_OUT_ARMED:
             run_arm(p_ctx, p_evt->value);
+            run_bar_clear(p_ctx, status_board_path(p_snap));
             run_follow_or_armed(p_ctx, p_snap, now_us);
             break;
         case RUN_BAR_OUT_CROSS:

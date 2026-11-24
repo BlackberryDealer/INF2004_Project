@@ -31,7 +31,6 @@
 
 /* ---- private function prototypes ------------------------------------- */
 
-static void     run_bar_clear(mission_ctx_t * p_ctx, uint32_t path);
 static bool     run_bar_still(status_board_t const * p_snap);
 static bool     run_bar_scan_ok(status_board_t const * p_snap);
 static uint32_t run_bar_brake_timeout(mission_ctx_t const * p_ctx,
@@ -207,8 +206,6 @@ uint32_t run_bar_step(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
     return out;
 }
 
-/* ---- private functions ------------------------------------------------ */
-
 /**
  * run_bar_clear
  * @brief   Release the retry modes and suppress a nearby duplicate probe.
@@ -216,13 +213,15 @@ uint32_t run_bar_step(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
  * @param   path   current odometry path counts
  * @context mission_task
  */
-static void run_bar_clear(mission_ctx_t * p_ctx, uint32_t path)
+void run_bar_clear(mission_ctx_t * p_ctx, uint32_t path)
 {
     p_ctx->barcode_phase      = RUN_BAR_IDLE;
     p_ctx->barcode_rearm_path = path;
     p_ctx->b_rearm_wait       = true;
     mission_mode_clear(RUN_BAR_INHIBITS | APP_MODE_BARCODE_REREAD);
 }
+
+/* ---- private functions ------------------------------------------------ */
 
 /**
  * run_bar_still
@@ -500,18 +499,16 @@ static uint32_t run_bar_read(mission_ctx_t * p_ctx,
     }
     else if (b_finished)
     {
-        run_bar_clear(p_ctx, path);
         if (APP_EVT_BARCODE == type)
         {
+            /* Caller arms the command first, then calls run_bar_clear(). */
             out = RUN_BAR_OUT_ARMED;
-        }
-        else if (b_cross && p_ctx->b_is_armed)
-        {
-            out = RUN_BAR_OUT_CROSS;
         }
         else
         {
-            out = RUN_BAR_OUT_RESUME;
+            run_bar_clear(p_ctx, path);
+            out = (b_cross && p_ctx->b_is_armed)
+                  ? RUN_BAR_OUT_CROSS : RUN_BAR_OUT_RESUME;
         }
     }
     else
