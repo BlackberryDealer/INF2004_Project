@@ -1012,7 +1012,10 @@ static void imu_turn_rate(bool b_mag_cycle, bool b_mag_read, int32_t pos_l,
             PRV_IMU_K_TURN_DPS_OFFSET);
     imu_g_flag_set(PRV_IMU_G_TURN_ENC_POS, b_use_enc);
 #if (0 != APP_TEST)
-    if ((0 != enc_dps) || (0 != imu_dps))
+    /* Only while the motors may drive: a still car's sensor noise gave a
+       non-zero rate every 50 ms and flooded the console (Session 1). */
+    if (mission_mode_is_set(APP_MODE_MOTOR_EN)
+        && ((0 != enc_dps) || (0 != imu_dps)))
     {
         app_log("[S4-I04/I11] turn dps: imu %d enc %d use_enc %d\n",
                 imu_dps, enc_dps, b_use_enc ? 1 : 0);
