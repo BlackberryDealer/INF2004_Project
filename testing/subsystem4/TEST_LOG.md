@@ -72,6 +72,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-18 | S4-U18 | `tribunal1-car-test` | Hanz | PASS | Car run, thin strip under the right wheel | v7 reported HUMP 15 mm, ruler 10 mm, so TERRAIN_ROLL_GAIN_PCT set to 67. Host expectations scale with the gain. Re-check on the car with v8. |
 | 2026-11-18 | S4-U18 | `9dcc102` (v8, gain 67 %) | Hanz | PASS | Car run, thin strip under the right wheel | 13:50: `HUMP (one wheel): 10 mm`, SUMMARY HUMP_PEAK 10 = ruler 10 mm. Calibrated. |
 | 2026-11-18 | S4 packing check | `9dcc102` + B4 late packing | Hanz | PASS | Differential host run of `imu_task` | Late `imu.c` statics packed (`PRV_IMU_G`..`PRV_IMU_M`). Old and new `imu.c` built against the same mocks and driven with the same random sensor / encoder / IR / mode streams (23 runs, 20 000-30 000 cycles, with calibration, lifts, one-wheel humps, I2C failures, full-scale samples): board writes, events, `SAFETY_LIFT`, faults and console lines identical. Car check still to do. |
+| 2026-11-24 | S4-U01..U20 | `c96481d` | Lucas | PASS | [`2026-11-24_host_s4_diag.txt`](logs/2026-11-24_host_s4_diag.txt) | `terrain` 48/48 (new `S4-U19` ramp-latch recovery & 5 mm boundary), `drv_lsm303` 14/14 (`S4-U15`), `imu_diag` (`-DAPP_TEST=1`) 7/7 + `test_imu` 6/6 (`S4-U20`, 75/75 checks pass). |
 
 ## SPEC-QUESTION
 

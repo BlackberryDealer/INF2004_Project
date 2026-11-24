@@ -33,3 +33,4 @@ Add a new row for every run. Never edit or delete old rows.
 
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
+| 2026-11-24 | INT-01..INT-13 (host suites) | `c96481d` | Lucas | PASS | [`2026-11-24_host_all_suites.txt`](../subsystem1/logs/2026-11-24_host_all_suites.txt) | All automated interface tests (`K1`–`K13`) pass across S1–S5 host suites (984 `[TEST]` lines, 0 failures); physical car clips 1–3 pending track session. |

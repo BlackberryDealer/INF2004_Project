@@ -27,3 +27,4 @@ Add a new row for every run. Never edit or delete old rows.
 
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
+| 2026-11-24 | SYS-08 (host, layout, BARR-C & `TEST=1` diag suites) | `c96481d` | Lucas | PASS | [`2026-11-24_host_all_suites.txt`](../subsystem1/logs/2026-11-24_host_all_suites.txt) | All S1–S5 host unit/simulation suites, dashboard UI ledger checks (`S1-U50`), `TEST=1` diagnostic harnesses (`S3-U56`, `S4-U20`), layout check (386 rows), and BARR-C check (95 files) pass with 0 findings. |
