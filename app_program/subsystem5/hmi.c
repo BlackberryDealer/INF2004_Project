@@ -8,14 +8,13 @@
  */
 
 #include "hmi.h"               /* own header first (BARR-C 4.3.c) */
-#include "../board_pins.h"
 #include "../app_types.h"
 #include "../app_bits.h"
 #include "../app_layout.h"
 #include "cfg_mission.h"
+#include "drv_button.h"
 #include "drv_buzzer.h"
 #include "drv_ws2812.h"
-#include "hardware/gpio.h"
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -81,7 +80,6 @@ static uint32_t g_beep_start_us = 0u;
 static uint32_t hmi_colour(uint32_t sys_state, bool b_is_blink_on);
 static bool     hmi_buzz(uint32_t sys_state, uint32_t now_us,
                          uint32_t in_state_us);
-static bool     hmi_is_pressed(uint32_t pin);
 static uint32_t hmi_get(uint32_t pos, uint32_t width);
 static void     hmi_put(uint32_t pos, uint32_t width, uint32_t value);
 static bool     hmi_is_warning(void);
@@ -93,19 +91,14 @@ static bool     hmi_is_warning(void);
  * @brief   Buttons as inputs with pull-ups, buzzer silent, RGB loaded
  *          (runs on without RGB if no PIO space is left).
  * @return  true if the RGB LED is usable; false: mission_task raises
- *          APP_FAULT_PIO_LOAD (this file is SDK side, no fault.h)
+ *          APP_FAULT_PIO_LOAD
  * @context mission_task, before its loop
  */
 bool hmi_init(void)
 {
     bool b_is_rgb_ok = false;
 
-    gpio_init(PIN_BTN_RUN);
-    gpio_set_dir(PIN_BTN_RUN, false);
-    gpio_pull_up(PIN_BTN_RUN);
-    gpio_init(PIN_BTN_RESET);
-    gpio_set_dir(PIN_BTN_RESET, false);
-    gpio_pull_up(PIN_BTN_RESET);
+    drv_button_init();
     drv_buzzer_init();
     b_is_rgb_ok = drv_ws2812_init();   /* false: no PIO space, no RGB */
 
@@ -129,7 +122,7 @@ uint32_t hmi_poll(void)
     bool     b_sent    = (0u != hmi_get(PRV_MIS_G_RESET_SENT_POS,
                                         PRV_MIS_G_RESET_SENT_BITS));
 
-    if (hmi_is_pressed(PIN_BTN_RUN))
+    if (drv_button_run_pressed())
     {
         if (run_cnt < MISSION_BTN_DEBOUNCE_TICKS)
         {
@@ -145,7 +138,7 @@ uint32_t hmi_poll(void)
         run_cnt = 0u;
     }
 
-    if (hmi_is_pressed(PIN_BTN_RESET))
+    if (drv_button_reset_pressed())
     {
         if (reset_cnt < MISSION_BTN_RESET_HOLD_TICKS)
         {
@@ -373,19 +366,6 @@ static void hmi_put(uint32_t pos, uint32_t width, uint32_t value)
 static bool hmi_is_warning(void)
 {
     return (0u != hmi_get(PRV_MIS_G_WARNING_POS, PRV_MIS_G_WARNING_BITS));
-}
-
-/**
- * hmi_is_pressed
- * @brief   Robo Pico buttons pull the pin to GND: pressed reads 0
- *          (MEASURE: confirm on the board).
- * @param   pin PIN_BTN_RUN or PIN_BTN_RESET
- * @return  true while pressed
- * @context mission_task
- */
-static bool hmi_is_pressed(uint32_t pin)
-{
-    return !gpio_get(pin);
 }
 
 /*** end of file ***/

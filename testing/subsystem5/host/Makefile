@@ -7,6 +7,7 @@
 #   test_drv_ultrasonic_host : S5-U09, trigger pulse >= 10 us when
 #                           interrupted and across the timer wrap
 #   test_status_board_host : S5-U74, packed status board round trip
+#   test_hmi_host          : S5-U85, HMI debounce, RESET hold, LED/buzzer
 # The simulations compile copies of the real sources in build/ next to a
 # mock app.h, so "../app.h" inside them resolves to the mock.
 # Run: make -C testing/subsystem5/host   (also called by testing/host)
@@ -20,18 +21,28 @@ B       := build/app_program
 .PHONY: all clean tree
 
 all: test_obs_profile_host.out sim_mission_host.out sim_obstacle_host.out \
-     test_drv_ultrasonic_host.out test_status_board_host.out
+     test_drv_ultrasonic_host.out test_status_board_host.out \
+     test_hmi_host.out
 	./test_obs_profile_host.out
 	./test_drv_ultrasonic_host.out
 	./sim_mission_host.out
 	./sim_obstacle_host.out
 	./test_status_board_host.out
+	./test_hmi_host.out
 
 test_obs_profile_host.out: test_obs_profile_host.c $(S5)/obs_profile.c \
                            $(S5)/obs_profile.h $(S5)/obs_edge.c \
                            $(S5)/obs_edge.h $(S5)/cfg_obstacle.h
 	$(CC) $(CFLAGS) -Wconversion -Wsign-conversion -o $@ \
 	    test_obs_profile_host.c $(S5)/obs_profile.c $(S5)/obs_edge.c
+
+test_hmi_host.out: test_hmi_host.c $(S5)/hmi.c $(S5)/hmi.h \
+                   $(S5)/drv_button.h $(S5)/drv_buzzer.h \
+                   $(S5)/drv_ws2812.h $(S5)/cfg_mission.h \
+                   $(APP)/app_bits.h $(APP)/app_layout.h \
+                   $(APP)/app_types.h ../../host/host_test.h
+	$(CC) $(CFLAGS) -Wconversion -Wsign-conversion -I../../host \
+	    -o $@ test_hmi_host.c $(S5)/hmi.c
 
 test_drv_ultrasonic_host.out: test_drv_ultrasonic_host.c $(S5)/drv_ultrasonic.c \
                               $(S5)/drv_ultrasonic.h mock_us/hardware/gpio.h \
