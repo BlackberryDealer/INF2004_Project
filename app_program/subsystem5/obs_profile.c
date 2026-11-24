@@ -28,6 +28,7 @@
 #define OBS_HALF_DEG_DDEG  (5u)    /* half of a 1-degree edge step     */
 #define OBS_HALF_DEG_Q14   (143)   /* 0.5 deg in radians, Q14          */
 #define OBS_HALF_CODE_MM   (2u)    /* +- rounding of a 4 mm range      */
+#define OBS_ISQRT_TOP_BIT  (0x40000000u) /* highest even bit, 2^30     */
 
 typedef struct
 {
@@ -832,7 +833,7 @@ static void obs_corner(uint32_t ddeg, uint32_t range_mm,
     int32_t const  cos_q14 = (held <= OBS_DDEG_90)
                              ? obs_sin_ddeg(OBS_DDEG_90 - held)
                              : -obs_sin_ddeg(held - OBS_DDEG_90);
-    int32_t const  dist = (int32_t) range_mm;   /* cast: <= 1022 mm */
+    int32_t const  dist = (int32_t) range_mm;   /* cast: <= 1020 mm */
 
     /* signed division, truncates toward zero (review R19); |d x q| < 2^24 */
     *p_x_mm = (dist * cos_q14) / OBS_Q14_ONE;
@@ -849,7 +850,7 @@ static void obs_corner(uint32_t ddeg, uint32_t range_mm,
 static uint32_t obs_isqrt(uint32_t value)
 {
     uint32_t root = 0u;
-    uint32_t bit  = 1u << 30;
+    uint32_t bit  = OBS_ISQRT_TOP_BIT;
     uint32_t rem  = value;
 
     while (bit > rem)

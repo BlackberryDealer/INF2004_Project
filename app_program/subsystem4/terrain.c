@@ -30,6 +30,15 @@
 #include "../subsystem2/odometry.h"
 
 /* ---- private constants and types ------------------------------------ */
+/* One-wheel tilt smoothing (1/4 per cycle, rounded) and height scale */
+#define TERRAIN_ROLL_EMA_DIV    (4)
+#define TERRAIN_ROLL_EMA_HALF   (TERRAIN_ROLL_EMA_DIV / 2)
+#define TERRAIN_ROLL_UM_PER_MM  (1000u)
+#define TERRAIN_ROLL_MG_PER_G   (1000u)
+#define TERRAIN_ROLL_PCT_SCALE  (100u)
+#define TERRAIN_ROLL_SCALE_DEN  (TERRAIN_ROLL_MG_PER_G \
+                                 * TERRAIN_ROLL_PCT_SCALE)
+#define TERRAIN_ROLL_SCALE_HALF (TERRAIN_ROLL_SCALE_DEN / 2u)
 
 /* Rebase/glitch guard for terrain_ds_counts: a plausible per-cycle delta
    is at most APP_TICK_COUNTS_MAX counts. */
@@ -613,12 +622,14 @@ uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
 
     *p_done_mm = 0u;
 
-    /* EMA 1/4 per cycle; a signed division, never >> (BARR-C 5.3).
-       The step is rounded to nearest (S4-U19): truncation stopped the
-       smoothed value 3 mg short of a steady tilt, 0.25 mm of a 4 mm
-       hump.                                                        */
+    /* EMA 1/TERRAIN_ROLL_EMA_DIV per cycle; a signed division, never
+       >> (BARR-C 5.3). The step is rounded to nearest (S4-U19):
+       truncation stopped the smoothed value 3 mg short of a steady tilt,
+       0.25 mm of a 4 mm hump.                                         */
     diff = terrain_lift_clamp(ay_mg) - filt;
-    filt = filt + ((diff + ((diff >= 0) ? 2 : -2)) / 4);
+    filt = filt + ((diff + ((diff >= 0) ? TERRAIN_ROLL_EMA_HALF
+                                        : -TERRAIN_ROLL_EMA_HALF))
+                   / TERRAIN_ROLL_EMA_DIV);
     if (filt > PRV_IMU_R_FILT_MAX)
     {
         filt = PRV_IMU_R_FILT_MAX;
@@ -674,9 +685,10 @@ uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
             {
                 if (!b_latched)
                 {
-                    *p_done_mm = (((APP_TRACK_UM / 1000u) * peak
-                                   * TERRAIN_ROLL_GAIN_PCT) + 50000u)
-                                 / 100000u;
+                    *p_done_mm = (((APP_TRACK_UM / TERRAIN_ROLL_UM_PER_MM)
+                                   * peak * TERRAIN_ROLL_GAIN_PCT)
+                                  + TERRAIN_ROLL_SCALE_HALF)
+                                 / TERRAIN_ROLL_SCALE_DEN;
                 }
                 b_now_on = false;
                 hyst     = 0u;

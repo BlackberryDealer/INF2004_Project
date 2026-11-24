@@ -320,11 +320,7 @@ static void imu_task(INT stacd, void * p_exinf)
         {
             /* S4-U20: one-wheel humps only while following the line */
             imu_terrain_update(pos_l, pos_r, speed_cpw,
-                               (APP_SYS_RUN == status_board_sys_state(&snap))
-                               && ((APP_RUN_FOLLOW
-                                    == status_board_run_state(&snap))
-                                   || (APP_RUN_ARMED
-                                       == status_board_run_state(&snap))));
+                               status_board_is_line_following(&snap));
 
             /* 7. Turn rate, every 5th cycle (the magnetometer cycle). */
             imu_turn_rate(b_mag_cycle, b_mag_read, pos_l, pos_r);

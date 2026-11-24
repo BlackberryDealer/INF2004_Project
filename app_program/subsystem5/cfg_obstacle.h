@@ -118,7 +118,12 @@
      raw span is still reported (uncertainty, console + profile).      */
 #define OBS_CORE_BAND_MM       (80u)     /* TUNE: > box face curvature   */
 #define OBS_CORE_GAP_STEPS     (1u)      /* hysteresis: bridged dropouts */
-#define OBS_BEAM_HALF_STEPS    (3u)      /* MEASURE: ~15 deg half-beam  */
+/* Planner pull-in, in 5-degree steps: how far the bypass planner trims
+   each end of the core (car-tuned 9..18 Nov with the bypass legs and
+   margins below). It is a planning margin, not the measured echo
+   half-angle (OBS_BEAM_HALF_DDEG, used only for the reported width):
+   changing it would change every bypass leg the car was tested with. */
+#define OBS_BEAM_HALF_STEPS    (3u)      /* TUNE: planner pull-in, steps  */
 #define OBS_WIDTH_MIN_MM       (100u)    /* professor: 10..20 cm        */
 #define OBS_WIDTH_MAX_MM       (200u)
 /* 1-degree edge pass (S5-U83; requirement 24 Nov 2026: reported width
@@ -132,6 +137,12 @@
    where the box sits. Calibrate OBS_BEAM_HALF_DDEG on the car against
    boxes of known width (S5-I09): 1 deg = ~7 mm of width at 200 mm. The
    bypass still plans from the 5-degree estimate above.                 */
+/* Scan geometry and stored range resolution shared by obstacle.c and
+   obs_edge.c                                                        */
+#define OBS_MM_STEP            (4u)      /* stored range resolution, mm  */
+#define OBS_SCAN_LAST_DEG      (APP_SCAN_ANGLE_MIN_DEG                 \
+                                + (APP_SCAN_ANGLE_STEP_DEG             \
+                                   * (APP_SCAN_STEPS - 1u)))  /* 150 */
 #define OBS_EDGE_SUB_MAX       (5u)      /* degrees past the start point  */
 /* An edge counts only if the next degree out jumps to background (clear,
    or more than OBS_EDGE_JUMP_MM beyond the edge echo). A face that keeps
@@ -153,8 +164,10 @@
    band, so the width is reported unavailable. Square boxes in front of
    the car, 8 deg turned or 40 mm off-centre, stay below 30 mm.       */
 #define OBS_EDGE_SKEW_MM       (60u)     /* TUNE */
-#if ((OBS_EDGE_RISE_MM % 4u) != 0u) || ((OBS_EDGE_JUMP_MM % 4u) != 0u)
-#error "Edge thresholds must be whole 4 mm codes"
+#if ((OBS_EDGE_RISE_MM % OBS_MM_STEP) != 0u)                          \
+    || ((OBS_EDGE_JUMP_MM % OBS_MM_STEP) != 0u)                        \
+    || ((OBS_EDGE_SKEW_MM % OBS_MM_STEP) != 0u)
+#error "Edge thresholds must be whole stored range steps (OBS_MM_STEP)"
 #endif
 /* 150 -> 290 (car run 24 Nov 2026 21:08, 70 mm box 200 mm ahead): the
    echoes ran from 55 to ~130 deg, a 75-degree spread for a box that is
