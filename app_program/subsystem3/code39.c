@@ -87,6 +87,8 @@ static uint32_t code39_lookup_pattern(uint16_t pattern);
 static uint32_t code39_try_direction(uint8_t const * p_widths,
                                      uint32_t threshold,
                                      uint32_t * p_char_index);
+static void     code39_reverse(uint8_t const * p_src,
+                               uint8_t * p_dst);
 static uint32_t code39_try_both(uint8_t const * p_widths,
                                 uint32_t threshold,
                                 uint32_t * p_char_index);
@@ -428,6 +430,25 @@ static uint32_t code39_try_direction(uint8_t const * p_widths,
 }
 
 /**
+ * code39_reverse
+ * @brief   Copies a 29-element capture in reverse order for bidirectional
+ *          decoding.
+ * @param   p_src  Source array of 29 element widths.
+ * @param   p_dst  Destination array of 29 element widths (distinct).
+ * @return  none
+ * @context barcode_task
+ */
+static void code39_reverse(uint8_t const * p_src, uint8_t * p_dst)
+{
+    uint32_t idx = 0u;
+
+    for (idx = 0u; idx < BAR_ELEMENTS; idx++)
+    {
+        p_dst[idx] = p_src[(BAR_ELEMENTS - 1u) - idx];
+    }
+}
+
+/**
  * code39_try_both
  * @brief   Attempts forward decode, then reversed element order if needed.
  * @param   p_widths      Array of 29 element widths.
@@ -444,13 +465,9 @@ static uint32_t code39_try_both(uint8_t const * p_widths,
 
     if (CODE39_OK != result)
     {
-        uint8_t  rev[BAR_ELEMENTS] = {0u};
-        uint32_t idx               = 0u;
+        uint8_t rev[BAR_ELEMENTS] = {0u};
 
-        for (idx = 0u; idx < BAR_ELEMENTS; idx++)
-        {
-            rev[idx] = p_widths[(BAR_ELEMENTS - 1u) - idx];
-        }
+        code39_reverse(p_widths, rev);
         result = code39_try_direction(rev, threshold, p_char_index);
     }
     else
@@ -635,13 +652,9 @@ static uint32_t code39_try_split_both(uint8_t const * p_widths,
 
     if (CODE39_OK != result)
     {
-        uint8_t  rev[BAR_ELEMENTS] = {0u};
-        uint32_t idx               = 0u;
+        uint8_t rev[BAR_ELEMENTS] = {0u};
 
-        for (idx = 0u; idx < BAR_ELEMENTS; idx++)
-        {
-            rev[idx] = p_widths[(BAR_ELEMENTS - 1u) - idx];
-        }
+        code39_reverse(p_widths, rev);
         result = code39_try_split_dir(rev, bar_ratio_x10, p_char_index);
     }
     else

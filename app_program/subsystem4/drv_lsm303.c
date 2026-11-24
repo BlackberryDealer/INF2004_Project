@@ -113,7 +113,6 @@ extern uint32_t sys_tick_now_us(void);
 #define LSM303_STEP_TIMEOUT_US (1000u)     /* per bus step (byte, STOP)  */
 #define LSM303_ENABLE_WAIT_US (100u) /* IC_ENABLE / ABORT settle bound */
 #define LSM303_SYS_HZ         (125000000u) /* template fixed clock  */
-#define LSM303_BUS_HZ         (400000u)
 #define LSM303_RESET_HALF_US  (5u) /* SCL half period, 100 kHz   */
 
 /* Driver error codes */
@@ -396,7 +395,8 @@ int32_t drv_lsm303_last_error(void)
 static void lsm303_hw_setup(void)
 {
     uint32_t period =
-        (LSM303_SYS_HZ + (LSM303_BUS_HZ / 2u)) / LSM303_BUS_HZ;  /* 313 */
+        (LSM303_SYS_HZ + (BOARD_I2C_IMU_HZ / 2u))
+        / BOARD_I2C_IMU_HZ;                                      /* 313 */
     uint32_t lcnt     = (period * 3u) / 5u;                      /* 187 */
     uint32_t hcnt     = period - lcnt;                           /* 126 */
     uint32_t spklen   = lcnt / 16u;                              /* 11 */
