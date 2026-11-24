@@ -31,8 +31,8 @@ typedef struct
     uint32_t value;          /* event value (D.13)   */
 } mission_evt_in_t;
 
-/* Whole mission state (baseline: natural types; Phase 4 packs it into
-   the PRV_MIS_* words). Only mission_task touches it.                */
+/* Working copy of the mission state (packed into PRV_MIS_* words
+   between passes). Only mission_task touches it.                     */
 typedef struct
 {
     uint32_t sys_state;          /* APP_SYS_*  */

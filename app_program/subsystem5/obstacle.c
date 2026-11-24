@@ -2,8 +2,8 @@
  * @file    obstacle.c
  * @brief   obstacle_task (60 ms, R3): ping inside a measurement window,
  *          echo timing through R1, confirmation, and the Obstacle Scanner
- *          (Figure 6.4). Baseline representation (natural types, same
- *          4 mm and 4 us resolution as the packed build).
+ *          (Figure 6.4). Packed representation (PRV_OBS_* words,
+ *          4 mm and 4 us resolution).
  * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    task
  * @reqs    FR6, FR7, FR8 (scan + plan), NFR6, NFR10b, NFR17
@@ -295,6 +295,7 @@ static void     obstacle_scan_begin(void);
 static bool     obstacle_next_fine(void);
 static void     obstacle_scan_finish(void);
 static void     obstacle_fill_gaps(void);
+static void     obstacle_build_profile(obs_profile_t * p_prof);
 static void     obstacle_set_step(uint32_t step);
 static bool     obstacle_edge_begin(void);
 static bool     obstacle_edge_step(uint32_t code);
@@ -748,7 +749,7 @@ static uint32_t obstacle_width_to_mm(uint32_t width_4us)
 /**
  * obstacle_round_mm
  * @brief   Rounds to the stored 4 mm step and saturates at the "nothing"
- *          sentinel, so the baseline holds what the packed build holds.
+ *          sentinel (4 mm stored code resolution).
  * @param   distance_mm any
  * @return  0..APP_DIST_NONE_MM, a multiple of 4
  * @context obstacle_task
@@ -897,7 +898,7 @@ static void obstacle_enter(uint32_t state)
 
 /**
  * obstacle_step_monitor
- * @brief   MONITOR: a confirmed reading under 400 mm -> OBSTACLE_AHEAD.
+ * @brief   MONITOR: a confirmed reading under OBS_SLOW_MM -> OBSTACLE_AHEAD.
  * @param   p_rd this cycle's reading
  * @context obstacle_task
  */
@@ -1250,19 +1251,11 @@ static void obstacle_scan_finish(void)
     obs_plan_t         plan = {OBS_OUT_NO_PATH, APP_SIDE_LEFT, 0u, 0u, false};
     obs_edge_t         edge;
     status_board_obs_t part;
-    uint16_t           scan_mm[APP_SCAN_STEPS];
-    uint32_t           idx  = 0u;
     uint32_t           est  = 0u;
     uint32_t           fine = 0u;
     uint32_t           pm_mm = 0u;
 
-    obstacle_fill_gaps();
-    for (idx = 0u; idx < APP_SCAN_STEPS; idx++)
-    {
-        /* cast: <= 1020 mm */
-        scan_mm[idx] = (uint16_t) obstacle_scan_mm(idx);
-    }
-    obs_profile_build(scan_mm, obstacle_get(OBS_F_INFERRED), &prof);
+    obstacle_build_profile(&prof);
     obs_profile_plan(&prof, &plan);
     /* S5-U83: the reported width is the 1-degree edge measurement; the
        plan above still comes from the 5-degree estimate.             */
@@ -1295,7 +1288,7 @@ static void obstacle_scan_finish(void)
         fault_set(APP_FAULT_RANGE_CLAMP);
     }
 
-    /* stored in 4 mm steps (same information as the packed build);
+    /* stored in 4 mm steps (matching the packed board codes);
        legs round up so a rounded leg is never shorter than planned */
     obstacle_part_get(&part);
     part.b_is_profile_valid = prof.b_is_valid;
@@ -1708,6 +1701,27 @@ static void obstacle_fill_gaps(void)
 }
 
 /**
+ * obstacle_build_profile
+ * @brief   Fills unmeasured scan steps, converts stored 4 mm codes to
+ *          millimetres and builds the 5-degree obstacle profile.
+ * @param   p_prof profile out
+ * @context obstacle_task
+ */
+static void obstacle_build_profile(obs_profile_t * p_prof)
+{
+    uint16_t scan_mm[APP_SCAN_STEPS];
+    uint32_t idx = 0u;
+
+    obstacle_fill_gaps();
+    for (idx = 0u; idx < APP_SCAN_STEPS; idx++)
+    {
+        /* cast: <= 1020 mm */
+        scan_mm[idx] = (uint16_t) obstacle_scan_mm(idx);
+    }
+    obs_profile_build(scan_mm, obstacle_get(OBS_F_INFERRED), p_prof);
+}
+
+/**
  * obstacle_set_step
  * @brief   Points the servo at a scan step and starts its settle time.
  * @param   step 0..24 (angle 30 + 5 x step)
@@ -1740,16 +1754,9 @@ static bool obstacle_edge_begin(void)
     obs_profile_t    prof = {0};
     obs_edge_t       edge;
     obs_edge_probe_t next = {0u, false};
-    uint16_t         scan_mm[APP_SCAN_STEPS];
     bool             b_is_more = false;
 
-    obstacle_fill_gaps();
-    for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)
-    {
-        /* cast: <= 1020 mm */
-        scan_mm[idx] = (uint16_t) obstacle_scan_mm(idx);
-    }
-    obs_profile_build(scan_mm, obstacle_get(OBS_F_INFERRED), &prof);
+    obstacle_build_profile(&prof);
 
     b_is_more = obs_edge_begin(&edge, g_obs_scan, &prof, &next);
     obstacle_edge_store(&edge);

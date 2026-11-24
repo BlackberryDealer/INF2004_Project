@@ -60,7 +60,7 @@
 #define OBS_SETTLE_SMALL_PINGS (1u)
 #define OBS_WATCH_SETTLE_PINGS (4u)      /* MEASURE: A9, worst 120 deg move */
 
-/* C.4b: the settle countdown (PRV_OBS_A SETTLE) is 3 bits, the lost and
+/* C.4b: the settle countdown (PRV_OBS_M SETTLE) is 3 bits, the lost and
    silent counters (LOST, SILENT) 2 bits each.                        */
 #if ((OBS_SETTLE_PINGS > 7u) || (OBS_WATCH_SETTLE_PINGS > 7u))
 #error "Settle counts no longer fit the 3-bit SETTLE field: widen it"

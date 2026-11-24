@@ -6,9 +6,8 @@
  * @kind    task
  * @reqs    FR15 (motion API), NFR16 (bypass and reverse caps), FR17
  *
- * Phase 2 (baseline) representation: one K5 message is a natural-type
- * struct of 12 bytes (16 bytes of buffer each). Phase 4 replaces it with
- * the 16-bit MSG_CMD word without changing any function below.
+ * Packed representation (Phase 4): one K5 message is one 16-bit MSG_CMD
+ * word (8 bytes of buffer per entry, 32 bytes for 4 entries).
  *
  * Tags: every accepted command carries a 2-bit tag, echoed by motion_task
  * in MOVE_DONE so mission can ignore stale completions (review R06). The

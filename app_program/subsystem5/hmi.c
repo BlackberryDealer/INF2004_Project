@@ -56,7 +56,7 @@
 
 /* ---- private data ---------------------------------------------------- */
 
-/* GRB levels per colour code: {red, green, blue} */
+/* RGB levels per colour code: {red, green, blue} */
 static uint8_t const g_hmi_rgb[HMI_LED_COUNT][3] =
 {
     {0u, 0u, 0u},                           /* off    */

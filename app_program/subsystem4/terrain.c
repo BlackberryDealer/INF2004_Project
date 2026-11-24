@@ -586,7 +586,7 @@ uint32_t terrain_ir_lift_step(uint32_t ir_cnt, uint32_t raw_l,
  *          g x h / track at the top; h = track x peak / 1000 mg (scaled
  *          by TERRAIN_ROLL_GAIN_PCT). A hump only starts while driving
  *          straight (a turn's sideways acceleration also shows in ay)
- *          and forward; on it, more than TERRAIN_ROLL_MAX_MM of travel
+ *          and forward; on it, more than TERRAIN_ROLL_MAX_TICKS cycles
  *          is a ramp or a held tilt and is dropped without a report.
  * @param   word       PRV_IMU_R word
  * @param   ay_mg      calibrated sideways average this cycle

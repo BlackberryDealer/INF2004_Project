@@ -2,7 +2,7 @@
  * @file    mission.c
  * @brief   Mission queue K4, mode flags K10 and mission_task: the system
  *          statechart (Figure 5a). RUN substates live in mission_run.c.
- *          Baseline representation (natural types).
+ *          Packed state between passes (PRV_MIS_* words, E5 timers).
  * @owner   Buddy 5 (mission, obstacle, shared services)
  * @kind    task
  * @reqs    FR11 (buttons), FR13, FR14, FR16, FR17, NFR10b, min-bit item 7
@@ -402,7 +402,7 @@ bool mission_mode_is_set(uint32_t bit)
 /**
  * mission_queue_high_water
  * @brief   Most K4 buffer bytes ever in use.
- * @return  bytes (each queued event costs 16 B in the baseline)
+ * @return  bytes (each queued event costs 8 B, one 16-bit MSG_EVT)
  * @context any task
  */
 uint32_t mission_queue_high_water(void)

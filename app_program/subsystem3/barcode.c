@@ -64,6 +64,23 @@
 #define BAR_STATE_DECODING   (2u)
 #define BAR_STATE_COOLDOWN   (3u)
 
+#if (BAR_EDGE_LOG_ON != 0u)
+/* Raw edge log entry bit fields (S3-U36, 31 bits of uint32_t): gap in
+   16 us units, level after the edge, speed (cpw) and task cycle.      */
+#define BAR_ELOG_GAP_POS     (0u)
+#define BAR_ELOG_GAP_BITS    (15u)
+#define BAR_ELOG_LVL_POS     (BAR_ELOG_GAP_POS + BAR_ELOG_GAP_BITS)
+#define BAR_ELOG_LVL_BITS    (1u)
+#define BAR_ELOG_CPW_POS     (BAR_ELOG_LVL_POS + BAR_ELOG_LVL_BITS)
+#define BAR_ELOG_CPW_BITS    (7u)
+#define BAR_ELOG_CPW_MAX     ((1u << BAR_ELOG_CPW_BITS) - 1u)
+#define BAR_ELOG_CYC_POS     (BAR_ELOG_CPW_POS + BAR_ELOG_CPW_BITS)
+#define BAR_ELOG_CYC_BITS    (8u)
+#if ((BAR_ELOG_CYC_POS + BAR_ELOG_CYC_BITS) > 32u)
+#error "Barcode edge log entry exceeds 32 bits"
+#endif
+#endif
+
 /* ---- private data ---------------------------------------------------- */
 
 static uint64_t          g_barcode_stack[BARCODE_STACK_WORDS];
@@ -1400,18 +1417,23 @@ static void barcode_elog_add(uint32_t gap_16us, uint32_t level,
 {
     if (0u == barcode_log_get(PRV_BAR_LOG_LEFT_POS, PRV_BAR_LOG_LEFT_BITS))
     {
-        uint32_t entry = 0u;
-
-        entry = app_bits_put(entry, 0u, 15u, gap_16us);
-        entry = app_bits_put(entry, 15u, 1u, level);
-        entry = app_bits_put(entry, 16u, 7u, (cpw > 127u) ? 127u : cpw);
-        entry = app_bits_put(entry, 23u, 8u,
-                             barcode_log_get(PRV_BAR_LOG_CYCLE_POS,
-                                             PRV_BAR_LOG_CYCLE_BITS));
         uint32_t const head = barcode_log_get(PRV_BAR_LOG_HEAD_POS,
                                               PRV_BAR_LOG_HEAD_BITS);
         uint32_t const cnt  = barcode_log_get(PRV_BAR_LOG_CNT_POS,
                                               PRV_BAR_LOG_CNT_BITS);
+        uint32_t const cpw_c = (cpw > BAR_ELOG_CPW_MAX)
+                               ? BAR_ELOG_CPW_MAX : cpw;
+        uint32_t       entry = 0u;
+
+        entry = app_bits_put(entry, BAR_ELOG_GAP_POS, BAR_ELOG_GAP_BITS,
+                             gap_16us);
+        entry = app_bits_put(entry, BAR_ELOG_LVL_POS, BAR_ELOG_LVL_BITS,
+                             level);
+        entry = app_bits_put(entry, BAR_ELOG_CPW_POS, BAR_ELOG_CPW_BITS,
+                             cpw_c);
+        entry = app_bits_put(entry, BAR_ELOG_CYC_POS, BAR_ELOG_CYC_BITS,
+                             barcode_log_get(PRV_BAR_LOG_CYCLE_POS,
+                                             PRV_BAR_LOG_CYCLE_BITS));
 
         g_bar_elog[head] = entry;
         barcode_log_put(PRV_BAR_LOG_HEAD_POS, PRV_BAR_LOG_HEAD_BITS,
@@ -1481,13 +1503,20 @@ static void barcode_elog_step(void)
         uint32_t const entry  = g_bar_elog[slot];
         /* casts: gap <= 32767 x 16 us and cpw <= 127 fit int32_t */
         int32_t const  gap_us =
-            (int32_t) (app_bits_get(entry, 0u, 15u) << BAR_GAP_SHIFT);
+            (int32_t) (app_bits_get(entry, BAR_ELOG_GAP_POS,
+                                    BAR_ELOG_GAP_BITS)
+                       << BAR_GAP_SHIFT);
         int32_t const  signed_gap =
-            (0u != app_bits_get(entry, 15u, 1u)) ? gap_us : -gap_us;
+            (0u != app_bits_get(entry, BAR_ELOG_LVL_POS,
+                                BAR_ELOG_LVL_BITS))
+            ? gap_us : -gap_us;
 
         app_log("BAR E %d %d %d\n",
-                (int32_t) app_bits_get(entry, 23u, 8u), signed_gap,
-                (int32_t) app_bits_get(entry, 16u, 7u));
+                (int32_t) app_bits_get(entry, BAR_ELOG_CYC_POS,
+                                       BAR_ELOG_CYC_BITS),
+                signed_gap,
+                (int32_t) app_bits_get(entry, BAR_ELOG_CPW_POS,
+                                       BAR_ELOG_CPW_BITS));
         barcode_log_put(PRV_BAR_LOG_LEFT_POS, PRV_BAR_LOG_LEFT_BITS,
                         left - 1u);
         if (1u == left)

@@ -208,9 +208,8 @@ ER telem_start(void)
 /**
  * telem_post_event
  * @brief   Queues an event for telemetry (K7, TMO_POL): the 16-bit app
- *          event word. The value is clamped to the type's own width
- *          (layout EVT_* groups; types without a group carry 0), as
- *          mission_post_event does.
+ *          event word. The value is clamped silently to the type's own
+ *          width (layout EVT_* groups; types without a group carry 0).
  * @param   type   APP_EVT_*
  * @param   value  event value (D.13)
  * @return  true if queued; false if K7 is full (counted)
