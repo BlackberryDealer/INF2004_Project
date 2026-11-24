@@ -14,10 +14,10 @@
 #include "../subsystem2/safety.h"
 #include "../subsystem2/fault.h"
 #include "../subsystem2/odometry.h"
-#include "../subsystem3/barcode.h"
 #include "cfg_mission.h"
 #include "cfg_obstacle.h"          /* OBS_SCAN_MM, OBS_CREEP_TOL_MM */
 #include "mission.h"
+#include "run_bar.h"
 
 /* ---- private constants and types ------------------------------------ */
 
@@ -31,12 +31,6 @@
 #define RUN_LEG_MIN_MM            (1)
 #define RUN_INHIBITS              (APP_MODE_BARCODE_INHIBIT          \
                                    | APP_MODE_JUNCTION_INHIBIT)
-
-#define RUN_BAR_IDLE              (0u)
-#define RUN_BAR_BRAKING           (1u)
-#define RUN_BAR_REVERSING         (2u)
-#define RUN_BAR_SETTLING          (3u)
-#define RUN_BAR_READING           (4u)
 
 /* substeps */
 #define RUN_SUB_FIRST     (0u)
@@ -54,8 +48,14 @@ static bool run_common(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                        status_board_t const * p_snap, uint32_t now_us);
 static void run_follow(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                        status_board_t const * p_snap, uint32_t now_us);
+static void run_cross(mission_ctx_t * p_ctx, status_board_t const * p_snap,
+                      uint32_t now_us);
 static void run_armed(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                       status_board_t const * p_snap, uint32_t now_us);
+static void run_barcode_outcome(mission_ctx_t * p_ctx, uint32_t outcome,
+                                mission_evt_in_t const * p_evt,
+                                status_board_t const * p_snap,
+                                uint32_t now_us);
 static void run_execute(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                         status_board_t const * p_snap, uint32_t now_us);
 static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
@@ -88,20 +88,6 @@ static void run_follow_or_armed(mission_ctx_t * p_ctx,
                                 status_board_t const * p_snap,
                                 uint32_t now_us);
 static void run_arm(mission_ctx_t * p_ctx, uint32_t value);
-static void run_barcode_begin(mission_ctx_t * p_ctx, uint32_t advance_mm,
-                               status_board_t const * p_snap,
-                               uint32_t now_us);
-static void run_barcode_try_rewind(mission_ctx_t * p_ctx,
-                                    status_board_t const * p_snap,
-                                    uint32_t now_us);
-static void run_barcode_step(mission_ctx_t * p_ctx,
-                              mission_evt_in_t const * p_evt,
-                              status_board_t const * p_snap,
-                              uint32_t now_us);
-static bool run_barcode_scan_ok(status_board_t const * p_snap);
-static void run_barcode_back(mission_ctx_t * p_ctx, uint32_t now_us);
-static bool run_barcode_retry(mission_ctx_t * p_ctx,
-                              status_board_t const * p_snap, uint32_t now_us);
 static void run_request(mission_ctx_t * p_ctx, uint32_t sys_state,
                         uint32_t end_reason);
 static void run_turn(mission_ctx_t * p_ctx, uint32_t side, int32_t angle_deg,
@@ -157,7 +143,9 @@ void mission_run_handle(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
 
     if ((!b_is_done) && (RUN_BAR_IDLE != p_ctx->barcode_phase))
     {
-        run_barcode_step(p_ctx, p_evt, p_snap, now_us);
+        run_barcode_outcome(p_ctx,
+                            run_bar_step(p_ctx, p_evt, p_snap, now_us),
+                            p_evt, p_snap, now_us);
         b_is_done = true;
     }
 
@@ -188,7 +176,7 @@ void mission_run_handle(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
 
     if (MISSION_REQ_NONE == p_ctx->sys_request)
     {
-        run_barcode_try_rewind(p_ctx, p_snap, now_us);
+        run_bar_try_rewind(p_ctx, p_snap, now_us);
         run_background(p_ctx, p_snap, now_us);
     }
 }
@@ -333,7 +321,7 @@ static bool run_common(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                  && ((APP_RUN_FOLLOW == p_ctx->run_state)
                      || (APP_RUN_ARMED == p_ctx->run_state)))
         {
-            run_barcode_begin(p_ctx, p_evt->value, p_snap, now_us);
+            run_bar_begin(p_ctx, p_evt->value, p_snap, now_us);
             b_is_done = true;
         }
         else
@@ -460,435 +448,40 @@ static void run_armed(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
 }
 
 /**
- * run_barcode_begin
- * @brief   Store a rewind target for a Code 39 start guard.
- *          Keep that target fixed if the line is briefly uncertain.
+ * run_barcode_outcome
+ * @brief   Applies the RUN transition returned by run_bar_step().
+ * @param   p_ctx    mission context
+ * @param   outcome  RUN_BAR_OUT_*
+ * @param   p_evt    this pass's event
+ * @param   p_snap   status board snapshot of this pass
+ * @param   now_us   this pass
  * @context mission_task
  */
-static void run_barcode_begin(mission_ctx_t * p_ctx, uint32_t advance_mm,
-                               status_board_t const * p_snap,
-                               uint32_t now_us)
+static void run_barcode_outcome(mission_ctx_t * p_ctx, uint32_t outcome,
+                                mission_evt_in_t const * p_evt,
+                                status_board_t const * p_snap, uint32_t now_us)
 {
-    uint32_t const path = status_board_path(p_snap);
-
-    if ((advance_mm <= MISSION_BARCODE_REWIND_MM - MISSION_BARCODE_LEAD_MM)
-        && ((!p_ctx->b_rearm_wait)
-            || (odometry_path_since(path, p_ctx->barcode_rearm_path)
-                >= odometry_mm_to_counts(MISSION_BARCODE_REARM_MM))))
+    switch (outcome)
     {
-        uint32_t const counts = odometry_mm_to_counts(
-            advance_mm + MISSION_BARCODE_LEAD_MM);
-
-        if (odometry_path_since(path, p_ctx->barcode_follow_path)
-            >= (counts + odometry_mm_to_counts(MISSION_BARCODE_BACK_PAD_MM)))
-        {
-            p_ctx->barcode_probe_mark = odometry_path_sub(path, counts);
-            p_ctx->b_probe_pending    = true;
-            p_ctx->barcode_since_us   = now_us;
-            return;
-        }
-    }
-
-    run_log_event(p_ctx, "BARCODE start at %d mm, no safe rewind\n",
-                  advance_mm);
-}
-
-/**
- * run_barcode_try_rewind
- * @brief   Wait briefly for visible or centred line tracking before braking.
- *          Cancel the pending retry when the time or distance runs out,
- *          or motion is no longer clear and under the follower's control.
- * @context mission_task
- */
-static void run_barcode_try_rewind(mission_ctx_t * p_ctx,
-                                    status_board_t const * p_snap,
-                                    uint32_t now_us)
-{
-    if (p_ctx->b_probe_pending)
-    {
-        uint32_t const path = status_board_path(p_snap);
-        uint32_t const need = odometry_counts_to_mm(
-            odometry_path_since(path, p_ctx->barcode_probe_mark));
-        uint32_t const line = status_board_line_status(p_snap);
-
-        if ((need > MISSION_BARCODE_REWIND_MM - MISSION_BARCODE_BACK_PAD_MM)
-            || ((now_us - p_ctx->barcode_since_us)
-                >= MISSION_BARCODE_WAIT_MS * RUN_US_PER_MS)
-            || (APP_MOT_FOLLOW != status_board_motion_state(p_snap))
-            || (status_board_speed_l(p_snap) <= 0)
-            || (status_board_speed_r(p_snap) <= 0)
-            || (APP_LINE_JUNCTION == line)
-            || (!run_barcode_scan_ok(p_snap))
-            || mission_mode_is_set(RUN_INHIBITS) || (0u != safety_get()))
-        {
-            p_ctx->b_probe_pending = false;
-            run_log_event(p_ctx, "BARCODE no safe rewind (%d mm needed)\n",
-                          need);
-        }
-        else if (APP_LINE_ON == line)
-        {
-            p_ctx->barcode_mark       = p_ctx->barcode_probe_mark;
-            p_ctx->b_probe_pending    = false;
-            p_ctx->barcode_phase      = RUN_BAR_BRAKING;
-            p_ctx->barcode_since_us   = now_us;
-            p_ctx->barcode_tries      = 0u;
-            mission_mode_set(RUN_INHIBITS | APP_MODE_BARCODE_REREAD);
-            mission_stop_motion(p_ctx);
-        }
-        else
-        {
-            /* The line tracker may recover before the deadline. */
-        }
-    }
-}
-
-/**
- * run_barcode_clear
- * @brief   Release the retry modes and suppress a nearby duplicate probe.
- * @context mission_task
- */
-static void run_barcode_clear(mission_ctx_t * p_ctx, uint32_t path)
-{
-    p_ctx->barcode_phase       = RUN_BAR_IDLE;
-    p_ctx->barcode_rearm_path  = path;
-    p_ctx->b_rearm_wait        = true;
-    mission_mode_clear(RUN_INHIBITS | APP_MODE_BARCODE_REREAD);
-}
-
-/**
- * run_barcode_still
- * @brief   Both wheels have stopped and the safety flags allow movement.
- * @context mission_task
- */
-static bool run_barcode_still(status_board_t const * p_snap)
-{
-    return ((APP_MOT_BRAKE == status_board_motion_state(p_snap))
-            && (0 == status_board_speed_l(p_snap))
-            && (0 == status_board_speed_r(p_snap))
-            && (0u == safety_get()));
-}
-
-/**
- * run_barcode_brake_timeout
- * @brief   A failed stop must not turn into a direction change.
- * @context mission_task
- */
-static void run_barcode_brake_timeout(mission_ctx_t * p_ctx, uint32_t now_us)
-{
-    if ((now_us - p_ctx->barcode_since_us)
-        >= MISSION_BARCODE_BRAKE_MS * RUN_US_PER_MS)
-    {
-        run_log_event(p_ctx, "BARCODE brake timed out (%d ms)\n",
-                      MISSION_BARCODE_BRAKE_MS);
-        run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
-    }
-}
-
-/**
- * run_barcode_braked
- * @brief   Set the minimum rewind and bound it by the last follow stretch.
- * @context mission_task
- */
-static void run_barcode_braked(mission_ctx_t * p_ctx,
-                                status_board_t const * p_snap,
-                                uint32_t now_us)
-{
-    if (run_barcode_still(p_snap))
-    {
-        uint32_t const path = status_board_path(p_snap);
-        uint32_t const need = odometry_counts_to_mm(
-            odometry_path_since(path, p_ctx->barcode_mark));
-        uint32_t const follow_mm = odometry_counts_to_mm(
-            odometry_path_since(path, p_ctx->barcode_follow_path));
-        uint32_t const available = (follow_mm > MISSION_BARCODE_BACK_PAD_MM)
-            ? (follow_mm - MISSION_BARCODE_BACK_PAD_MM) : 0u;
-        uint32_t const limit = (available < MISSION_BARCODE_REWIND_MM)
-            ? available : MISSION_BARCODE_REWIND_MM;
-        /* A retry returns to the start of its failed pass (S5-U81). */
-        uint32_t const extra = (0u == p_ctx->barcode_tries)
-            ? MISSION_BARCODE_BACK_EXTRA_MM : MISSION_BARCODE_RETRY_EXTRA_MM;
-        uint32_t const back = ((need + extra) < limit)
-            ? (need + extra) : limit;
-
-        if ((need <= limit) && run_barcode_scan_ok(p_snap))
-        {
-            p_ctx->barcode_mark      = odometry_path_add(
-                path, odometry_mm_to_counts(need));
-            p_ctx->barcode_back_path = path;
-            p_ctx->barcode_back_left = back;
-            p_ctx->barcode_edge_path = path;
-            p_ctx->barcode_edges     = barcode_edge_count();
-            p_ctx->barcode_phase     = RUN_BAR_REVERSING;
-            if (!p_ctx->b_is_quiet)
-            {
-                /* casts: both distances <= MISSION_BARCODE_REWIND_MM */
-                app_log("BARCODE rewind: needs %d mm, backing %d mm\n",
-                        (int32_t) need, (int32_t) back, 0);
-            }
-            run_barcode_back(p_ctx, now_us);
-        }
-        else
-        {
-            run_log_event(p_ctx, "BARCODE rewind skipped (%d mm needed)\n",
-                          need);
-            run_barcode_clear(p_ctx, path);
+        case RUN_BAR_OUT_RESUME:
             run_follow_or_armed(p_ctx, p_snap, now_us);
-        }
-    }
-    else
-    {
-        run_barcode_brake_timeout(p_ctx, now_us);
-    }
-}
-
-/**
- * run_barcode_scan_ok
- * @brief   The scanner allows a rewind: no obstacle stop or bypass. An
- *          obstacle ahead (APPROACH) is allowed, the car backs away from
- *          it and the sonar guard still stops the slow pass.
- * @context mission_task
- */
-static bool run_barcode_scan_ok(status_board_t const * p_snap)
-{
-    uint32_t const state = status_board_scanner_state(p_snap);
-
-    return ((APP_SCAN_MONITOR == state) || (APP_SCAN_APPROACH == state));
-}
-
-/**
- * run_barcode_back
- * @brief   Send the next reverse move of the rewind. One move is at most
- *          MOTION_REVERSE_MAX_MM, so a long rewind takes several.
- * @context mission_task
- */
-static void run_barcode_back(mission_ctx_t * p_ctx, uint32_t now_us)
-{
-    uint32_t const max_mm = (uint32_t) MOTION_REVERSE_MAX_MM;
-    uint32_t const step   = (p_ctx->barcode_back_left < max_mm)
-                            ? p_ctx->barcode_back_left : max_mm;
-
-    p_ctx->barcode_back_left -= step;
-    /* cast: step <= MOTION_REVERSE_MAX_MM */
-    (void) mission_send_move(p_ctx, MISSION_MV_BACK, (int32_t) step, now_us);
-}
-
-/**
- * run_barcode_white_lead
- * @brief   Require a quiet white stretch past the first observed bar.
- *          A white gap inside the strip is too short to count.
- * @context mission_task
- */
-static bool run_barcode_white_lead(mission_ctx_t * p_ctx, uint32_t path)
-{
-    uint32_t const edges   = barcode_edge_count();
-    bool const     b_white = (0u == barcode_do_level());
-
-    if ((!b_white) || (edges != p_ctx->barcode_edges))
-    {
-        p_ctx->barcode_edge_path = path;
-        p_ctx->barcode_edges     = edges;
-    }
-    return b_white && odometry_path_reached(path, p_ctx->barcode_mark)
-           && (odometry_path_since(path, p_ctx->barcode_edge_path)
-               >= odometry_mm_to_counts(MISSION_BARCODE_QUIET_MM));
-}
-
-/**
- * run_barcode_settled
- * @brief   Check that white held through braking, then start the slow pass.
- * @context mission_task
- */
-static void run_barcode_settled(mission_ctx_t * p_ctx,
-                                 status_board_t const * p_snap,
-                                 uint32_t now_us)
-{
-    uint32_t const path = status_board_path(p_snap);
-    bool const     b_lead = run_barcode_white_lead(p_ctx, path);
-
-    if (run_barcode_still(p_snap))
-    {
-        uint32_t const backed = odometry_counts_to_mm(
-            odometry_path_since(path, p_ctx->barcode_back_path));
-
-        if (!b_lead)
-        {
-            run_log_event(p_ctx, "BARCODE rewind ended after %d mm"
-                          " without a white lead-in\n", backed);
-            run_barcode_clear(p_ctx, path);
-            run_follow_or_armed(p_ctx, p_snap, now_us);
-        }
-        else if (motion_follow(MISSION_BARCODE_SPEED_MM_S))
-        {
-            if (!p_ctx->b_is_quiet)
-            {
-                /* casts: short rewind and white travel < 2047 mm */
-                app_log("BARCODE white lead-in %d mm after rewinding %d mm\n",
-                        (int32_t) odometry_counts_to_mm(
-                            odometry_path_since(
-                                path, p_ctx->barcode_edge_path)),
-                        (int32_t) backed, 0);
-            }
-            p_ctx->barcode_mark     = path;
-            p_ctx->barcode_since_us = now_us;
-            p_ctx->barcode_phase    = RUN_BAR_READING;
-            mission_mode_clear(RUN_INHIBITS);
-            run_log_event(p_ctx, "BARCODE reread at %d mm/s\n",
-                          MISSION_BARCODE_SPEED_MM_S);
-        }
-        else
-        {
-            run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
-        }
-    }
-    else
-    {
-        run_barcode_brake_timeout(p_ctx, now_us);
-    }
-}
-
-/**
- * run_barcode_read
- * @brief   End the slow pass on a decoder result, the cross or its limit.
- * @context mission_task
- */
-static void run_barcode_read(mission_ctx_t * p_ctx,
-                              mission_evt_in_t const * p_evt,
-                              status_board_t const * p_snap, uint32_t now_us)
-{
-    uint32_t const type = p_evt->b_has_event ? p_evt->type : APP_EVT_COUNT;
-    uint32_t const path = status_board_path(p_snap);
-    bool const     b_cross = (APP_EVT_JUNCTION == type)
-                             && (APP_JCT_CROSS == p_evt->value);
-    bool           b_finished = true;
-
-    switch (type)
-    {
-        case APP_EVT_BARCODE:
+            break;
+        case RUN_BAR_OUT_ARMED:
             run_arm(p_ctx, p_evt->value);
+            run_follow_or_armed(p_ctx, p_snap, now_us);
             break;
-        case APP_EVT_UNMAPPED:
-            run_log_event(p_ctx, "BARCODE reread: char index %d has"
-                          " no command\n", p_evt->value);
+        case RUN_BAR_OUT_CROSS:
+            run_cross(p_ctx, p_snap, now_us);
             break;
-        case APP_EVT_INVALID:
-            run_log_event(p_ctx, "BARCODE reread invalid (%d elements)\n",
-                          p_evt->value);
+        case RUN_BAR_OUT_SEARCH:
+            run_goto(p_ctx, APP_RUN_SEARCH_LINE, p_snap, now_us);
+            break;
+        case RUN_BAR_OUT_FAULT:
+            run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
             break;
         default:
-            b_finished = b_cross
-                || (odometry_path_since(path, p_ctx->barcode_mark)
-                    >= odometry_mm_to_counts(MISSION_BARCODE_READ_MM))
-                || ((now_us - p_ctx->barcode_since_us)
-                    >= MISSION_BARCODE_READ_MS * RUN_US_PER_MS);
-            if (b_finished)
-            {
-                run_log_event(p_ctx, "BARCODE reread ended without decode"
-                              " after %d mm\n",
-                              odometry_counts_to_mm(odometry_path_since(
-                                  path, p_ctx->barcode_mark)));
-            }
+            /* RUN_BAR_OUT_ACTIVE: recovery continues. */
             break;
-    }
-
-    if (b_finished && (APP_EVT_BARCODE != type) && (APP_EVT_UNMAPPED != type)
-        && run_barcode_retry(p_ctx, p_snap, now_us))
-    {
-        /* Rewinding to the start of this pass for another read. */
-    }
-    else if (b_finished)
-    {
-        run_barcode_clear(p_ctx, path);
-        if (b_cross && p_ctx->b_is_armed)
-        {
-            run_cross(p_ctx, p_snap, now_us);
-        }
-        else
-        {
-            run_follow_or_armed(p_ctx, p_snap, now_us);
-        }
-    }
-}
-
-/**
- * run_barcode_retry
- * @brief   A slow pass ended without a decode: brake and rewind to the
- *          start of that pass (barcode_mark) for another slow pass, at
- *          most MISSION_BARCODE_RETRIES times (S5-U68).
- * @return  true if the retry started
- * @context mission_task
- */
-static bool run_barcode_retry(mission_ctx_t * p_ctx,
-                              status_board_t const * p_snap, uint32_t now_us)
-{
-    bool b_retry = false;
-
-    if ((p_ctx->barcode_tries < MISSION_BARCODE_RETRIES)
-        && run_barcode_scan_ok(p_snap) && (0u == safety_get()))
-    {
-        p_ctx->barcode_tries++;
-        p_ctx->barcode_phase    = RUN_BAR_BRAKING;
-        p_ctx->barcode_since_us = now_us;
-        mission_mode_set(RUN_INHIBITS | APP_MODE_BARCODE_REREAD);
-        mission_stop_motion(p_ctx);
-        run_log_event(p_ctx, "BARCODE reread failed: rewinding for"
-                      " retry %d\n", p_ctx->barcode_tries);
-        b_retry = true;
-    }
-    return b_retry;
-}
-
-/**
- * run_barcode_step
- * @brief   Brake, back up once, then follow the line at the reread speed.
- *          Common STOP, obstacle and fault handling has priority.
- * @context mission_task
- */
-static void run_barcode_step(mission_ctx_t * p_ctx,
-                              mission_evt_in_t const * p_evt,
-                              status_board_t const * p_snap, uint32_t now_us)
-{
-    uint32_t const type = p_evt->b_has_event ? p_evt->type : APP_EVT_COUNT;
-    uint32_t const path = status_board_path(p_snap);
-
-    if (APP_EVT_LINE_LOST == type)
-    {
-        run_barcode_clear(p_ctx, path);
-        run_goto(p_ctx, APP_RUN_SEARCH_LINE, p_snap, now_us);
-    }
-    else if (RUN_BAR_BRAKING == p_ctx->barcode_phase)
-    {
-        run_barcode_braked(p_ctx, p_snap, now_us);
-    }
-    else if (RUN_BAR_REVERSING == p_ctx->barcode_phase)
-    {
-        /* Keep updating the quiet stretch, but use the full bounded
-           rewind. An edge during early braking could erase the lead. */
-        (void) run_barcode_white_lead(p_ctx, path);
-        if ((APP_EVT_MOVE_DONE == type) && (0u != p_ctx->barcode_back_left))
-        {
-            run_barcode_back(p_ctx, now_us);
-        }
-        else if (APP_EVT_MOVE_DONE == type)
-        {
-            p_ctx->barcode_phase    = RUN_BAR_SETTLING;
-            p_ctx->barcode_since_us = now_us;
-        }
-        else
-        {
-            /* Reverse move still running. */
-        }
-    }
-    else if (RUN_BAR_SETTLING == p_ctx->barcode_phase)
-    {
-        run_barcode_settled(p_ctx, p_snap, now_us);
-    }
-    else if (RUN_BAR_READING == p_ctx->barcode_phase)
-    {
-        run_barcode_read(p_ctx, p_evt, p_snap, now_us);
-    }
-    else
-    {
-        /* No active barcode retry phase. */
     }
 }
 
