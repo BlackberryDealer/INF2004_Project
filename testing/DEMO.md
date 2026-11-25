@@ -31,11 +31,24 @@ Save a scope capture where a firmware diagnostic cannot establish the timing. Ke
 
 ## 2. Course · normal firmware and broker capture
 
-Flash **`build_make/mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2`**. Start your usual broker and [dashboard](../tools/dashboard/README.md). In the team's Bash build shell, start the capture below (Python needs `paho-mqtt` for this command). It timestamps incoming messages through the project decoder. Use the broker address in place of `localhost` if it runs on another machine. The dashboard guide includes the discovery beacon setup.
+Flash **`build_make/mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2`**. Start the usual broker, discovery beacon and [dashboard](../tools/dashboard/README.md). From PowerShell in this checkout, start capture **before** sending MAP or START. This Windows command uses installed Mosquitto and the standard-library project decoder.
 
-```bash
-bash testing/run-demo.sh mqtt Dylan localhost
+```powershell
+& "C:\msys64\ucrt64\bin\python3.exe" .\testing\capture_mqtt.py --tester Dylan --firmware 72482f3 --host localhost
 ```
+
+Use the actual flashed revision and broker address. Wait for a fresh STATE or HEARTBEAT, run the course, request SUMMARY and then press Ctrl+C. The dated CSV in `testing/system/logs/` contains the subscriber arrival time, topic, retained flag, exact payload in hex, decoded fields, tester and flashed commit. Use fresh STATE messages (retained=0) to measure rate. S1-I01 expects 270–330 STATE messages over a complete 60-second interval. The existing Bash command `bash testing/run-demo.sh mqtt Dylan localhost` saves decoded text and requires Python with `paho-mqtt`.
+
+| Case | Evidence during an untethered run |
+|---|---|
+| SYS-02 dashboard | Save the commands, car responses, state stream and final summary. A video is optional when these establish the claimed result. |
+| SYS-03 routing | Pair the acknowledged map and barcode event with a short view of the printed letter, the next cross, the car taking the assigned action and continuing. |
+| SYS-04 hump/ramp | Pair the reported height with a ruler photo and a labelled trial. Film a crossing if the conditions, ramp rejection or physical behavior are unclear from the measurements. |
+| SYS-05 obstacle | Measure the box and stop clearance with a ruler. Show the car clearing it and following the line again; save the matching PROFILE. Time the rejoin from the end of the pass leg using a visible reference or the onboard timing trace. |
+| SYS-06 lift / SYS-07 link loss | Show the lift and wheel stop. Measure the 100 ms limit independently. For Wi-Fi loss, show hotspot off and the car continuing in one shot; capture recovery on the broker. For a fault, film the stimulus and physical response when the saved measurements are insufficient. |
+| SYS-01 boot / SYS-08 diagnostics | Capture the bench UF2 once over USB. The prepared profiles omit the MQTT console mirror; the target assertion macros print directly to the console. For claimed LED colours, add a photo or clip. |
+
+Show or say the test ID, link any 15–60 s unlisted YouTube clip in the [video index](../videos/README.md) and the result row, and use timestamps when one clip covers several cases.
 
 Copy `testing/system/track_trials.csv` into `testing/system/logs/` under a dated filename. Enter the tested commit and tester, the measured inputs, actual observations and evidence filename/time. Blank trials have no outcome. Set the four assigned barcode actions in READY and wait for each MAP acknowledgement. Run SYS-02 through SYS-05 on the course, then SYS-06 and SYS-07 as separate bench/track runs. A second observer can measure clearance and film the actual turn or obstacle pass. The worksheet covers repeat trials; the [system cases](system/TEST_LOG.md) list the other observations. Use USB capture or an independent observation for the interval when the hotspot is off.
 
