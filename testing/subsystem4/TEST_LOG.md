@@ -193,3 +193,4 @@ everything below is fixed and re-tested except where marked pending.
   run-start handler and the `terrain_ds_counts` rebase guard are already
   in place.
 
+| 2026-11-25 | S4-I02, S4-I03, S4-I04, S4-I05, S4-I07, S4-I08, S4-I10, S4-I11, S4-I14 | — | Dylan | NOT RUN | — | No full track, IMU fix in progress and no scope/meter on demo morning (30 cm track section only). IMU intermittently fails to start after reset (see system log SYS-06 rows); rerun after the fix. |
