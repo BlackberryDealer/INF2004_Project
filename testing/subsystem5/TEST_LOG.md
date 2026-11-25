@@ -161,6 +161,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-24 | S5-U29 | `40de1f5` | Hanz | PASS | [`2026-11-24_target_test_session1.txt`](../system/logs/2026-11-24_target_test_session1.txt) | 1 s delay measured 1 005 863 µs (limit 990 000–1 020 000). Pico `TEST=1 NET=lwip MQTT=1` image, built dual-core (`SMP=1`) by mistake: `TEAM.md` says `SMP=0`. |
 | 2026-11-24 | S5-U06 | `40de1f5` | Hanz | FAIL | [`2026-11-24_target_test_session1.txt`](../system/logs/2026-11-24_target_test_session1.txt) | "latency counter moved" failed: before 1769 µs, after 1769 µs. The other 2 checks passed. Likely cause: on a dual-core build the busy task does not delay tasks on the other core. Re-run on the `SMP=0` build. Pico `TEST=1 NET=lwip MQTT=1` image, built dual-core (`SMP=1`) by mistake: `TEAM.md` says `SMP=0`. |
 | 2026-11-24 | S5-I04 (stacks only) | `40de1f5` | Hanz | PASS (partial) | [`2026-11-24_target_test_session1.txt`](../system/logs/2026-11-24_target_test_session1.txt) | Lowest free stack: obstacle_task 368 of 1152 B (32 %), limit 25 %. CPU and RAM use not measured yet. Pico `TEST=1 NET=lwip MQTT=1` image, built dual-core (`SMP=1`) by mistake: `TEAM.md` says `SMP=0`. |
+| 2026-11-25 | S5 host checks (72 distinct printed IDs) | `72482f3` | Codex | PASS (host) | [Fresh run](../subsystem1/logs/2026-11-25_090514_host_72482f3_f1OjER.txt) | 374 passing S5 assertions. Search the transcript by test ID for the input and observed result. |
 
 ## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
 

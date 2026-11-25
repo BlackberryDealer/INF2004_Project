@@ -1,0 +1,18 @@
+PicoCar local single-core firmware builds
+Source: 72482f3da1f921e07cb6267ae3f0c1cde2f36dc3
+Tester: Codex | 2026-11-25 | SDK 2.3.0 | USB CDC | Wi-Fi + lwIP + MQTT
+Each RP2040 UF2 block header, family, sequence, total and trailing magic verified; local UF2 SHA-256 recomputed.
+
+mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_test.uf2
+787456 bytes
+commit=72482f3da1f921e07cb6267ae3f0c1cde2f36dc3
+profile=bench
+tracked_firmware_edits=no
+sha256=cf349b9a806795c107fb03b5e082462cb9b221aa6651577a742e45de3b36b1e6
+
+mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2
+771072 bytes
+commit=72482f3da1f921e07cb6267ae3f0c1cde2f36dc3
+profile=course
+tracked_firmware_edits=no
+sha256=69bbbd99c57b6c0519663e157ce8c7c4f879d516441c8eb81b686a5149d33701

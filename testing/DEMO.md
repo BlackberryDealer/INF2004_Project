@@ -20,6 +20,13 @@ Hold BOOTSEL while plugging in the Pico. Copy **`build_make/mtk3pico_smp0_usb_cd
 | S3-I01 | Period range (9–11 ms) and maximum cycle time (≤300 µs). |
 | S4-I09 | Worst read time and applicable 550/750/800 µs workload budget. Identify which limit applies; uncertain workload is inconclusive. |
 
+For a quick readout, run the following on this Windows laptop. It selects the newest bench capture. On another machine, use its Python 3 interpreter. It reviews the last boot and reports the two unit verdicts, the line timing range and the maximum IMU read duration. Exit 1 means a failure was observed and exit 2 means the capture needs more evidence. Keep the raw capture.
+
+```powershell
+$capture = Get-ChildItem .\testing\system\logs\*_bench_*.txt | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+& "C:\msys64\ucrt64\bin\python3.exe" .\testing\review-bench.py $capture.FullName
+```
+
 Save a scope capture where a firmware diagnostic cannot establish the timing. Keep all failing lines. For a missing banner, incomplete test or missing physical measurement, record the observed portion and mark the rest pending.
 
 ## 2. Course · normal firmware and broker capture

@@ -4,3 +4,5 @@
 *.sh  text eol=lf
 tools/dashboard/telem_tables.js text eol=lf
 testing/subsystem1/host/golden/*.csv text eol=lf
+# Keep the original console capture bytes, including serial CRLF.
+testing/system/logs/*.txt -text
