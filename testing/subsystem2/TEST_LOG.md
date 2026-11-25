@@ -108,7 +108,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-10-22 | S2-U01, U02, U11, U13, U14, U03, U12, U15–U19 | `<commit>` | | PASS | `logs/2026-10-22_host_all_v2.txt` | 64 host checks after the review fixes |
 | 2026-10-22 | S2-U01, U02, U11, U13, U14, U03, U12, U15–U19 | `<commit>` | | PASS | `logs/2026-10-22_host_all_v3.txt` | 68 host checks after the follow-up fix (late-cycle recovery) |
 | 2026-11-24 | S2-I07 | `40de1f5` | Hanz | PASS | [`2026-11-24_target_test_session1.txt`](../system/logs/2026-11-24_target_test_session1.txt) | Both checks passed on the Pico. Pico `TEST=1 NET=lwip MQTT=1` image, built dual-core (`SMP=1`) by mistake: `TEAM.md` says `SMP=0`. |
-| 2026-11-25 | S2 host checks (25 distinct printed IDs) | `72482f3` | Codex | PASS (host) | [Fresh run](../subsystem1/logs/2026-11-25_090514_host_72482f3_f1OjER.txt) | 131 passing S2 assertions. Search the transcript by test ID for the input and observed result. |
+| 2026-11-25 | S2 host checks (25 distinct printed IDs) | `72482f3` | Dylan | PASS (host) | [Fresh run](../subsystem1/logs/2026-11-25_090514_host_72482f3_f1OjER.txt) | 131 passing S2 assertions. Search the transcript by test ID for the input and observed result. |
 
 | 2026-11-10 | S2-U28 | before fix | Hanz | FAIL | motion_task host sim | 70 mm/s used the same split as slow speed. |
 | 2026-11-10 | S2-U28 | `barcode-reread-full-strip` | Hanz | PASS | motion_task host sim | Split scaled to 70/100. Subsystem 2 run: 32 + 4 + 14 + 52 pass. |

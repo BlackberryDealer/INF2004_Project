@@ -1,6 +1,6 @@
 PicoCar S1-S5 automated host test run
 GitHub main commit: 14ed65a6995fb94a828f114fe6bd788a5c28be00 (git -c core.autocrlf=false archive, repository line endings)
-Runner: Codex, Windows MSYS2 UCRT64 host
+Runner: Dylan, Windows MSYS2 UCRT64 host
 Run started: 2026-11-25 03:49:03 +08
 gcc.exe (Rev8, Built by MSYS2 project) 15.2.0
 GNU Make 4.4.1

@@ -1,0 +1,227 @@
+2026-11-10T13:58:02.129Z  (81 console lines dropped: queue full)
+2026-11-10T13:58:02.129Z  7 tasks started
+2026-11-10T13:58:02.198Z  ENC PIO1 SM 0 1 offset 0
+2026-11-10T13:58:02.198Z  STATE BOOT (white): waiting for task check-ins and radio init
+2026-11-10T13:58:02.239Z  IMPACT INT1: edge at 10 ms, handled 133986 us later, IG_SRC1 106 (66 = X high, 72 = Y high)
+2026-11-10T13:58:02.239Z    speed 0 counts per 50 ms, FIFO overruns so far 0
+2026-11-10T13:58:02.301Z    read before: -1 samples (-1 = failed), at -10541 us after the edge
+2026-11-10T13:58:02.301Z      raw peak X 0 Y 0 mg
+2026-11-10T13:58:02.354Z    read at handling: 4 samples (-1 = failed), at 133390 us after the edge
+2026-11-10T13:58:02.354Z      raw peak X 2993 Y 2993 mg
+2026-11-10T13:58:02.415Z    next read: 4 samples (-1 = failed), at 143215 us after the edge
+2026-11-10T13:58:02.415Z      raw peak X 2993 Y 2993 mg
+2026-11-10T13:58:02.508Z  US dist 1968 mm, lost 0
+2026-11-10T13:58:02.508Z  IR raw L 209 R 210
+2026-11-10T13:58:02.607Z  ENC pos L 0 R 0
+2026-11-10T13:58:02.607Z  BAR DO 0 (1 = black), edges 11
+2026-11-10T13:58:02.615Z  US dist 1964 mm, lost 0
+2026-11-10T13:58:02.615Z  IR raw L 217 R 205
+2026-11-10T13:58:02.671Z  ENC pos L 0 R 0
+2026-11-10T13:58:02.671Z  BAR DO 0 (1 = black), edges 11
+2026-11-10T13:58:02.739Z  US dist 1952 mm, lost 0
+2026-11-10T13:58:02.739Z  STATE CAL_IMU (yellow blink): keep the car still, 2 s
+2026-11-10T13:58:02.777Z  IR raw L 196 R 202
+2026-11-10T13:58:02.777Z  ENC pos L 0 R 0
+2026-11-10T13:58:02.847Z  BAR DO 0 (1 = black), edges 11
+2026-11-10T13:58:02.856Z  WDT longest feed gap 10258 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:02.886Z  US dist 1916 mm, lost 0
+2026-11-10T13:58:02.886Z  IR raw L 197 R 207
+2026-11-10T13:58:02.955Z  ENC pos L 0 R 0
+2026-11-10T13:58:02.955Z  BAR DO 0 (1 = black), edges 11
+2026-11-10T13:58:03.037Z  US dist 1892 mm, lost 0
+2026-11-10T13:58:03.040Z  IR raw L 218 R 206
+2026-11-10T13:58:03.070Z  ENC pos L 0 R 0
+2026-11-10T13:58:03.070Z  BAR DO 0 (1 = black), edges 11
+2026-11-10T13:58:03.128Z  US dist 1876 mm, lost 0
+2026-11-10T13:58:03.128Z  IR raw L 205 R 200
+2026-11-10T13:58:03.206Z  ENC pos L 0 R 0
+2026-11-10T13:58:03.206Z  BAR DO 0 (1 = black), edges 11
+2026-11-10T13:58:03.264Z  US dist 1888 mm, lost 0
+2026-11-10T13:58:03.265Z  IMU at rest, raw before offsets: ax 2993 ay 2993 az 2993 mg
+2026-11-10T13:58:03.318Z  STATE CAL_IR (yellow blink): sweeping over the line
+2026-11-10T13:58:03.318Z  SAFETY IMPACT latched before the motors were enabled: cleared
+2026-11-10T13:58:03.377Z  WDT longest feed gap 10529 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:03.377Z  US dist 2044 mm, lost 1
+2026-11-10T13:58:03.432Z  US dist 1880 mm, lost 0
+2026-11-10T13:58:03.432Z  US dist 1892 mm, lost 0
+2026-11-10T13:58:03.511Z  CAL_IR sweep done: heading -163 cdeg from the start (+ = right) after 0 return turns
+2026-11-10T13:58:03.512Z  IR cal OK: span L 3337 R 3290
+2026-11-10T13:58:03.571Z  STATE READY (green): press and release RUN (GP20) to start
+2026-11-10T13:58:03.572Z  US dist 1876 mm, lost 0
+2026-11-10T13:58:03.623Z  IR raw L 193 R 225
+2026-11-10T13:58:03.624Z  ENC pos L 4 R 14
+2026-11-10T13:58:03.687Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:03.687Z  US dist 1876 mm, lost 0
+2026-11-10T13:58:03.748Z  IR raw L 223 R 228
+2026-11-10T13:58:03.749Z  ENC pos L 4 R 14
+2026-11-10T13:58:03.805Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:03.805Z  MAP stored char index 10, command 0
+2026-11-10T13:58:03.886Z  US dist 1876 mm, lost 0
+2026-11-10T13:58:03.886Z  IR raw L 226 R 225
+2026-11-10T13:58:03.923Z  ENC pos L 4 R 14
+2026-11-10T13:58:03.924Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:03.996Z  WDT longest feed gap 12947 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:03.996Z  US dist 1876 mm, lost 0
+2026-11-10T13:58:04.153Z  IR raw L 216 R 230
+2026-11-10T13:58:04.154Z  ENC pos L 4 R 14
+2026-11-10T13:58:04.237Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:04.462Z  US dist 1876 mm, lost 0
+2026-11-10T13:58:04.638Z  IR raw L 176 R 230
+2026-11-10T13:58:04.638Z  ENC pos L 4 R 14
+2026-11-10T13:58:04.688Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:04.971Z  US dist 1884 mm, lost 0
+2026-11-10T13:58:05.419Z  IR raw L 211 R 228
+2026-11-10T13:58:05.420Z  ENC pos L 4 R 14
+2026-11-10T13:58:05.424Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:05.428Z  US dist 1884 mm, lost 0
+2026-11-10T13:58:05.668Z  IR raw L 186 R 232
+2026-11-10T13:58:05.668Z  ENC pos L 4 R 14
+2026-11-10T13:58:05.736Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:05.962Z  US dist 1896 mm, lost 0
+2026-11-10T13:58:06.147Z  WDT longest feed gap 12400 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:06.235Z  IR raw L 186 R 231
+2026-11-10T13:58:06.235Z  ENC pos L 4 R 14
+2026-11-10T13:58:06.351Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:06.376Z  US dist 1880 mm, lost 0
+2026-11-10T13:58:06.706Z  IR raw L 216 R 227
+2026-11-10T13:58:06.706Z  ENC pos L 4 R 14
+2026-11-10T13:58:06.707Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:06.856Z  US dist 1880 mm, lost 0
+2026-11-10T13:58:07.202Z  IR raw L 195 R 231
+2026-11-10T13:58:07.202Z  ENC pos L 4 R 14
+2026-11-10T13:58:07.415Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:07.607Z  US dist 1884 mm, lost 0
+2026-11-10T13:58:07.707Z  IR raw L 185 R 226
+2026-11-10T13:58:07.708Z  ENC pos L 4 R 14
+2026-11-10T13:58:07.708Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:07.828Z  US dist 1892 mm, lost 0
+2026-11-10T13:58:08.004Z  WDT longest feed gap 12411 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:08.194Z  IR raw L 224 R 219
+2026-11-10T13:58:08.194Z  ENC pos L 4 R 14
+2026-11-10T13:58:08.281Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:08.300Z  US dist 1888 mm, lost 0
+2026-11-10T13:58:08.724Z  IR raw L 196 R 229
+2026-11-10T13:58:08.812Z  ENC pos L 4 R 14
+2026-11-10T13:58:08.812Z  BAR DO 0 (1 = black), edges 13
+2026-11-10T13:58:08.938Z  US dist 1896 mm, lost 0
+2026-11-10T13:58:08.993Z  STATE RUN (blue): following the line
+2026-11-10T13:58:10.050Z  WDT longest feed gap 11983 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:10.050Z  BAR edges 13 so far (DO now 0)
+2026-11-10T13:58:12.072Z  WDT longest feed gap 11965 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:12.072Z  BAR edges 36 so far (DO now 0)
+2026-11-10T13:58:12.384Z  LINE LOST (both sensors white 200 ms): searching, path 448 mm
+2026-11-10T13:58:12.491Z  LINE FOUND again after 120 ms of search
+2026-11-10T13:58:12.695Z  BARCODE value 10: armed for the next cross-junction
+2026-11-10T13:58:14.014Z  WDT longest feed gap 12356 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:14.014Z  BAR edges 47 so far (DO now 0)
+2026-11-10T13:58:16.037Z  WDT longest feed gap 13276 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:16.037Z  BAR edges 47 so far (DO now 0)
+2026-11-10T13:58:17.138Z  OBSTACLE AHEAD: distance 596 mm, slowing down
+2026-11-10T13:58:17.953Z  OBSTACLE AHEAD: distance 164 mm, slowing down
+2026-11-10T13:58:18.022Z  WDT longest feed gap 12247 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:18.022Z  BAR edges 53 so far (DO now 1)
+2026-11-10T13:58:18.834Z  OBSTACLE AHEAD: distance 380 mm, slowing down
+2026-11-10T13:58:18.836Z  RAMP: pitched, echo 396 mm ignored, stop below 251 mm
+2026-11-10T13:58:19.003Z  OBSTACLE STOP (ESTOP): distance 160 mm, lost echoes 0
+2026-11-10T13:58:19.035Z  CREEP stop at 380 mm (lost 0, agrees 0)
+2026-11-10T13:58:19.280Z  CREEP: obstacle at 568 mm, moving 318 mm closer to scan
+2026-11-10T13:58:19.295Z  CREEP done: obstacle at 332 mm, scanning
+2026-11-10T13:58:20.056Z  WDT longest feed gap 12146 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:20.056Z  BAR edges 53 so far (DO now 1)
+2026-11-10T13:58:22.041Z  WDT longest feed gap 11901 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:22.041Z  BAR edges 82 so far (DO now 0)
+2026-11-10T13:58:22.156Z  STATE FINISHED (green blink)
+2026-11-10T13:58:22.518Z  IR raw L 246 R 214
+2026-11-10T13:58:22.518Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:22.518Z  BAR DO 0 (1 = black), edges 94
+2026-11-10T13:58:22.518Z  US dist 508 mm, lost 0
+2026-11-10T13:58:24.470Z  IR raw L 252 R 225
+2026-11-10T13:58:24.472Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:24.472Z  BAR DO 0 (1 = black), edges 115
+2026-11-10T13:58:24.472Z  US dist 596 mm, lost 0
+2026-11-10T13:58:24.552Z  IR raw L 243 R 218
+2026-11-10T13:58:24.552Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:24.552Z  BAR DO 0 (1 = black), edges 138
+2026-11-10T13:58:24.552Z  US dist 976 mm, lost 0
+2026-11-10T13:58:24.557Z  IR raw L 239 R 230
+2026-11-10T13:58:24.557Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:24.559Z  BAR DO 0 (1 = black), edges 142
+2026-11-10T13:58:24.559Z  US dist 704 mm, lost 0
+2026-11-10T13:58:24.562Z  WDT longest feed gap 11901 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:24.567Z  IR raw L 237 R 223
+2026-11-10T13:58:24.567Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:24.573Z  BAR DO 0 (1 = black), edges 142
+2026-11-10T13:58:24.573Z  US dist 32 mm, lost 0
+2026-11-10T13:58:24.863Z  US dist 28 mm, lost 0
+2026-11-10T13:58:24.866Z  IR raw L 233 R 218
+2026-11-10T13:58:24.929Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:24.936Z  BAR DO 0 (1 = black), edges 166
+2026-11-10T13:58:25.341Z  US dist 28 mm, lost 0
+2026-11-10T13:58:25.400Z  IR raw L 257 R 215
+2026-11-10T13:58:25.400Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:25.451Z  BAR DO 0 (1 = black), edges 183
+2026-11-10T13:58:26.207Z  US dist 232 mm, lost 0
+2026-11-10T13:58:26.207Z  IR raw L 241 R 223
+2026-11-10T13:58:26.207Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:26.402Z  BAR DO 0 (1 = black), edges 202
+2026-11-10T13:58:27.598Z  WDT longest feed gap 15267 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:27.601Z  US dist 376 mm, lost 0
+2026-11-10T13:58:27.603Z  IR raw L 228 R 222
+2026-11-10T13:58:27.603Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:27.603Z  BAR DO 0 (1 = black), edges 267
+2026-11-10T13:58:27.608Z  US dist 376 mm, lost 0
+2026-11-10T13:58:27.608Z  IR raw L 262 R 212
+2026-11-10T13:58:27.608Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:27.610Z  BAR DO 0 (1 = black), edges 276
+2026-11-10T13:58:27.615Z  US dist 376 mm, lost 0
+2026-11-10T13:58:27.617Z  IR raw L 248 R 222
+2026-11-10T13:58:27.617Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:27.617Z  BAR DO 0 (1 = black), edges 276
+2026-11-10T13:58:27.732Z  US dist 376 mm, lost 0
+2026-11-10T13:58:27.853Z  IR raw L 220 R 218
+2026-11-10T13:58:27.854Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:27.930Z  BAR DO 0 (1 = black), edges 315
+2026-11-10T13:58:28.047Z  WDT longest feed gap 14843 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:28.224Z  US dist 376 mm, lost 0
+2026-11-10T13:58:28.422Z  IR raw L 212 R 218
+2026-11-10T13:58:28.423Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:28.454Z  BAR DO 0 (1 = black), edges 361
+2026-11-10T13:58:28.699Z  US dist 376 mm, lost 0
+2026-11-10T13:58:29.063Z  IR raw L 248 R 208
+2026-11-10T13:58:29.298Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:29.298Z  BAR DO 0 (1 = black), edges 380
+2026-11-10T13:58:29.310Z  US dist 376 mm, lost 0
+2026-11-10T13:58:29.368Z  IR raw L 250 R 213
+2026-11-10T13:58:29.368Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:29.686Z  BAR DO 0 (1 = black), edges 404
+2026-11-10T13:58:29.690Z  US dist 376 mm, lost 0
+2026-11-10T13:58:29.896Z  IR raw L 248 R 216
+2026-11-10T13:58:29.896Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:29.959Z  BAR DO 0 (1 = black), edges 423
+2026-11-10T13:58:30.098Z  WDT longest feed gap 12201 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:30.134Z  US dist 376 mm, lost 0
+2026-11-10T13:58:30.402Z  IR raw L 250 R 221
+2026-11-10T13:58:30.402Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:30.426Z  BAR DO 0 (1 = black), edges 440
+2026-11-10T13:58:30.608Z  US dist 376 mm, lost 0
+2026-11-10T13:58:30.863Z  IR raw L 242 R 220
+2026-11-10T13:58:30.863Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:31.120Z  BAR DO 0 (1 = black), edges 461
+2026-11-10T13:58:31.125Z  US dist 376 mm, lost 0
+2026-11-10T13:58:31.392Z  IR raw L 254 R 223
+2026-11-10T13:58:31.392Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:31.462Z  BAR DO 0 (1 = black), edges 485
+2026-11-10T13:58:31.593Z  US dist 376 mm, lost 0
+2026-11-10T13:58:32.046Z  IR raw L 239 R 226
+2026-11-10T13:58:32.047Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:32.047Z  BAR DO 0 (1 = black), edges 496
+2026-11-10T13:58:32.055Z  WDT longest feed gap 11923 us in the last 2 s (watchdog fires at 30000)
+2026-11-10T13:58:32.055Z  US dist 376 mm, lost 0
+2026-11-10T13:58:32.455Z  IR raw L 239 R 224
+2026-11-10T13:58:32.456Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:32.456Z  BAR DO 0 (1 = black), edges 518
+2026-11-10T13:58:32.541Z  US dist 376 mm, lost 0
+2026-11-10T13:58:32.908Z  IR raw L 231 R 212
+2026-11-10T13:58:32.908Z  ENC pos L 3124 R 3736
+2026-11-10T13:58:32.992Z  BAR DO 0 (1 = black), edges 537
+2026-11-10T13:58:33.012Z  US dist 376 mm, lost 0

@@ -1,6 +1,6 @@
 PicoCar local single-core firmware builds
 Source: 72482f3da1f921e07cb6267ae3f0c1cde2f36dc3
-Tester: Codex | 2026-11-25 | SDK 2.3.0 | USB CDC | Wi-Fi + lwIP + MQTT
+Tester: Dylan | 2026-11-25 | SDK 2.3.0 | USB CDC | Wi-Fi + lwIP + MQTT
 Each RP2040 UF2 block header, family, sequence, total and trailing magic verified; local UF2 SHA-256 recomputed.
 
 mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_test.uf2
