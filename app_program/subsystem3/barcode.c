@@ -1206,6 +1206,16 @@ static void barcode_step_decoding(uint32_t path)
         {
             (void) mission_post_event(APP_EVT_UNMAPPED, char_idx);
         }
+#if (0 != APP_TEST)
+        {
+            uint32_t const lat_us = sys_tick_now_us() - g_bar_last_us;
+
+            /* casts: masked latency < 2^31 and char/cmd <= 42 fit int32_t */
+            app_log("[S3-I03] BARCODE decode lat %d us (char %d, cmd %d)\n",
+                    (int32_t) (lat_us & 0x7FFFFFFFu),
+                    (int32_t) char_idx, (int32_t) cmd);
+        }
+#endif /* APP_TEST */
 
         barcode_mark_set(path);
         barcode_state_set(BAR_STATE_COOLDOWN, n_elem);

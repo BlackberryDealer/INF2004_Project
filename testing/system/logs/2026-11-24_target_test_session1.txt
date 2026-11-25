@@ -1,0 +1,4534 @@
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2026.11.24 22:34:27 =~=~=~=~=~=~=~=~=~=~=~=
+
+
+microT-Kernel Version 3.00
+
+
+=== CSC28 PicoCar on micro T-Kernel (spec 0x6300, product 0x0003) ===
+dual-core (SMP) build
+GP0 func 31 GP1 func 31
+RESET cause watchdog 0
+IMU answered at I2C address 29 (29 = 0x1D SA0 high, 30 = 0x1E SA0 low)
+ENC PIO1 SM 0 1 offset 0
+7 tasks started
+STATE BOOT (white): waiting for task check-ins and radio init
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+US dist 1156 mm, lost 0
+[TEST] === test run start ===
+IR raw L 198 R 2211
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[TEST] S1-U03 FAIL  K11 holds at most 8 messages; the next send fails   (../app_program/subsystem1/test_telem.c:85)
+[TEST] S1-U03 PASS  the refused send returned at once (nothing blocks)
+[S4-I10] mag raw mx 6521 my -6370 mz -1407
+[TEST] S1-U03 PASS  telem_task's payload into a full K11 is counted
+[TEST] S1-U03 PASS  mqtt_bridge_take drains every queued payload
+EVT 1 ignored in 0
+[TEST] S1-U12 PASS  two remote STOPs return at once (counts: host test)
+[TEST] telem SUMMARY 4 passed, 1 failed
+[TEST] S2-I07 PASS  motion_move_backward(151) returns false (NFR16)
+[TEST] S2-I07 PASS  every out-of-range argument is refused
+[TEST] motion SUMMARY 2 passed, 0 failed
+[TEST] S3-U06 PASS  cal_finish accepts both polarities
+[TEST] S3-U01 PASS  exact endpoints 0 and 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  steering sign convention +left -right
+[TEST] S3-U14 PASS  early barcode branch + right sat classifies T
+[TEST] S3-U02 PASS  late barcode branch + right sat + line present -> CROSS
+US dist 1152 mm, lost 0
+IR raw L 213 R 2220
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx 6546 my -6364 mz -1382
+[S3-I05/I06 boot] 16-smp L 195..220 sd 7
+[S3-I05/I06 boot] 16-smp R 2209..2238 sd 7
+[TEST] S3-U56 PASS  SH_IR_RAW stationary ADC sampling & std-dev under US ping
+[TEST] line SUMMARY 7 passed, 0 failed
+[TEST] S3-U03 PASS  code39 decodes *A* to index 10
+[TEST] S3-U05 PASS  28-element capture rejected
+[TEST] S3-U08 PASS  barcode_map_set boundary calls safe
+[TEST] S3-U10 PASS  MSG_EDGE pack/unpack at 0, 1, 0x7FFE, 0x7FFF and saturation
+[TEST] barcode SUMMARY 4 passed, 0 failed
+[TEST] S4-U13 PASS  terrain_reset clears state and accumulators
+[TEST] S4-U13 PASS  position rebase gives ds = 0 (no false climb)
+[TEST] S4-U13 PASS  ds is the slower wheel's delta
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U11 PASS  hump 127 passes, 128 clamps and raises RANGE_CLAMP
+[TEST] S4-U11 PASS  one PRV_OFS_A AX step decodes to 2 mg, range covers +-4094 mg
+[TEST] imu SUMMARY 6 passed, 0 failed
+[TEST] obstacle SUMMARY 0 passed, 0 failed
+wifi: joining "Hpi~" ...
+US dist 1152 mm, lost 0
+IR raw L 201 R 2217
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+wifi: link status -> joined AP, waiting for IP (1)
+STATE CAL_IMU (yellow blink): keep the car still, 2 s
+[S4-I10] mag raw mx 6540 my -6339 mz -1400
+WDT longest feed gap 10624 us in the last 2 s (watchdog fires at 30000)
+US dist 1156 mm, lost 0
+IR raw L 193 R 2222
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx 6551 my -6344 mz -1384
+[TEST] S5-U29 PASS  timer advances ~1 000 000 us in 1 s
+S5-U29 timer diff 1005863 us
+[TEST] time base SUMMARY 1 passed, 0 failed
+US dist 1192 mm, lost 0
+IR raw L 215 R 2218
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx 6537 my -6352 mz -1403
+US dist 1152 mm, lost 0
+IR raw L 208 R 2227
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx 6557 my -6327 mz -1410
+US dist 1152 mm, lost 0
+IR raw L 203 R 2228
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+IMU at rest, raw before offsets: ax -178 ay 50 az -850 mg
+STATE CAL_IR (yellow blink): sweeping over the line
+[S4-I04/I11] turn dps: imu 2 enc -11 use_enc 0
+EVT 18 ignored in 2
+[TEST] S5-U06 PASS  busy task started
+[TEST] S5-U06 FAIL  latency counter moved   (../app_program/subsystem5/test_mission.c:110)
+[TEST] S5-U06 PASS  latency shows the 2 ms delay
+S5-U06 latency before 1769 after 1769 us
+[TEST] mission latency SUMMARY 2 passed, 1 failed
+[TEST] === test run end ===
+stack 0 free 720 of 1152: motion_task
+stack 1 free 552 of 1152: line_task
+stack 2 free 728 of 1152: barcode_task
+stack 3 free 536 of 1152: imu_task
+stack 4 free 368 of 1152: obstacle_task
+stack 5 free 1712 of 2176: telem_task
+stack 6 free 1112 of 2176: mission_task
+stack 7 free 416 of 640: test_busy
+[S4-I04/I11] turn dps: imu 18 enc -53 use_enc 1
+[S4-I04/I11] turn dps: imu 96 enc -110 use_enc 1
+[S4-I04/I11] turn dps: imu 98 enc -130 use_enc 1
+[S4-I04/I11] turn dps: imu 0 enc -98 use_enc 1
+[S4-I04/I11] turn dps: imu 0 enc -17 use_enc 1
+US dist 624 mm, lost 0
+EVT 18 ignored in 2
+WDT longest feed gap 11429 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 74 enc -56 use_enc 1
+[S4-I04/I11] turn dps: imu 6 enc -53 use_enc 1
+[S4-I04/I11] turn dps: imu 50 enc -53 use_enc 1
+EVT 15 ignored in 2
+[S4-I04/I11] turn dps: imu 84 enc -35 use_enc 1
+EVT 18 ignored in 2
+[S4-I04/I11] turn dps: imu -6 enc 41 use_enc 1
+[S4-I04/I11] turn dps: imu -86 enc 86 use_enc 1
+[S4-I04/I11] turn dps: imu -104 enc 133 use_enc 1
+[S4-I04/I11] turn dps: imu -150 enc 145 use_enc 1
+[S4-I04/I11] turn dps: imu -88 enc 142 use_enc 1
+US dist 1164 mm, lost 0
+[S4-I04/I11] turn dps: imu 0 enc 145 use_enc 1
+[S4-I04/I11] turn dps: imu 0 enc 136 use_enc 1
+[S4-I04/I11] turn dps: imu -138 enc 118 use_enc 1
+[S4-I04/I11] turn dps: imu -44 enc 74 use_enc 1
+[S4-I04/I11] turn dps: imu -46 enc 50 use_enc 1
+[S4-I04/I11] turn dps: imu -4 enc 53 use_enc 1
+[S4-I04/I11] turn dps: imu -70 enc 50 use_enc 1
+EVT 15 ignored in 2
+[S4-I04/I11] turn dps: imu -58 enc 35 use_enc 1
+[S4-I04/I11] turn dps: imu -24 enc -41 use_enc 1
+[S4-I04/I11] turn dps: imu 54 enc -89 use_enc 1
+US dist 968 mm, lost 0
+[S4-I04/I11] turn dps: imu 140 enc -130 use_enc 1
+[S4-I04/I11] turn dps: imu 0 enc -121 use_enc 1
+[S4-I04/I11] turn dps: imu 0 enc -17 use_enc 1
+EVT 18 ignored in 2
+[S4-I04/I11] turn dps: imu 38 enc -65 use_enc 1
+[S4-I04/I11] turn dps: imu 50 enc -56 use_enc 1
+[S4-I04/I11] turn dps: imu 42 enc -59 use_enc 1
+EVT 15 ignored in 2
+[S4-I04/I11] turn dps: imu 66 enc -38 use_enc 1
+EVT 18 ignored in 2
+[S4-I04/I11] turn dps: imu -2 enc -3 use_enc 0
+CAL_IR sweep done: heading -148 cdeg from the start (+ = right) after 0 return turns
+IR cal OK: span L 3222 R 3136
+STATE READY (green): press and release RUN (GP20) to start
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6558 my -6161 mz -1431
+US dist 1084 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 202 R 2898
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6554 my -6157 mz -1438
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 1184 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 11540 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 197 R 2892
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 1140 mm, lost 0
+[S4-I10] mag raw mx 6585 my -6159 mz -1421
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 199 R 2888
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 888 mm, lost 0
+[S4-I10] mag raw mx 6592 my -6154 mz -1433
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 193 R 2909
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 1104 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6606 my -6187 mz -1438
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 207 R 2892
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6598 my -6208 mz -1416
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 11424 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 198 R 2885
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 1092 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6596 my -6213 mz -1422
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 205 R 2896
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 1088 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6589 my -6211 mz -1410
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 193 R 2892
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 808 mm, lost 0
+[S4-I10] mag raw mx 6623 my -6224 mz -1426
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 860 mm, lost 0
+IR raw L 209 R 2894
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 10 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6589 my -6214 mz -1425
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 12 enc 0 use_enc 0
+WDT longest feed gap 11665 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -12 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 969 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9406..10616 us, wcet 1198 us
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 828 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 198 R 2901
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 14 enc 0 use_enc 0
+[S4-I10] mag raw mx 6577 my -6190 mz -1441
+wifi: link status -> joined AP, no IP yet (2)
+wifi: link up, ip=10.84.253.206
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 812 mm, lost 0
+wifi: power save off (0)
+mqtt: listening for the broker beacon on UDP 18830
+mqtt: connecting to 10.14.95.64 (wifi_secrets.h)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 174 R 2892
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6601 my -6193 mz -1431
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 932 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 209 R 2910
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6610 my -6246 mz -1442
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+mqtt: broker beacon from 10.84.253.64
+mqtt: connecting to 10.84.253.64 (beacon)
+US dist 852 mm, lost 0
+IR raw L 183 R 2900
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+mqtt: connected to 10.84.253.64 port 1883
+[S4-I10] mag raw mx 6608 my -6198 mz -1428
+WDT longest feed gap 12680 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 844 mm, lost 0
+IR raw L 216 R 2899
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6604 my -6201 mz -1413
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 844 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 200 R 2890
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6605 my -6230 mz -1422
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 836 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 204 R 2905
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6596 my -6212 mz -1397
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 828 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 196 R 2906
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6612 my -6221 mz -1409
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12200 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 744 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 212 R 2901
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6597 my -6234 mz -1416
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 201 R 2901
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6591 my -6206 mz -1429
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 668 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 212 R 2894
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 528 mm, lost 0
+[S4-I10] mag raw mx 6590 my -6228 mz -1407
+[S3-I05/I06] 1024-smp L: min 167 max 239 sd 10
+[S3-I05/I06] 1024-smp R: min 2877 max 2926 sd 7
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 203 R 2889
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I10] mag raw mx 6574 my -6280 mz -1407
+WDT longest feed gap 12603 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 216 R 2895
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6557 my -6288 mz -1409
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 214 R 2897
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6556 my -6281 mz -1411
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 203 R 2888
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6566 my -6302 mz -1415
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 209 R 2882
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12451 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6557 my -6274 mz -1401
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 211 R 2885
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6568 my -6347 mz -1409
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 203 R 2899
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 576 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6566 my -6282 mz -1403
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 2890
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 520 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6570 my -6286 mz -1396
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 214 R 2898
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12159 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6564 my -6286 mz -1423
+[S4-I09] imu_read 1000-cyc wcet 1040 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9799..10256 us, wcet 2167 us
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 203 R 2897
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6555 my -6228 mz -1391
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 209 R 2895
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 460 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6550 my -6281 mz -1405
+IR raw L 203 R 2895
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6556 my -6279 mz -1399
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 472 mm, lost 0
+IR raw L 201 R 2887
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12178 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6562 my -6264 mz -1429
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 472 mm, lost 0
+IR raw L 211 R 2900
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6560 my -6292 mz -1379
+US dist 644 mm, lost 0
+IR raw L 202 R 2896
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6540 my -6310 mz -1389
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 440 mm, lost 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 209 R 2910
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6546 my -6285 mz -1403
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 372 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 186 R 2894
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12214 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6538 my -6328 mz -1407
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+US dist 1748 mm, lost 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 214 R 2879
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6554 my -6294 mz -1401
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 1756 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 206 R 2897
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+US dist 1752 mm, lost 0
+[S4-I10] mag raw mx 6542 my -6311 mz -1481
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 198 R 2906
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 1752 mm, lost 0
+[S4-I10] mag raw mx 6526 my -6271 mz -1455
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 207 R 2904
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S3-I05/I06] 1024-smp L: min 166 max 237 sd 10
+[S3-I05/I06] 1024-smp R: min 2873 max 2925 sd 7
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12433 us in the last 2 s (watchdog fires at 30000)
+US dist 1752 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6560 my -6313 mz -1420
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 214 R 2905
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 1752 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6547 my -6274 mz -1429
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 199 R 2904
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 1756 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6564 my -6295 mz -1447
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 219 R 2905
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 1756 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6541 my -6335 mz -1454
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+IR raw L 211 R 2903
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 1752 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12035 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6543 my -6274 mz -1454
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 205 R 2914
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 1756 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6563 my -6273 mz -1450
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 189 R 2913
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 1752 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6560 my -6276 mz -1457
+IR raw L 193 R 2908
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 1752 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6564 my -6263 mz -1423
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 216 R 2902
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 484 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12359 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 1479 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9831..10200 us, wcet 1978 us
+[S4-I10] mag raw mx 6539 my -6296 mz -1440
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 206 R 2904
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 756 mm, lost 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6538 my -6252 mz -1418
+IR raw L 202 R 2909
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 552 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6564 my -6293 mz -1414
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 203 R 2902
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 508 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6573 my -6270 mz -1408
+IR raw L 192 R 2906
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 508 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12494 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6544 my -6265 mz -1417
+IR raw L 216 R 2907
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6555 my -6244 mz -1400
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 212 R 2905
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 548 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6545 my -6255 mz -1396
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 200 R 2908
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 680 mm, lost 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6557 my -6268 mz -1417
+US dist 656 mm, lost 0
+IR raw L 193 R 2906
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12225 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 692 mm, lost 0
+[S4-I10] mag raw mx 6549 my -6295 mz -1423
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 206 R 2906
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 696 mm, lost 0
+[S4-I10] mag raw mx 6545 my -6257 mz -1415
+IR raw L 209 R 2897
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 648 mm, lost 0
+[S4-I10] mag raw mx 6551 my -6243 mz -1417
+IR raw L 212 R 2899
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 696 mm, lost 0
+IR raw L 184 R 2902
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6561 my -6260 mz -1404
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 167 max 238 sd 10
+[S3-I05/I06] 1024-smp R: min 2887 max 2926 sd 8
+WDT longest feed gap 12274 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 632 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 209 R 2898
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6542 my -6256 mz -1408
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 668 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 195 R 2914
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6545 my -6277 mz -1403
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 676 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 179 R 2896
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6551 my -6246 mz -1418
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 676 mm, lost 0
+IR raw L 208 R 2907
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6571 my -6267 mz -1423
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 636 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12094 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 201 R 2905
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6537 my -6282 mz -1399
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 592 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 192 R 2901
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6536 my -6258 mz -1402
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 760 mm, lost 0
+IR raw L 197 R 2909
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6539 my -6262 mz -1377
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 209 R 2912
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6537 my -6237 mz -1414
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 640 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12390 us in the last 2 s (watchdog fires at 30000)
+[S4-I09] imu_read 1000-cyc wcet 1071 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9856..10177 us, wcet 1998 us
+IR raw L 217 R 2907
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6600 my -6254 mz -1398
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+US dist 672 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 211 R 2898
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6527 my -6255 mz -1397
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 189 R 2892
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6552 my -6247 mz -1408
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 668 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 199 R 2896
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6562 my -6268 mz -1396
+US dist 680 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12236 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 196 R 2896
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6523 my -6231 mz -1394
+US dist 676 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 216 R 2900
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6551 my -6262 mz -1401
+US dist 636 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 212 R 2911
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6534 my -6252 mz -1401
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 688 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 187 R 2898
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 644 mm, lost 0
+[S4-I10] mag raw mx 6536 my -6266 mz -1405
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+WDT longest feed gap 12659 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 207 R 2911
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 836 mm, lost 0
+[S4-I10] mag raw mx 6554 my -6232 mz -1394
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 186 R 2894
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 636 mm, lost 0
+[S4-I10] mag raw mx 6555 my -6235 mz -1407
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 210 R 2909
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 688 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6541 my -6228 mz -1405
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 812 mm, lost 0
+IR raw L 191 R 2901
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6531 my -6259 mz -1417
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12131 us in the last 2 s (watchdog fires at 30000)
+US dist 1752 mm, lost 0
+IR raw L 218 R 2902
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S3-I05/I06] 1024-smp L: min 171 max 236 sd 11
+[S3-I05/I06] 1024-smp R: min 2886 max 2920 sd 6
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6515 my -6291 mz -1463
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 724 mm, lost 0
+IR raw L 193 R 2911
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6557 my -6238 mz -1501
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 668 mm, lost 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 205 R 2892
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -18 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -18 enc 0 use_enc 0
+[S4-I10] mag raw mx 6330 my -6756 mz -1723
+[S4-I04/I11] turn dps: imu -30 enc 0 use_enc 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 12 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 12 enc 0 use_enc 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu 10 enc 0 use_enc 0
+US dist 620 mm, lost 0
+[S4-I04/I11] turn dps: imu 16 enc 0 use_enc 0
+IR raw L 205 R 2921
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 10 enc 0 use_enc 0
+[S4-I10] mag raw mx 6328 my -6157 mz -1235
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12546 us in the last 2 s (watchdog fires at 30000)
+US dist 520 mm, lost 0
+IR raw L 190 R 2922
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6397 my -6212 mz -1345
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 368 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 197 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6435 my -6180 mz -1335
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 532 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 200 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6404 my -6230 mz -1364
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 612 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 201 R 2972
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6412 my -6213 mz -1350
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 396 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 990 us (last smp 2)
+WDT longest feed gap 12747 us in the last 2 s (watchdog fires at 30000)
+[S3-I01] line 1000-cyc: dt 9833..10216 us, wcet 2105 us
+IR raw L 185 R 2987
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6177 mz -1336
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 740 mm, lost 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 199 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6426 my -6230 mz -1336
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 198 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6414 my -6213 mz -1337
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 668 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 208 R 2977
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6409 my -6188 mz -1331
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12208 us in the last 2 s (watchdog fires at 30000)
+IR raw L 190 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6417 my -6221 mz -1341
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 212 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6434 my -6212 mz -1305
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 668 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 214 R 2972
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I10] mag raw mx 6399 my -6181 mz -1332
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 204 R 2988
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 648 mm, lost 0
+[S4-I10] mag raw mx 6428 my -6201 mz -1346
+WDT longest feed gap 11813 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 191 R 2980
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6414 my -6169 mz -1344
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 188 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 716 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6398 my -6221 mz -1350
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 192 R 2996
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6423 my -6260 mz -1328
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 217 R 2972
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 640 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6417 my -6222 mz -1363
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12130 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 214 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 680 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6436 my -6183 mz -1336
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 168 max 235 sd 11
+[S3-I05/I06] 1024-smp R: min 2854 max 3037 sd 31
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 201 R 2974
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 636 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6416 my -6212 mz -1328
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 179 R 2976
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 648 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6421 my -6182 mz -1329
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 712 mm, lost 0
+IR raw L 210 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6435 my -6208 mz -1332
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12265 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 636 mm, lost 0
+IR raw L 184 R 2977
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6407 my -6211 mz -1333
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 648 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 200 R 2993
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6422 my -6204 mz -1330
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 636 mm, lost 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 204 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6412 my -6239 mz -1340
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 208 R 2979
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6411 my -6191 mz -1341
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 981 us (last smp 2)
+US dist 664 mm, lost 0
+[S3-I01] line 1000-cyc: dt 9798..10227 us, wcet 1990 us
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+WDT longest feed gap 12724 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+IR raw L 201 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6424 my -6202 mz -1334
+US dist 640 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 198 R 2974
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6412 my -6217 mz -1347
+US dist 632 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 211 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6418 my -6200 mz -1339
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 680 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 196 R 2975
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6409 my -6206 mz -1343
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12198 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 204 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6406 my -6188 mz -1327
+US dist 680 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 220 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 636 mm, lost 0
+[S4-I10] mag raw mx 6412 my -6173 mz -1349
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 212 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I10] mag raw mx 6408 my -6176 mz -1321
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 211 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6405 my -6202 mz -1327
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12412 us in the last 2 s (watchdog fires at 30000)
+IR raw L 200 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I10] mag raw mx 6406 my -6180 mz -1351
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 199 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 648 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6413 my -6220 mz -1322
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 224 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 640 mm, lost 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I10] mag raw mx 6360 my -6193 mz -1341
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 205 R 2976
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6429 my -6191 mz -1342
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12016 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 215 R 2977
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 756 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6404 my -6190 mz -1334
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S3-I05/I06] 1024-smp L: min 173 max 235 sd 11
+[S3-I05/I06] 1024-smp R: min 2962 max 2998 sd 6
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 656 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6410 my -6181 mz -1327
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 205 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6407 my -6217 mz -1321
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 217 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6405 my -6182 mz -1317
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12176 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 190 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6413 my -6207 mz -1337
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 220 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 652 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6433 my -6212 mz -1321
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 194 R 2974
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 656 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6417 my -6204 mz -1308
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 652 mm, lost 0
+IR raw L 204 R 2972
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6418 my -6183 mz -1333
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 1253 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9829..10183 us, wcet 2134 us
+WDT longest feed gap 12629 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 664 mm, lost 0
+IR raw L 199 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6430 my -6192 mz -1332
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 668 mm, lost 0
+IR raw L 192 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6413 my -6211 mz -1345
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 692 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 198 R 2976
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6407 my -6203 mz -1348
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 220 R 2977
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6413 my -6214 mz -1336
+US dist 704 mm, lost 0
+WDT longest feed gap 12697 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 207 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 680 mm, lost 0
+[S4-I10] mag raw mx 6431 my -6188 mz -1341
+IR raw L 207 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I10] mag raw mx 6414 my -6187 mz -1322
+IR raw L 209 R 2980
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 700 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6414 my -6195 mz -1321
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 189 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6406 my -6187 mz -1337
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12085 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 201 R 2992
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6407 my -6169 mz -1325
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 203 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 664 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6395 my -6203 mz -1338
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 203 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 668 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6420 my -6220 mz -1333
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 196 R 2979
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6395 my -6212 mz -1350
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12368 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 208 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 676 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6408 my -6191 mz -1337
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 198 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 672 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 167 max 233 sd 10
+[S3-I05/I06] 1024-smp R: min 2964 max 3000 sd 6
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6408 my -6200 mz -1351
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 204 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 644 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6412 my -6207 mz -1345
+IR raw L 209 R 2974
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 700 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12176 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6422 my -6204 mz -1338
+IR raw L 205 R 2977
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 696 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6408 my -6200 mz -1335
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 208 R 2988
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 692 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6422 my -6211 mz -1336
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 205 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6399 my -6202 mz -1348
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 202 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 656 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 974 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9864..10176 us, wcet 2002 us
+WDT longest feed gap 12216 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6410 my -6227 mz -1326
+IR raw L 195 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 213 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6409 my -6220 mz -1329
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 708 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 222 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6409 my -6205 mz -1357
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 712 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 676 mm, lost 0
+IR raw L 208 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6429 my -6196 mz -1325
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12107 us in the last 2 s (watchdog fires at 30000)
+US dist 708 mm, lost 0
+IR raw L 203 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6411 my -6217 mz -1343
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 656 mm, lost 0
+IR raw L 187 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6421 my -6182 mz -1336
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 680 mm, lost 0
+IR raw L 208 R 2974
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6434 my -6206 mz -1346
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 712 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 205 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6416 my -6174 mz -1343
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 704 mm, lost 0
+WDT longest feed gap 12527 us in the last 2 s (watchdog fires at 30000)
+IR raw L 209 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6418 my -6194 mz -1337
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 732 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 207 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6404 my -6201 mz -1333
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 672 mm, lost 0
+IR raw L 208 R 2970
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6429 my -6232 mz -1332
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 2992
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6416 my -6208 mz -1323
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+WDT longest feed gap 12120 us in the last 2 s (watchdog fires at 30000)
+IR raw L 214 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6428 my -6232 mz -1338
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 1752 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 204 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6200 mz -1331
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 836 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 167 max 234 sd 10
+[S3-I05/I06] 1024-smp R: min 2963 max 2998 sd 6
+IR raw L 201 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6414 my -6227 mz -1336
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 652 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 198 R 2974
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6444 my -6168 mz -1340
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 640 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12247 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 191 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6445 my -6215 mz -1343
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 668 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6402 my -6168 mz -1358
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 648 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 215 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6421 my -6226 mz -1320
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 684 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 194 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6432 my -6205 mz -1330
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 652 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 1070 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9834..10214 us, wcet 1990 us
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 11994 us in the last 2 s (watchdog fires at 30000)
+IR raw L 198 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6437 my -6197 mz -1336
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6417 my -6191 mz -1340
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 636 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+IR raw L 202 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 672 mm, lost 0
+[S4-I10] mag raw mx 6421 my -6203 mz -1327
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 208 R 2970
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 832 mm, lost 0
+[S4-I10] mag raw mx 6410 my -6218 mz -1317
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12290 us in the last 2 s (watchdog fires at 30000)
+IR raw L 196 R 2977
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 636 mm, lost 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6402 my -6179 mz -1344
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 216 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 604 mm, lost 0
+[S4-I10] mag raw mx 6407 my -6209 mz -1355
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 185 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 640 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6403 my -6193 mz -1349
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 660 mm, lost 0
+IR raw L 203 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6427 my -6215 mz -1338
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 764 mm, lost 0
+WDT longest feed gap 12364 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 203 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6414 my -6204 mz -1337
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 772 mm, lost 0
+IR raw L 208 R 2977
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6410 my -6206 mz -1345
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 776 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 218 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6412 my -6178 mz -1340
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 780 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 194 R 2969
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6430 my -6236 mz -1327
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 772 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 206 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+WDT longest feed gap 12170 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6215 mz -1332
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 772 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 201 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6423 my -6202 mz -1345
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 472 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 210 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6436 my -6182 mz -1330
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 171 max 230 sd 10
+[S3-I05/I06] 1024-smp R: min 2964 max 3001 sd 5
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 568 mm, lost 0
+IR raw L 218 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6421 my -6178 mz -1334
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+IR raw L 201 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+WDT longest feed gap 12558 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6219 mz -1342
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 556 mm, lost 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 188 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6426 my -6182 mz -1343
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 214 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6420 my -6208 mz -1350
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 186 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6403 my -6198 mz -1354
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 548 mm, lost 0
+[S4-I09] imu_read 1000-cyc wcet 1209 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9835..10188 us, wcet 2012 us
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+WDT longest feed gap 12541 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 552 mm, lost 0
+[S4-I10] mag raw mx 6441 my -6198 mz -1350
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 212 R 2976
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+US dist 784 mm, lost 0
+[S4-I10] mag raw mx 6409 my -6198 mz -1338
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 208 R 2979
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6419 my -6207 mz -1357
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 207 R 2980
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6442 my -6232 mz -1351
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 202 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 11925 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 508 mm, lost 0
+[S4-I10] mag raw mx 6409 my -6181 mz -1342
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 208 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 560 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6432 my -6215 mz -1336
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 203 R 2998
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6420 my -6207 mz -1347
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 209 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 496 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6403 my -6211 mz -1344
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 211 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+WDT longest feed gap 12412 us in the last 2 s (watchdog fires at 30000)
+US dist 496 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6409 my -6197 mz -1335
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 207 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6411 my -6193 mz -1348
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 202 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 656 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6421 my -6198 mz -1341
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+IR raw L 210 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6210 mz -1333
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+IR raw L 195 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+WDT longest feed gap 11937 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6425 my -6212 mz -1327
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 552 mm, lost 0
+IR raw L 214 R 2962
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6430 my -6168 mz -1350
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+IR raw L 198 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6428 my -6212 mz -1335
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S3-I05/I06] 1024-smp L: min 173 max 240 sd 10
+[S3-I05/I06] 1024-smp R: min 2962 max 3000 sd 6
+IR raw L 179 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6427 my -6203 mz -1340
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 556 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 211 R 2980
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+WDT longest feed gap 12133 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6426 my -6174 mz -1336
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 580 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 199 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 572 mm, lost 0
+[S4-I10] mag raw mx 6431 my -6216 mz -1339
+IR raw L 198 R 2988
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 484 mm, lost 0
+[S4-I10] mag raw mx 6417 my -6221 mz -1345
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 208 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 620 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6426 my -6213 mz -1333
+[S4-I09] imu_read 1000-cyc wcet 1037 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9815..10234 us, wcet 2017 us
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 194 R 2976
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+WDT longest feed gap 12265 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I10] mag raw mx 6430 my -6211 mz -1362
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 216 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 560 mm, lost 0
+[S4-I10] mag raw mx 6427 my -6211 mz -1340
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 216 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 508 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I10] mag raw mx 6427 my -6172 mz -1336
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 221 R 2980
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6411 my -6202 mz -1347
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 193 R 2980
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+WDT longest feed gap 12252 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 540 mm, lost 0
+[S4-I10] mag raw mx 6430 my -6175 mz -1319
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 186 R 2974
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6406 my -6194 mz -1346
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 188 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6418 my -6201 mz -1340
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 198 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 472 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6414 my -6221 mz -1341
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 200 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12143 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6433 my -6184 mz -1340
+IR raw L 206 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6423 my -6203 mz -1329
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 202 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6422 my -6201 mz -1322
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 204 R 2980
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 512 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6429 my -6187 mz -1355
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 209 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12149 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 576 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6425 my -6205 mz -1337
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 199 R 2970
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6420 my -6192 mz -1332
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 620 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6390 my -6200 mz -1347
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 492 mm, lost 0
+IR raw L 202 R 2977
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 167 max 233 sd 10
+[S3-I05/I06] 1024-smp R: min 2962 max 2997 sd 6
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I10] mag raw mx 6426 my -6196 mz -1335
+IR raw L 201 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 11999 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+IR raw L 209 R 2988
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6406 my -6211 mz -1348
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 492 mm, lost 0
+IR raw L 207 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6422 my -6212 mz -1340
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 214 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6401 my -6201 mz -1338
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 1062 us (last smp 2)
+US dist 568 mm, lost 0
+[S3-I01] line 1000-cyc: dt 9837..10202 us, wcet 1994 us
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6425 my -6209 mz -1329
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12152 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 202 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6414 my -6207 mz -1342
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 201 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6436 my -6198 mz -1352
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 588 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 194 R 2992
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6383 my -6212 mz -1352
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 632 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 195 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6424 my -6202 mz -1332
+WDT longest feed gap 12183 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 512 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 187 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6413 my -6196 mz -1354
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 556 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 221 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6410 my -6169 mz -1354
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 540 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 214 R 2979
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6440 my -6201 mz -1325
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 208 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6422 my -6204 mz -1327
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12003 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 219 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6439 my -6214 mz -1347
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 204 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6437 my -6180 mz -1322
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 508 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 202 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6424 my -6206 mz -1321
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 216 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6406 my -6194 mz -1323
+WDT longest feed gap 11985 us in the last 2 s (watchdog fires at 30000)
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 210 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6390 my -6208 mz -1340
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 592 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 213 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6430 my -6186 mz -1333
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 564 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 201 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6409 my -6207 mz -1341
+US dist 556 mm, lost 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 165 max 233 sd 11
+[S3-I05/I06] 1024-smp R: min 2966 max 3001 sd 6
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 203 R 2978
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 556 mm, lost 0
+[S4-I10] mag raw mx 6420 my -6189 mz -1309
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12250 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 213 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 592 mm, lost 0
+[S4-I10] mag raw mx 6427 my -6201 mz -1352
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 212 R 2979
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 584 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6406 my -6194 mz -1350
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 604 mm, lost 0
+IR raw L 197 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6409 my -6201 mz -1351
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 952 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9818..10222 us, wcet 2000 us
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 552 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 213 R 2975
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6405 my -6196 mz -1339
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 13024 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+IR raw L 191 R 2969
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6420 my -6254 mz -1339
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 195 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6418 my -6203 mz -1343
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 200 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6422 my -6196 mz -1336
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 588 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 195 R 2970
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+WDT longest feed gap 12262 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6410 my -6197 mz -1332
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 209 R 2992
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6425 my -6223 mz -1337
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 208 R 2986
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6417 my -6194 mz -1356
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 201 R 2973
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6416 my -6201 mz -1342
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 496 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 210 R 2993
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12700 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6223 mz -1344
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 620 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 199 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6394 my -6183 mz -1351
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 512 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 206 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6199 mz -1345
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 202 R 2988
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6425 my -6222 mz -1345
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 223 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12249 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6408 my -6228 mz -1339
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 600 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 194 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6412 my -6196 mz -1354
+US dist 552 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 205 R 2975
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 596 mm, lost 0
+[S4-I10] mag raw mx 6399 my -6201 mz -1341
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 216 R 2976
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 604 mm, lost 0
+[S4-I10] mag raw mx 6414 my -6197 mz -1341
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 209 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12076 us in the last 2 s (watchdog fires at 30000)
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 165 max 231 sd 10
+[S3-I05/I06] 1024-smp R: min 2966 max 3001 sd 6
+[S4-I10] mag raw mx 6410 my -6275 mz -1328
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 208 R 2987
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 584 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6400 my -6193 mz -1340
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 204 R 2974
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I10] mag raw mx 6423 my -6228 mz -1343
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+IR raw L 199 R 2976
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 572 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6410 my -6205 mz -1348
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 1572 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9850..10172 us, wcet 2294 us
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 190 R 2979
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 512 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12635 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6413 my -6216 mz -1347
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 214 R 2972
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6401 my -6198 mz -1344
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 209 R 2980
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6389 my -6225 mz -1327
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 500 mm, lost 0
+IR raw L 198 R 2976
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6411 my -6231 mz -1322
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 588 mm, lost 0
+IR raw L 212 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12300 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6423 my -6233 mz -1371
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 500 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 218 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6404 my -6209 mz -1346
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 500 mm, lost 0
+IR raw L 206 R 2980
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6216 mz -1353
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 592 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 220 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6416 my -6183 mz -1342
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 592 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 197 R 2988
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12363 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6390 my -6187 mz -1322
+US dist 580 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 199 R 2995
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6414 my -6222 mz -1327
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 214 R 2985
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6399 my -6208 mz -1342
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 199 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6407 my -6193 mz -1348
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 572 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 201 R 2984
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12084 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6412 my -6229 mz -1352
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 564 mm, lost 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 201 R 2981
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6225 mz -1352
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 205 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6404 my -6193 mz -1334
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 504 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 2991
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 508 mm, lost 0
+[S4-I10] mag raw mx 6444 my -6217 mz -1325
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 195 R 2989
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12076 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 520 mm, lost 0
+[S4-I10] mag raw mx 6419 my -6202 mz -1338
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 168 max 234 sd 10
+[S3-I05/I06] 1024-smp R: min 2963 max 3000 sd 6
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 205 R 2977
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 512 mm, lost 0
+[S4-I10] mag raw mx 6399 my -6184 mz -1344
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+IR raw L 215 R 2974
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 624 mm, lost 0
+[S4-I10] mag raw mx 6409 my -6242 mz -1348
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 201 R 2982
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 532 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6421 my -6190 mz -1337
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 1059 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9827..10211 us, wcet 2007 us
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 194 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 588 mm, lost 0
+WDT longest feed gap 12502 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6380 my -6194 mz -1344
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 215 R 2979
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 520 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6415 my -6206 mz -1353
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 197 R 2983
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6413 my -6205 mz -1338
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 198 R 2990
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 560 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6417 my -6186 mz -1320
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 201 R 2991
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12184 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6370 my -6270 mz -1361
+[S4-I04/I11] turn dps: imu -8 enc 3 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 192 R 2706
+ENC pos L 0 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 568 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6431 my -6166 mz -1372
+[S4-I04/I11] turn dps: imu 0 enc -3 use_enc 1
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+IR raw L 203 R 3194
+ENC pos L -1 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 564 mm, lost 0
+[S4-I04/I11] turn dps: imu 0 enc -3 use_enc 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu -8 enc -23 use_enc 1
+[S4-I04/I11] turn dps: imu -26 enc -29 use_enc 1
+[S4-I04/I11] turn dps: imu -8 enc -12 use_enc 0
+[S4-I04/I11] turn dps: imu 0 enc -2 use_enc 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu 12 enc 0 use_enc 0
+[S4-I10] mag raw mx 6365 my -6309 mz -1111
+[S4-I04/I11] turn dps: imu 14 enc -3 use_enc 0
+[S4-I04/I11] turn dps: imu 18 enc -3 use_enc 0
+[S4-I04/I11] turn dps: imu 18 enc -9 use_enc 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu 6 enc -3 use_enc 0
+US dist 792 mm, lost 0
+IR raw L 188 R 197
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 3 use_enc 0
+[S4-I10] mag raw mx 6609 my -5979 mz -851
+[S4-I04/I11] turn dps: imu 6 enc -3 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 600 mm, lost 0
+IR raw L 217 R 194
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12571 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6624 my -6009 mz -858
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 836 mm, lost 0
+IR raw L 200 R 184
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6636 my -6019 mz -842
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 215 R 191
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6614 my -6027 mz -874
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 792 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 210 R 210
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6610 my -5999 mz -849
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 792 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 197 R 198
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+WDT longest feed gap 12170 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6611 my -6011 mz -848
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 592 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 198 R 196
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 604 mm, lost 0
+[S4-I10] mag raw mx 6631 my -6007 mz -839
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 202 R 189
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 856 mm, lost 0
+[S4-I10] mag raw mx 6617 my -5993 mz -865
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 210 R 196
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 616 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6614 my -6011 mz -848
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 204 R 202
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12121 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 584 mm, lost 0
+[S4-I10] mag raw mx 6610 my -5999 mz -846
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 199 R 212
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 168 max 231 sd 10
+[S3-I05/I06] 1024-smp R: min 171 max 3265 sd 1378
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 588 mm, lost 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6616 my -6002 mz -865
+IR raw L 219 R 209
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 596 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6614 my -6031 mz -854
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 200 R 203
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 584 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 1418 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9847..10177 us, wcet 1993 us
+[S4-I10] mag raw mx 6616 my -6021 mz -849
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 218 R 209
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12210 us in the last 2 s (watchdog fires at 30000)
+US dist 792 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6617 my -6012 mz -839
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 222 R 201
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 616 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6609 my -5995 mz -859
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 216 R 195
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6629 my -5999 mz -836
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 206 R 195
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+US dist 684 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6616 my -5996 mz -865
+IR raw L 201 R 187
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 632 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12253 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6612 my -5989 mz -844
+IR raw L 199 R 207
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 696 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6607 my -6011 mz -844
+IR raw L 199 R 200
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 616 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6614 my -5999 mz -869
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 204 R 199
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6606 my -6016 mz -847
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 205 R 185
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 632 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12185 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6612 my -6007 mz -849
+IR raw L 205 R 202
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 203 R 214
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6616 my -5969 mz -850
+US dist 796 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 620 mm, lost 0
+IR raw L 208 R 210
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6622 my -6044 mz -867
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 616 mm, lost 0
+IR raw L 204 R 211
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6604 my -5995 mz -850
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+WDT longest feed gap 12143 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 612 mm, lost 0
+IR raw L 209 R 202
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6594 my -5961 mz -857
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 800 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 216 R 207
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6630 my -5978 mz -862
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 201 R 206
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6618 my -5982 mz -852
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 796 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 206 R 205
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6619 my -6004 mz -847
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12359 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 211 R 189
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6609 my -6009 mz -839
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 688 mm, lost 0
+[S3-I05/I06] 1024-smp L: min 168 max 240 sd 11
+[S3-I05/I06] 1024-smp R: min 176 max 218 sd 6
+IR raw L 193 R 201
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6622 my -5995 mz -858
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+US dist 624 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 192 R 194
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6624 my -5997 mz -843
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 688 mm, lost 0
+[S4-I09] imu_read 1000-cyc wcet 1030 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9830..10198 us, wcet 1965 us
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 192 R 194
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6621 my -6013 mz -868
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12170 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 672 mm, lost 0
+[S4-I04/I11] turn dps: imu -8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 205 R 191
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6614 my -5988 mz -842
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 684 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 214 R 209
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6620 my -5967 mz -841
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+IR raw L 206 R 210
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6613 my -6034 mz -836
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 620 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 201 R 202
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6610 my -6007 mz -852
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12330 us in the last 2 s (watchdog fires at 30000)
+US dist 624 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 211 R 206
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6618 my -5999 mz -856
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 620 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 194 R 209
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6630 my -5954 mz -852
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+US dist 624 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 220 R 186
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I10] mag raw mx 6612 my -5991 mz -848
+US dist 628 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 222 R 183
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6600 my -5987 mz -854
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 796 mm, lost 0
+WDT longest feed gap 12005 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 215 R 209
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I10] mag raw mx 6644 my -6047 mz -838
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 206 R 207
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+US dist 624 mm, lost 0
+[S4-I10] mag raw mx 6614 my -6028 mz -840
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -10 enc 0 use_enc 0
+IR raw L 222 R 186
+ENC pos L -31 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 628 mm, lost 0
+[S4-I10] mag raw mx 6612 my -6010 mz -828
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 0 enc 3 use_enc 1
+IR raw L 204 R 192
+ENC pos L -30 R 9
+BAR DO 0 (1 = black), edges 4
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu 0 enc 6 use_enc 1
+US dist 692 mm, lost 0
+[S4-I10] mag raw mx 6575 my -6075 mz -869
+WDT longest feed gap 12663 us in the last 2 s (watchdog fires at 30000)
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 206 R 191
+ENC pos L -28 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6550 my -6026 mz -909
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+IR raw L 189 R 194
+ENC pos L -28 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 620 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6518 my -5983 mz -918
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 652 mm, lost 0
+IR raw L 226 R 197
+ENC pos L -28 R 9
+BAR DO 0 (1 = black), edges 4
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 0 enc 3 use_enc 1
+[S4-I10] mag raw mx 6663 my -6186 mz -493
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu 6 enc 3 use_enc 0
+[S4-I04/I11] turn dps: imu 0 enc 3 use_enc 1
+[S4-I04/I11] turn dps: imu 0 enc 2 use_enc 1
+EVT 18 ignored in 3
+US dist 812 mm, lost 0
+IR raw L 3157 R 3205
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I10] mag raw mx 7278 my -6564 mz 1546
+WDT longest feed gap 12082 us in the last 2 s (watchdog fires at 30000)
+US dist 840 mm, lost 0
+IR raw L 3648 R 3641
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I10] mag raw mx 7384 my -6725 mz 2451
+US dist 848 mm, lost 0
+IR raw L 3686 R 3687
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S3-I05/I06] 1024-smp L: min 170 max 3699 sd 1115
+[S3-I05/I06] 1024-smp R: min 175 max 3691 sd 1123
+[S4-I10] mag raw mx 7361 my -6706 mz 2516
+US dist 848 mm, lost 0
+IR raw L 3702 R 3680
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I10] mag raw mx 7369 my -6712 mz 2532
+[S4-I09] imu_read 1000-cyc wcet 1008 us (last smp 2)
+US dist 844 mm, lost 0
+[S3-I01] line 1000-cyc: dt 9838..10186 us, wcet 1992 us
+IR raw L 3705 R 3691
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I10] mag raw mx 7355 my -6668 mz 2608
+WDT longest feed gap 12447 us in the last 2 s (watchdog fires at 30000)
+US dist 840 mm, lost 0
+IR raw L 3702 R 3710
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I10] mag raw mx 7365 my -6710 mz 2610
+US dist 844 mm, lost 0
+IR raw L 3708 R 3713
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I10] mag raw mx 7236 my -6617 mz 3400
+US dist 844 mm, lost 0
+IR raw L 3704 R 3709
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I10] mag raw mx 7229 my -6637 mz 3345
+US dist 840 mm, lost 0
+IR raw L 3688 R 3697
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I10] mag raw mx 7248 my -6615 mz 3240
+WDT longest feed gap 12539 us in the last 2 s (watchdog fires at 30000)
+US dist 836 mm, lost 0
+IR raw L 3523 R 3523
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I10] mag raw mx 7032 my -6392 mz 1787
+US dist 700 mm, lost 0
+IR raw L 1660 R 1678
+ENC pos L -24 R 9
+BAR DO 1 (1 = black), edges 6
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I10] mag raw mx 6505 my -6157 mz 73
+US dist 512 mm, lost 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 217 R 210
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+EVT 18 ignored in 3
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6370 my -6173 mz -172
+US dist 696 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+IR raw L 208 R 192
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 800 mm, lost 0
+WDT longest feed gap 11926 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6460 my -6124 mz -782
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 214 R 200
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu 6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 704 mm, lost 0
+[S4-I10] mag raw mx 6432 my -6142 mz -1230
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 213 R 198
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 660 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6491 my -6070 mz -1235
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 202 R 205
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I10] mag raw mx 6506 my -6128 mz -1267
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 217 R 188
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 708 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+WDT longest feed gap 12830 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6480 my -6108 mz -1255
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 194 R 212
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6512 my -6096 mz -1245
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 214 R 191
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6544 my -6101 mz -1234
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 201 R 207
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu -6 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6499 my -6085 mz -1240
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 188 R 199
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 696 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+WDT longest feed gap 12139 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6500 my -6097 mz -1203
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+IR raw L 210 R 205
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+US dist 684 mm, lost 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6502 my -6097 mz -1238
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+IR raw L 189 R 193
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+US dist 704 mm, lost 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6492 my -6096 mz -1246
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S3-I05/I06] 1024-smp L: min 179 max 3743 sd 1647
+[S3-I05/I06] 1024-smp R: min 176 max 3724 sd 1648
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+US dist 796 mm, lost 0
+IR raw L 193 R 201
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 8 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6497 my -6092 mz -1220
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+[S4-I09] imu_read 1000-cyc wcet 1164 us (last smp 2)
+[S3-I01] line 1000-cyc: dt 9149..10829 us, wcet 1962 us
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+US dist 796 mm, lost 0
+IR raw L 188 R 200
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+WDT longest feed gap 12319 us in the last 2 s (watchdog fires at 30000)
+[S4-I10] mag raw mx 6527 my -6101 mz -1221
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+US dist 700 mm, lost 0
+IR raw L 212 R 203
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I10] mag raw mx 6499 my -6094 mz -1250
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu 4 enc 0 use_enc 0
+US dist 796 mm, lost 0
+[S4-I04/I11] turn dps: imu -4 enc 0 use_enc 0
+[S4-I04/I11] turn dps: imu -2 enc 0 use_enc 0
+IR raw L 205 R 205
+ENC pos L -24 R 9
+BAR DO 0 (1 = black), edges 8
+[S4-I04/I11] turn dps: imu 2 enc 0 use_enc 0
+[S4-I04/I1

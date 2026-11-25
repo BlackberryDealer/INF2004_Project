@@ -455,7 +455,7 @@ static bool golden_write(char const * p_name, uint8_t const * p_buf,
     }
 
     (void) snprintf(path, sizeof(path), GOLDEN_DIR "/%s.csv", p_name);
-    p_file = fopen(path, "w");
+    p_file = fopen(path, "wb");
     if (NULL == p_file)
     {
         b_ok = false;

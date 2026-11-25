@@ -2,3 +2,5 @@
 # tools/barr_check.sh also runs from WSL / Git Bash on a Windows checkout
 # (core.autocrlf=true would otherwise give it CRLF and bash would fail).
 *.sh  text eol=lf
+tools/dashboard/telem_tables.js text eol=lf
+testing/subsystem1/host/golden/*.csv text eol=lf

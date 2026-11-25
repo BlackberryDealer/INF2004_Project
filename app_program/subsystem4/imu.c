@@ -125,6 +125,16 @@ static uint32_t g_imu_prv_m = /* MX, MY */
     ((uint32_t)PRV_IMU_M_MX_OFFSET << PRV_IMU_M_MX_POS) |
     ((uint32_t)PRV_IMU_M_MY_OFFSET << PRV_IMU_M_MY_POS);
 
+#if (0 != APP_TEST)
+#define IMU_TEST_WCET_CYCLES (1000u)
+#define IMU_TEST_MAG_LOG_DIV (10u)   /* every 0.5 s at 20 Hz mag rate */
+#define IMU_TEST_US_MASK     (0x7FFFFFFFu)
+
+static uint32_t g_imu_test_cnt     = 0u;
+static uint32_t g_imu_test_wcet_us = 0u;
+static uint32_t g_imu_test_mag_div = 0u;
+#endif /* APP_TEST */
+
 /* ---- private function prototypes ------------------------------------- */
 
 static void imu_task(INT stacd, void * p_exinf);
@@ -195,6 +205,11 @@ ER imu_init(void)
         ercd = drv_lsm303_init();
     }
     imu_need_cfg_set(0 != ercd);
+#if (0 != APP_TEST)
+    g_imu_test_cnt     = 0u;
+    g_imu_test_wcet_us = 0u;
+    g_imu_test_mag_div = 0u;
+#endif /* APP_TEST */
     if (0 == ercd)
     {
         /* Bring-up diagnosis (S4-U15). cast: 0x1D or 0x1E */
@@ -468,6 +483,9 @@ static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
                              bool * pb_mag_read)
 {
     uint32_t n_samples = 0u;
+#if (0 != APP_TEST)
+    uint32_t const start_us = sys_tick_now_us();
+#endif /* APP_TEST */
 
     bool b_acc_ok = imu_read_acc(&n_samples);
 
@@ -477,6 +495,26 @@ static void imu_read_sensors(bool * pb_read_ok, bool * pb_mag_cycle,
        would be counted twice. */
     *pb_read_ok = b_acc_ok && (n_samples > 0u);
     imu_read_mag_if_due(n_samples, pb_mag_cycle, pb_mag_read);
+#if (0 != APP_TEST)
+    {
+        uint32_t const exec_us = sys_tick_now_us() - start_us;
+
+        if (exec_us > g_imu_test_wcet_us)
+        {
+            g_imu_test_wcet_us = exec_us;
+        }
+        g_imu_test_cnt++;
+        if (g_imu_test_cnt >= IMU_TEST_WCET_CYCLES)
+        {
+            /* casts: masked us and 0..4 sample count fit int32_t */
+            app_log("[S4-I09] imu_read 1000-cyc wcet %d us (last smp %d)\n",
+                    (int32_t) (g_imu_test_wcet_us & IMU_TEST_US_MASK),
+                    (int32_t) n_samples, 0);
+            g_imu_test_cnt     = 0u;
+            g_imu_test_wcet_us = 0u;
+        }
+    }
+#endif /* APP_TEST */
 }
 
 /**
@@ -634,6 +672,18 @@ static void imu_read_mag_if_due(uint32_t n_samples, bool * pb_mag_cycle,
     {
         imu_i2c_result(true, false);
         *pb_mag_read = true;
+#if (0 != APP_TEST)
+        if (!mission_mode_is_set(APP_MODE_MOTOR_EN))
+        {
+            g_imu_test_mag_div++;
+            if (g_imu_test_mag_div >= IMU_TEST_MAG_LOG_DIV)
+            {
+                g_imu_test_mag_div = 0u;
+                app_log("[S4-I10] mag raw mx %d my %d mz %d\n",
+                        mag_x, mag_y, mag_z);
+            }
+        }
+#endif /* APP_TEST */
     }
     g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_MAG_DIV_POS,
                                PRV_IMU_A_MAG_DIV_BITS, IMU_MAG_DIV_PERIOD);
@@ -968,6 +1018,16 @@ static void imu_turn_rate(bool b_mag_cycle, bool b_mag_read, int32_t pos_l,
             PRV_IMU_K_TURN_DPS_MIN, PRV_IMU_K_TURN_DPS_MAX,
             PRV_IMU_K_TURN_DPS_OFFSET);
     imu_g_flag_set(PRV_IMU_G_TURN_ENC_POS, b_use_enc);
+#if (0 != APP_TEST)
+    /* Only while the motors may drive: a still car's sensor noise gave a
+       non-zero rate every 50 ms and flooded the console (Session 1). */
+    if (mission_mode_is_set(APP_MODE_MOTOR_EN)
+        && ((0 != enc_dps) || (0 != imu_dps)))
+    {
+        app_log("[S4-I04/I11] turn dps: imu %d enc %d use_enc %d\n",
+                imu_dps, enc_dps, b_use_enc ? 1 : 0);
+    }
+#endif /* APP_TEST */
 }
 
 /**

@@ -1,25 +1,25 @@
-# Integration — test log
+# Integration test log
 
-Tests that two or more subsystems work together. There is one test (or more) for every interface listed in TEAM.md section 5. Both owners agree on the test and sign off the result.
+Run the [demo procedure](../DEMO.md). Cross-reference each result with the actual assertion ID or the timestamp in the capture. Both interface owners sign the result. The host suite uses mocked devices and kernel objects. The last column lists the outstanding on-car check where applicable.
 
-See `testing/README.md` for how to run tests and record results.
-
-## Test cases
-
-Define a test here before running it. Test IDs never change.
-
-| ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
-|---|---|---|---|---|---|
-| INT-01 | samples flow from S2 to S3 (≥ 5 in 2 s) | IF-01, IF-02 | auto | `subsystem3_test.c` | `[TEST] INT-01 PASS` |
-| INT-02 | summary lines flow from S3 to S4 (≥ 2 in 3.5 s) | IF-03 | auto | `subsystem4_test.c` | `[TEST] INT-02 PASS` |
-
-*Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
-**manual** = a person observes the result (LED, scope, meter, phone app…).
+| ID | Interface | Runnable check and expected observation | Car evidence |
+|---|---|---|---|
+| INT-01 | K1 echo ISR → obstacle | S5-U08/U17 simulate valid and delayed echoes. Valid range reaches the obstacle state machine and late echoes are discarded. | Compare the scanner output against measured boxes in SYS-05. |
+| INT-02 | K2 barcode ISR → decoder | S3-U07/U46/U55 exercise edge capture, overflow and both print scales. An overflow must discard the frame. | Match the printed letters with received events in SYS-03. |
+| INT-03 | K3 safety → motion | S5-U78 and S2 motion tests exercise LIFT and braking separately. | SYS-06 must show lift, wheel stop, FINISHED and RESET. Measure the delay. |
+| INT-04 | K4 mission event queue | S5-U04 fills the 16-event queue. The next post returns immediately and sets the overflow fault. | Save the corresponding host assertions. |
+| INT-05 | K5 mission → motion | S5-U07/U27 exercise mission commands and completion tags. | Compare the commanded and actual turn at a cross in SYS-03. |
+| INT-06 | K6 shared status | S5-U74 round-trips packed subsystem fields and sentinels. | Compare a live snapshot with the matching dashboard state. |
+| INT-07 | K7 mission → telemetry | S1-U02/U42 check packed events, profiles and summaries. | SYS-02 and SYS-05 must receive the run summary and box profile at the broker. |
+| INT-08 | K8 task check-ins → watchdog | In the documented S5-I02r hang-injection setup, stop each task checking in. Record the reset cause and elapsed time. | Verify the watchdog resets within 100 ms for each injection. Ordinary boot alone covers startup only. |
+| INT-09 | K9 PIO encoder → motion | S2-U01/U31 exercise odometry and wrap using simulated counts. | Drive a measured distance and save actual wheel counts, direction and odometer. |
+| INT-10 | K10 mission mode flags | S3-U44 and S5-U07 exercise reread and motion mode transitions. | Observe calibration, RUN and STOP in SYS-01/02. |
+| INT-11 | K11 telemetry → radio | S1-U03 on the test image exercises queue capacity. S1-I01 measures delivery at the broker. | Collect 120 s of broker data at 5 Hz and exercise link loss in SYS-07. |
+| INT-12 | K12 shared faults | S4-U21 injects an IMU read failure. S5-U78 exercises the separate lift-stop path. | Record fault state and RESET recovery in SYS-07. |
+| INT-13 | K13 diagnostic console → radio | Build the separate debug profile with `DEBUG_MQTT=1`. Compare a distinctive USB message against its decoded `c28/l` copy. | Save both captures and the matching line. The normal course image has the console mirror disabled. |
 
 ## Results
 
-Add a new row for every run. Never edit or delete old rows.
-
-| Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
+| Date | Test ID | Commit | Tester / owners | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|
-| YYYY-MM-DD | INT-01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+| 2026-11-24 | INT-01–13, historical host coverage | `c96481d` | Lucas | Host suite passed; partial integration evidence | [Branch host capture](../subsystem1/logs/2026-11-24_host_all_suites.txt) | Branch diagnostics used different S4/S5 IDs. Evidence applies to that revision. Target, physical checks and both owners' sign-off remain separate. |
