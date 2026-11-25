@@ -80,7 +80,7 @@ This page indexes the testing done on demo day. Each result row lives in its `TE
 
 ## Not run, and why
 
-Floor motion tests S2-I01–I03 and S2-I08 need a MOVE-capable build. Scope or meter tests (S2-I04, S2-I05, S3-I10, S4-I07, S5-I05) and hang-injection tests (S5-I02, S5-I02b, S5-I02r, INT-08) need instruments or special builds. Laps (S3-I04), hump strips (S4-I14), the Wi-Fi-loss run and the numbered repeat trials in the [trial sheet](system/logs/2026-11-25_track_trials.csv) were not completed before the car was dismantled.
+Floor motion tests S2-I01–I03 and S2-I08 need a MOVE-capable build. Scope or meter tests (S2-I04, S2-I05, S3-I10, S4-I07, S5-I05) and hang-injection tests (S5-I02, S5-I02b, S5-I02r, INT-08) need instruments or special builds. The Wi-Fi-loss run, 250 mm/s speed laps (S3-I04) and ruler-referenced 4/5 mm hump strips (S4-I14) were not completed; all recorded track runs across 9–25 Nov (127 chronological trials) are indexed in [2026-11-25_track_trials.csv](system/logs/2026-11-25_track_trials.csv).
 
 ## Still to add
 
@@ -90,4 +90,4 @@ Floor motion tests S2-I01–I03 and S2-I08 need a MOVE-capable build. Scope or m
 
 ## Evidence index
 
-All raw captures are in [system/logs](system/logs/) and [subsystem1/logs](subsystem1/logs/). MQTT captures (`*_mqtt.csv`) hold the arrival time, topic, exact payload bytes and decoded fields of every message. `*_bench_*.txt` and `*_course_*.txt` are USB console captures.
+All raw captures are in [system/logs](system/logs/), [system/logs/historical](system/logs/historical/) (9–24 Nov console/MQTT exports) and [subsystem1/logs](subsystem1/logs/). MQTT captures (`*_mqtt.csv`) hold the arrival time, topic, exact payload bytes and decoded fields of every message. `*_bench_*.txt` and `*_course_*.txt` are USB console captures.
