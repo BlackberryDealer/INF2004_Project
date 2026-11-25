@@ -1,0 +1,6 @@
+Static checks at 5751975615dde88ed4e1ae36d978b72449aa04a2
+2026-11-25 14:31 +08
+bash tools/barr_check.sh:
+barr_check: 101 files, no findings
+python3 tools/gen_layout.py --check tools/layout.csv:
+layout.csv: OK, 397 rows

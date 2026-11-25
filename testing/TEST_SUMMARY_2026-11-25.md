@@ -11,14 +11,16 @@ This page indexes the testing done on demo day. Each result row lives in its `TE
 | `72482f3` | `mtk3pico_smp0_…_mqtt_test.uf2` / `…_mqtt.uf2` (single-core) | Test-only diagnostics on top of `main` `14ed65a` | Bench capture, boot, SYS-02, first lift trials |
 | `14ed65a` | `PicoCar_hotspot_main_14ed65a.uf2` (previous day's image, console mirrored to MQTT) | Same logic as `main` | Lift A/B check, stall, sensor bench tests |
 | `f4e94ad` | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2`, SHA-256 `072aa8b7…` | IMU: retry a bad calibration once, then raise `APP_FAULT_IMU` | All tests from 12:08, including the full-track runs |
-| `fc9e59a` | not flashed | Mission: hand over to line search when the rejoin window passes | **Host-tested only** (S5 suites 61 + 198 + 12 PASS, BARR-C clean); never run on the car |
+| `fc9e59a` | not flashed | Mission: hand over to line search when the rejoin window passes | **Reverted in `5751975`.** Never run on the car, and review found it clears the FR9 timer on entering the search |
+| `5751975` | — (submitted HEAD) | Revert of `fc9e59a` | Firmware source identical to `f4e94ad`, the demonstrated image |
 
 ## Unit tests (host)
 
 | Scope | Commit | Result | Evidence |
 |---|---|---|---|
 | S1–S5 host suites, all unit tests | `f4e94ad` | **PASS** · 947 PASS, 0 FAIL | [host log](subsystem1/logs/2026-11-25_120829_host_f4e94ad_C1q6qT.txt) |
-| Layout and BARR-C static checks | `72482f3` | **PASS** · 101 files, 0 findings | [static checks](system/logs/2026-11-25_72482f3_static_checks.txt) |
+| S1–S5 host suites, all unit tests | `5751975` (submitted HEAD) | **PASS** · 947 PASS, 0 FAIL | [host log](subsystem1/logs/2026-11-25_host_5751975_linux.txt) |
+| Layout and BARR-C static checks | `5751975` | **PASS** · BARR-C 101 files, 0 findings; layout 397 rows OK | [static checks](system/logs/2026-11-25_5751975_static_checks.txt) |
 | S1-U03 on the car (failed 24 Nov) | `72482f3` | **PASS** 4/4 | [bench console](system/logs/2026-11-25_104810_617_bench_72482f3.txt) |
 | Single-core on-target test image (SYS-08) | `72482f3` | **FAIL** · watchdog reset during S5-U06 on every boot; S3-I01 and S4-I09 not reached | same bench console |
 
@@ -36,10 +38,10 @@ This page indexes the testing done on demo day. Each result row lives in its `TE
 | S4-I05 | IMU bus unplugged | **PASS** | IMU fault → FAULT state; power-cycle recovers |
 | S4-I08 | Pitch sign | **PASS** | nose-up +17°, nose-down −18° |
 | S5-I01 | Obstacle stop | PARTIAL | Stopped 224 mm from the box, no contact; not at cruise speed |
-| S5-I03 | Bypass and rejoin | PARTIAL | Rejoined on the full run (17 s); failed 5 times at the same spot (see SYS-05) |
+| S5-I03 | Bypass and rejoin | PARTIAL | Rejoined on the full run; failed 5 times at the same spot (see SYS-05). FR9 timing not measured |
 | S5-I06 | Sensor-to-front offset | MEASURED | 40 mm; code still uses 60 mm |
 | S5-I07 | Ultrasonic range | PARTIAL (PASS at tested points) | 200/300/500 mm read 196/300/505 |
-| S5-I09 | Obstacle width | PARTIAL | Car reported 88, 80, 88, 116 mm; box ruler widths not recorded. 70 mm bottle runs invalid (outside spec) |
+| S5-I09 | Obstacle width | PARTIAL | Car reported 88, 80, 88, 116 mm; box ruler widths not recorded, so ±10 mm not verified. Unavailable scans explained by geometry (correction row). 70 mm bottle runs invalid (outside spec) |
 
 ## Interface (integration) tests
 
@@ -57,9 +59,9 @@ This page indexes the testing done on demo day. Each result row lives in its `TE
 |---|---|---|---|
 | SYS-01 | Boot and calibration | **PASS** (log) | BOOT → CAL → READY, IR spans 3177 / 3047 |
 | SYS-02 | Dashboard control | **PASS** | START → RUN → STOP → FINISHED → SUMMARY → RESET → READY |
-| SYS-03 / 05 / 02 | Full-track run | **PASS** (no fault) | 13:20–13:22: barcode M decoded ×2, obstacle 116 mm passed and rejoined, junction taken, 10.5 m in 119 s, 0 faults. Turn direction and rejoin branch not written down |
-| SYS-05 | Obstacle one tile after a bend | **FAIL** 5 of 6 | REACQUIRE_FAIL: rejoin window passed with no crossing. Fix `fc9e59a` host-tested only |
-| SYS-06 | Lift-stop | FAIL before fix, **PASS** after | 0/6 gentle lifts before `f4e94ad`; 3/3 stops after |
+| SYS-03 / 05 / 02 | Full-track run | **PASS** (no fault) | 13:20–13:22: barcode M decoded ×2, obstacle 116 mm passed and rejoined (17 s from the stop; FR9 timing not measured), junction taken, 10.5 m in 119 s, 0 faults. Turn direction and rejoin branch not written down |
+| SYS-05 | Obstacle one tile after a bend | **FAIL** 5 of 6 | REACQUIRE_FAIL: rejoin window passed with no crossing. Open defect (attempted fix reverted) |
+| SYS-06 | Lift-stop | FAIL before fix, **PASS** after | 0/6 gentle lifts before `f4e94ad`; 3/3 stops after (≤100 ms bound not measured) |
 | SYS-07 | Faults | PARTIAL | Stall PASS; IMU bus fault PASS; Wi-Fi-loss run NOT RUN |
 | SYS-04 | Hump and ramp | NOT VERIFIED | HUMP events (3–22 mm) logged, no ruler reference |
 | SYS-08 | Diagnostics | Host PASS, bench FAIL | See unit tests |
@@ -71,7 +73,7 @@ This page indexes the testing done on demo day. Each result row lives in its `TE
 | IMU sometimes starts dead after a reset (raw 2993 on every axis); no fault raised, lift-stop silently weakened | SYS-06 A/B rows | **Fixed** in `f4e94ad`, verified on car |
 | Level lift: IR no-floor threshold 3950 above the ~3880 the sensors read when held up | S3-I05 row | Open |
 | Single-core test image resets in S5-U06 | SYS-08 bench row | Open |
-| Rejoin fails when the obstacle sits just after a bend | SYS-05 rows | Fix `fc9e59a` host-tested, not run on car |
+| Rejoin fails when the obstacle sits just after a bend | SYS-05 rows | Open. Attempted fix `fc9e59a` reverted: untested on car and it cleared the FR9 timer early |
 | `OBS_FRONT_OFFSET_MM` 60 mm vs 40 mm measured | S5-I06 | Open |
 | `APP_COUNTS_PER_REV` 640 vs 619–626 measured | S2-I09 | Open (team decision) |
 | Loose power wire: 13 restarts in the last capture | MQTT captures | Hardware |
