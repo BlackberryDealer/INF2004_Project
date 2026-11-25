@@ -16,8 +16,8 @@ CFLAGS  := -std=c99 -Wall -Wextra -Werror -pedantic \
            -I../../host -I$(APP_DIR) -I$(S3_DIR)
 MOCK    := -Imock
 
-.PHONY: all line_track code39 sim clean
-all: line_track code39 sim
+.PHONY: all line_track code39 sim diag clean
+all: line_track code39 sim diag
 
 test_line_track_host.out: test_line_track_host.c $(S3_DIR)/line_track.c \
                           $(S3_DIR)/line_track.h $(S3_DIR)/cfg_line.h \
@@ -46,6 +46,20 @@ code39: test_code39_host.out
 
 sim: test_line_barcode_sim_host.out
 	./test_line_barcode_sim_host.out
+
+test_s3_diag_host.out: test_s3_diag_host.c \
+                       $(S3_DIR)/line.c $(S3_DIR)/barcode.c \
+                       $(S3_DIR)/test_line.c $(S3_DIR)/test_barcode.c \
+                       $(S3_DIR)/line_track.c $(S3_DIR)/code39.c \
+                       $(APP_DIR)/app_bits.c $(S2_DIR)/odometry.c \
+                       ../../host/host_test.h
+	$(CC) $(CFLAGS) -Wconversion -Wsign-conversion -DAPP_TEST=1 $(MOCK) \
+	    -o $@ test_s3_diag_host.c $(S3_DIR)/test_line.c \
+	    $(S3_DIR)/test_barcode.c $(S3_DIR)/line_track.c \
+	    $(S3_DIR)/code39.c $(APP_DIR)/app_bits.c $(S2_DIR)/odometry.c
+
+diag: test_s3_diag_host.out
+	./test_s3_diag_host.out
 
 clean:
 	rm -f *.out

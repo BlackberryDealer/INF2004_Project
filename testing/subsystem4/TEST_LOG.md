@@ -13,6 +13,7 @@ Define a test here before running it. Test IDs never change (spec B4).
 
 | ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
 |---|---|---|---|---|---|
+| S4-U21 | IMU bench diagnostics, encoder turn-rate fallback and I2C fault/recovery | FR13, S4-I09 | host | Run `test_imu_diag_host.c` with simulated reads and elapsed time | Diagnostics show the injected values. A sustained read failure raises the fault and good reads restore terrain tracking. |
 | S4-U01 | Terrain Monitor replay of a recorded hump log | FR4, FR5, NFR7 | auto (host) | `make -C testing/subsystem4/host terrain` | One hump; peak within ±20 % or ±5 mm of the ruler value |
 | S4-U02 | Ramp longer than `TERRAIN_MAX_CLIMB_MM` | FR4 | auto (host) | host replay, synthetic ramp | No hump reported |
 | S4-U03 | Integer `atan2` vs `math.h` on a 1 deg grid | B4.2.1 | auto (host) | host grid comparison (may use double) | Error ≤ 0.2 deg |
@@ -77,6 +78,9 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-24 | S4-U19 (wheel shape) | `fine-width-scan` v2 | Dylan | PASS | Terrain host test | 66 mm wheel rolling over 4/5 mm strips 10 and 20 mm wide at 120 mm/s (the wheel is lifted for ~260 ms even on a thin strip): 4 reads 4, 5 reads 5. The old threshold also passes this shape, but only just (smoothed peak 45 mg = threshold), so the 30 mg start keeps ~15 mg of margin. Car check S4-I14 to do. |
 | 2026-11-24 | S4-U20 | before fix (car, v3 dbg image) | Dylan | FAIL | Console 13:08:30-13:08:36 | Four HUMP events while avoiding the box and one after the stop. |
 | 2026-11-24 | S4-U20 | `fine-width-scan` v4 | Dylan | PASS | Terrain host test | `imu_task` passes "following the line" (RUN, FOLLOW or ARMED) to `terrain_roll_hump_line()`; 2 of 2 checks pass. Car check to do. |
+| 2026-11-24 | S4-U10, S4-U11, S4-U13 | `40de1f5` | Hanz | PASS | [`2026-11-24_target_test_session1.txt`](../system/logs/2026-11-24_target_test_session1.txt) | imu 6/6 on the Pico. Pico `TEST=1 NET=lwip MQTT=1` image, built dual-core (`SMP=1`) by mistake: `TEAM.md` says `SMP=0`. |
+| 2026-11-24 | S4-I09 | `40de1f5` | Hanz | FAIL | [`2026-11-24_target_test_session1.txt`](../system/logs/2026-11-24_target_test_session1.txt) | `imu_read` worst time 969–1479 µs per 1000 cycles, over the 550 µs budget (750 with magnetometer, 800 backlog). Wall-clock time, includes other tasks. Re-run on the `SMP=0` build before changing code. Pico `TEST=1 NET=lwip MQTT=1` image, built dual-core (`SMP=1`) by mistake: `TEAM.md` says `SMP=0`. |
+| 2026-11-25 | S4 host checks (17 distinct printed IDs) | `72482f3` | Codex | PASS (host) | [Fresh run](../subsystem1/logs/2026-11-25_090514_host_72482f3_f1OjER.txt) | 82 passing S4 assertions. Search the transcript by test ID for the input and observed result. |
 
 ## SPEC-QUESTION
 
@@ -189,3 +193,7 @@ everything below is fixed and re-tested except where marked pending.
   run-start handler and the `terrain_ds_counts` rebase guard are already
   in place.
 
+| 2026-11-25 | S4-I02, S4-I03, S4-I04, S4-I05, S4-I07, S4-I08, S4-I10, S4-I11, S4-I14 | — | Dylan | NOT RUN | — | No full track, IMU fix in progress and no scope/meter on demo morning (30 cm track section only). IMU intermittently fails to start after reset (see system log SYS-06 rows); rerun after the fix. |
+| 2026-11-25 | S4-I08 (pitch sign) | `f4e94ad` (course UF2) | Dylan | PASS | [MQTT STATE PITCH](../system/logs/2026-11-25_121342_949638_mqtt.csv) 12:14:03–12:14:14 | Nose tilted up: PITCH +6.7 → +16.9 deg. Nose tilted down: PITCH −12.1 → −17.8 deg. Flat between: within ±3.5 deg. Sign convention nose-up = positive. Roll/other axes not checked. |
+| 2026-11-25 | S4-I05 (unplug SDA) | `f4e94ad` (course UF2) | Dylan | PASS | [MQTT capture](../system/logs/2026-11-25_121342_949638_mqtt.csv) 12:14:28–12:14:58 | IMU SDA unplugged in READY: `SENSOR_FAULT FAULT_IDX=2` (IMU), FAULTS 0x004, state FAULT (SYS 7), END_REASON 3 at 12:14:28. After reconnecting and a power-cycle the car booted to READY at 12:14:58 with no faults. Unplug-to-fault delay not timed. |
+| 2026-11-25 | Closing note (supersedes the 2026-11-25 NOT RUN row for S4-I05 and S4-I08) | — | Dylan | — | [Summary](../TEST_SUMMARY_2026-11-25.md) | S4-I05 and S4-I08 were later run and passed (rows above); S4-I12 lift-stop is recorded in the system log (fails before the IMU fix `f4e94ad`, 3/3 stops after). S4-I14 hump strips not run with a ruler reference. Car dismantled after the 13:22 run; no further measurement possible. |

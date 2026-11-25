@@ -60,8 +60,16 @@ void test_telem_run(void)
 
     TEST_INIT();
 
-    /* a valid (all-zero) heartbeat, and the 1-byte binary STOP command */
-    pay_len  = telem_bin_heartbeat(0u, 0u, 0u, payload, sizeof(payload));
+    /* a valid (all-zero) state payload, and the 1-byte binary STOP command.
+       K11 is sized in bytes for TELEM_K11_ENTRIES of the largest payload
+       (state, 18 B), so only state payloads fill it at exactly 8; smaller
+       heartbeats (6 B) would fit 16 and the "at most 8" check would fail. */
+    {
+        telem_bin_state_t const zero_state = {0};
+
+        pay_len = telem_bin_state(&zero_state, payload, sizeof(payload),
+                                  NULL);
+    }
     /* cast: the header is one byte */
     stop_cmd = (uint8_t) telem_bin_header(APP_MQ_TYPE_CMD_STOP);
 

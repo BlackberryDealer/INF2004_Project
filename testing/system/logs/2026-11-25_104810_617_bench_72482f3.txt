@@ -1,0 +1,472 @@
+Started 2026-11-25T10:48:10.6447860+08:00 | Tester Dylan | COM6
+Selected UF2 mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_test.uf2 | SHA256 cf349b9a806795c107fb03b5e082462cb9b221aa6651577a742e45de3b36b1e6
+Build 72482f3da1f921e07cb6267ae3f0c1cde2f36dc3 | tracked firmware edits no
+
+
+microT-Kernel Version 3.00
+
+
+=== CSC28 PicoCar on micro T-Kernel (spec 0x6300, product 0x0003) ===
+single-core build
+GP0 func 31 GP1 func 31
+RESET cause watchdog 1
+IMU answered at I2C address 29 (29 = 0x1D SA0 high, 30 = 0x1E SA0 low)
+7 tasks started
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+ENC PIO1 SM 0 1 offset 0
+STATE BOOT (white): waiting for task check-ins and radio init
+[TEST] === test run start ===
+[TEST] S1-U03 PASS  K11 holds at most 8 messages; the next send fails
+[TEST] S1-U03 PASS  the refused send returned at once (nothing blocks)
+US dist 1416 mm, lost 0
+IR raw L 250 R 214
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7203 my -2385 mz -2292
+[TEST] S1-U03 PASS  telem_task's payload into a full K11 is counted
+[TEST] S1-U03 PASS  mqtt_bridge_take drains every queued payload
+EVT 1 ignored in 0
+[TEST] S1-U12 PASS  two remote STOPs return at once (counts: host test)
+[TEST] telem SUMMARY 5 passed, 0 failed
+[TEST] S2-I07 PASS  motion_move_backward(151) returns false (NFR16)
+[TEST] S2-I07 PASS  every out-of-range argument is refused
+[TEST] motion SUMMARY 2 passed, 0 failed
+[TEST] S3-U06 PASS  cal_finish accepts both polarities
+[TEST] S3-U01 PASS  exact endpoints 0 and 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  steering sign convention +left -right
+[TEST] S3-U14 PASS  early barcode branch + right sat classifies T
+[TEST] S3-U02 PASS  late barcode branch + right sat + line present -> CROSS
+US dist 1412 mm, lost 0
+IR raw L 233 R 198
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S3-I05/I06 boot] 16-smp L 223..252 sd 7
+[S3-I05/I06 boot] 16-smp R 194..214 sd 4
+[TEST] S3-U56 PASS  SH_IR_RAW stationary ADC sampling & std-dev under US ping
+[TEST] line SUMMARY 7 passed, 0 failed
+[TEST] S3-U03 PASS  code39 decodes *A* to index 10
+[TEST] S3-U05 PASS  28-element capture rejected
+[TEST] S3-U08 PASS  barcode_map_set boundary calls safe
+[TEST] S3-U10 PASS  MSG_EDGE pack/unpack at 0, 1, 0x7FFE, 0x7FFF and saturation
+[TEST] barcode SUMMARY 4 passed, 0 failed
+[TEST] S4-U13 PASS  terrain_reset clears state and accumulators
+[TEST] S4-U13 PASS  position rebase gives ds = 0 (no false climb)
+[TEST] S4-U13 PASS  ds is the slower wheel's delta
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U11 PASS  hump 127 passes, 128 clamps and raises RANGE_CLAMP
+[TEST] S4-U11 PASS  one PRV_OFS_A AX step decodes to 2 mg, range covers +-4094 mg
+[TEST] imu SUMMARY 6 passed, 0 failed
+[TEST] obstacle SUMMARY 0 passed, 0 failed
+[S4-I10] mag raw mx -7233 my -2350 mz -2290
+wifi: joining "U know my password" ...
+US dist 1412 mm, lost 0
+wifi: link status -> joined AP, waiting for IP (1)
+STATE CAL_IMU (yellow blink): keep the car still, 2 s
+IR raw L 239 R 202
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7191 my -2335 mz -2293
+WDT longest feed gap 10272 us in the last 2 s (watchdog fires at 30000)
+US dist 1416 mm, lost 0
+IR raw L 220 R 213
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[TEST] S5-U29 PASS  timer advances ~1 000 000 us in 1 s
+S5-U29 timer diff 1007579 us
+[TEST] time base SUMMARY 1 passed, 0 failed
+[S4-I10] mag raw mx -7197 my -2326 mz -2303
+US dist 1416 mm, lost 0
+IR raw L 233 R 204
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7212 my -2335 mz -2311
+US dist 1416 mm, lost 0
+IR raw L 245 R 205
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+
+
+microT-Kernel Version 3.00
+
+
+=== CSC28 PicoCar on micro T-Kernel (spec 0x6300, product 0x0003) ===
+single-core build
+GP0 func 31 GP1 func 31
+RESET cause watchdog 1
+IMU answered at I2C address 29 (29 = 0x1D SA0 high, 30 = 0x1E SA0 low)
+7 tasks started
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+ENC PIO1 SM 0 1 offset 0
+STATE BOOT (white): waiting for task check-ins and radio init
+[TEST] === test run start ===
+[TEST] S1-U03 PASS  K11 holds at most 8 messages; the next send fails
+[TEST] S1-U03 PASS  the refused send returned at once (nothing blocks)
+US dist 1416 mm, lost 0
+IR raw L 253 R 210
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7212 my -2382 mz -2288
+[TEST] S1-U03 PASS  telem_task's payload into a full K11 is counted
+[TEST] S1-U03 PASS  mqtt_bridge_take drains every queued payload
+EVT 1 ignored in 0
+[TEST] S1-U12 PASS  two remote STOPs return at once (counts: host test)
+[TEST] telem SUMMARY 5 passed, 0 failed
+[TEST] S2-I07 PASS  motion_move_backward(151) returns false (NFR16)
+[TEST] S2-I07 PASS  every out-of-range argument is refused
+[TEST] motion SUMMARY 2 passed, 0 failed
+[TEST] S3-U06 PASS  cal_finish accepts both polarities
+[TEST] S3-U01 PASS  exact endpoints 0 and 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  steering sign convention +left -right
+[TEST] S3-U14 PASS  early barcode branch + right sat classifies T
+[TEST] S3-U02 PASS  late barcode branch + right sat + line present -> CROSS
+US dist 1420 mm, lost 0
+IR raw L 243 R 210
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S3-I05/I06 boot] 16-smp L 225..254 sd 8
+[S3-I05/I06 boot] 16-smp R 195..213 sd 5
+[TEST] S3-U56 PASS  SH_IR_RAW stationary ADC sampling & std-dev under US ping
+[TEST] line SUMMARY 7 passed, 0 failed
+[TEST] S3-U03 PASS  code39 decodes *A* to index 10
+[TEST] S3-U05 PASS  28-element capture rejected
+[TEST] S3-U08 PASS  barcode_map_set boundary calls safe
+[TEST] S3-U10 PASS  MSG_EDGE pack/unpack at 0, 1, 0x7FFE, 0x7FFF and saturation
+[TEST] barcode SUMMARY 4 passed, 0 failed
+[TEST] S4-U13 PASS  terrain_reset clears state and accumulators
+[TEST] S4-U13 PASS  position rebase gives ds = 0 (no false climb)
+[TEST] S4-U13 PASS  ds is the slower wheel's delta
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U11 PASS  hump 127 passes, 128 clamps and raises RANGE_CLAMP
+[TEST] S4-U11 PASS  one PRV_OFS_A AX step decodes to 2 mg, range covers +-4094 mg
+[TEST] imu SUMMARY 6 passed, 0 failed
+[TEST] obstacle SUMMARY 0 passed, 0 failed
+[S4-I10] mag raw mx -7178 my -2322 mz -2282
+wifi: joining "U know my password" ...
+US dist 1412 mm, lost 0
+wifi: link status -> joined AP, waiting for IP (1)
+STATE CAL_IMU (yellow blink): keep the car still, 2 s
+IR raw L 246 R 215
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7177 my -2367 mz -2302
+WDT longest feed gap 10360 us in the last 2 s (watchdog fires at 30000)
+US dist 1412 mm, lost 0
+IR raw L 224 R 206
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[TEST] S5-U29 PASS  timer advances ~1 000 000 us in 1 s
+S5-U29 timer diff 1007745 us
+[TEST] time base SUMMARY 1 passed, 0 failed
+[S4-I10] mag raw mx -7212 my -2314 mz -2293
+US dist 1416 mm, lost 0
+IR raw L 248 R 207
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7197 my -2340 mz -2275
+US dist 1416 mm, lost 0
+IR raw L 234 R 205
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+
+
+microT-Kernel Version 3.00
+
+
+=== CSC28 PicoCar on micro T-Kernel (spec 0x6300, product 0x0003) ===
+single-core build
+GP0 func 31 GP1 func 31
+RESET cause watchdog 1
+IMU answered at I2C address 29 (29 = 0x1D SA0 high, 30 = 0x1E SA0 low)
+7 tasks started
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+ENC PIO1 SM 0 1 offset 0
+STATE BOOT (white): waiting for task check-ins and radio init
+[TEST] === test run start ===
+[TEST] S1-U03 PASS  K11 holds at most 8 messages; the next send fails
+[TEST] S1-U03 PASS  the refused send returned at once (nothing blocks)
+US dist 1416 mm, lost 0
+IR raw L 236 R 213
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7212 my -2339 mz -2285
+[TEST] S1-U03 PASS  telem_task's payload into a full K11 is counted
+[TEST] S1-U03 PASS  mqtt_bridge_take drains every queued payload
+EVT 1 ignored in 0
+[TEST] S1-U12 PASS  two remote STOPs return at once (counts: host test)
+[TEST] telem SUMMARY 5 passed, 0 failed
+[TEST] S2-I07 PASS  motion_move_backward(151) returns false (NFR16)
+[TEST] S2-I07 PASS  every out-of-range argument is refused
+[TEST] motion SUMMARY 2 passed, 0 failed
+[TEST] S3-U06 PASS  cal_finish accepts both polarities
+[TEST] S3-U01 PASS  exact endpoints 0 and 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  steering sign convention +left -right
+[TEST] S3-U14 PASS  early barcode branch + right sat classifies T
+[TEST] S3-U02 PASS  late barcode branch + right sat + line present -> CROSS
+US dist 1420 mm, lost 0
+IR raw L 234 R 206
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S3-I05/I06 boot] 16-smp L 224..249 sd 6
+[S3-I05/I06 boot] 16-smp R 195..216 sd 5
+[TEST] S3-U56 PASS  SH_IR_RAW stationary ADC sampling & std-dev under US ping
+[TEST] line SUMMARY 7 passed, 0 failed
+[TEST] S3-U03 PASS  code39 decodes *A* to index 10
+[TEST] S3-U05 PASS  28-element capture rejected
+[TEST] S3-U08 PASS  barcode_map_set boundary calls safe
+[TEST] S3-U10 PASS  MSG_EDGE pack/unpack at 0, 1, 0x7FFE, 0x7FFF and saturation
+[TEST] barcode SUMMARY 4 passed, 0 failed
+[TEST] S4-U13 PASS  terrain_reset clears state and accumulators
+[TEST] S4-U13 PASS  position rebase gives ds = 0 (no false climb)
+[TEST] S4-U13 PASS  ds is the slower wheel's delta
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U11 PASS  hump 127 passes, 128 clamps and raises RANGE_CLAMP
+[TEST] S4-U11 PASS  one PRV_OFS_A AX step decodes to 2 mg, range covers +-4094 mg
+[TEST] imu SUMMARY 6 passed, 0 failed
+[TEST] obstacle SUMMARY 0 passed, 0 failed
+[S4-I10] mag raw mx -7184 my -2368 mz -2287
+wifi: joining "U know my password" ...
+US dist 1416 mm, lost 0
+wifi: link status -> joined AP, waiting for IP (1)
+STATE CAL_IMU (yellow blink): keep the car still, 2 s
+IR raw L 258 R 209
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7199 my -2348 mz -2306
+WDT longest feed gap 10518 us in the last 2 s (watchdog fires at 30000)
+US dist 1416 mm, lost 0
+IR raw L 226 R 204
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[TEST] S5-U29 PASS  timer advances ~1 000 000 us in 1 s
+S5-U29 timer diff 1007596 us
+[TEST] time base SUMMARY 1 passed, 0 failed
+[S4-I10] mag raw mx -7202 my -2317 mz -2309
+US dist 1416 mm, lost 0
+IR raw L 241 R 214
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7188 my -2337 mz -2289
+US dist 1416 mm, lost 0
+IR raw L 230 R 205
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+
+
+microT-Kernel Version 3.00
+
+
+=== CSC28 PicoCar on micro T-Kernel (spec 0x6300, product 0x0003) ===
+single-core build
+GP0 func 31 GP1 func 31
+RESET cause watchdog 1
+IMU answered at I2C address 29 (29 = 0x1D SA0 high, 30 = 0x1E SA0 low)
+7 tasks started
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+ENC PIO1 SM 0 1 offset 0
+STATE BOOT (white): waiting for task check-ins and radio init
+[TEST] === test run start ===
+[TEST] S1-U03 PASS  K11 holds at most 8 messages; the next send fails
+[TEST] S1-U03 PASS  the refused send returned at once (nothing blocks)
+US dist 1416 mm, lost 0
+IR raw L 225 R 209
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7216 my -2376 mz -2286
+[TEST] S1-U03 PASS  telem_task's payload into a full K11 is counted
+[TEST] S1-U03 PASS  mqtt_bridge_take drains every queued payload
+EVT 1 ignored in 0
+[TEST] S1-U12 PASS  two remote STOPs return at once (counts: host test)
+[TEST] telem SUMMARY 5 passed, 0 failed
+[TEST] S2-I07 PASS  motion_move_backward(151) returns false (NFR16)
+[TEST] S2-I07 PASS  every out-of-range argument is refused
+[TEST] motion SUMMARY 2 passed, 0 failed
+[TEST] S3-U06 PASS  cal_finish accepts both polarities
+[TEST] S3-U01 PASS  exact endpoints 0 and 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  steering sign convention +left -right
+[TEST] S3-U14 PASS  early barcode branch + right sat classifies T
+[TEST] S3-U02 PASS  late barcode branch + right sat + line present -> CROSS
+US dist 1416 mm, lost 0
+IR raw L 232 R 204
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S3-I05/I06 boot] 16-smp L 221..251 sd 7
+[S3-I05/I06 boot] 16-smp R 195..221 sd 6
+[TEST] S3-U56 PASS  SH_IR_RAW stationary ADC sampling & std-dev under US ping
+[TEST] line SUMMARY 7 passed, 0 failed
+[TEST] S3-U03 PASS  code39 decodes *A* to index 10
+[TEST] S3-U05 PASS  28-element capture rejected
+[TEST] S3-U08 PASS  barcode_map_set boundary calls safe
+[TEST] S3-U10 PASS  MSG_EDGE pack/unpack at 0, 1, 0x7FFE, 0x7FFF and saturation
+[TEST] barcode SUMMARY 4 passed, 0 failed
+[TEST] S4-U13 PASS  terrain_reset clears state and accumulators
+[TEST] S4-U13 PASS  position rebase gives ds = 0 (no false climb)
+[TEST] S4-U13 PASS  ds is the slower wheel's delta
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U11 PASS  hump 127 passes, 128 clamps and raises RANGE_CLAMP
+[TEST] S4-U11 PASS  one PRV_OFS_A AX step decodes to 2 mg, range covers +-4094 mg
+[TEST] imu SUMMARY 6 passed, 0 failed
+[TEST] obstacle SUMMARY 0 passed, 0 failed
+[S4-I10] mag raw mx -7189 my -2347 mz -2285
+wifi: joining "U know my password" ...
+US dist 1416 mm, lost 0
+wifi: link status -> joined AP, waiting for IP (1)
+STATE CAL_IMU (yellow blink): keep the car still, 2 s
+IR raw L 228 R 213
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7213 my -2352 mz -2275
+WDT longest feed gap 10528 us in the last 2 s (watchdog fires at 30000)
+US dist 1416 mm, lost 0
+IR raw L 236 R 213
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[TEST] S5-U29 PASS  timer advances ~1 000 000 us in 1 s
+S5-U29 timer diff 1007573 us
+[TEST] time base SUMMARY 1 passed, 0 failed
+[S4-I10] mag raw mx -7208 my -2336 mz -2301
+US dist 1416 mm, lost 0
+IR raw L 230 R 213
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7199 my -2309 mz -2301
+US dist 1416 mm, lost 0
+IR raw L 223 R 207
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+
+
+microT-Kernel Version 3.00
+
+
+=== CSC28 PicoCar on micro T-Kernel (spec 0x6300, product 0x0003) ===
+single-core build
+GP0 func 31 GP1 func 31
+RESET cause watchdog 1
+IMU answered at I2C address 29 (29 = 0x1D SA0 high, 30 = 0x1E SA0 low)
+7 tasks started
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+ENC PIO1 SM 0 1 offset 0
+STATE BOOT (white): waiting for task check-ins and radio init
+[TEST] === test run start ===
+[TEST] S1-U03 PASS  K11 holds at most 8 messages; the next send fails
+[TEST] S1-U03 PASS  the refused send returned at once (nothing blocks)
+US dist 1412 mm, lost 0
+IR raw L 240 R 211
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7211 my -2370 mz -2285
+[TEST] S1-U03 PASS  telem_task's payload into a full K11 is counted
+[TEST] S1-U03 PASS  mqtt_bridge_take drains every queued payload
+EVT 1 ignored in 0
+[TEST] S1-U12 PASS  two remote STOPs return at once (counts: host test)
+[TEST] telem SUMMARY 5 passed, 0 failed
+[TEST] S2-I07 PASS  motion_move_backward(151) returns false (NFR16)
+[TEST] S2-I07 PASS  every out-of-range argument is refused
+[TEST] motion SUMMARY 2 passed, 0 failed
+[TEST] S3-U06 PASS  cal_finish accepts both polarities
+[TEST] S3-U01 PASS  exact endpoints 0 and 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  steering sign convention +left -right
+[TEST] S3-U14 PASS  early barcode branch + right sat classifies T
+[TEST] S3-U02 PASS  late barcode branch + right sat + line present -> CROSS
+US dist 1416 mm, lost 0
+IR raw L 238 R 212
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S3-I05/I06 boot] 16-smp L 221..250 sd 6
+[S3-I05/I06 boot] 16-smp R 193..216 sd 5
+[TEST] S3-U56 PASS  SH_IR_RAW stationary ADC sampling & std-dev under US ping
+[TEST] line SUMMARY 7 passed, 0 failed
+[TEST] S3-U03 PASS  code39 decodes *A* to index 10
+[TEST] S3-U05 PASS  28-element capture rejected
+[TEST] S3-U08 PASS  barcode_map_set boundary calls safe
+[TEST] S3-U10 PASS  MSG_EDGE pack/unpack at 0, 1, 0x7FFE, 0x7FFF and saturation
+[TEST] barcode SUMMARY 4 passed, 0 failed
+[TEST] S4-U13 PASS  terrain_reset clears state and accumulators
+[TEST] S4-U13 PASS  position rebase gives ds = 0 (no false climb)
+[TEST] S4-U13 PASS  ds is the slower wheel's delta
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U11 PASS  hump 127 passes, 128 clamps and raises RANGE_CLAMP
+[TEST] S4-U11 PASS  one PRV_OFS_A AX step decodes to 2 mg, range covers +-4094 mg
+[TEST] imu SUMMARY 6 passed, 0 failed
+[TEST] obstacle SUMMARY 0 passed, 0 failed
+[S4-I10] mag raw mx -7186 my -2311 mz -2300
+wifi: joining "U know my password" ...
+US dist 1416 mm, lost 0
+wifi: link status -> joined AP, waiting for IP (1)
+STATE CAL_IMU (yellow blink): keep the car still, 2 s
+IR raw L 244 R 212
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7110 my -2300 mz -2281
+WDT longest feed gap 10505 us in the last 2 s (watchdog fires at 30000)
+US dist 1416 mm, lost 0
+IR raw L 229 R 205
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[TEST] S5-U29 PASS  timer advances ~1 000 000 us in 1 s
+S5-U29 timer diff 1007744 us
+[TEST] time base SUMMARY 1 passed, 0 failed
+[S4-I10] mag raw mx -7186 my -2343 mz -2282
+US dist 1416 mm, lost 0
+IR raw L 242 R 210
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7189 my -2333 mz -2305
+US dist 1416 mm, lost 0
+IR raw L 240 R 208
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+
+
+microT-Kernel Version 3.00
+
+
+=== CSC28 PicoCar on micro T-Kernel (spec 0x6300, product 0x0003) ===
+single-core build
+GP0 func 31 GP1 func 31
+RESET cause watchdog 1
+IMU answered at I2C address 29 (29 = 0x1D SA0 high, 30 = 0x1E SA0 low)
+7 tasks started
+wifi: cyw43_utk_task starting (proc 1)
+wifi: cyw43_init() ...
+wifi: cyw43_init() returned, bringing interface up ...
+ENC PIO1 SM 0 1 offset 0
+STATE BOOT (white): waiting for task check-ins and radio init
+[TEST] === test run start ===
+[TEST] S1-U03 PASS  K11 holds at most 8 messages; the next send fails
+[TEST] S1-U03 PASS  the refused send returned at once (nothing blocks)
+US dist 1416 mm, lost 0
+IR raw L 247 R 204
+ENC pos L 0 R 0
+BAR DO 0 (1 = black), edges 0
+[S4-I10] mag raw mx -7225 my -2361 mz -2285
+[TEST] S1-U03 PASS  telem_task's payload into a full K11 is counted
+[TEST] S1-U03 PASS  mqtt_bridge_take drains every queued payload
+EVT 1 ignored in 0
+[TEST] S1-U12 PASS  two remote STOPs return at once (counts: host test)
+[TEST] telem SUMMARY 5 passed, 0 failed
+[TEST] S2-I07 PASS  motion_move_backward(151) returns false (NFR16)
+[TEST] S2-I07 PASS  every out-of-range argument is refused
+[TEST] motion SUMMARY 2 passed, 0 failed
+[TEST] S3-U06 PASS  cal_finish accepts both polarities
+[TEST] S3-U01 PASS  exact endpoints 0 and 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  steering sign convention +left -right
+[TEST] S3-U14 PASS  early barcode branch + right sat classifies T
+[TEST] S3-U02 PASS  late barcode branch + right sat + line present -> CROSS
+US dist 1420 mm, lost 0
