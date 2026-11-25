@@ -749,7 +749,7 @@ static void imu_i2c_result(bool b_ok, bool b_is_acc)
         /* Bring-up diagnosis: -1 = the bus stayed silent for a whole
            1 ms step (wiring, power, a hung LSM303D), -2 = NACK (sensor
            not answering, e.g. still booting after a supply dip). */
-        app_log("IMU I2C: last error %d (-1 timeout, -2 NACK)\n",
+        app_log("IMU I2C: last error %d (-1 timeout, -2 NACK, -3 identity)\n",
                 drv_lsm303_last_error(), 0, 0);
         fault_set(APP_FAULT_IMU);
         drv_lsm303_bus_reset();
@@ -834,16 +834,47 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
     }
     else if (!b_mode_set)
     {
+        g_imu_prv_b = app_bits_put(g_imu_prv_b, PRV_IMU_B_CAL_RETRIED_POS,
+                                   PRV_IMU_B_CAL_RETRIED_BITS, 0u);
         imu_g_flag_set(PRV_IMU_G_CAL_ACTIVE_POS, false);
         return;
     }
 
-    if (!b_read_ok)
+    if (!b_read_ok || (0u != (fault_get() & APP_FAULT_IMU)))
     {
-        return; /* no samples this cycle */
+        return; /* await new samples, or mission RESET after an IMU fault */
     }
     if (cal_cnt < IMU_CAL_SAMPLES)
     {
+        /* Check before applying offsets. An invalid constant on all axes
+           would otherwise calibrate to exactly (0, 0, 1000) mg. The
+           16-bit input is at most 3998 mg/axis, so the sum fits int32. */
+        int32_t const ax = ((int32_t)g_avg_raw_x * IMU_MG_NUM) / IMU_MG_DEN;
+        int32_t const ay = ((int32_t)g_avg_raw_y * IMU_MG_NUM) / IMU_MG_DEN;
+        int32_t const az = ((int32_t)g_avg_raw_z * IMU_MG_NUM) / IMU_MG_DEN;
+        int32_t const gravity_sq = (ax * ax) + (ay * ay) + (az * az);
+
+        if ((gravity_sq < (IMU_CAL_GRAVITY_MIN_MG * IMU_CAL_GRAVITY_MIN_MG))
+            || (gravity_sq > (IMU_CAL_GRAVITY_MAX_MG * IMU_CAL_GRAVITY_MAX_MG)))
+        {
+            app_log("IMU calibration rejected: ax %d ay %d az %d mg\n",
+                    ax, ay, az);
+            if (0u == app_bits_get(g_imu_prv_b, PRV_IMU_B_CAL_RETRIED_POS,
+                                    PRV_IMU_B_CAL_RETRIED_BITS))
+            {
+                g_imu_prv_b = app_bits_put(g_imu_prv_b,
+                                           PRV_IMU_B_CAL_RETRIED_POS,
+                                           PRV_IMU_B_CAL_RETRIED_BITS, 1u);
+                /* Re-enter with empty accumulators on the next cycle. */
+                imu_g_flag_set(PRV_IMU_G_CAL_ACTIVE_POS, false);
+                imu_need_cfg_set(true);
+            }
+            else
+            {
+                fault_set(APP_FAULT_IMU);
+            }
+            return;
+        }
         g_cal_sum_x += g_avg_raw_x; /* raw, before the old offsets */
         g_cal_sum_y += g_avg_raw_y;
         g_cal_sum_z += g_avg_raw_z;

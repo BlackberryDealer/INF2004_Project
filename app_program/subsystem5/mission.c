@@ -149,7 +149,7 @@ static char const * const g_fault_names[APP_FAULT_COUNT] =
 {
     "FAULT bit 0 MOTOR_STALL (wheel not turning)\n",
     "FAULT bit 1 ENCODER (impossible encoder read)\n",
-    "FAULT bit 2 IMU (3 I2C errors in a row)\n",
+    "FAULT bit 2 IMU (sensor communication or calibration failed)\n",
     "FAULT bit 3 NO_ECHO (ultrasonic silent 3 pings)\n",
     "FAULT bit 4 WIFI_LOSS (info only)\n",
     "FAULT bit 5 QUEUE_OVERFLOW (mission queue full)\n",

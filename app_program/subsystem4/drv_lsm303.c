@@ -98,6 +98,7 @@ extern uint32_t sys_tick_now_us(void);
 #define LSM303_VAL_CTRL6     (0x00u) /* MFS = +-2 gauss                 */
 #define LSM303_VAL_CTRL7     (0x00u) /* MD = continuous conversion      */
 #define LSM303_VAL_FIFO_CTRL (0x40u) /* FM = stream mode                */
+#define LSM303_FIFO_BYPASS   (0x00u) /* empty FIFO before stream starts */
 #define LSM303_VAL_IG_CFG1   (0x00u) /* interrupt generator 1 off: a
                                          warm restart may find the old
                                          impact setup in the sensor     */
@@ -118,6 +119,7 @@ extern uint32_t sys_tick_now_us(void);
 /* Driver error codes */
 #define LSM303_ERR_TIMEOUT (-1)
 #define LSM303_ERR_ABORT   (-2)
+#define LSM303_ERR_ID      (-3)
 
 #define LSM303_SAMPLES_BYTES (DRV_LSM303_FIFO_MAX * 6u)
 
@@ -180,6 +182,14 @@ int32_t drv_lsm303_init(void)
         g_lsm303_addr = drv_lsm303_pick_addr(g_lsm303_addr, id_now,
                                              id_other);
         lsm303_set_tar(g_lsm303_addr);
+        if (1 != id_other)
+        {
+            /* A device acknowledging a write is insufficient. Preserve a
+               bus error if neither probe returned an identity byte. */
+            g_lsm303_last_err = ((0 == id_now) || (0 == id_other))
+                                ? LSM303_ERR_ID : id_other;
+            return g_lsm303_last_err;
+        }
     }
     else
     {
@@ -340,7 +350,8 @@ uint32_t drv_lsm303_fifo_overruns(void)
  * drv_lsm303_bus_reset
  * @brief   Recovers a stuck bus: disables the controller, clocks SCL nine
  *          times as a GPIO (5 us half period) to release a held slave,
- *          then re-inits and rewrites every register.
+ *          then restores the controller. The pending NEED_CFG retry
+ *          identifies the sensor before writing any registers.
  * @return  none
  * @context imu_task
  */
@@ -364,8 +375,6 @@ void drv_lsm303_bus_reset(void)
 
     gpio_set_function(PIN_IMU_SCL, GPIO_FUNC_I2C);
     lsm303_hw_setup();
-    (void)lsm303_hw_write_config(); /* ignored: the caller is already
-                                       in the I2C fault path */
 }
 
 /**
@@ -373,7 +382,7 @@ void drv_lsm303_bus_reset(void)
  * @brief   Code of the most recent failed transfer, for the console
  *          message when imu_task raises APP_FAULT_IMU.
  * @return  0 (none yet), -1 timeout (bus silent for a whole step) or
- *          -2 abort (NACK or lost arbitration)
+ *          -2 abort (NACK or lost arbitration), or -3 wrong identity
  * @context imu_task
  */
 int32_t drv_lsm303_last_error(void)
@@ -432,7 +441,12 @@ static int32_t lsm303_hw_write_config(void)
 {
     int32_t ercd = 0;
 
-    ercd = lsm303_tx2(LSM303_REG_CTRL0, LSM303_VAL_CTRL0);
+    /* A Pico reset can leave the separately powered sensor streaming. */
+    ercd = lsm303_tx2(LSM303_REG_FIFO_CTRL, LSM303_FIFO_BYPASS);
+    if (0 == ercd)
+    {
+        ercd = lsm303_tx2(LSM303_REG_CTRL0, LSM303_VAL_CTRL0);
+    }
     if (0 == ercd)
     {
         ercd = lsm303_tx2(LSM303_REG_CTRL1, LSM303_VAL_CTRL1);

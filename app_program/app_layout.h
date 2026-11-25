@@ -1312,7 +1312,13 @@
 #define PRV_IMU_B_PEAK_NOW_MAX          (127)
 #define PRV_IMU_B_PEAK_NOW_OFFSET       (0)
 #define PRV_IMU_B_PEAK_NOW_KIND         (APP_KIND_RNG)
-#define PRV_IMU_B_USED_BITS             (PRV_IMU_B_PEAK_NOW_POS + PRV_IMU_B_PEAK_NOW_BITS)
+#define PRV_IMU_B_CAL_RETRIED_POS       (PRV_IMU_B_PEAK_NOW_POS + PRV_IMU_B_PEAK_NOW_BITS)
+#define PRV_IMU_B_CAL_RETRIED_BITS      (1u)
+#define PRV_IMU_B_CAL_RETRIED_MIN       (0)
+#define PRV_IMU_B_CAL_RETRIED_MAX       (1)
+#define PRV_IMU_B_CAL_RETRIED_OFFSET    (0)
+#define PRV_IMU_B_CAL_RETRIED_KIND      (APP_KIND_FLAG)
+#define PRV_IMU_B_USED_BITS             (PRV_IMU_B_CAL_RETRIED_POS + PRV_IMU_B_CAL_RETRIED_BITS)
 #if (PRV_IMU_B_USED_BITS > 32u)
 #error "Group PRV_IMU_B no longer fits in 32 bits"
 #endif

@@ -42,6 +42,10 @@
 #define IMU_MAG_MAX_PITCH_DDEG   (50) /* above 5.0 deg use encoder rate */
 #define IMU_ACC_SAMPLES_MAX      (4u)
 #define IMU_CAL_SAMPLES          (200u) /* 2 s */
+/* Uncorrected gravity magnitude while braked. The mounted car measures
+   about 870 mg, with negative Z. Allow margin in either orientation. */
+#define IMU_CAL_GRAVITY_MIN_MG   (650)
+#define IMU_CAL_GRAVITY_MAX_MG   (1350)
 #define IMU_MG_PER_LSB           (2)    /* DLHC only, see SQ-B4-2 */
 #define IMU_MAG_EVERY_N          (5u)   /* magnetometer every 50 ms */
 #define IMU_I2C_ERR_MAX          (3u)

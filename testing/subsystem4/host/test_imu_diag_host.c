@@ -36,6 +36,8 @@ static uint32_t           g_sim_faults    = 0u;
 static uint32_t           g_sim_safety    = 0u;
 static uint32_t           g_sim_ir_word   = 0u;
 static int32_t            g_sim_acc_rc    = 1;
+static uint32_t           g_sim_init_calls;
+static uint32_t           g_sim_cal_events;
 static drv_lsm303_acc_t   g_sim_acc_smp   = {0, 0, 16000}; /* +1000 mg */
 static int32_t            g_sim_mag_rc    = 0;
 static int16_t            g_sim_mx        = 1000;
@@ -120,11 +122,19 @@ uint32_t sys_tick_now_us(void)
 void sys_health_check_in(uint32_t task_bit) { (void) task_bit; }
 bool sys_health_is_started(void) { return gb_started; }
 void fault_set(uint32_t bit) { g_sim_faults |= bit; }
+uint32_t fault_get(void) { return g_sim_faults; }
 void safety_set(uint32_t bit) { g_sim_safety |= bit; }
 uint32_t safety_get(void) { return g_sim_safety; }
 uint32_t line_raw_word(void) { return g_sim_ir_word; }
 bool mission_mode_is_set(uint32_t mask) { return (0u != (g_sim_modes & mask)); }
-bool mission_post_event(uint32_t type, uint32_t value) { (void) type; (void) value; return true; }
+bool mission_post_event(uint32_t type, uint32_t value)
+{
+    if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IMU == value))
+    {
+        g_sim_cal_events++;
+    }
+    return true;
+}
 
 /* This bench scenario holds the mission off the line. */
 bool status_board_is_line_following(status_board_t const * p_snap) { (void) p_snap; return false; }
@@ -135,7 +145,11 @@ int32_t status_board_speed_l(status_board_t const * p_snap) { (void) p_snap; ret
 int32_t status_board_speed_r(status_board_t const * p_snap) { (void) p_snap; return g_sim_spd_cpw; }
 void status_board_write_imu(status_board_imu_t const * p_part) { g_sim_imu_board = *p_part; }
 
-int32_t drv_lsm303_init(void) { return (g_sim_acc_rc < 0) ? g_sim_acc_rc : 0; }
+int32_t drv_lsm303_init(void)
+{
+    g_sim_init_calls++;
+    return (g_sim_acc_rc < 0) ? g_sim_acc_rc : 0;
+}
 uint32_t drv_lsm303_addr(void) { return 0x1Du; }
 int32_t drv_lsm303_last_error(void) { return g_sim_acc_rc; }
 void drv_lsm303_bus_reset(void) {}
@@ -292,6 +306,59 @@ int main(void)
     }
     HOST_CHECK("S4-U21", TERRAIN_FLAT == imu_terrain_state_get(),
                "register rewrite + the configured good accelerometer reads recover TERRAIN_FLAT");
+
+    /* Replay the observed warm-reset signature and the mounted sensor's
+       healthy negative-Z baseline through the actual calibration path. */
+    drv_lsm303_acc_t const frozen = {24535, 24535, 24535}; /* 2993 mg each */
+    drv_lsm303_acc_t const healthy = {-1420, 435, -6968};
+    uint32_t const initial_calls = g_sim_init_calls;
+    uint32_t const old_offsets_a = g_ofs_word_a;
+    uint32_t const old_offsets_b = g_ofs_word_b;
+
+    g_sim_faults = 0u;
+    g_sim_modes = APP_MODE_CAL_IMU;
+    g_sim_acc_smp = frozen;
+    for (idx = 0u; idx < IMU_CAL_SAMPLES + 2u; idx++)
+    {
+        sim_imu_cycle();
+    }
+    g_sim_acc_smp = healthy;
+    for (idx = 0u; idx < IMU_CAL_SAMPLES + 1u; idx++)
+    {
+        sim_imu_cycle(); /* fault stays latched until RESET */
+    }
+    HOST_CHECK("S4-U21", (g_sim_init_calls == initial_calls + 1u)
+               && (0u != (g_sim_faults & APP_FAULT_IMU))
+               && (0u == g_sim_cal_events) && (g_ofs_word_a == old_offsets_a)
+               && (g_ofs_word_b == old_offsets_b),
+               "persistent 2993 mg rest vector retries once, faults and never commits calibration");
+
+    g_sim_modes = 0u; /* mission clears modes during RESET */
+    sim_imu_cycle();
+    g_sim_modes = APP_MODE_CAL_IMU;
+    g_sim_faults = 0u;
+    g_sim_acc_smp = healthy;
+    for (idx = 0u; idx < IMU_CAL_SAMPLES - 1u; idx++)
+    {
+        sim_imu_cycle();
+    }
+    g_sim_acc_smp = frozen;
+    sim_imu_cycle();
+    sim_imu_cycle(); /* identify and configure again */
+    g_sim_acc_smp = healthy;
+    for (idx = 0u; idx < IMU_CAL_SAMPLES - 1u; idx++)
+    {
+        sim_imu_cycle();
+    }
+    HOST_CHECK("S4-U21", (0u == g_sim_cal_events) && (old_offsets_b == g_ofs_word_b),
+               "bad sample discards the partial calibration window");
+    sim_imu_cycle();
+    sim_imu_cycle();
+    sim_imu_cycle();
+    HOST_CHECK("S4-U21", (g_sim_init_calls == initial_calls + 2u)
+               && (1u == g_sim_cal_events) && (0u == (g_sim_faults & APP_FAULT_IMU))
+               && (imu_az_mg() >= 999) && (imu_az_mg() <= 1001),
+               "fresh calibration after retry accepts measured negative Z and posts CAL_DONE once");
 
     return (0 == HOST_SUMMARY("imu_diag")) ? 0 : 1;
 }

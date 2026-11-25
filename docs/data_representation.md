@@ -224,6 +224,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | CLIMB_CNT | PRV_IMU_B | 0..2047 × 1 count | 1 | 11 | 11 | SAT | P | Climb distance |
 | HIST_IDX | PRV_IMU_B | 0..4 × 1 slot | 1 | 3 | 3 | RNG | P | Speed history index |
 | PEAK_NOW | PRV_IMU_B | 0..127 × 1 mm | 1 | 7 | 7 | RNG | P | Peak of this hump (A25) |
+| CAL_RETRIED | PRV_IMU_B | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | Sensor restarted after implausible gravity during this calibration |
 | PREV_HDG | PRV_IMU_C | 0..3599 × 1 0.1 deg | 1 | 12 | 12 | RNG | P | Previous magnetometer heading (wrapped 0..3599) |
 | PREV_HDG_VALID | PRV_IMU_C | 0..1 × 1 flag | 1 | 1 | 1 | FLAG | P | PREV_HDG is from the previous 50 ms read |
 | PITCH_MAX | PRV_IMU_C | -450..450 × 1 0.1 deg | 1 | 10 | 10 | RNG | P | Max pitch this hump (A24) |
@@ -488,7 +489,7 @@ width). Kinds: SAT saturates silently at a sentinel; RNG clamps and sets
 | PRV_WIN_T | 6 | 8 |
 | PRV_WIN_I | 3 | 8 |
 | PRV_IMU_A | 31 | 32 |
-| PRV_IMU_B | 29 | 32 |
+| PRV_IMU_B | 30 | 32 |
 | PRV_IMU_C | 30 | 32 |
 | PRV_IMU_D | 19 | 32 |
 | PRV_IMU_R | 31 | 32 |

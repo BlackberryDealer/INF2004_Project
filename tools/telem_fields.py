@@ -295,6 +295,7 @@ GROUPS = {
         ('CLIMB_CNT', 11, 0, 1, 'count'),
         ('HIST_IDX', 3, 0, 1, 'slot'),
         ('PEAK_NOW', 7, 0, 1, 'mm'),
+        ('CAL_RETRIED', 1, 0, 1, 'flag'),
     ],
     'PRV_IMU_C': [
         ('PREV_HDG', 12, 0, 1, '0.1 deg'),
