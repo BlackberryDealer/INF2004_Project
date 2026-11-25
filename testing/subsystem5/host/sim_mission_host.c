@@ -614,10 +614,9 @@ int main(void) {
         CHECK("S5-U58", APP_RUN_FOLLOW == g_ctx.run_state,
               "a valid crossing returns to FOLLOW");
       } else {
-        CHECK("S5-U58", APP_SYS_RUN == g_ctx.sys_state
-              && APP_RUN_SEARCH_LINE == g_ctx.run_state
-              && 0u == (g_fault & APP_FAULT_REACQUIRE_FAIL),
-              "no accepted crossing by move end: hand over to the line search (FR9 limit still applies)");
+        CHECK("S5-U58", APP_SYS_FAULT == g_ctx.sys_state
+              && 0u != (g_fault & APP_FAULT_REACQUIRE_FAIL),
+              "no accepted crossing by move end, stop on REACQUIRE_FAIL");
       }
     }
   }
