@@ -80,7 +80,7 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-24 | S4-U20 | `fine-width-scan` v4 | Dylan | PASS | Terrain host test | `imu_task` passes "following the line" (RUN, FOLLOW or ARMED) to `terrain_roll_hump_line()`; 2 of 2 checks pass. Car check to do. |
 | 2026-11-24 | S4-U10, S4-U11, S4-U13 | `40de1f5` | Hanz | PASS | [`2026-11-24_target_test_session1.txt`](../system/logs/2026-11-24_target_test_session1.txt) | imu 6/6 on the Pico. Pico `TEST=1 NET=lwip MQTT=1` image, built dual-core (`SMP=1`) by mistake: `TEAM.md` says `SMP=0`. |
 | 2026-11-24 | S4-I09 | `40de1f5` | Hanz | FAIL | [`2026-11-24_target_test_session1.txt`](../system/logs/2026-11-24_target_test_session1.txt) | `imu_read` worst time 969–1479 µs per 1000 cycles, over the 550 µs budget (750 with magnetometer, 800 backlog). Wall-clock time, includes other tasks. Re-run on the `SMP=0` build before changing code. Pico `TEST=1 NET=lwip MQTT=1` image, built dual-core (`SMP=1`) by mistake: `TEAM.md` says `SMP=0`. |
-| 2026-11-25 | S4 host checks (17 distinct printed IDs) | `72482f3` | Codex | PASS (host) | [Fresh run](../subsystem1/logs/2026-11-25_090514_host_72482f3_f1OjER.txt) | 82 passing S4 assertions. Search the transcript by test ID for the input and observed result. |
+| 2026-11-25 | S4 host checks (17 distinct printed IDs) | `72482f3` | Dylan | PASS (host) | [Fresh run](../subsystem1/logs/2026-11-25_090514_host_72482f3_f1OjER.txt) | 82 passing S4 assertions. Search the transcript by test ID for the input and observed result. |
 
 ## SPEC-QUESTION
 

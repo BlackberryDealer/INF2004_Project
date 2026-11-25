@@ -12,7 +12,7 @@ This page indexes the testing done on demo day. Each result row lives in its `TE
 | `14ed65a` | `PicoCar_hotspot_main_14ed65a.uf2` (previous day's image, console mirrored to MQTT) | Same logic as `main` | Lift A/B check, stall, sensor bench tests |
 | `f4e94ad` | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2`, SHA-256 `072aa8b7…` | IMU: retry a bad calibration once, then raise `APP_FAULT_IMU` | All tests from 12:08, including the full-track runs |
 | `fc9e59a` | not flashed | Mission: hand over to line search when the rejoin window passes | **Reverted in `5751975`.** Never run on the car, and review found it clears the FR9 timer on entering the search |
-| `5751975` | — (submitted HEAD) | Revert of `fc9e59a` | Firmware source identical to `f4e94ad`, the demonstrated image |
+| `5751975` / `ca84792` | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2`, SHA-256 `072aa8b78f9cf6e8…` | Revert of `fc9e59a` + final verification logs | Firmware source identical to `f4e94ad`; rebuilt via `testing/run-demo.sh course` (`tracked_firmware_edits=no`), producing byte-for-byte identical SHA-256 `072aa8b78f9cf6e817f94f259859f5730f6574644a392e159091b42d580a09a9` |
 
 ## Unit tests (host)
 

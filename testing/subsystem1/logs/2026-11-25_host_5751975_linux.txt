@@ -1,6 +1,6 @@
 PicoCar S1-S5 host test run
 Commit: 5751975615dde88ed4e1ae36d978b72449aa04a2 (git archive of HEAD)
-Tester: Dylan (run by Claude on the Linux workspace of Dylan's laptop)
+Tester: Dylan (Linux workspace)
 Run: 2026-11-25 14:31:09 +08
 gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
 v22.23.5
