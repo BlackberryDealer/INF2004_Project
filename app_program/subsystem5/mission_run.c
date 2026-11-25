@@ -81,6 +81,9 @@ static void run_avoid_heading(mission_ctx_t * p_ctx,
                               status_board_t const * p_snap, uint32_t now_us);
 static void run_finish_avoid(mission_ctx_t * p_ctx,
                              status_board_t const * p_snap, uint32_t now_us);
+static void run_end_avoid_marks(mission_ctx_t * p_ctx,
+                                status_board_t const * p_snap,
+                                uint32_t now_us);
 static void run_background(mission_ctx_t * p_ctx,
                            status_board_t const * p_snap, uint32_t now_us);
 static void run_path_marks(mission_ctx_t * p_ctx, uint32_t path);
@@ -958,13 +961,18 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
     }
     else if ((RUN_SUB_SECOND == p_ctx->substep) && (APP_EVT_MOVE_DONE == type))
     {
+        /* Track 25 Nov 2026: an obstacle one tile after a bend leaves the
+           line curving away from the straight bypass, so the window
+           passes without a crossing. Hand over to the normal line search
+           (sweep, FR14 timeout) instead of stopping; the FR9 limit still
+           ends the bypass with REACQUIRE_FAIL if no line is found.      */
         if (!p_ctx->b_is_quiet)
         {
-            app_log("REJOIN FAIL: drove the whole window, no line accepted\n",
+            app_log("REJOIN: window over, no line accepted: searching\n",
                     0, 0, 0);
         }
-        fault_set(APP_FAULT_REACQUIRE_FAIL);    /* no line in the window */
-        run_request(p_ctx, APP_SYS_FAULT, APP_END_FAULT);
+        run_end_avoid_marks(p_ctx, p_snap, now_us);
+        run_goto(p_ctx, APP_RUN_SEARCH_LINE, p_snap, now_us);
     }
     else if ((RUN_SUB_THIRD == p_ctx->substep) && (APP_EVT_MOVE_DONE == type))
     {
@@ -1031,6 +1039,21 @@ static void run_avoid_heading(mission_ctx_t * p_ctx,
 static void run_finish_avoid(mission_ctx_t * p_ctx,
                              status_board_t const * p_snap, uint32_t now_us)
 {
+    run_end_avoid_marks(p_ctx, p_snap, now_us);
+    run_follow_or_armed(p_ctx, p_snap, now_us);
+}
+
+/**
+ * run_end_avoid_marks
+ * @brief   Bypass bookkeeping shared by a normal rejoin and the search
+ *          hand-over: slow speed after the bypass, inhibits cleared 150 mm
+ *          later, RESUME pulse for obstacle_task.
+ * @context mission_task
+ */
+static void run_end_avoid_marks(mission_ctx_t * p_ctx,
+                                status_board_t const * p_snap,
+                                uint32_t now_us)
+{
     p_ctx->b_post_avoid_slow = true;
     p_ctx->b_inhibit_pending = true;
     p_ctx->inhibit_mark      = odometry_path_add(
@@ -1039,7 +1062,6 @@ static void run_finish_avoid(mission_ctx_t * p_ctx,
                                        MISSION_INHIBIT_CLEAR_MM));
     p_ctx->avoid_step        = APP_AVOID_WAIT_PLAN;
     mission_run_resume_pulse(p_ctx, now_us);
-    run_follow_or_armed(p_ctx, p_snap, now_us);
 }
 
 /**
