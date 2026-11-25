@@ -80,7 +80,7 @@ This page indexes the testing done on demo day. Each result row lives in its `TE
 
 ## Not run, and why
 
-Floor motion tests S2-I01–I03 and S2-I08 need a MOVE-capable build. Scope or meter tests (S2-I04, S2-I05, S3-I10, S4-I07, S5-I05) and hang-injection tests (S5-I02, S5-I02b, S5-I02r, INT-08) need instruments or special builds. The Wi-Fi-loss run, 250 mm/s speed laps (S3-I04) and ruler-referenced 4/5 mm hump strips (S4-I14) were not completed; all recorded track runs across 9–25 Nov (127 chronological trials) are indexed in [2026-11-25_track_trials.csv](system/logs/2026-11-25_track_trials.csv).
+Floor motion tests S2-I01–I03 and S2-I08 need a MOVE-capable build. Scope or meter tests (S2-I04, S2-I05, S3-I10, S4-I07, S5-I05) and hang-injection tests (S5-I02, S5-I02b, S5-I02r, INT-08) need instruments or special builds. The Wi-Fi-loss run, 250 mm/s speed laps (S3-I04) and ruler-referenced 4/5 mm hump strips (S4-I14) were not completed; 127 selected evidence records across 9–25 Nov (numbered chronologically within each case) are indexed in [2026-11-25_track_trials.csv](system/logs/2026-11-25_track_trials.csv).
 
 ## Still to add
 

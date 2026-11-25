@@ -1,6 +1,6 @@
 # PicoCar system tests
 
-These IDs retain the definitions used by the November 24 Pico capture. Run the [demo-day procedure](../DEMO.md). Use the blank [trial sheet template](track_trials.csv) for repeated measurements; the 25 Nov 2026 demo-day results are recorded in [logs/2026-11-25_track_trials.csv](logs/2026-11-25_track_trials.csv).
+These IDs retain the definitions used by the November 24 Pico capture. Run the [demo-day procedure](../DEMO.md). Use the blank [trial sheet template](track_trials.csv) for repeated measurements; 127 selected evidence records across 9–25 Nov are indexed in [logs/2026-11-25_track_trials.csv](logs/2026-11-25_track_trials.csv).
 
 | ID | Requirement | Method and expected result |
 |---|---|---|
