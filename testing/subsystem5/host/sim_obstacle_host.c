@@ -422,7 +422,7 @@ int main(void) {
   /* S5-U83 (requirement 24 Nov 2026: reported width within +-10 mm).
      The whole scan (5-degree points + 1-degree edge pass) of boxes
      100..200 mm wide, 200 mm ahead (OBS_SCAN_MM), centred, off-centre
-     and turned, through a 15-degree cone. The board width is what the
+     and turned, through the calibrated cone. The board width is what the
      dashboard shows.                                                  */
   { static const struct { double w, cx, yaw; } box[] = {
       {100, 0, 0}, {125, 0, 0}, {150, 0, 0}, {175, 0, 0}, {200, 0, 0},

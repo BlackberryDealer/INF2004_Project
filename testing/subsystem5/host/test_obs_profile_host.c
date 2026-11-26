@@ -7,8 +7,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include "../../host/host_test.h"
 #include "subsystem5/obs_profile.h"
+#include "subsystem5/obs_edge.h"
 #include "subsystem5/cfg_obstacle.h"
 
 /* sin(5k deg), Q14, k = 0..36 (same values as obs_profile.c) */
@@ -660,13 +662,21 @@ int main(void)
         HOST_CHECK("S5-U83", (w >= 140u) && (w <= 160u) && (pm > 0u)
                    && (pm <= 12u),
                    "150 mm box from its corner echoes (+-10 mm), +- reported");
-        /* car run 24 Nov 21:08: 70 mm box, echoes 55 deg / 228 mm and
-           130 deg, scan stopped 204 mm away                          */
+        /* car run 24 Nov 21:08 (v3 logged WIDTH unavailable so only low
+           55 deg / 228 mm was printed; 5-deg 130 deg read 256 mm;
+           228 mm is assumed symmetric here to check the corner maths) */
         w = obs_profile_edge_width(55u, 228u, 130u, 228u, &pm);
-        printf("   S5-U83: car scan 70 mm box (55/130 deg, 228 mm) -> %u mm\n",
+        printf("   S5-U83: replay 21:08 (55/130 deg, hi 228 mm assumed) -> %u mm\n",
                (unsigned) w);
         HOST_CHECK("S5-U83", (w >= 60u) && (w <= 80u),
-                   "car scan of the 70 mm box reads 70 +-10 mm");
+                   "corner maths replay 21:08 (70 mm box, assumed symmetric 228 mm): 70 +-10 mm");
+        /* car run 24 Nov 21:22 (both edges logged: 58/130 deg at 240 mm;
+           car logged 61 mm, dashboard 60 mm at 29.0 deg)              */
+        w = obs_profile_edge_width(58u, 240u, 130u, 240u, &pm);
+        printf("   S5-U83: replay 21:22 (58/130 deg, 240/240 mm) -> %u mm\n",
+               (unsigned) w);
+        HOST_CHECK("S5-U83", (w >= 60u) && (w <= 80u),
+                   "corner maths replay 21:22 (70 mm box, 240/240 mm): 70 +-10 mm");
         HOST_CHECK("S5-U83",
                    (0u == obs_profile_edge_width(90u, 200u, 90u, 200u, &pm))
                    && (0u == pm)
@@ -678,6 +688,99 @@ int main(void)
         HOST_CHECK("S5-U83",
                    0u == obs_profile_edge_width(80u, 200u, 100u, 200u, &pm),
                    "span narrower than the beam (corners reversed): 0");
+    }
+
+    /* S5-U84: the edge pass (obs_edge.c) on its own, one rule each.
+       Core 50..130 deg at 200 mm (code 50), band limit 280 mm (70).   */
+    {
+        uint8_t          scan[APP_SCAN_STEPS];
+        obs_profile_t    prof;
+        obs_edge_t       edge;
+        obs_edge_probe_t next = {0u, false};
+        uint32_t         pm   = 0u;
+        uint32_t         idx  = 0u;
+        bool             b_ok = true;
+
+        memset(&prof, 0, sizeof(prof));
+        for (idx = 0u; idx < APP_SCAN_STEPS; idx++)
+        {
+            scan[idx] = ((idx >= 4u) && (idx <= 20u)) ? 50u : 255u;
+        }
+        prof.b_is_valid    = true;
+        prof.angle_step    = 12u;
+        prof.core_lo_step  = 4u;
+        prof.core_hi_step  = 20u;
+        prof.core_limit_mm = 280u;
+
+        /* clean edges: in band, then background, on both sides */
+        b_ok = b_ok && obs_edge_begin(&edge, scan, &prof, &next)
+               && (49u == next.deg) && next.b_is_far;
+        b_ok = b_ok && obs_edge_sample(&edge, 52u, scan, &next)
+               && (48u == next.deg) && !next.b_is_far;
+        b_ok = b_ok && obs_edge_sample(&edge, 255u, scan, &next)
+               && edge.b_ok_lo && (49u == edge.lo_deg)
+               && (131u == next.deg) && next.b_is_far;
+        b_ok = b_ok && obs_edge_sample(&edge, 52u, scan, &next)
+               && !obs_edge_sample(&edge, 255u, scan, &next)
+               && edge.b_ok_hi && (131u == edge.hi_deg)
+               && (OBS_EDGE_OFF == edge.phase)
+               && (obs_edge_width(&edge, &pm) > 0u);
+        HOST_CHECK("S5-U84", b_ok, "clean edges: probe order, both confirmed, width given");
+
+        /* patchy fringe: 5 probes in band, the extra one in band too;
+           background at the 5-degree point beyond confirms the edge   */
+        (void) obs_edge_begin(&edge, scan, &prof, &next);
+        for (idx = 0u; idx < OBS_EDGE_SUB_MAX; idx++)
+        {
+            (void) obs_edge_sample(&edge, 52u, scan, &next);
+        }
+        b_ok = edge.b_grace && (44u == next.deg);
+        b_ok = b_ok && obs_edge_sample(&edge, 54u, scan, &next)
+               && edge.b_ok_lo && (45u == edge.lo_deg);
+        HOST_CHECK("S5-U84", b_ok, "patchy in-band echo past the edge, background beyond: confirmed");
+
+        /* receding face: past the band but no jump, twice: not seen */
+        (void) obs_edge_begin(&edge, scan, &prof, &next);
+        edge.lo_code = 60u;
+        b_ok = obs_edge_sample(&edge, 72u, scan, &next)
+               && edge.b_grace && (48u == next.deg) && (50u == edge.lo_deg);
+        b_ok = b_ok && obs_edge_sample(&edge, 74u, scan, &next)
+               && !edge.b_ok_lo;
+        HOST_CHECK("S5-U84", b_ok, "face receding past the band: edge not confirmed");
+
+        /* fringe echo: in band but rising > OBS_EDGE_RISE_MM: the edge
+           stays, the extra degree decides                            */
+        (void) obs_edge_begin(&edge, scan, &prof, &next);
+        b_ok = obs_edge_sample(&edge,
+                               50u + (OBS_EDGE_RISE_MM / OBS_MM_STEP) + 1u,
+                               scan, &next)
+               && edge.b_grace && (50u == edge.lo_deg) && (48u == next.deg);
+        b_ok = b_ok && obs_edge_sample(&edge, 255u, scan, &next)
+               && edge.b_ok_lo && (50u == edge.lo_deg);
+        HOST_CHECK("S5-U84", b_ok, "fringe echo: edge kept, the next degree confirms it");
+
+        /* a core end at the 30 deg limit is never confirmed */
+        prof.core_lo_step = 0u;
+        for (idx = 0u; idx <= 20u; idx++)
+        {
+            scan[idx] = 50u;
+        }
+        b_ok = obs_edge_begin(&edge, scan, &prof, &next)
+               && (OBS_EDGE_HI_SIDE == edge.phase) && !edge.b_ok_lo
+               && (0u == obs_edge_width(&edge, &pm));
+        HOST_CHECK("S5-U84", b_ok, "core at the scan limit: low side skipped, width unavailable");
+
+        /* corners confirmed but far apart in range: turned too far */
+        edge.b_ok_lo = true;
+        edge.b_ok_hi = true;
+        edge.lo_deg  = 60u;
+        edge.hi_deg  = 120u;
+        edge.lo_code = 50u;
+        edge.hi_code = 50u + (OBS_EDGE_SKEW_MM / OBS_MM_STEP) + 1u;
+        b_ok = (0u == obs_edge_width(&edge, &pm));
+        edge.hi_code = 50u + (OBS_EDGE_SKEW_MM / OBS_MM_STEP);
+        b_ok = b_ok && (obs_edge_width(&edge, &pm) > 0u);
+        HOST_CHECK("S5-U84", b_ok, "corner ranges > OBS_EDGE_SKEW_MM apart: unavailable");
     }
 
     return (0 == HOST_SUMMARY("subsystem5 host")) ? 0 : 1;
