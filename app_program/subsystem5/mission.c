@@ -58,13 +58,12 @@
 #define MISSION_EVTS_PER_WAKE  (8u)    /* bounds one wake's work        */
 #define MISSION_STACK_WORDS    (APP_STACK_MISSION_BYTES / 8u)
 
-#define MISSION_US_PER_MS      (1000u)
 #define MISSION_US_PER_S       (1000000u)
 #define MISSION_HMI_PERIOD_US  (10000u)  /* buttons polled every 10 ms */
 #define MISSION_ODO_MAX_MM     (32767u)  /* K7_SUMM ODO_MM (A23)       */
 #define MISSION_RUN_S_MAX      (1023u)   /* K7_SUMM RUN_S (A28)        */
 /* Run odometer cap: the first count whose mm reach MISSION_ODO_MAX_MM. */
-#define MISSION_ODO_MAX_COUNTS (((MISSION_ODO_MAX_MM * 1000u)              \
+#define MISSION_ODO_MAX_COUNTS (((MISSION_ODO_MAX_MM * APP_UM_PER_MM)      \
                                  / APP_UM_PER_COUNT) + 1u)
 #define MISSION_STATE_RUN_SHIFT (3u)     /* STATE_CHANGE: sys | run<<3 */
 
@@ -566,7 +565,7 @@ static void mission_task(INT stacd, void * p_exinf)
 #if (MISSION_WDT_LOG_MS != 0u)
             /* Bring-up diagnosis: watchdog margin (window 30 ms) */
             if ((now_us - wdt_log_us)
-                >= (MISSION_WDT_LOG_MS * MISSION_US_PER_MS))
+                >= (MISSION_WDT_LOG_MS * APP_US_PER_MS))
             {
                 wdt_log_us = now_us;
                 /* cast: a gap is far below INT32_MAX */
@@ -1433,7 +1432,7 @@ static void mission_st_cal_imu(mission_ctx_t * p_ctx, uint32_t type,
                                uint32_t value, status_board_t const * p_snap,
                                uint32_t now_us)
 {
-    uint32_t const limit_us = MISSION_CAL_TIMEOUT_MS * MISSION_US_PER_MS;
+    uint32_t const limit_us = MISSION_CAL_TIMEOUT_MS * APP_US_PER_MS;
 
     if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IMU == value))
     {
@@ -1466,8 +1465,8 @@ static void mission_st_cal_ir(mission_ctx_t * p_ctx, uint32_t type,
                               uint32_t value, status_board_t const * p_snap,
                               uint32_t now_us)
 {
-    uint32_t const sweep_us = MISSION_CAL_SWEEP_MAX_MS * MISSION_US_PER_MS;
-    uint32_t const limit_us = MISSION_CAL_TIMEOUT_MS * MISSION_US_PER_MS;
+    uint32_t const sweep_us = MISSION_CAL_SWEEP_MAX_MS * APP_US_PER_MS;
+    uint32_t const limit_us = MISSION_CAL_TIMEOUT_MS * APP_US_PER_MS;
     uint32_t const cal_ir   = APP_MODE_CAL_IR | APP_MODE_MOTOR_EN;
 
     if ((APP_EVT_CAL_DONE == type) && (APP_CAL_SRC_IR == value))
@@ -1590,8 +1589,8 @@ static void mission_cal_settle(mission_ctx_t * p_ctx,
     else
     {
         /* event time: division allowed */
-        turn_deg = (mag_cdeg + (MISSION_CDEG_PER_DEG / 2))
-                   / MISSION_CDEG_PER_DEG;
+        turn_deg = (mag_cdeg + (APP_CDEG_PER_DEG / 2))
+                   / APP_CDEG_PER_DEG;
         if (!p_ctx->b_is_quiet)
         {
             app_log("CAL_IR heading %d cdeg from the start (+ = right):"
@@ -1619,8 +1618,8 @@ static void mission_cal_settle(mission_ctx_t * p_ctx,
 static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
                              status_board_t const * p_snap, uint32_t now_us)
 {
-    uint32_t const warn_us = MISSION_START_WARN_MS * MISSION_US_PER_MS;
-    uint32_t const hold_us = MISSION_RUN_START_HOLD_MS * MISSION_US_PER_MS;
+    uint32_t const warn_us = MISSION_START_WARN_MS * APP_US_PER_MS;
+    uint32_t const hold_us = MISSION_RUN_START_HOLD_MS * APP_US_PER_MS;
 
     if ((APP_EVT_START == type) && (!p_ctx->b_is_warning)
         && (!p_ctx->b_run_starting))
@@ -1682,7 +1681,7 @@ static void mission_st_ready(mission_ctx_t * p_ctx, uint32_t type,
 static void mission_st_ended(mission_ctx_t * p_ctx, uint32_t type,
                              status_board_t const * p_snap, uint32_t now_us)
 {
-    uint32_t const wait_us = MISSION_RECOVER_MS * MISSION_US_PER_MS;
+    uint32_t const wait_us = MISSION_RECOVER_MS * APP_US_PER_MS;
     bool           b_again = false;
 
     if (p_ctx->b_recovering)
@@ -1814,7 +1813,7 @@ static void mission_moves(mission_ctx_t * p_ctx, uint32_t now_us)
     }
     else if (p_ctx->b_move_pending
              && ((now_us - p_ctx->move_start_us)
-                 >= (p_ctx->move_limit_ms * MISSION_US_PER_MS)))
+                 >= (p_ctx->move_limit_ms * APP_US_PER_MS)))
     {
         mission_stop_motion(p_ctx);               /* deadline passed */
         p_ctx->b_motion_failed = true;
@@ -1949,7 +1948,7 @@ uint32_t mission_move_deadline_ms(uint32_t kind, int32_t param)
         }
         else if ((MISSION_MV_LEFT == kind) || (MISSION_MV_RIGHT == kind))
         {
-            dist  = (amount * MISSION_TURN_UM_PER_DEG) / 1000u;
+            dist  = (amount * MISSION_TURN_UM_PER_DEG) / APP_UM_PER_MM;
             speed = (uint32_t) MOTION_TURN_SPEED_MM_S;
         }
         else
@@ -1970,7 +1969,7 @@ uint32_t mission_move_deadline_ms(uint32_t kind, int32_t param)
  */
 static void mission_timers(mission_ctx_t * p_ctx, uint32_t now_us)
 {
-    uint32_t const pulse_us = MISSION_RESUME_PULSE_MS * MISSION_US_PER_MS;
+    uint32_t const pulse_us = MISSION_RESUME_PULSE_MS * APP_US_PER_MS;
 
     if (p_ctx->b_resume_pending
         && ((now_us - p_ctx->resume_start_us) >= pulse_us))

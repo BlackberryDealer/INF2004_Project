@@ -22,7 +22,6 @@
    ENC L -18 R 37).                                                    */
 #define MISSION_CAL_HEADING_TOL_CDEG (200)    /* TUNE: 2 deg */
 #define MISSION_CAL_CORR_MAX        (2u)      /* return turns at most */
-#define MISSION_CDEG_PER_DEG        (100)
 #define MISSION_START_WARN_MS       (1000u)
 #define MISSION_SEARCH_TIMEOUT_MS   (5000u)   /* FR14 */
 #define MISSION_SEARCH_SWEEP_DEG    (60)

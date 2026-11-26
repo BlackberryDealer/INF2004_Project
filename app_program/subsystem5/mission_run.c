@@ -25,8 +25,6 @@
 #define RUN_UTURN_DEG             (180)
 #define RUN_SQRT2_X1000           (1414u)   /* 45 deg leg = lateral x 1.414 */
 #define RUN_PCT                   (100u)
-#define RUN_CDEG_PER_DEG          (100)
-#define RUN_US_PER_MS             (1000u)
 #define RUN_TURN_MAX_DEG          (360)
 #define RUN_LEG_MIN_MM            (1)
 #define RUN_INHIBITS              (APP_MODE_BARCODE_INHIBIT          \
@@ -538,7 +536,7 @@ static void run_execute(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
 static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                        status_board_t const * p_snap, uint32_t now_us)
 {
-    uint32_t const limit_us = MISSION_SEARCH_TIMEOUT_MS * RUN_US_PER_MS;
+    uint32_t const limit_us = MISSION_SEARCH_TIMEOUT_MS * APP_US_PER_MS;
     uint32_t const other    = (MISSION_MV_RIGHT == p_ctx->search_first)
                               ? MISSION_MV_LEFT : MISSION_MV_RIGHT;
 
@@ -549,7 +547,7 @@ static void run_search(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
             /* cast: elapsed ms < 2^31 */
             app_log("LINE FOUND again after %d ms of search\n",
                     (int32_t) ((now_us - p_ctx->search_start_us)
-                               / RUN_US_PER_MS), 0, 0);
+                               / APP_US_PER_MS), 0, 0);
         }
         mission_stop_motion(p_ctx);
         run_follow_or_armed(p_ctx, p_snap, now_us);
@@ -606,7 +604,7 @@ static void run_avoid(mission_ctx_t * p_ctx, mission_evt_in_t const * p_evt,
                       status_board_t const * p_snap, uint32_t now_us)
 {
     uint32_t const mot   = status_board_motion_state(p_snap);
-    uint32_t const fr9us = MISSION_FR9_LIMIT_MS * RUN_US_PER_MS;
+    uint32_t const fr9us = MISSION_FR9_LIMIT_MS * APP_US_PER_MS;
     uint32_t const type  = p_evt->b_has_event ? p_evt->type : APP_EVT_COUNT;
 
     if (p_ctx->b_wait_standstill
@@ -1003,7 +1001,7 @@ static void run_avoid_heading(mission_ctx_t * p_ctx,
     else
     {
         /* event time: division allowed */
-        turn_deg = (mag_cdeg + (RUN_CDEG_PER_DEG / 2)) / RUN_CDEG_PER_DEG;
+        turn_deg = (mag_cdeg + (APP_CDEG_PER_DEG / 2)) / APP_CDEG_PER_DEG;
         if (turn_deg > RUN_TURN_MAX_DEG)
         {
             turn_deg = RUN_TURN_MAX_DEG;
@@ -1087,7 +1085,7 @@ static void run_background(mission_ctx_t * p_ctx,
             /* cast: elapsed ms < 2^31 */
             app_log("FR9 %d ms\n",
                     (int32_t) ((now_us - p_ctx->fr9_start_us)
-                               / RUN_US_PER_MS), 0, 0);
+                               / APP_US_PER_MS), 0, 0);
         }
     }
 

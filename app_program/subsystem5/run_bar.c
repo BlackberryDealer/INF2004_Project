@@ -17,7 +17,6 @@
 
 /* ---- private constants and types ------------------------------------ */
 
-#define RUN_BAR_US_PER_MS     (1000u)
 #define RUN_BAR_INHIBITS      (APP_MODE_BARCODE_INHIBIT \
                                | APP_MODE_JUNCTION_INHIBIT)
 
@@ -115,7 +114,7 @@ void run_bar_try_rewind(mission_ctx_t * p_ctx, status_board_t const * p_snap,
 
         if ((need > MISSION_BARCODE_REWIND_MM - MISSION_BARCODE_BACK_PAD_MM)
             || ((now_us - p_ctx->barcode_since_us)
-                >= MISSION_BARCODE_WAIT_MS * RUN_BAR_US_PER_MS)
+                >= MISSION_BARCODE_WAIT_MS * APP_US_PER_MS)
             || (APP_MOT_FOLLOW != status_board_motion_state(p_snap))
             || (status_board_speed_l(p_snap) <= 0)
             || (status_board_speed_r(p_snap) <= 0)
@@ -268,7 +267,7 @@ static uint32_t run_bar_brake_timeout(mission_ctx_t const * p_ctx,
     uint32_t out = RUN_BAR_OUT_ACTIVE;
 
     if ((now_us - p_ctx->barcode_since_us)
-        >= MISSION_BARCODE_BRAKE_MS * RUN_BAR_US_PER_MS)
+        >= MISSION_BARCODE_BRAKE_MS * APP_US_PER_MS)
     {
         run_bar_log_event(p_ctx, "BARCODE brake timed out (%d ms)\n",
                           MISSION_BARCODE_BRAKE_MS);
@@ -481,7 +480,7 @@ static uint32_t run_bar_read(mission_ctx_t * p_ctx,
                 || (odometry_path_since(path, p_ctx->barcode_mark)
                     >= odometry_mm_to_counts(MISSION_BARCODE_READ_MM))
                 || ((now_us - p_ctx->barcode_since_us)
-                    >= MISSION_BARCODE_READ_MS * RUN_BAR_US_PER_MS);
+                    >= MISSION_BARCODE_READ_MS * APP_US_PER_MS);
             if (b_finished)
             {
                 run_bar_log_event(p_ctx, "BARCODE reread ended without decode"

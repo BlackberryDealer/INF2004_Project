@@ -48,8 +48,7 @@
 #define TELEM_K11_MBF_BYTES   (TELEM_K11_ENTRIES \
                                * (TELEM_MBF_HDR_BYTES + TELEM_K11_MSG_BYTES))
 
-#define TELEM_US_PER_MS       (1000u)
-#define TELEM_STATE_PERIOD_US (TELEM_STATE_PERIOD_MS * TELEM_US_PER_MS)
+#define TELEM_STATE_PERIOD_US (TELEM_STATE_PERIOD_MS * APP_US_PER_MS)
 #define TELEM_WAIT_MIN_MS     (1u)
 #define TELEM_TIME_HALF_RANGE (0x80000000u)  /* wrap-safe "has reached" */
 #define TELEM_MM_STEP_SHIFT   (2u)           /* 4 mm fields             */
@@ -556,7 +555,7 @@ static TMO telem_wait_ms(uint32_t next_us, uint32_t now_us)
 
     if (left_us < TELEM_TIME_HALF_RANGE)
     {
-        wait_ms = (left_us + (TELEM_US_PER_MS - 1u)) / TELEM_US_PER_MS;
+        wait_ms = (left_us + (APP_US_PER_MS - 1u)) / APP_US_PER_MS;
     }
     if (wait_ms < TELEM_WAIT_MIN_MS)
     {

@@ -25,6 +25,7 @@
 #include "terrain.h" /* own header first (BARR-C 4.3.c) */
 #include <stddef.h>  /* NULL for the clamp-flag arguments */
 #include "cfg_imu.h"
+#include "../app_types.h"
 #include "../app_bits.h"
 #include "../app_layout.h"
 #include "../subsystem2/odometry.h"
@@ -33,7 +34,6 @@
 /* One-wheel tilt smoothing (1/4 per cycle, rounded) and height scale */
 #define TERRAIN_ROLL_EMA_DIV    (4)
 #define TERRAIN_ROLL_EMA_HALF   (TERRAIN_ROLL_EMA_DIV / 2)
-#define TERRAIN_ROLL_UM_PER_MM  (1000u)
 #define TERRAIN_ROLL_MG_PER_G   (1000u)
 #define TERRAIN_ROLL_PCT_SCALE  (100u)
 #define TERRAIN_ROLL_SCALE_DEN  (TERRAIN_ROLL_MG_PER_G \
@@ -48,9 +48,7 @@
 #define TERRAIN_DDEG_THREE_Q   (2700)
 #define TERRAIN_DDEG_HALF      (1800)
 #define TERRAIN_DDEG_QUADRANT  (900)
-#define TERRAIN_DDEG_PER_DEG   (10)
 #define TERRAIN_DEG_QUADRANT   (90u)
-#define TERRAIN_Q14_ONE        (16384)
 #define TERRAIN_ATAN_K_MAX     (32)
 #define TERRAIN_ATAN_SCALE     (1024)
 #define TERRAIN_ATAN_FRAC_MASK (31u)
@@ -262,8 +260,8 @@ int32_t terrain_sin_q14(int32_t ddeg)
         fold_ddeg = (uint32_t)TERRAIN_DDEG_CIRCLE - ddeg_u;
     }
 
-    deg       = fold_ddeg / (uint32_t)TERRAIN_DDEG_PER_DEG;
-    frac      = fold_ddeg % (uint32_t)TERRAIN_DDEG_PER_DEG;
+    deg       = fold_ddeg / APP_DDEG_PER_DEG;
+    frac      = fold_ddeg % APP_DDEG_PER_DEG;
     q14_value = terrain_sin_q14_deg(deg, frac);
 
     if (b_is_neg)
@@ -689,7 +687,7 @@ uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
             {
                 if (!b_latched)
                 {
-                    *p_done_mm = (((APP_TRACK_UM / TERRAIN_ROLL_UM_PER_MM)
+                    *p_done_mm = (((APP_TRACK_UM / APP_UM_PER_MM)
                                    * peak * TERRAIN_ROLL_GAIN_PCT)
                                   + TERRAIN_ROLL_SCALE_HALF)
                                  / TERRAIN_ROLL_SCALE_DEN;
@@ -1047,7 +1045,7 @@ static uint32_t terrain_sin_q14_deg(uint32_t deg, uint32_t frac_ddeg)
     }
     return base +
            (((uint32_t)(g_sin_tab[deg + 1u] - g_sin_tab[deg]) * frac_ddeg) /
-            (uint32_t)TERRAIN_DDEG_PER_DEG);
+            APP_DDEG_PER_DEG);
     /* unsigned division by 10, event-time */
 }
 
@@ -1247,7 +1245,7 @@ static void terrain_descend_step(terrain_t * p_ter, int32_t pitch_ddeg,
         uint32_t geo_mm =
             ((uint32_t)TERRAIN_WHEELBASE_MM *
              (uint32_t)terrain_sin_q14(terrain_pitch_max_get(p_ter))) /
-            (uint32_t)TERRAIN_Q14_ONE;
+            (uint32_t)APP_Q14_ONE;
         /* casts: the wheelbase is positive and, because the maximum
            pitch is >= TERRAIN_CLIMB_START_DDEG > 0, the sine is >= 0;
            the division is by a power of two (never >> on a signed
