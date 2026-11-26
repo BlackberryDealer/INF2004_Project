@@ -12,6 +12,7 @@
  */
 
 #include "obs_profile.h"       /* own header first (BARR-C 4.3.c) */
+#include "../app_types.h"
 #include "cfg_obstacle.h"
 
 /* ---- private constants and types ------------------------------------ */
@@ -19,10 +20,8 @@
 #define OBS_SIN_ENTRIES    (37u)   /* 0, 5, ..., 180 deg               */
 #define OBS_SIN_IDX_90     (18u)   /* index of 90 deg                  */
 #define OBS_STEP_IDX_BASE  (6u)    /* scan step 0 = 30 deg = index 6   */
-#define OBS_Q14_ONE        (16384)  /* 1.0 in Q14 (signed division) */
 #define OBS_STEP_LAST      (APP_SCAN_STEPS - 1u)
 #define OBS_SIN1_ENTRIES   (91u)   /* sin(0..90 deg), 1 deg apart      */
-#define OBS_DDEG_PER_DEG   (10u)
 #define OBS_DDEG_90        (900u)
 #define OBS_DDEG_180       (1800u)
 #define OBS_HALF_DEG_DDEG  (5u)    /* half of a 1-degree edge step     */
@@ -283,9 +282,9 @@ uint32_t obs_profile_edge_width(uint32_t lo_deg, uint32_t lo_mm,
                                 uint32_t hi_deg, uint32_t hi_mm,
                                 uint32_t * p_pm_mm)
 {
-    uint32_t const lo_dd  = (lo_deg * OBS_DDEG_PER_DEG) + OBS_BEAM_HALF_DDEG
+    uint32_t const lo_dd  = (lo_deg * APP_DDEG_PER_DEG) + OBS_BEAM_HALF_DDEG
                             - OBS_HALF_DEG_DDEG;
-    uint32_t const hi_dd  = (hi_deg * OBS_DDEG_PER_DEG) + OBS_HALF_DEG_DDEG;
+    uint32_t const hi_dd  = (hi_deg * APP_DDEG_PER_DEG) + OBS_HALF_DEG_DDEG;
     uint32_t       result = 0u;
     int32_t        x_lo   = 0;
     int32_t        y_lo   = 0;
@@ -317,7 +316,7 @@ uint32_t obs_profile_edge_width(uint32_t lo_deg, uint32_t lo_mm,
             /* 0.5 deg at each corner (range x 0.5 deg in rad) plus half a
                4 mm code at each; casts: ranges <= 1020 mm               */
             *p_pm_mm = (uint32_t) ((((int32_t) (lo_mm + hi_mm))
-                                    * OBS_HALF_DEG_Q14) / OBS_Q14_ONE)
+                                    * OBS_HALF_DEG_Q14) / APP_Q14_ONE)
                        + (2u * OBS_HALF_CODE_MM);
         }
     }
@@ -361,10 +360,10 @@ static void obs_make_points(uint16_t const * p_scan_mm, obs_point_t * p_pts)
             }
             /* signed division by a power of two, truncates toward zero
                (never >> on a signed value, review R19); |d x cos| < 2^23 */
-            p_pts[step].x_mm = (dist * cos_q14) / OBS_Q14_ONE;
+            p_pts[step].x_mm = (dist * cos_q14) / APP_Q14_ONE;
             /* cast: d >= 0 and sin >= 0, so the quotient is >= 0 */
             p_pts[step].y_mm = (uint32_t) ((dist * g_obs_sin_q14[sin_idx])
-                                           / OBS_Q14_ONE);
+                                           / APP_Q14_ONE);
         }
     }
 }
@@ -802,15 +801,15 @@ static int32_t obs_sin_ddeg(uint32_t ddeg)
     uint32_t const held = (ddeg > OBS_DDEG_180) ? OBS_DDEG_180 : ddeg;
     uint32_t const fold = (held > OBS_DDEG_90) ? (OBS_DDEG_180 - held)
                                                : held;
-    uint32_t const deg  = fold / OBS_DDEG_PER_DEG;
-    uint32_t const frac = fold % OBS_DDEG_PER_DEG;
+    uint32_t const deg  = fold / APP_DDEG_PER_DEG;
+    uint32_t const frac = fold % APP_DDEG_PER_DEG;
     int32_t        val  = g_obs_sin1_q14[deg];
 
     if (0u != frac)         /* deg < 90 here, so deg + 1 is in the table */
     {
         /* cast: frac 1..9 */
         val += ((g_obs_sin1_q14[deg + 1u] - g_obs_sin1_q14[deg])
-                * (int32_t) frac) / (int32_t) OBS_DDEG_PER_DEG;
+                * (int32_t) frac) / (int32_t) APP_DDEG_PER_DEG;
     }
 
     return val;
@@ -836,8 +835,8 @@ static void obs_corner(uint32_t ddeg, uint32_t range_mm,
     int32_t const  dist = (int32_t) range_mm;   /* cast: <= 1020 mm */
 
     /* signed division, truncates toward zero (review R19); |d x q| < 2^24 */
-    *p_x_mm = (dist * cos_q14) / OBS_Q14_ONE;
-    *p_y_mm = (dist * obs_sin_ddeg(held)) / OBS_Q14_ONE;
+    *p_x_mm = (dist * cos_q14) / APP_Q14_ONE;
+    *p_y_mm = (dist * obs_sin_ddeg(held)) / APP_Q14_ONE;
 }
 
 /**

@@ -44,6 +44,7 @@
 #include "sys_health.h"        /* own header first (BARR-C 4.3.c) */
 #include "drv_led_alive.h"
 #include "sys_tick.h"
+#include "../app_types.h"
 #include "../app_bits.h"
 #include "../app_layout.h"
 #if defined(TM_WIFI_CYW43) && (TM_WIFI_CYW43 != 0)
@@ -55,7 +56,6 @@
 
 #define SYS_HEALTH_FAST_BITS    (SYS_HEALTH_BIT_LINE | SYS_HEALTH_BIT_MOTION \
                                  | SYS_HEALTH_BIT_IMU)
-#define SYS_HEALTH_US_PER_MS    (1000u)
 
 /* Watchdog and PSM registers (values as in the SDK's regs/watchdog.h,
    regs/psm.h, addressmap.h), driven with the kernel's in_w/out_w and the
@@ -81,10 +81,10 @@
 /* RP2040 erratum E1: the counter decrements twice per 1 us tick, so the
    load is 2 x the delay in us (the SDK's WATCHDOG_XFACTOR).           */
 #define SYS_HEALTH_WDT_XFACTOR  (2u)
-#define SYS_HEALTH_LOAD_NORMAL  (SYS_HEALTH_WDT_MS * SYS_HEALTH_US_PER_MS \
+#define SYS_HEALTH_LOAD_NORMAL  (SYS_HEALTH_WDT_MS * APP_US_PER_MS \
                                  * SYS_HEALTH_WDT_XFACTOR)
 #define SYS_HEALTH_LOAD_START   (SYS_HEALTH_WDT_START_MS                  \
-                                 * SYS_HEALTH_US_PER_MS                   \
+                                 * APP_US_PER_MS                   \
                                  * SYS_HEALTH_WDT_XFACTOR)
 #define SYS_HEALTH_WDT_DBG_BITS (SYS_HEALTH_WDT_PAUSE_DBG0                \
                                  | SYS_HEALTH_WDT_PAUSE_DBG1              \
@@ -193,7 +193,7 @@ void sys_health_service(void)
     T_RFLG         rflg     = {0};
     uint32_t const obs_us   = g_obs_checkin_us;          /* one load */
     uint32_t const age_us   = sys_tick_now_us() - obs_us; /* wrap-safe */
-    uint32_t const limit_us = SYS_HEALTH_OBS_MAX_AGE_MS * SYS_HEALTH_US_PER_MS;
+    uint32_t const limit_us = SYS_HEALTH_OBS_MAX_AGE_MS * APP_US_PER_MS;
     bool           b_fast   = false;
     bool           b_feed   = false;
 
@@ -370,7 +370,7 @@ static bool sys_health_radio_settled(void)
     cyw43_utk_get_status(&status);
     b_is_settled = (0u != status.init_complete)
                    || (age_us >= (SYS_HEALTH_RADIO_WAIT_MS
-                                  * SYS_HEALTH_US_PER_MS));
+                                  * APP_US_PER_MS));
 #endif
 
     return b_is_settled;

@@ -19,6 +19,13 @@
 #define APP_KIND_PAD    (4u)  /* unused bits, always zero                   */
 #define APP_KIND_RAW    (5u)  /* hardware image or wrapping counter         */
 
+/* ---- Unit conversions and fixed-point scale ------------------------ */
+#define APP_US_PER_MS            (1000u)
+#define APP_UM_PER_MM            (1000u)
+#define APP_CDEG_PER_DEG         (100)
+#define APP_DDEG_PER_DEG         (10u)
+#define APP_Q14_ONE              (16384)   /* signed scale for Q14 division */
+
 /* ---- Robot physical constants (rows owned by Buddy 2) ---------------- */
 #define APP_TICK_MS              (10u)
 #define APP_SPEED_WINDOW_MS      (50u)
@@ -52,7 +59,8 @@
                                 * (1u + APP_LATE_TICKS_MAX)                \
                                 * APP_COUNTS_PER_REV) + APP_WHEEL_CIRC_UM   \
                                - 1u) / APP_WHEEL_CIRC_UM)
-#define APP_RUN_MAX_COUNTS   ((APP_RUN_MAX_MM * 1000u) / APP_UM_PER_COUNT)
+#define APP_RUN_MAX_COUNTS   ((APP_RUN_MAX_MM * APP_UM_PER_MM) \
+                              / APP_UM_PER_COUNT)
 
 #if (APP_SPAN_COUNTS_MAX > 63u)
 #error "Encoder delta no longer fits 7 bits: widen it in tools/layout.csv"

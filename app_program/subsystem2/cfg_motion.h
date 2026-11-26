@@ -105,7 +105,7 @@
      || (MOTION_FOLLOW_MAX_MM_S > 2047))   /* MSG_CMD PARAM: 11 bits */
 #error "A command limit no longer fits the 11-bit K5 parameter"
 #endif
-#if ((2u * (((MOTION_MOVE_MAX_MM * 1000u) + (APP_UM_PER_COUNT / 2u)) \
+#if ((2u * (((MOTION_MOVE_MAX_MM * APP_UM_PER_MM) + (APP_UM_PER_COUNT / 2u)) \
             / APP_UM_PER_COUNT)) > 16383u)   /* PRV_MOT_C TARGET2: 14 b */
 #error "2 x the longest move no longer fits TARGET2: widen it"
 #endif

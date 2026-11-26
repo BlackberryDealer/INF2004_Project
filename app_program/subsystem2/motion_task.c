@@ -65,11 +65,10 @@
 #define MOTION_WHEEL_L         (0u)         /* index of the left wheel     */
 #define MOTION_WHEEL_R         (1u)
 #define MOTION_WHEELS          (2u)
-#define MOTION_UM_PER_MM       (1000u)
 /* 2 x the counts of the creep zone, as odometry_mm_to_counts() rounds it
    (checked by S2-U32); a constant, so it is not stored.                */
 #define MOTION_CREEP_ZONE2                                                 \
-    (2u * (((MOTION_CREEP_ZONE_MM * MOTION_UM_PER_MM)                      \
+    (2u * (((MOTION_CREEP_ZONE_MM * APP_UM_PER_MM)                      \
             + (APP_UM_PER_COUNT / 2u)) / APP_UM_PER_COUNT))
 #define MOTION_PROG2_MAX       ((uint32_t) PRV_MOT_C_PROG2_MAX)
 #define MOTION_DIFF_MASK       ((uint32_t) PRV_MOT_E_DIFF_START_MAX)

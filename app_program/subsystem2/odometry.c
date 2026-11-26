@@ -18,7 +18,6 @@
 
 /* ---- private constants and types ------------------------------------ */
 
-#define ODOMETRY_UM_PER_MM          (1000u)
 #define ODOMETRY_HALF_MM_UM         (500u)
 #define ODOMETRY_PI_NUM             (355u)    /* pi ~= 355/113 (3e-7 off) */
 #define ODOMETRY_PI_DEN             (113u)
@@ -115,7 +114,7 @@ uint32_t odometry_hw_to_counts(uint32_t hw_image)
 uint32_t odometry_counts_to_mm(uint32_t counts)
 {
     return (((counts * APP_UM_PER_COUNT) + ODOMETRY_HALF_MM_UM)
-            / ODOMETRY_UM_PER_MM);
+            / APP_UM_PER_MM);
 }
 
 /**
@@ -127,7 +126,7 @@ uint32_t odometry_counts_to_mm(uint32_t counts)
  */
 uint32_t odometry_mm_to_counts(uint32_t distance_mm)
 {
-    return (((distance_mm * ODOMETRY_UM_PER_MM) + (APP_UM_PER_COUNT / 2u))
+    return (((distance_mm * APP_UM_PER_MM) + (APP_UM_PER_COUNT / 2u))
             / APP_UM_PER_COUNT);
 }
 

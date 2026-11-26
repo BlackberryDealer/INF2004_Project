@@ -41,8 +41,7 @@
 #define OBS_ECHO_MM_Q16        (11299u)
 #define OBS_ECHO_ROUND_Q16     (32768u)
 #define OBS_ECHO_Q16_SHIFT     (16u)
-#define OBS_US_PER_MS          (1000u)
-#define OBS_ECHO_TIMEOUT_US    (OBS_ECHO_TIMEOUT_MS * OBS_US_PER_MS)
+#define OBS_ECHO_TIMEOUT_US    (OBS_ECHO_TIMEOUT_MS * APP_US_PER_MS)
 #define OBS_WIDTH_SHIFT        (2u)          /* 4 us units            */
 #define OBS_WIDTH_4US_MAX      (4095u)       /* 12 bits; SAT          */
 #define OBS_SEQ_LOW_MASK       (0x3u)        /* record keeps 2 bits   */
@@ -676,8 +675,8 @@ static bool obstacle_wait_echo(uint8_t done0)
         else
         {
             /* event time in a 60 ms task: the division is allowed */
-            left_ms = ((OBS_ECHO_TIMEOUT_US - elapsed) + OBS_US_PER_MS - 1u)
-                      / OBS_US_PER_MS;
+            left_ms = ((OBS_ECHO_TIMEOUT_US - elapsed) + APP_US_PER_MS - 1u)
+                      / APP_US_PER_MS;
             /* cast: <= 40 ms; a timeout is fine, the loop re-checks */
             (void) tk_wai_sem(gh_echo_sem, 1, (TMO) left_ms);
             b_is_done = (done0 != g_echo_done_cnt);
@@ -1309,7 +1308,7 @@ static void obstacle_scan_finish(void)
 
     /* casts: scan ms, outcome and the 25-bit mask all fit int32_t */
     app_log("SCAN %d ms out %d inferred 0x%x\n",
-            (int32_t) ((sys_tick_now_us() - g_scan_start_us) / OBS_US_PER_MS),
+            (int32_t) ((sys_tick_now_us() - g_scan_start_us) / APP_US_PER_MS),
             (int32_t) plan.outcome, (int32_t) obstacle_get(OBS_F_INFERRED));
     obstacle_scan_log();
     obstacle_ranges_log();
