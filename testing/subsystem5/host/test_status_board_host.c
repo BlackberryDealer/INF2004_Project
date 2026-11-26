@@ -9,16 +9,13 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include "../../host/host_test.h"
 #include "app_program/subsystem5/status_board.h"
 #include "app_program/app_types.h"
 
 ID tk_cre_mtx(T_CMTX const *p) { (void) p; return 1; }
 ER tk_loc_mtx(ID id, TMO t) { (void) id; (void) t; return E_OK; }
 ER tk_unl_mtx(ID id) { (void) id; return E_OK; }
-
-static int pass_n, fail_n;
-#define CHECK(id, c, d) do { if (c) { pass_n++; printf("[TEST] %s PASS  %s\n", id, d); } \
-  else { fail_n++; printf("[TEST] %s FAIL  %s (line %d)\n", id, d, __LINE__); } } while (0)
 
 static status_board_t snap;
 
@@ -61,9 +58,10 @@ static bool mis_ok(uint32_t sys, uint32_t run, uint32_t av, uint32_t end, bool a
          && status_board_is_armed(&snap) == arm && status_board_armed_cmd(&snap) == cmd; }
 
 int main(void) {
+  HOST_INIT();
   status_board_init();
   status_board_read(&snap);
-  CHECK("S5-U74", status_board_distance(&snap) == APP_DIST_NONE_MM
+  HOST_CHECK("S5-U74", status_board_distance(&snap) == APP_DIST_NONE_MM
         && status_board_width(&snap) == APP_PROFILE_CLEAR_MM
         && status_board_nearest(&snap) == APP_PROFILE_CLEAR_MM
         && status_board_clear_left(&snap) == APP_PROFILE_CLEAR_MM
@@ -74,30 +72,42 @@ int main(void) {
         && status_board_turn_rate(&snap) == 0 && status_board_path(&snap) == 0
         && status_board_sys_state(&snap) == 0,
         "initial board: nothing ahead, profile clear, every other field 0");
-  CHECK("S5-U74", sizeof(status_board_t) == 44u,
+  HOST_CHECK("S5-U74", sizeof(status_board_t) == 44u,
         "snapshot is the 11 packed 32-bit words (44 B)");
-  CHECK("S5-U74", line_ok(-1000, 3u, APP_JCT_SIDE_R, true) && line_ok(1000, 0u, 0u, false)
+  HOST_CHECK("S5-U74", line_ok(-1000, 3u, APP_JCT_SIDE_R, true) && line_ok(1000, 0u, 0u, false)
         && line_ok(0, 1u, 1u, true) && line_ok(-1, 2u, 3u, false),
         "line part: steering -1000..1000, status, junction, calibrated");
-  CHECK("S5-U74", mot_ok(-127, 127, 7u, -131071, 131071, 131071)
+  HOST_CHECK("S5-U74", mot_ok(-127, 127, 7u, -131071, 131071, 131071)
         && mot_ok(127, -127, 0u, 131071, -131071, 0u) && mot_ok(18, 17, 1u, 3086, -3086, 3086),
         "motion part: speeds +-127, state, positions +-131071, path 0..131071");
-  CHECK("S5-U74", imu_ok(-450, 127u, 127u, 6u, true, -360)
+  HOST_CHECK("S5-U74", imu_ok(-450, 127u, 127u, 6u, true, -360)
         && imu_ok(450, 0u, 0u, 0u, false, 360) && imu_ok(25, 11u, 12u, 3u, true, -90),
         "IMU part: pitch +-450, hump 0..127, class, source, turn +-360");
-  CHECK("S5-U74", obs_ok(APP_DIST_NONE_MM, 7u, 24u, 1u, true, 1020u, 1020u, 1020u, 1020u, 1020u, 1020u)
+  HOST_CHECK("S5-U74", obs_ok(APP_DIST_NONE_MM, 7u, 24u, 1u, true, 1020u, 1020u, 1020u, 1020u, 1020u, 1020u)
         && obs_ok(0u, 0u, 0u, 0u, false, 0u, 0u, 0u, 0u, 0u, 0u)
         && obs_ok(252u, 2u, 12u, 0u, true, 200u, 248u, 120u, 1020u, 352u, 800u),
         "obstacle part: 4 mm steps, sentinels 2044 / 1020, legs 0..1020");
-  CHECK("S5-U74", mis_ok(7u, 4u, 6u, 3u, true, 3u) && mis_ok(0u, 0u, 0u, 0u, false, 0u)
+  HOST_CHECK("S5-U74", mis_ok(7u, 4u, 6u, 3u, true, 3u) && mis_ok(0u, 0u, 0u, 0u, false, 0u)
         && mis_ok(4u, 1u, 0u, 2u, true, 1u),
         "mission part: every state, step, end reason and armed command");
   {
     status_board_imu_t p = {900, 0u, 0u, 0u, false, 0};
     status_board_write_imu(&p); status_board_read(&snap);
-    CHECK("S5-U74", status_board_pitch(&snap) == 450,
+    HOST_CHECK("S5-U74", status_board_pitch(&snap) == 450,
           "pitch beyond +-45 deg is stored as 45 deg (ramp check uses +-2 deg)");
   }
-  printf("[TEST] S5-U74 status board host tests SUMMARY %d passed, %d failed\n", pass_n, fail_n);
-  return (0 == fail_n) ? 0 : 1;
+  /* S4-U20: "following the line" is RUN with FOLLOW or ARMED only */
+  { static const struct { uint32_t sys, run; bool want; } c[] = {
+      {APP_SYS_RUN, APP_RUN_FOLLOW, true}, {APP_SYS_RUN, APP_RUN_ARMED, true},
+      {APP_SYS_RUN, APP_RUN_AVOID, false}, {APP_SYS_RUN, APP_RUN_EXECUTE_TURN, false},
+      {APP_SYS_RUN, APP_RUN_SEARCH_LINE, false}, {APP_SYS_READY, APP_RUN_FOLLOW, false},
+      {APP_SYS_FINISHED, APP_RUN_FOLLOW, false} };
+    bool b_all = true;
+    for (size_t i = 0u; i < sizeof(c) / sizeof(c[0]); i++) {
+      status_board_mission_t p = {c[i].sys, c[i].run, 0u, 0u, false, 0u};
+      status_board_write_mission(&p); status_board_read(&snap);
+      b_all = b_all && (status_board_is_line_following(&snap) == c[i].want); }
+    HOST_CHECK("S4-U20", b_all,
+               "line following = RUN + FOLLOW/ARMED; turns, search, bypass and other states are not"); }
+  return (0 == HOST_SUMMARY("S5-U74 status board host tests")) ? 0 : 1;
 }

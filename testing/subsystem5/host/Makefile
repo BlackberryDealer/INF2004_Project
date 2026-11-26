@@ -78,7 +78,7 @@ sim_obstacle_host.out: sim_obstacle_host.c tree
 	    $(B)/subsystem5/status_board.c \
 	    $(B)/app_bits.c -lm
 
-test_status_board_host.out: test_status_board_host.c tree
+test_status_board_host.out: test_status_board_host.c ../../host/host_test.h tree
 	$(CC) $(SIMFLAGS) -o $@ test_status_board_host.c \
 	    $(B)/subsystem5/status_board.c $(B)/app_bits.c
 
