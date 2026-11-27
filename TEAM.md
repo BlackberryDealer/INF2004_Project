@@ -20,11 +20,11 @@ every affected buddy.
 
 | # | Subsystem (what it does) | Name | Student ID | GitHub username | Code | Tests |
 |---|---|---|---|---|---|---|
-| 1 | Communications: MQTT telemetry, remote START/STOP/RESET, packing helpers (`app_bits`), layout generator, laptop decoder | Hanzalah | | | `app_program/subsystem1/` | `testing/subsystem1/` |
-| 2 | Motion control: closed-loop wheel speed, move/turn, odometry, stall detection, safety interlock (K3), shared fault bitmask (K12) | Dylan | | | `app_program/subsystem2/` | `testing/subsystem2/` |
-| 3 | Line following, junction classification, Code 39 barcodes | Lucas | | | `app_program/subsystem3/` | `testing/subsystem3/` |
-| 4 | IMU, terrain (humps, motion class, turn rate), lift-stop (Change Requirement 2), RAM report | Faris | | | `app_program/subsystem4/` | `testing/subsystem4/` |
-| 5 | Shared services (status board, mission queue, ticks, watchdog, GPIO IRQ), obstacles, mission statechart, HMI | Afif | | | `app_program/subsystem5/` | `testing/subsystem5/` |
+| 1 | Communications: MQTT telemetry, remote START/STOP/RESET, packing helpers (`app_bits`), layout generator, laptop decoder | Hanzalah | 2500949 | colossalcap | `app_program/subsystem1/` | `testing/subsystem1/` |
+| 2 | Motion control: closed-loop wheel speed, move/turn, odometry, stall detection, safety interlock (K3), shared fault bitmask (K12) | Dylan | 2303703 | BlackberryDealer | `app_program/subsystem2/` | `testing/subsystem2/` |
+| 3 | Line following, junction classification, Code 39 barcodes | Lucas | 2502908 | Johndose-val | `app_program/subsystem3/` | `testing/subsystem3/` |
+| 4 | IMU, terrain (humps, motion class, turn rate), lift-stop (Change Requirement 2), RAM report | Faris | 2500841 | macfreze12 | `app_program/subsystem4/` | `testing/subsystem4/` |
+| 5 | Shared services (status board, mission queue, ticks, watchdog, GPIO IRQ), obstacles, mission statechart, HMI | Afif | 2500708 | AfifLotfi | `app_program/subsystem5/` | `testing/subsystem5/` |
 
 Each member fills in their own Student ID and GitHub username.
 Integrator (Phase 0 skeleton): Dylan (`phase0-skeleton` pull request,

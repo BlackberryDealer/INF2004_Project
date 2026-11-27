@@ -1,0 +1,22 @@
+# Commit record for Results rows that name a branch, phase or placeholder instead of a commit
+# File: testing/subsystem2/TEST_LOG.md
+# Source: git history of main at 22a73b4.
+# Method: for each row, git log -S "| <date> | <test ID> | <label> |" -- <file>; the oldest match is the commit that added the row.
+# 'Recorded in' is that commit. Where the row was committed together with the code, it is also the tested code.
+# The old rows are not changed (append-only); this file only adds the missing commit reference.
+# Rows: 13
+
+Date        | Test ID | Label in the row | Recorded in (date) | Note
+2026-10-22 | S2-U01, S2-U11 | <commit> | 1edb8bd (2026-10-22) | placeholder left in the row; Tester column empty; row committed by Dylan (BlackberryDealer) in 1edb8bd
+2026-10-22 | S2-U02 | <commit> | 1edb8bd (2026-10-22) | placeholder left in the row; Tester column empty; row committed by Dylan (BlackberryDealer) in 1edb8bd
+2026-10-22 | S2-U01, U02, U11, U13, U14, U03, U12, U15–U19 | <commit> | 1edb8bd (2026-10-22) | placeholder left in the row; Tester column empty; row committed by Dylan (BlackberryDealer) in 1edb8bd
+2026-10-22 | S2-U01, U02, U11, U13, U14, U03, U12, U15–U19 | <commit> | 1edb8bd (2026-10-22) | placeholder left in the row; Tester column empty; row committed by Dylan (BlackberryDealer) in 1edb8bd
+2026-11-10 | S2-U28 | before fix | 6f9d1ee (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S2-U28 | barcode-reread-full-strip | 6f9d1ee (2026-11-10)
+2026-11-12 | S2-U29 | pack-motion-command-word | e0f8e03 (2026-11-12)
+2026-11-12 | S2-U28, S2-U30 | follow-split-rounded | 3cfc8b4 (2026-11-12)
+2026-11-12 | S2-U29, S2-U30 | shared-event-type-range (patches 6–15) | 2d5536d (2026-11-12)
+2026-11-12 | S2-U14 | imu-lift-stop | 9f648bc (2026-11-12)
+2026-11-16 | S2-U15, S2-U31 | path-wraps | a47ec41 (2026-11-18)
+2026-11-17 | S2-U32 | before change (path-wraps) | 69dccb1 (2026-11-18) | code version tested here was not committed on its own
+2026-11-17 | S2-U11, S2-U32 | motion-private-state-packed | 69dccb1 (2026-11-18)

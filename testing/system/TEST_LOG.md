@@ -1,19 +1,30 @@
-# PicoCar system tests
+# System — test log
 
-These IDs retain the definitions used by the November 24 Pico capture. Run the [demo-day procedure](../DEMO.md). Use the blank [trial sheet template](track_trials.csv) for repeated measurements; 127 selected evidence records across 9–25 Nov are indexed in [logs/2026-11-25_track_trials.csv](logs/2026-11-25_track_trials.csv).
+Tests of the complete product against its requirements, run on the final hardware set-up. Run the full set before every demo and before hand-in. Use the blank [trial sheet template](track_trials.csv) for repeated measurements.
 
-| ID | Requirement | Method and expected result |
-|---|---|---|
-| SYS-01 | FR1, FR16, FR17 · boot and calibration | Start capture before boot. BOOT → CAL_IMU → CAL_IR → READY, both IR spans ≥400 ADC codes, zero stop faults. Observe white boot, yellow calibration and solid green READY. |
-| SYS-02 | FR10–12, NFR8 · dashboard | In READY issue START. During RUN request SUMMARY, then STOP and RESET. Verify RUN → FINISHED → READY, frozen final summary after STOP and live telemetry at 5 Hz ±10%. Use the broker timestamp trace to check rate. |
-| SYS-03 | FR1–3, FR19 · line and barcode routing | Load all four assigned mappings over MQTT in READY. Log each acknowledgement. Drive over a full- and half-scale print on the left. Record the printed letter, decoded letter, next cross and actual movement. Expect the assigned action at the next cross and continued following. Exercise all four actions and both reading directions across trials. For S3-I02 use 20 passes per scale and ≥95% correct. For S3-I04 use three runs at 250 mm/s with no loss over 200 ms. |
-| SYS-04 | FR4, FR5, FR13 · hump and ramp | Compare reported height with the ruler. For the 4 and 5 mm right-wheel strips, use five runs each, one event per strip within 1 mm, and three flat controls with zero events (S4-I14). Check ramp rejection and no false lift during driving. S4-I02 has separate larger-hump trials. |
-| SYS-05 | FR6–9 · obstacle | At cruise observe stop, scan, chosen side, clearance and line rejoin. At 300 mm/s expect ≥100 mm stop clearance and braking within 150 ms of the first reading. For S5-I09 scan 100/150/200 mm boxes three times each. Record all widths, signed errors and spread; mean error for each box must be within ±10 mm. Record contact and rejoin time from end of pass leg (upper limit 5.5 s). |
-| SYS-06 | FR13 · lift-stop | Run, lift, observe LIFT STOP, wheels stopped and FINISHED with STOP reason. RESET returns to READY. For S4-I12 perform ten lifts covering level, tilted and overturned on a soft surface. Use synchronized lift/PWM measurement to establish the ≤100 ms bound. |
-| SYS-07 | FR15, FR17, NFR9 · faults and link loss | With USB capture or a track observer, switch off the hotspot during RUN. Car continues with WIFI_LOSS. On separate runs check blocked-wheel STALL and IMU bus failure. Capture FAULT, motors braked and RESET recovery after clearing the cause. |
-| SYS-08 | NFR1, NFR5c, NFR11, NFR13, NFR17 · diagnostics | Run the host suites and single-core bench image. Measure line period 9–11 ms and WCET ≤300 µs, decode ≤50 ms, calibrated IR noise <1%, IMU read budget for the workload and minimum free stack ≥25%. Use S1-I06 for release latency, S5-I04 for CPU/RAM, and the project layout and BARR-C checks. Record each part independently. |
+See `testing/README.md` for how to run tests and record results.
+
+## Test cases
+
+Define a test here before running it. Test IDs never change.
+
+| ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
+|---|---|---|---|---|---|
+| SYS-01 | Boot and calibration | FR1, FR16, FR17 | manual (car) | Start capture before boot. Observe the LED colours during boot, calibration and READY. | BOOT → CAL_IMU → CAL_IR → READY, both IR spans ≥400 ADC codes, zero stop faults. White boot, yellow calibration and solid green READY. |
+| SYS-02 | Dashboard | FR10–12, NFR8 | manual (car + dashboard) | In READY issue START. During RUN request SUMMARY, then STOP and RESET. Use the broker timestamp trace to check rate. | RUN → FINISHED → READY, frozen final summary after STOP and live telemetry at 5 Hz ±10%. |
+| SYS-03 | Line and barcode routing | FR1–3, FR19 | manual (track) | Load all four assigned mappings over MQTT in READY. Log each acknowledgement. Drive over a full- and half-scale print on the left. Record the printed letter, decoded letter, next cross and actual movement. Exercise all four actions and both reading directions across trials. For S3-I02 use 20 passes per scale. For S3-I04 use three runs at 250 mm/s. | The assigned action at the next cross and continued following. S3-I02: ≥95% correct. S3-I04: no loss over 200 ms. |
+| SYS-04 | Hump and ramp | FR4, FR5, FR13 | manual (track) | Compare reported height with the ruler. For the 4 and 5 mm right-wheel strips, use five runs each, plus three flat controls (S4-I14). Check ramp rejection and no false lift during driving. S4-I02 has separate larger-hump trials. | One event per strip within 1 mm; zero events on the flat controls; no false lift. |
+| SYS-05 | Obstacle | FR6–9 | manual (track) | At cruise observe stop, scan, chosen side, clearance and line rejoin. For S5-I09 scan 100/150/200 mm boxes three times each. Record all widths, signed errors and spread. Record contact and rejoin time from end of pass leg. | At 300 mm/s: ≥100 mm stop clearance and braking within 150 ms of the first reading. Mean width error for each box within ±10 mm. Rejoin time from end of pass leg at most 5.5 s. |
+| SYS-06 | Lift-stop | FR13 | manual (track) | Run, then lift the car. For S4-I12 perform ten lifts covering level, tilted and overturned on a soft surface. Use synchronized lift/PWM measurement for the time bound. | LIFT STOP, wheels stopped and FINISHED with STOP reason; RESET returns to READY; stop within ≤100 ms. |
+| SYS-07 | Faults and link loss | FR15, FR17, NFR9 | manual (track) | With USB capture or a track observer, switch off the hotspot during RUN. On separate runs check blocked-wheel STALL and IMU bus failure. Capture FAULT, motors braked and RESET recovery after clearing the cause. | Car continues with WIFI_LOSS. STALL and IMU bus failure give FAULT with motors braked; RESET recovers after the cause is cleared. |
+| SYS-08 | Diagnostics | NFR1, NFR5c, NFR11, NFR13, NFR17 | auto (host) + manual (bench) | Run the host suites and single-core bench image. Use S1-I06 for release latency, S5-I04 for CPU/RAM, and the project layout and BARR-C checks. Record each part independently. | Line period 9–11 ms and WCET ≤300 µs, decode ≤50 ms, calibrated IR noise <1%, IMU read budget for the workload, minimum free stack ≥25%. |
+
+*Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
+**manual** = a person observes the result (LED, scope, meter, phone app…).
 
 ## Results
+
+Add a new row for every run. Never edit or delete old rows.
 
 | Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
 |---|---|---|---|---|---|---|

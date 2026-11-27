@@ -1,0 +1,112 @@
+# Host test run: subsystem4
+# Commit: 22a73b4 (origin/main; firmware and test sources identical to 6899aa0)
+# Command: make -B -C testing/subsystem4/host
+# Compiler: gcc.exe (Rev8, Built by MSYS2 project) 15.2.0
+# Date: 2026-11-28
+
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -Wconversion -Wsign-conversion -I../../host -I../../../app_program -I../../../app_program/subsystem4 -I../../../app_program/subsystem2 -o test_terrain_host.out test_terrain_host.c ../../../app_program/subsystem4/terrain.c \
+    ../../../app_program/subsystem2/odometry.c ../../../app_program/app_bits.c -lm
+./test_terrain_host.out
+[TEST] S4-U03 PASS  atan2 1-deg grid error <= 0.2 deg
+[TEST] S4-U03 PASS  atan2 cardinal and diagonal points
+[TEST] S4-U03 PASS  sin/cos table points at 0, 30, 60, 90 deg
+[TEST] S4-U03 PASS  sin/cos full-circle quadrant bounds, symmetry and Q14 accuracy
+[TEST] S4-U03 PASS  heading wrap and shortest-delta maths
+[TEST] S4-U13 PASS  ds from the slower wheel; rebase gives 0
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U12 PASS  fresh (zero-filled) history: a_fwd = speed x gain
+[TEST] S4-U12 PASS  40 - 0 over 50 ms = 528 mg (hand calculation)
+[TEST] S4-U12 PASS  40 - 10 over 50 ms = 396 mg
+[TEST] S4-U12 PASS  0 - 20 over 50 ms = -264 mg
+[TEST] S4-U12 PASS  0 - 30 over 50 ms = -396 mg
+[TEST] S4-U01 PASS  one hump reported for the recorded profile
+[TEST] S4-U01 PASS  20 mm ruler hump within +-20 % / +-5 mm
+[TEST] S4-U01 PASS  climb pitch was seen (>= 4.5 deg)
+[TEST] S4-U02 PASS  ramp longer than TERRAIN_MAX_CLIMB_MM: no hump
+[TEST] S4-U06 PASS  long hump at ~150 mm/s is not rejected
+[TEST] S4-U06 PASS  long-hump peak within tolerance
+[TEST] S4-U07 PASS  slip replay still reports the hump
+[TEST] S4-U07 PASS  slip changes the height by <= 10 %
+[TEST] S4-U16 PASS  flat driving (az +1000 mg, 2 s): never lifted
+[TEST] S4-U16 PASS  45 deg slope held 2 s (A24 limit): |a| = 1 g, not lifted
+[TEST] S4-U16 PASS  braking / accelerating at 0.2 g on the flat: not lifted
+[TEST] S4-U16 PASS  40 ms bumps (+400 / -400 mg) with a level cycle between: no stop, the count restarted
+[TEST] S4-U16 PASS  hand lift (+350 mg): not yet after 4 cycles (40 ms)
+[TEST] S4-U16 PASS  hand lift: stop on the 5th cycle (50 ms)
+[TEST] S4-U16 PASS  count saturates at 5: fits the 3-bit LIFT_CNT field
+[TEST] S4-U16 PASS  upside down (az -1000 mg): stop
+[TEST] S4-U16 PASS  tipped over 70 deg (az 342 mg): stop
+[TEST] S4-U16 PASS  lowered fast / dropping (|a| 650 mg): stop
+[TEST] S4-U16 PASS  out-of-range input is clamped, no overflow: stop
+[TEST] S4-U16 PASS  class LIFTED wins while SAFETY_LIFT is set, else as before
+[TEST] S4-U17 PASS  both on the darkest tape (3570): never lifted
+[TEST] S4-U17 PASS  only one sensor high: not lifted
+[TEST] S4-U17 PASS  dark ramp (L 3708, R 3905) for 1 s: never lifted
+[TEST] S4-U17 PASS  290 ms with no floor, then floor: no stop, count reset
+[TEST] S4-U17 PASS  logged level lift: not yet after 29 cycles
+[TEST] S4-U17 PASS  logged level lift: stop on the 30th cycle (300 ms)
+[TEST] S4-U17 PASS  count saturates at 30: fits the 5-bit IR_LIFT_CNT field
+[TEST] S4-U18 PASS  flat, +-30 mg vibration: no hump
+[TEST] S4-U18 PASS  8 mm one-wheel hump (ay 64 mg): one report, 7..9 mm x gain
+[TEST] S4-U18 PASS  +120 mg (other mounting sign): 15 mm x gain
+[TEST] S4-U18 PASS  turning (dl 4, dr 9): no hump
+[TEST] S4-U18 PASS  3 s held tilt: no report (ramp rule)
+[TEST] S4-U18 PASS  stationary tilt (handling): no hump
+   S4-U19: 4 mm strip (top 48 mg): 1 report(s), 4 mm
+[TEST] S4-U19 PASS  4/5 mm strip: one report within 1 mm
+   S4-U19: 5 mm strip (top 60 mg): 1 report(s), 5 mm
+[TEST] S4-U19 PASS  4/5 mm strip: one report within 1 mm
+   S4-U19: 4 mm strip +vibration (top 48 mg): 1 report(s), 4 mm
+[TEST] S4-U19 PASS  4/5 mm strip with +-10 mg vibration: one report within 1 mm
+   S4-U19: 5 mm strip +vibration (top 60 mg): 1 report(s), 5 mm
+[TEST] S4-U19 PASS  4/5 mm strip with +-10 mg vibration: one report within 1 mm
+   S4-U19: wheel over a 4 mm x 10 mm strip at 120 mm/s: 1 report(s), 4 mm
+[TEST] S4-U19 PASS  real wheel shape over a 10/20 mm wide strip: one report within 1 mm
+   S4-U19: wheel over a 5 mm x 10 mm strip at 120 mm/s: 1 report(s), 5 mm
+[TEST] S4-U19 PASS  real wheel shape over a 10/20 mm wide strip: one report within 1 mm
+   S4-U19: wheel over a 4 mm x 20 mm strip at 120 mm/s: 1 report(s), 4 mm
+[TEST] S4-U19 PASS  real wheel shape over a 10/20 mm wide strip: one report within 1 mm
+   S4-U19: wheel over a 5 mm x 20 mm strip at 120 mm/s: 1 report(s), 5 mm
+[TEST] S4-U19 PASS  real wheel shape over a 10/20 mm wide strip: one report within 1 mm
+[TEST] S4-U20 PASS  on the line: the tilt is reported once
+[TEST] S4-U20 PASS  off the line (obstacle bypass): no hump
+[TEST] terrain SUMMARY 55 passed, 0 failed
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -Wconversion -Wsign-conversion -I../../host -I../../../app_program -I../../../app_program/subsystem4 -I../../../app_program/subsystem2 -o test_drv_lsm303_host.out test_drv_lsm303_host.c
+./test_drv_lsm303_host.out
+[TEST] S4-U14 PASS  empty FIFO: take 0, no overrun
+[TEST] S4-U14 PASS  two unread samples: take 2
+[TEST] S4-U14 PASS  backlog of 6: take 4 now
+[TEST] S4-U14 PASS  backlog of 2 next cycle: take 2
+[TEST] S4-U14 PASS  overrun: no samples used, counter +1
+[TEST] S4-U14 PASS  overrun counter saturates at 255
+[TEST] S4-U14 PASS  LSM303D answers on the single address 0x1D
+[TEST] S4-U14 PASS  LSM303D WHO_AM_I is 0x49, not the DLHC 'H','4','3'
+[TEST] S4-U15 PASS  the two SA0 addresses are 0x1D (high) and 0x1E (low)
+[TEST] S4-U15 PASS  answers at the current address: keep it
+[TEST] S4-U15 PASS  NACK at 0x1D, identity at 0x1E: switch to 0x1E
+[TEST] S4-U15 PASS  SA0 back high: switch back to 0x1D
+[TEST] S4-U15 PASS  nothing answers: keep the address (fault path as before)
+[TEST] S4-U15 PASS  other address answers with a wrong identity: not taken
+[TEST] drv_lsm303 SUMMARY 14 passed, 0 failed
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -Wconversion -Wsign-conversion -I../../host -I../../../app_program -I../../../app_program/subsystem4 -I../../../app_program/subsystem2 -DAPP_TEST=1 -I../../subsystem3/host/mock -o test_imu_diag_host.out \
+    test_imu_diag_host.c ../../../app_program/subsystem4/test_imu.c ../../../app_program/subsystem4/terrain.c \
+    ../../../app_program/subsystem2/odometry.c ../../../app_program/app_bits.c
+./test_imu_diag_host.out
+[TEST] S4-U13 PASS  terrain_reset clears state and accumulators
+[TEST] S4-U13 PASS  position rebase gives ds = 0 (no false climb)
+[TEST] S4-U13 PASS  ds is the slower wheel's delta
+[TEST] S4-U10 PASS  pitch pack/unpack at -45/0/+45 deg and clamp beyond
+[TEST] S4-U11 PASS  hump 127 passes, 128 clamps and raises RANGE_CLAMP
+[TEST] S4-U11 PASS  one PRV_OFS_A AX step decodes to 2 mg, range covers +-4094 mg
+[TEST] imu SUMMARY 6 passed, 0 failed
+[TEST] S4-U21 PASS  target test_imu.c passes all 6 checks under APP_TEST=1
+[TEST] S4-U21 PASS  S4-I09 WCET and S4-I10 magnetometer logs emitted under APP_TEST=1
+[TEST] S4-U21 PASS  S4-I04/I11 turn-rate >10% disagreement selects encoder rate and logs it
+[TEST] S4-U21 PASS  1st I2C error cycle does not yet latch APP_FAULT_IMU
+[TEST] S4-U21 PASS  3 consecutive I2C errors enter TERRAIN_FAULT and set APP_FAULT_IMU
+[TEST] S4-U21 PASS  IR lift-stop fallback sets SAFETY_LIFT even when IMU bus is faulted
+[TEST] S4-U21 PASS  register rewrite + the configured good accelerometer reads recover TERRAIN_FLAT
+[TEST] S4-U21 PASS  persistent 2993 mg rest vector retries once, faults and never commits calibration
+[TEST] S4-U21 PASS  bad sample discards the partial calibration window
+[TEST] S4-U21 PASS  fresh calibration after retry accepts measured negative Z and posts CAL_DONE once
+[TEST] imu_diag SUMMARY 10 passed, 0 failed

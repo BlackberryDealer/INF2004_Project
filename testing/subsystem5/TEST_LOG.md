@@ -1,6 +1,6 @@
 # Subsystem 5 — test log
 
-**Subsystem:** Shared services, obstacles and the mission (Buddy 5)  ·  **Student ID:** <student ID>  ·  **Code:** `app_program/subsystem5/`
+**Subsystem:** Shared services, obstacles and the mission  ·  **Student ID:** 2500708  ·  **Code:** `app_program/subsystem5/`
 
 See `testing/README.md` for how to run tests and record results.
 
@@ -72,9 +72,62 @@ Define a test here before running it. Test IDs never change.
 | S5-U82 | A tighter bypass: the lateral leg clears the box's plan edge by the half width + 30 mm (`OBS_BOX_MARGIN_MM`; the free gap to other objects keeps 50 mm), and the forward leg is nearest + 150 mm assumed depth + 100 mm tail instead of + 180 mm car length (on-car 18 Nov 13:03: 293 mm lateral, 557 mm forward for a 125 mm box) | FR5, NFR6, NFR16 | auto (host) | `test_obs_profile_host.c` with the logged 13:03 scan; S5-U01/U03/U23/U48/U51/U53/U59 and `sim_obstacle_host.c` S5-U08 updated | 13:03 scan plans right, lateral 272 mm, forward 474 mm, body 30 mm clear of every return; 17:00 scene still never passes left |
 | S5-U83 | Width within +-10 mm (requirement 24 Nov 2026). Scan at 200 mm (`OBS_SCAN_MM` 250 -> 200). In the same scan, after the 5-degree points, a 1-degree edge pass: up to `OBS_EDGE_SUB_MAX` (4) degrees past each end of the core, 3 pings each, keeping the outermost in-band angle and its range. Width = distance between the two box corners (corner direction = that angle -+ `OBS_BEAM_HALF_DDEG`, distance = its range). The bypass still plans from the 5-degree estimate | FR7, NFR16 | auto (host) | `test_obs_profile_host.c` (corner maths); `sim_obstacle_host.c`: whole scan through a 15-degree cone, boxes 100..200 mm at 200 mm, centred, up to 40 mm off-centre, turned up to 8 degrees | Board width (what the dashboard shows) within +-10 mm in every case |
 | S5-U84 | Edge pass module `obs_edge.c` on its own (extracted from `obstacle.c`, which now only packs its state and moves the servo): probe order and settle, clean edges, patchy fringe confirmed by background beyond, receding face not confirmed, fringe rise keeps the edge, core at the scan limit, corner-range skew | FR7 | auto (host) | `test_obs_profile_host.c` (built with `-Wconversion -Wsign-conversion`) | 6 of 6 rules behave as listed |
+| S5-U09 | Ultrasonic trigger pulse is always ≥ 10 µs: uninterrupted it is 10..20 µs; with a 40 µs interruption anywhere, right after the first timer read, or across the 32-bit timer wrap it stays ≥ 10 µs | K1 | auto (host) | `test_drv_ultrasonic_host.c` | `[TEST] S5-U09 PASS` ×5 |
+| S5-U31 | Obstacle stop only with the motors enabled: motors off, 100 mm for 8 pings gives no ESTOP and no events, and the distance is still measured and published; in RUN the same 100 mm gives ESTOP, OBSTACLE, STOPPED; when the run ends it returns to MONITOR with the servo centred | FR6, K3 | auto (host sim) | `sim_obstacle_host.c` | `[TEST] S5-U31 PASS` ×4 |
+| S5-U32 | Stale LIFT and ESTOP at calibration and start: LIFT latched in CAL_IMU is cleared on entering CAL_IR (sweep runs, no FAULT); LIFT during the CAL_IR sweep gives FAULT; an ESTOP set before CAL_IR is kept; LIFT latched in READY is cleared before the ZERO and the run starts; a clean recalibration reaches READY | FR13, FR17, K3 | auto (host sim) | `sim_mission_host.c` | `[TEST] S5-U32 PASS` ×5 |
+| S5-U33 | LIFT around the run start: a LIFT during the start warning is cleared before the ZERO; a fresh LIFT with the ZERO pending gives FAULT LIFT at once and STOP drops the ZERO; a fresh LIFT in the run-start hold gives FAULT and the motors are never enabled | FR13, K3 | auto (host sim) | `sim_mission_host.c` | `[TEST] S5-U33 PASS` ×8 |
+| S5-U34 | No obstacle stop during the CAL_IR sweep: a near echo followed by lost echoes gives no ESTOP and no events; once CAL_IR is cleared, the same 100 mm in RUN gives ESTOP, STOPPED | FR6, FR17 | auto (host sim) | `sim_obstacle_host.c` | `[TEST] S5-U34 PASS` ×2 |
+| S5-U36 | Line search toward the last-seen side: line last seen on the right gives STOP, turn right 60°, then left 120°, then right 60°; line found gives FOLLOW | FR1, FR9 | auto (host sim) | `sim_mission_host.c` | `[TEST] S5-U36 PASS` ×4 |
+| S5-U37 | Obstacle approach and stop distance: approaching from 420 mm gives ESTOP + OBSTACLE by about 390 mm; the stop is at about 400 mm, the slow-down starts ≥ 150 mm earlier, and the scan's near limit covers it | FR6, NFR6 | auto (host sim) | `sim_obstacle_host.c` | `[TEST] S5-U37 PASS` ×2 |
+| S5-U38 | Lost pings and stray echoes: lost pings in MONITOR give no event or fault; a stray 500 mm echo gives APPROACH (logged), then 2 open-track lost pings give CONTINUE and no ESTOP; 395 mm unconfirmed after 452 mm and 1 lost ping keep approaching; 2 lost pings after an echo under the stop distance give ESTOP, OBSTACLE; the scan log names the nearest point and its angle | FR6 | auto (host sim) | `sim_obstacle_host.c` | `[TEST] S5-U38 PASS` ×8 |
+| S5-U39 | FR9 timer for the rejoin: it starts at the end of the pass leg; turn 45° (1.2 s), then the rejoin drive; line found 4.2 s after the pass leg keeps RUN; no REACQUIRE_FAIL at 5.4 s; rejoin finished at about 6.3 s gives FOLLOW with no fault; the FR9 limit is 20 s | FR9 | auto (host sim) | `sim_mission_host.c` | `[TEST] S5-U39 PASS` ×6 |
+| S5-U40 | Bypass speed and width report: cruise is 120 mm/s and the slow speed stays below it; the scanned width is printed on the console with the MQTT profile | FR7, FR8 | auto (host sim) | `sim_mission_host.c` | `[TEST] S5-U40 PASS` ×2 |
+| S5-U41 | Rejoin line-width window: a 10 mm crossing (barcode bar) and a 90 mm one (driving along the line) are rejected and the drive continues; 49 mm (the car's real crossing) is accepted and advances 60 mm; back to FOLLOW with no REACQUIRE_FAIL | FR9 | auto (host sim) | `sim_mission_host.c` | `[TEST] S5-U41 PASS` ×5 |
+| S5-U42 | Ramp versus obstacle: a ramp at 500 mm on flat ground gives APPROACH; pitched onto the ramp at 350 mm the car keeps approaching slowly with no ESTOP and no CONTINUE (console says the stop distance was relaxed); a descending ramp gives no stop; a box at 240 mm while pitched still gives ESTOP, OBSTACLE (NFR6 minimum kept); after the ramp hold, 380 mm on flat ground stops at the normal distance; a narrow 90° ramp glint gives CONTINUE; a real 140 mm box scanned while pitched gives PLAN or NO_PATH, never CONTINUE | FR5, FR6, NFR6 | auto (host sim) | `sim_obstacle_host.c` | `[TEST] S5-U42 PASS` ×10 |
+| S5-U43 | Rejoin window of 50..120 % of the expected crossing: rejoin drive e × 1.2 = 488 mm and the console shows the window; 38 mm wide at 202 mm (< 203) is rejected; at 221 mm (the car's crossing) it is accepted and advances 60 mm; back to FOLLOW with no REACQUIRE_FAIL | FR9 | auto (host sim) | `sim_mission_host.c` | `[TEST] S5-U43 PASS` ×5 |
+| S5-U44 | Scan runs split at range jumps: box estimate 100 mm (span ~112), not the whole 30..125° arc; box edges x ≈ −8..+92 mm, nearest ≈ 240 mm; objects behind the box do not block; gaps only come from points beside the pass leg; real objects beside the box still give NO_PATH | FR7 | auto (host) | `test_obs_profile_host.c` | `[TEST] S5-U44 PASS` ×5 |
+| S5-U45 | Beam-aware width: a wide face gives at most 200 mm, centred on the shortest echo; an 80 cm wall at 250 mm gives NO_PATH; a smeared box gives a width of 100..200 mm while the measured span (~580 mm) is still reported; the nearest point is the shortest echo; a smear scanned from 40 cm gives NO_PATH | FR7, FR8 | auto (host) | `test_obs_profile_host.c` | `[TEST] S5-U45 PASS` ×6 |
+| S5-U46 | Pass on the side away from a second object: a chair at 130°, 620 mm blocks the left gap, so the car passes right with path + margin clear | FR7 | auto (host) | `test_obs_profile_host.c` | `[TEST] S5-U46 PASS` ×2 |
+| S5-U47 | Median scan: a box at 380 mm gives STOPPED; one 120 mm spike per step still gives PLAN and never becomes the nearest point; per-step ranges are printed | FR7 | auto (host sim) | `sim_obstacle_host.c` | `[TEST] S5-U47 PASS` ×4 |
+| S5-U48 | Estimate centred mid-plateau (50..130° → 90°, S5-U51), not on 75°; the logged 17:00 scene never passes left, and the right pass of 331 mm keeps path + margin clear (S5-U82) | FR7 | auto (host) | `test_obs_profile_host.c` | `[TEST] S5-U48 PASS` ×2 |
+| S5-U49 | Unconfirmed lanes: a smear 31° beyond the estimate leaves the lanes unconfirmed; a 300 mm return at 130° is in the left extent or gap (logged) and no pass touches it; 300 mm at every angle gives NO_PATH; any PLAN on a measured scan keeps path + margin clear; an inferred return in the left lane blocks a left pass | FR7 | auto (host) | `test_obs_profile_host.c` | `[TEST] S5-U49 PASS` ×6 |
+| S5-U50 | No inferred step beside a near coarse scan point | FR7 | auto (host sim) | `sim_obstacle_host.c` | `[TEST] S5-U50 PASS` ×1 |
+| S5-U51 | Logged 18:00 car scans: PLAN centred within 45 mm in 3 of 4; a real 568 mm object at 50° still blocks the right | FR7 | auto (host) | `test_obs_profile_host.c` | `[TEST] S5-U51 PASS` ×2 |
+| S5-U52 | Scan time: a 140 mm box is scanned in ≤ 6.5 s including the edge pass (4.0 s before S5-U83) | FR7 | auto (host sim) | `sim_obstacle_host.c` | `[TEST] S5-U52 PASS` ×1 |
+| S5-U53 | Every PLAN on the logged car scans keeps the car's body + 30 mm clear of every return (S5-U82) | FR7, FR8 | auto (host) | `test_obs_profile_host.c` | `[TEST] S5-U53 PASS` ×1 |
+| S5-U54 | Creep to the scan distance: stopped at 400 mm, ESTOP is released and the car creeps 200 mm to the 200 mm scan distance (S5-U83), logged, with no scan yet; creep done gives ESTOP hold and a scan request; a guard ESTOP at standstill cancels the creep and requests the scan; PLAN after the creep bypasses as before; 218 mm (within tolerance) scans at once with no creep; NO_PATH stops the car (FAULT) with a console line and no reverse | FR6, FR7 | auto (host sim) | `sim_mission_host.c` | `[TEST] S5-U54 PASS` ×8 |
+| S5-U55 | Creep guard: creeping with agreeing readings > 200 mm does not brake; a confirmed 196 mm ≤ `OBS_SCAN_MM` gives ESTOP (logged); a lost echo or disagreeing readings (256 → 320) while creeping give ESTOP; standing still or driving backwards the guard does nothing | FR6, NFR6 | auto (host sim) | `sim_obstacle_host.c` | `[TEST] S5-U55 PASS` ×7 |
+| S5-PACK | Packed mission state (Tribunal 1 minimum bits): `mission_ctx_t` saved to the packed rows `PRV_MIS_A..R` and loaded back is unchanged, for 20 000 random states over every row range (extremes included) and for every pass of the mission simulation | `tools/layout.csv` (`PRV_MIS_*`) | auto (host sim) | `sim_mission_host.c` | `[TEST] S5-PACK PASS` ×1 |
+| S5-U85 | HMI on its own (`hmi.c` with `drv_button` mocked): `hmi_init` calls the button, buzzer and WS2812 init and returns false when the RGB load fails; short glitches and bouncing RUN presses give HMI_NONE and a stable RUN press fires once on release; RESET held 200 ticks (2 s) fires HMI_RESET_HOLD once and re-arms on release, released at 199 ticks gives nothing, and it wins over a simultaneous RUN press; BOOT (white, 100 ms beep), READY (blue flash with continuous buzzer during the start warning, else steady green), FINISHED (two 100 ms beeps) and FAULT (red, alternating alarm) patterns | HMI (LED, buzzer, buttons) | auto (host) | `test_hmi_host.c` | `[TEST] S5-U85 PASS` ×13 |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
+
+## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
+
+- **S5-U04 and S5-U05 moved from target to host: live side effects.** On the
+  robot the TEST=1 suites run beside the real mission_task. The S5-U05 matrix
+  sent a real 360° CAL_IR turn with MOTOR_EN, re-armed the watchdog and its
+  "undo" cleared a real ESTOP, faults and modes. S5-U04 assumed usermain at
+  priority 1, but D.15 step 4 raises it to 21, so mission drained K4 during
+  the flood and the fake SUMMARY events reached the real mission. Both now run
+  in `sim_mission_host.c`; the spec's test list should say "auto (host)".
+- **Q1 answered: include order cannot fix the SDK/kernel clash.** `size_t`
+  (kernel `long`, SDK `unsigned int`) and the peripheral base macros clash in
+  either order. Every B5 `.c` file is now kernel side (register access with
+  `in_w`/`out_w`/`set_w`/`clr_w`) or SDK side (no kernel header), per the
+  build rule in `docs/BARR_C_DEVIATIONS.md`. `hmi_init()` now returns `bool`
+  so mission_task raises `APP_FAULT_PIO_LOAD` (B5.1).
+- **New test S5-U29 (timer tick, Fix 4).** Nothing in the template starts the
+  RP2040 watchdog tick that drives the TIMER, so `sys_tick_init()` now starts
+  it (12 cycles of the 12 MHz clk_ref = 1 µs). This affects the whole template
+  (the radio driver uses the same timer). Measurement on the board pending.
+- **NO_ECHO at power-up (S5-U30, 2026-10-22).** On the car the HC-SR04P stays
+  silent for the first pings after power-up, which latched NO_ECHO and sent
+  the car to FAULT at every boot. `obstacle.c` now ignores silence until the
+  first echo edge or `OBS_WARMUP_PINGS` (34 pings, ~2 s), whichever comes
+  first. This adds one rule to B5.2.3 / T10, and one private counter (a
+  candidate PRV_OBS field for Phase 4; 6 bits).
 
 ## Results
 
@@ -164,33 +217,6 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-24 | S5-I04 (stacks only) | `40de1f5` | Hanz | PASS (partial) | [`2026-11-24_target_test_session1.txt`](../system/logs/2026-11-24_target_test_session1.txt) | Lowest free stack: obstacle_task 368 of 1152 B (32 %), limit 25 %. CPU and RAM use not measured yet. Pico `TEST=1 NET=lwip MQTT=1` image, built dual-core (`SMP=1`) by mistake: `TEAM.md` says `SMP=0`. |
 | 2026-11-25 | S5 host checks (72 distinct printed IDs) | `72482f3` | Dylan | PASS (host) | [Fresh run](../subsystem1/logs/2026-11-25_090514_host_72482f3_f1OjER.txt) | 374 passing S5 assertions. Search the transcript by test ID for the input and observed result. |
 | 2026-11-27 | S5-U83, S5-U84, S5-U74 (`HOST_CHECK`) | `2f99798` + test-only PR | Dylan | PASS (host) | `make -C testing/host` (gcc 15.2.0) | Added S5-U84 `obs_edge.c` host checks (6/6) and S5-U83 21:22 logged-edge replay (`test_obs_profile_host`: 68/68), switched `test_status_board_host.c` to `HOST_CHECK` (9/9 with S4-U20), and updated `sim_obstacle_host.c` cone comment. All 5 host suites: 955 PASS, 0 FAIL; BARR-C 101 files clean; firmware untouched vs `2f99798`. |
-
-## SPEC-QUESTIONs raised (2026-10-22, fix brief from Buddy 2)
-
-- **S5-U04 and S5-U05 moved from target to host: live side effects.** On the
-  robot the TEST=1 suites run beside the real mission_task. The S5-U05 matrix
-  sent a real 360° CAL_IR turn with MOTOR_EN, re-armed the watchdog and its
-  "undo" cleared a real ESTOP, faults and modes. S5-U04 assumed usermain at
-  priority 1, but D.15 step 4 raises it to 21, so mission drained K4 during
-  the flood and the fake SUMMARY events reached the real mission. Both now run
-  in `sim_mission_host.c`; the spec's test list should say "auto (host)".
-- **Q1 answered: include order cannot fix the SDK/kernel clash.** `size_t`
-  (kernel `long`, SDK `unsigned int`) and the peripheral base macros clash in
-  either order. Every B5 `.c` file is now kernel side (register access with
-  `in_w`/`out_w`/`set_w`/`clr_w`) or SDK side (no kernel header), per the
-  build rule in `docs/BARR_C_DEVIATIONS.md`. `hmi_init()` now returns `bool`
-  so mission_task raises `APP_FAULT_PIO_LOAD` (B5.1).
-- **New test S5-U29 (timer tick, Fix 4).** Nothing in the template starts the
-  RP2040 watchdog tick that drives the TIMER, so `sys_tick_init()` now starts
-  it (12 cycles of the 12 MHz clk_ref = 1 µs). This affects the whole template
-  (the radio driver uses the same timer). Measurement on the board pending.
-- **NO_ECHO at power-up (S5-U30, 2026-10-22).** On the car the HC-SR04P stays
-  silent for the first pings after power-up, which latched NO_ECHO and sent
-  the car to FAULT at every boot. `obstacle.c` now ignores silence until the
-  first echo edge or `OBS_WARMUP_PINGS` (34 pings, ~2 s), whichever comes
-  first. This adds one rule to B5.2.3 / T10, and one private counter (a
-  candidate PRV_OBS field for Phase 4; 6 bits).
-
 | 2026-11-25 | S5-I07 (3 of 10 distances, motors off) | `14ed65a` (debug UF2 `PicoCar_hotspot_main_14ed65a.uf2`) | Dylan | PARTIAL (PASS at tested points) | [MQTT SENSORS stream](../system/logs/2026-11-25_114936_199386_mqtt.csv) | Box at ruler distance from the sensor face vs `US_MM`: 200 mm → 196 mm (11:51:13), 300 mm → 296–300 mm (11:51:28–33), 500 mm → 500–512 mm (11:51:50–11:53:05). Errors −4, 0, +6 mm. Not yet run: remaining 7 distances, cruise PWM, no-echo timeout measurement, module photo. |
 | 2026-11-25 | S5-I06 | n/a (ruler) | Dylan | MEASURED | Photo to add | Sensor face to front-most point ≈ 40 mm. `cfg_obstacle.h` still has the 60 mm placeholder (`OBS_FRONT_OFFSET_MM`): update needed, stop clearance is computed with it. |
 | 2026-11-25 | S5-I01 (trial 1, short section) | `14ed65a` (debug UF2) | Dylan | PARTIAL | [MQTT capture incl. console](../system/logs/2026-11-25_114936_199386_mqtt.csv) 12:00:04–12:00:09; tester's video | Box placed ~220 mm ahead on the 30 cm section. START 12:00:04 → `OBSTACLE STOP (ESTOP): distance 224 mm` 12:00:05, car travelled 6 mm, no contact; entered AVOID, then STOP → FINISHED. The car never reached cruise, so the 300 mm/s clearance (≥100 mm) and ≤150 ms braking criteria are not yet shown. Repeat on the full track. |
@@ -205,3 +231,5 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-25 | S5-I09 (correction to the trials 3–4 row) | `f4e94ad` (course UF2) | Dylan | — | [MQTT capture](../system/logs/2026-11-25_121702_512268_mqtt.csv) | The trials 3–4 row concluded that the 1-degree corner pass was not working on the car. Later scans on the same image measured 88, 80, 88 and 116 mm, so that conclusion is withdrawn. The two unavailable scans have geometric explanations: 12:44:28 ANGLE_STEP 16 (110°, object 20° left of centre, another object 40 mm to its left) and 12:45:53 ANGLE_STEP 13 (95°), where with the ~29° beam half-angle the far corner of a box near 200 mm wide reaches the 150° scan limit (the documented "200 mm box > ~20 mm off-centre: unavailable" case). The 5-degree fallback trialled in the working tree was never committed or flashed. |
 | 2026-11-25 | S5-I03 (correction) and S5-U58 | `5751975` | Dylan | — | [System log](../system/TEST_LOG.md) | The 17 s in the S5-I03 row runs from the obstacle stop; FR9 starts at the end of the pass leg, so it does not grade FR9 either way. The rejoin-search change `fc9e59a` was reverted in `5751975`: never run on the car, and review found it clears the FR9 timer on entry to SEARCH_LINE, so its "FR9 limit still applies" claim was wrong. S5-U58 is back to stop-on-REACQUIRE_FAIL. Rejoin after a bend remains an open defect. |
 | 2026-11-25 | S5-I09 (trials 1–2, video) | `f4e94ad` (course UF2) | Dylan (run), Afif (video) | — (trials stay INVALID, object outside spec) | [Video](https://youtu.be/9nU9wnezGOc), [MQTT capture](../system/logs/2026-11-25_121702_512268_mqtt.csv) 12:35–12:36 | Shows the round bottle (~70 mm) on the line. Car stops, scans and drives the bypass. Also shows an obstacle stop on `f4e94ad` (S5-I01 behaviour), but this is not the `14ed65a` trials 2–3 video, which is still not uploaded. |
+| 2026-11-28 | S5 host suite: 73 S5 IDs (plus cross-checks S1-U41, S4-U20) incl. S5-PACK, S5-U09, S5-U15, S5-U18, S5-U21, S5-U22, S5-U25, S5-U26, S5-U31, S5-U32, S5-U33, S5-U34, S5-U36, S5-U37, S5-U38, S5-U39, S5-U40, S5-U41, S5-U42, S5-U43, S5-U44, S5-U45, S5-U46, S5-U47, S5-U48, S5-U49, S5-U50, S5-U51, S5-U52, S5-U53, S5-U54, S5-U55, S5-U85 | `22a73b4` | Dylan | PASS (host) | [Host run](logs/2026-11-28_host_22a73b4.txt) | `make -B -C testing/subsystem5/host`, MSYS2 gcc 15.2.0 (sources identical to `6899aa0`): 386 PASS, 0 FAIL. S5-U15, U18, U21, U22, U25, U26 are target/manual tests: host part only. S5-PACK, S5-U09, U31..U55, U85 checks existed since 26 Oct–25 Nov; their Test cases rows were added today. The sections that sat between Results rows were moved above the Results heading, so all rows form one table; no row was changed. |
+| 2026-11-28 | Commit record for 39 earlier rows | `22a73b4` | Dylan | — | [Commit record](logs/2026-11-28_commit_record.txt) | 39 earlier rows give a branch name, phase or placeholder in the Commit column instead of the commit hash. The file lists, for each of them, the commit on main that added the row (from git history at `22a73b4`). 7 of them tested a code version that was never committed on its own; the file marks them. The earlier rows are unchanged. |
