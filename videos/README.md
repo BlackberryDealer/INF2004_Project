@@ -39,3 +39,6 @@ Newest at the bottom. Never delete a row.
 | Date | Subsystem | Test ID / demo | Commit | Student ID | Link | Notes |
 |---|---|---|---|---|---|---|
 | YYYY-MM-DD | S1 | S1-U03 | `abc1234` | | <https://youtu.be/...> | LED blinks at 2 Hz |
+| 2026-11-25 | S3 / SYS | S3-I02, SYS-03 | `f4e94ad` | 2500708 | <https://youtu.be/GweIDDofwxg> | Barcode pass on the track. Dashboard shows Z decoded at 12:33:51, 29/29 valid elements, mapped to STRAIGHT. |
+| 2026-11-25 | S4 / SYS | SYS-04, S4-I02 | `f4e94ad` | 2500708 | <https://youtu.be/4vyPeXknS8E> | Car crossing the hump. Dashboard hump peak 12 mm (HUMP event 12:33:58 in the MQTT capture). No ruler reference in shot. |
+| 2026-11-25 | S5 | S5-I09 (trials 1–2), S5-I01 | `f4e94ad` | 2500708 | <https://youtu.be/9nU9wnezGOc> | Round bottle (~70 mm) on the line, 12:35–12:36. Car stops, scans and drives the bypass. Object outside the S5-I09 box spec. |
