@@ -78,7 +78,7 @@ Section B3.4 lists the two `E_BAR` documentation rows as:
 - `E_BAR,8,HEAD_TAIL,6,1,index,0,0,0,RAW,E,B3,E6 ring head (ISR) and tail (task): one writer per byte`
 - `E_BAR,32,LAST_US,32,1,us,0,0,0,RAW,E,B3,E5 ISR-private last accepted edge time`
 
-`tools/gen_layout.py` validates that all rows in a group share one `group_bits` value and that `bits` is in `1..31` *before* applying the class-`E` exemption (the same generator rule documented in Buddy 4's resolved `SQ-B4-1`). Accordingly, the second class-`E` documentation row is recorded as `E_BAR_US,32,LAST_US,31,1,us,0,0,0,RAW,E,B3,...`. Class-`E` rows emit no C macros and record `group_bits` (`32`) as their stored width in `tools/layout.csv`, so generated code and ABI are unaffected.
+`tools/gen_layout.py` validates that all rows in a group share one `group_bits` value and that `bits` is in `1..31` *before* applying the class-`E` exemption (the same generator rule documented in Buddy 4's resolved `SQ-B4-1`). Accordingly, the second class-`E` documentation row is recorded as `E_BAR_US,32,LAST_US,31,1,us,0,0,0,RAW,E,B3,...`. Class-`E` rows emit no C macros and use `group_bits` (`32`) as their stored width in `docs/data_representation.md`, so generated code and ABI are unaffected.
 
 ## Results
 
