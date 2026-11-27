@@ -104,7 +104,8 @@ from B4.4 is written up. That PR is merged, so the rows are on `main` and
 The lecturer removed collision detection with the IMU (it conflicted with
 obstacle avoidance). The only replacement: when the car is lifted or
 overturned the motors must stop at once; lifting the car ends the run in the
-demonstration. No sophisticated classification is wanted.
+demonstration. No sophisticated classification is wanted. Full write-up:
+`docs/change_requirement_2_lift_stop.md`.
 
 | Before | After |
 |---|---|
@@ -136,7 +137,7 @@ everything below is fixed and re-tested except where marked pending.
 | `imu_task`, `imu_turn_rate`, `terrain_step` | BARR 6.2.a | 152, 107 and 151 lines | Split into `imu_terrain_update`, `imu_encoder_rate`, `imu_mag_rate`, `imu_turn_disagrees`, `terrain_flat_step` / `terrain_climb_step` / `terrain_descend_step`; longest function is now 89 lines |
 | `n`, `y`, `x`, `r`, `k`, `f`, `a`, `da`, `id` | BARR 7.1.e | Names shorter than three characters | Renamed (`n_samples`, `y_value`, `id_bytes`, …). **Exception:** `terrain_atan2_ddeg(int32_t y, int32_t x)` keeps the spec's parameter names, because spec line 3291 writes that declaration verbatim and Part A rule 1 fixes the interface |
 | `tools/ram_report.sh` | cosmetic | Symbol rows printed as `\|sym\| … \|B4\|` (no padding in the markdown table) | `\| %s \|`; report regenerated |
-| Phase 5 RAM report | packaging | The Phase 5 run left the file as UTF-16LE with a BOM, so git stored it as a **binary blob** and the markdown table rendered as garbage on GitHub | Regenerated as plain UTF-8; the same UTF-16 problem was found in `logs/2026-10-22_host_phase2.txt` and `..._phase4_packed.txt` and both were converted too |
+| `docs/ram_comparison.md` | packaging | The Phase 5 run left the file as UTF-16LE with a BOM, so git stored it as a **binary blob** and the markdown table rendered as garbage on GitHub | Regenerated as plain UTF-8; the same UTF-16 problem was found in `logs/2026-10-22_host_phase2.txt` and `..._phase4_packed.txt` and both were converted too |
 | `layout.csv` / generated files | process | The B4 layout rows were committed as `S4:` on `b4-imu`, but C.6 lists `tools/layout.csv` as a shared file that changes only through a `SHARED:` PR | Rows re-submitted for review on branch `shared-b4-layout-rows` (commit `36da4ae`), additive only (+375/−0), with the B4.4 `E_IMU_SAMPLE` deviation written up in the commit/PR body |
 
 ## Phase 3 integration plan (pending hardware)
