@@ -118,7 +118,8 @@ static uint32_t          g_bar_prv_log                = 0u;
    white with no edge behind it: set at init and at RUN start, cleared
    by an inhibit or a transition.                                     */
 
-/* Default character-to-command map: A->LEFT, B->RIGHT, C->STRAIGHT, D->UTURN */
+/* Default character-to-command map: A->LEFT, B->RIGHT, C->STRAIGHT, D->UTURN.
+   casts: PRV_BAR_MAP 6-bit char index (10..13) | 2-bit cmd fits uint8_t.   */
 static uint8_t const g_bar_default_map[BAR_MAP_ENTRIES] =
 {
     (uint8_t) (10u | (APP_BAR_CMD_LEFT << PRV_BAR_MAP_CMD_POS)),
@@ -262,7 +263,8 @@ bool barcode_map_set(uint32_t char_index, uint32_t cmd)
 
         for (idx = 0u; idx < BAR_MAP_ENTRIES; idx++)
         {
-            uint32_t const entry    = (uint32_t) g_bar_map[idx]; /* cast */
+            /* cast: widen 8-bit PRV_BAR_MAP entry (0..255) to uint32_t */
+            uint32_t const entry    = (uint32_t) g_bar_map[idx];
             uint32_t const cur_char = app_bits_get(
                 entry, PRV_BAR_MAP_CHAR_POS, PRV_BAR_MAP_CHAR_BITS);
 
@@ -529,6 +531,7 @@ static void barcode_edge_isr(uint32_t events, uint32_t now_us)
         uint8_t const  next =
             (uint8_t) (((uint32_t) head + 1u) & (BAR_RING_ENTRIES - 1u));
 
+        /* casts: MSG_EDGE GAP max is a positive 15-bit layout bound (32767) */
         if (gap > (uint32_t) MSG_EDGE_GAP_MAX)
         {
             gap = (uint32_t) MSG_EDGE_GAP_MAX;
@@ -542,9 +545,10 @@ static void barcode_edge_isr(uint32_t events, uint32_t now_us)
 
         if (next == g_bar_tail)
         {
+            /* casts: SH_BAR_OVF OVERFLOW max (255) and +1 fit uint8_t */
             g_bar_overflow =
                 (g_bar_overflow < (uint8_t) SH_BAR_OVF_OVERFLOW_MAX)
-                    ? ((uint8_t) (g_bar_overflow + 1u)) /* cast: <= 255 */
+                    ? ((uint8_t) (g_bar_overflow + 1u))
                     : (uint8_t) SH_BAR_OVF_OVERFLOW_MAX;
         }
         else
@@ -746,8 +750,9 @@ static uint32_t barcode_gap_add(uint32_t first, uint32_t second)
 {
     uint32_t const sum = first + second;
 
+    /* casts: MSG_EDGE GAP max is a positive 15-bit layout bound (32767) */
     return (sum < (uint32_t) MSG_EDGE_GAP_MAX) ? sum
-                                             : (uint32_t) MSG_EDGE_GAP_MAX;
+                                               : (uint32_t) MSG_EDGE_GAP_MAX;
 }
 
 /**
@@ -1016,6 +1021,7 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
         {
             uint32_t width_01mm = barcode_width_01mm(gap_all, cpw);
 
+            /* casts: PRV_BAR_W WIDTH max is a positive layout bound (255) */
             if (width_01mm > (uint32_t) PRV_BAR_W_WIDTH_MAX)
             {
                 width_01mm = (uint32_t) PRV_BAR_W_WIDTH_MAX;
@@ -1025,10 +1031,12 @@ static void barcode_edge_capturing(uint32_t gap_16us, uint32_t level,
                 /* Width fits 8-bit 0.1 mm slot. */
             }
 
-            /* cast: clamped to <= 255 above */
+            /* cast: clamped to PRV_BAR_W WIDTH max (<= 255) above */
             barcode_store_width(n_elem, (uint8_t) width_01mm);
+            /* cast: MSG_EDGE GAP max is a positive layout bound (32767) */
             barcode_clamp_age_step(n_elem,
                                    gap_all >= (uint32_t) MSG_EDGE_GAP_MAX);
+            /* cast: PRV_BAR_A N_ELEM max is a positive layout bound (63) */
             if (n_elem < (uint32_t) PRV_BAR_A_N_ELEM_MAX)
             {
                 n_elem++;
@@ -1121,6 +1129,7 @@ static void barcode_probe(uint32_t path)
 
     for (uint32_t idx = 0u; idx < BAR_PROBE_ELEMENTS; idx++)
     {
+        /* cast: widen PRV_BAR_W uint8_t width (0..255) to uint32_t */
         uint32_t const width = (uint32_t) g_bar_widths[idx];
         narrow = (width < narrow) ? width : narrow;
         wide   = (width > wide) ? width : wide;
@@ -1160,6 +1169,7 @@ static void barcode_request_rewind(uint32_t path)
                                 barcode_c_get(PRV_BAR_C_START_PATH_POS,
                                               PRV_BAR_C_START_PATH_BITS)));
 
+        /* cast: MSG_EVT VALUE max is a positive 11-bit layout bound (2047) */
         if ((travel >= (BAR_PROBE_ELEMENTS * BAR_PROBE_MIN_01MM) / 10u)
             && (travel <= (uint32_t) MSG_EVT_VALUE_MAX))
         {
@@ -1374,6 +1384,7 @@ static void barcode_log_widths(uint32_t n_elem)
     }
     if (idx < count)
     {
+        /* casts: element number <= 29 and uint8_t width <= 255 fit int32_t */
         app_log("BAR widths %d+ (0.1 mm, bar first): %d\n",
                 (int32_t) (idx + 1u), (int32_t) g_bar_widths[idx], 0);
     }
@@ -1521,6 +1532,7 @@ static void barcode_elog_step(void)
                                 BAR_ELOG_LVL_BITS))
             ? gap_us : -gap_us;
 
+        /* casts: 8-bit cycle (0..255) and 7-bit cpw (0..127) fit int32_t */
         app_log("BAR E %d %d %d\n",
                 (int32_t) app_bits_get(entry, BAR_ELOG_CYC_POS,
                                        BAR_ELOG_CYC_BITS),

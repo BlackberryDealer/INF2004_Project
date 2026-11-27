@@ -69,6 +69,7 @@ static uint8_t const g_hmi_rgb[HMI_LED_COUNT][3] =
 /* All written only by mission_task. PRV_MIS_G: BTN_RUN, BTN_RESET,
    RESET_SENT, WARNING, LED (starts unknown), BUZZ, PREV_SYS (starts
    none), BEEP. The two times are E5 timer images (E_MIS_US).        */
+/* casts: PRV_MIS_G LED (0..6) and PREV_SYS (0..8) are positive codes */
 static uint32_t g_hmi_word =
     ((uint32_t) HMI_LED_UNKNOWN << PRV_MIS_G_LED_POS)
     | ((uint32_t) HMI_STATE_NONE << PRV_MIS_G_PREV_SYS_POS);

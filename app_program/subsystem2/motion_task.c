@@ -111,7 +111,8 @@
 #endif
 
 /* Words with every field at its reset value (signed fields hold their
-   offset, which stands for 0).                                         */
+   offset, which stands for 0). casts: PRV_MOT_B and PRV_MOT_PI offsets
+   are positive layout constants that fit uint32_t.                     */
 #define MOTION_B_RESET                                                     \
     ((((uint32_t) PRV_MOT_B_BASE_CPW_OFFSET) << PRV_MOT_B_BASE_CPW_POS)    \
      | (((uint32_t) PRV_MOT_B_CREEP_CPW_OFFSET) << PRV_MOT_B_CREEP_CPW_POS))
@@ -711,6 +712,7 @@ static void motion_start_cmd(uint32_t type, uint32_t param, uint32_t tag)
         motion_reset_control();
         motion_a_set(PRV_MOT_A_ACT_TYPE_POS, PRV_MOT_A_ACT_TYPE_BITS, type);
         motion_a_set(PRV_MOT_A_ACT_TAG_POS, PRV_MOT_A_ACT_TAG_BITS, tag);
+        /* cast: validated MSG_CMD PARAM follow speed is 0..300 mm/s */
         motion_set_base_cpw(odometry_mm_s_to_cpw((int32_t) param));
         motion_set_state(APP_MOT_FOLLOW);
     }
@@ -754,6 +756,7 @@ static void motion_start_move(uint32_t state, int32_t base_cpw,
     int32_t const creep = odometry_mm_s_to_cpw(MOTION_CREEP_MM_S);
     int32_t const mag   = (base_cpw < 0) ? -base_cpw : base_cpw;
     bool          b_was_clamped = false;
+    /* cast: PRV_MOT_C TARGET2 max is a positive layout bound (16383) */
     uint32_t const target = app_bits_clamp_u(target2,
                                              (uint32_t) PRV_MOT_C_TARGET2_MAX,
                                              &b_was_clamped);

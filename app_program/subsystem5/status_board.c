@@ -38,12 +38,14 @@ typedef struct
    distance and profile fields their maximum (sentinels).               */
 static status_board_t g_sb =
 {
+    /* casts: SB_LINE0..SB_MOT2 signed offsets are positive layout constants */
     .line0 = ((uint32_t) SB_LINE0_STEERING_OFFSET << SB_LINE0_STEERING_POS),
     .mot0  = (((uint32_t) SB_MOT0_SPEED_L_OFFSET << SB_MOT0_SPEED_L_POS)
               | ((uint32_t) SB_MOT0_SPEED_R_OFFSET << SB_MOT0_SPEED_R_POS)),
     .mot1  = ((uint32_t) SB_MOT1_POS_L_OFFSET << SB_MOT1_POS_L_POS),
     .mot2  = ((uint32_t) SB_MOT2_POS_R_OFFSET << SB_MOT2_POS_R_POS),
     .mot3  = 0u,
+    /* casts: SB_IMU0..SB_OBS1 offsets and maxima are positive layout bounds */
     .imu0  = ((uint32_t) SB_IMU0_PITCH_OFFSET << SB_IMU0_PITCH_POS),
     .imu1  = ((uint32_t) SB_IMU1_TURN_RATE_OFFSET << SB_IMU1_TURN_RATE_POS),
     .obs0  = ((uint32_t) SB_OBS0_DIST_MAX << SB_OBS0_DIST_POS),

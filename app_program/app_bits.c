@@ -176,9 +176,9 @@ void app_bits_write(app_bits_writer_t * p_writer, uint32_t value,
                 {
                     byte_idx = p_writer->bit_pos / APP_BITS_PER_BYTE;
                     bit_mask = 1u << (p_writer->bit_pos % APP_BITS_PER_BYTE);
+                    /* cast: bit_mask < 256, so the OR fits a byte */
                     p_writer->p_buf[byte_idx] =
                         (uint8_t) (p_writer->p_buf[byte_idx] | bit_mask);
-                        /* cast: bit_mask < 256, so the OR fits a byte */
                 }
                 p_writer->bit_pos++;
             }
@@ -285,9 +285,9 @@ uint32_t app_bits_read(app_bits_reader_t * p_reader, uint32_t width)
             for (idx = 0u; idx < width; idx++)
             {
                 byte_idx = p_reader->bit_pos / APP_BITS_PER_BYTE;
+                /* cast: widen the byte (0..255) before shifting */
                 bit      = ((uint32_t) p_reader->p_buf[byte_idx] >>
                             (p_reader->bit_pos % APP_BITS_PER_BYTE)) & 1u;
-                            /* cast: widen the byte before shifting */
                 value   |= bit << idx;
                 p_reader->bit_pos++;
             }

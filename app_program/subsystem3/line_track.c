@@ -109,8 +109,8 @@ bool line_track_cal_finish(line_track_cal_t * p_cal,
  * @brief   Normalises a raw 12-bit ADC reading into 0 (white) .. 1000 (black)
  *          without runtime division.
  * @param   raw        Raw ADC code (0..4095).
- * @param   white      Ordered low endpoint lo (or white level).
- * @param   black      Ordered high endpoint hi (or black level).
+ * @param   white      Ordered low endpoint low_end (or white level).
+ * @param   black      Ordered high endpoint high_end (or black level).
  * @param   recip_q16  Precomputed ((1000 << 16) + span - 1) / span.
  * @return  Normalised reflectance 0..1000 (0 = white, 1000 = black).
  * @context line_task (10 ms hot path)
@@ -118,8 +118,8 @@ bool line_track_cal_finish(line_track_cal_t * p_cal,
 uint32_t line_track_normalise(uint32_t raw, uint32_t white,
                               uint32_t black, uint32_t recip_q16)
 {
-    uint32_t lo            = white;
-    uint32_t hi            = black;
+    uint32_t low_end       = white;
+    uint32_t high_end      = black;
     bool     b_high_black  = LINE_BLACK_IS_HIGH;
     uint32_t clamped       = raw;
     uint32_t norm          = 0u;
@@ -127,28 +127,28 @@ uint32_t line_track_normalise(uint32_t raw, uint32_t white,
 
     if (white > black)
     {
-        lo           = black;
-        hi           = white;
+        low_end      = black;
+        high_end     = white;
         b_high_black = false;
     }
     else
     {
-        /* Endpoints are in standard ascending order [lo, hi]. */
+        /* Endpoints are in standard ascending order [low_end, high_end]. */
     }
 
-    if (clamped <= lo)
+    if (clamped <= low_end)
     {
         norm = 0u;
     }
-    else if (clamped >= hi)
+    else if (clamped >= high_end)
     {
         norm = LINE_NORM_MAX;
     }
     else
     {
         /* Product < 2^32 because span >= 400 so recip_q16 <= 163840 and
-           (clamped - lo) < span, giving product <= 65536000. */
-        norm = ((clamped - lo) * recip_q16) >> LINE_RECIP_SHIFT;
+           (clamped - low_end) < span, giving product <= 65536000. */
+        norm = ((clamped - low_end) * recip_q16) >> LINE_RECIP_SHIFT;
         if (norm > LINE_NORM_MAX)
         {
             norm = LINE_NORM_MAX;

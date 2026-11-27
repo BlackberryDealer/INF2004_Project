@@ -90,39 +90,40 @@ void drv_ws2812_set(uint32_t red, uint32_t green, uint32_t blue)
 static bool drv_ws2812_try(PIO p_pio)
 {
     bool           b_is_ok = false;
-    int            sm      = -1;
-    int            offset  = -1;
+    int32_t        sm_idx  = -1;
+    int32_t        offset  = -1;
     pio_sm_config  cfg     = {0};
 
     if (pio_can_add_program(p_pio, &ws2812_program))
     {
-        sm = pio_claim_unused_sm(p_pio, false);
+        sm_idx = pio_claim_unused_sm(p_pio, false);
     }
-    if (sm >= 0)
+    if (sm_idx >= 0)
     {
         offset = pio_add_program(p_pio, &ws2812_program);
         if (offset < 0)
         {
-            pio_sm_unclaim(p_pio, (uint) sm);  /* cast: sm >= 0 */
+            /* cast: claimed PIO state machine index is 0..3 */
+            pio_sm_unclaim(p_pio, (uint32_t) sm_idx);
         }
     }
-    if ((sm >= 0) && (offset >= 0))
+    if ((sm_idx >= 0) && (offset >= 0))
     {
-        g_ws_sm   = (uint32_t) sm;      /* cast: 0..3 */
+        g_ws_sm   = (uint32_t) sm_idx;  /* cast: claimed SM is 0..3 */
         gp_ws_pio = p_pio;
         pio_gpio_init(p_pio, PIN_RGB);
         (void) pio_sm_set_consecutive_pindirs(p_pio, g_ws_sm, PIN_RGB, 1u,
                                               true); /* valid pin */
-        cfg = ws2812_program_get_default_config(
-            (uint) offset);                      /* cast: offset >= 0 */
+        /* cast: PIO instruction offset is 0..31 */
+        cfg = ws2812_program_get_default_config((uint32_t) offset);
         sm_config_set_sideset_pins(&cfg, PIN_RGB);
         sm_config_set_out_shift(&cfg, false, true, DRV_WS2812_BITS);
         sm_config_set_fifo_join(&cfg, PIO_FIFO_JOIN_TX);
         /* cast: 160 fits a byte */
         sm_config_set_clkdiv_int_frac8(&cfg, DRV_WS2812_DIV_INT,
                                        (uint8_t) DRV_WS2812_DIV_FRAC8);
-        /* cast: offset >= 0; init cannot fail with a claimed SM */
-        (void) pio_sm_init(p_pio, g_ws_sm, (uint) offset, &cfg);
+        /* cast: PIO offset is 0..31; init cannot fail with a claimed SM */
+        (void) pio_sm_init(p_pio, g_ws_sm, (uint32_t) offset, &cfg);
         pio_sm_set_enabled(p_pio, g_ws_sm, true);
         b_is_ok = true;
     }

@@ -139,7 +139,7 @@ uint32_t odometry_mm_to_counts(uint32_t distance_mm)
  */
 int32_t odometry_cpw_to_mm_s(int32_t speed_cpw)
 {
-    /* casts: both constants are small positive values (349, 50) */
+    /* casts: APP_UM_PER_COUNT and APP_SPEED_WINDOW_MS are positive */
     return ((speed_cpw * (int32_t) APP_UM_PER_COUNT)
             / (int32_t) APP_SPEED_WINDOW_MS);
 }
@@ -153,17 +153,19 @@ int32_t odometry_cpw_to_mm_s(int32_t speed_cpw)
  */
 int32_t odometry_mm_s_to_cpw(int32_t speed_mm_s)
 {
-    /* casts: both constants are small positive values (50, 349) */
+    /* casts: APP_SPEED_WINDOW_MS and APP_UM_PER_COUNT are positive */
     int32_t const num  = speed_mm_s * (int32_t) APP_SPEED_WINDOW_MS;
     int32_t const half = (int32_t) APP_UM_PER_COUNT / 2;
     int32_t       cpw  = 0;
 
     if (num >= 0)
     {
+        /* cast: APP_UM_PER_COUNT is a positive constant */
         cpw = (num + half) / (int32_t) APP_UM_PER_COUNT;
     }
     else
     {
+        /* cast: APP_UM_PER_COUNT is a positive constant */
         cpw = (num - half) / (int32_t) APP_UM_PER_COUNT; /* round away */
     }
 

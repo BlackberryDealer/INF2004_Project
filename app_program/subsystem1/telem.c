@@ -215,12 +215,12 @@ ER telem_start(void)
 bool telem_post_event(uint32_t type, uint32_t value)
 {
     uint8_t           msg[TELEM_K7_MSG_BYTES] = {0u};
-    app_bits_writer_t wr = {NULL, 0u, 0u, false};
+    app_bits_writer_t writer = {NULL, 0u, 0u, false};
 
-    app_bits_writer_init(&wr, msg, sizeof(msg));
-    app_bits_write(&wr, telem_evt_word(type, value), MSG_EVT_USED_BITS);
+    app_bits_writer_init(&writer, msg, sizeof(msg));
+    app_bits_write(&writer, telem_evt_word(type, value), MSG_EVT_USED_BITS);
 
-    return telem_k7_send(msg, app_bits_writer_bytes(&wr));
+    return telem_k7_send(msg, app_bits_writer_bytes(&writer));
 }
 
 /**
@@ -236,30 +236,30 @@ bool telem_post_event(uint32_t type, uint32_t value)
 bool telem_post_profile(telem_bin_profile_t const * p_profile)
 {
     uint8_t           msg[TELEM_K7_MSG_BYTES] = {0u};
-    app_bits_writer_t wr        = {NULL, 0u, 0u, false};
+    app_bits_writer_t writer    = {NULL, 0u, 0u, false};
     bool              b_clamped = false;
 
-    app_bits_writer_init(&wr, msg, sizeof(msg));
-    app_bits_write(&wr, telem_evt_word(APP_EVT_OBSTACLE, 0u),
+    app_bits_writer_init(&writer, msg, sizeof(msg));
+    app_bits_write(&writer, telem_evt_word(APP_EVT_OBSTACLE, 0u),
                    MSG_EVT_USED_BITS);
-    app_bits_write_u(&wr, p_profile->angle_step, K7_PROF_ANGLE_STEP_MAX,
+    app_bits_write_u(&writer, p_profile->angle_step, K7_PROF_ANGLE_STEP_MAX,
                      K7_PROF_ANGLE_STEP_BITS, &b_clamped);
-    app_bits_write_u(&wr, p_profile->width_mm >> TELEM_MM_STEP_SHIFT,
+    app_bits_write_u(&writer, p_profile->width_mm >> TELEM_MM_STEP_SHIFT,
                      K7_PROF_WIDTH_MAX, K7_PROF_WIDTH_BITS, NULL);
-    app_bits_write_u(&wr, p_profile->nearest_mm >> TELEM_MM_STEP_SHIFT,
+    app_bits_write_u(&writer, p_profile->nearest_mm >> TELEM_MM_STEP_SHIFT,
                      K7_PROF_NEAREST_MAX, K7_PROF_NEAREST_BITS, NULL);
-    app_bits_write_u(&wr, p_profile->clear_left_mm >> TELEM_MM_STEP_SHIFT,
+    app_bits_write_u(&writer, p_profile->clear_left_mm >> TELEM_MM_STEP_SHIFT,
                      K7_PROF_CLEAR_L_MAX, K7_PROF_CLEAR_L_BITS, NULL);
-    app_bits_write_u(&wr, p_profile->clear_right_mm >> TELEM_MM_STEP_SHIFT,
+    app_bits_write_u(&writer, p_profile->clear_right_mm >> TELEM_MM_STEP_SHIFT,
                      K7_PROF_CLEAR_R_MAX, K7_PROF_CLEAR_R_BITS, NULL);
-    app_bits_write_u(&wr, p_profile->side, K7_PROF_SIDE_MAX,
+    app_bits_write_u(&writer, p_profile->side, K7_PROF_SIDE_MAX,
                      K7_PROF_SIDE_BITS, NULL);
     if (b_clamped)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
     }
 
-    return telem_k7_send(msg, app_bits_writer_bytes(&wr));
+    return telem_k7_send(msg, app_bits_writer_bytes(&writer));
 }
 
 /**
@@ -274,28 +274,28 @@ bool telem_post_profile(telem_bin_profile_t const * p_profile)
 bool telem_post_summary(telem_bin_summary_t const * p_summary)
 {
     uint8_t           msg[TELEM_K7_MSG_BYTES] = {0u};
-    app_bits_writer_t wr    = {NULL, 0u, 0u, false};
-    bool              b_any = false;
+    app_bits_writer_t writer = {NULL, 0u, 0u, false};
+    bool              b_any  = false;
 
-    app_bits_writer_init(&wr, msg, sizeof(msg));
-    app_bits_write(&wr, telem_evt_word(APP_EVT_SUMMARY, 0u),
+    app_bits_writer_init(&writer, msg, sizeof(msg));
+    app_bits_write(&writer, telem_evt_word(APP_EVT_SUMMARY, 0u),
                    MSG_EVT_USED_BITS);
-    app_bits_write_u(&wr, p_summary->end_reason, K7_SUMM_END_REASON_MAX,
+    app_bits_write_u(&writer, p_summary->end_reason, K7_SUMM_END_REASON_MAX,
                      K7_SUMM_END_REASON_BITS, NULL);
-    app_bits_write_u(&wr, p_summary->hump_peak_mm, K7_SUMM_HUMP_PEAK_MAX,
+    app_bits_write_u(&writer, p_summary->hump_peak_mm, K7_SUMM_HUMP_PEAK_MAX,
                      K7_SUMM_HUMP_PEAK_BITS, &b_any);
-    app_bits_write_u(&wr, p_summary->odometry_mm, K7_SUMM_ODO_MM_MAX,
+    app_bits_write_u(&writer, p_summary->odometry_mm, K7_SUMM_ODO_MM_MAX,
                      K7_SUMM_ODO_MM_BITS, &b_any);
-    app_bits_write_u(&wr, p_summary->faults, K7_SUMM_FAULTS_MAX,
+    app_bits_write_u(&writer, p_summary->faults, K7_SUMM_FAULTS_MAX,
                      K7_SUMM_FAULTS_BITS, NULL);
-    app_bits_write_u(&wr, p_summary->run_time_s, K7_SUMM_RUN_S_MAX,
+    app_bits_write_u(&writer, p_summary->run_time_s, K7_SUMM_RUN_S_MAX,
                      K7_SUMM_RUN_S_BITS, &b_any);
     if (b_any)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
     }
 
-    return telem_k7_send(msg, app_bits_writer_bytes(&wr));
+    return telem_k7_send(msg, app_bits_writer_bytes(&writer));
 }
 
 /**
@@ -310,30 +310,30 @@ bool telem_post_summary(telem_bin_summary_t const * p_summary)
 bool telem_post_snapshot(telem_bin_snapshot_t const * p_snap)
 {
     uint8_t           msg[TELEM_K7_MSG_BYTES] = {0u};
-    app_bits_writer_t wr    = {NULL, 0u, 0u, false};
-    bool              b_any = false;
+    app_bits_writer_t writer = {NULL, 0u, 0u, false};
+    bool              b_any  = false;
 
-    app_bits_writer_init(&wr, msg, sizeof(msg));
-    app_bits_write(&wr, telem_evt_word(APP_EVT_SNAPSHOT, 0u),
+    app_bits_writer_init(&writer, msg, sizeof(msg));
+    app_bits_write(&writer, telem_evt_word(APP_EVT_SNAPSHOT, 0u),
                    MSG_EVT_USED_BITS);
-    app_bits_write_u(&wr, p_snap->sys_state, K7_SNAP_SYS_MAX,
+    app_bits_write_u(&writer, p_snap->sys_state, K7_SNAP_SYS_MAX,
                      K7_SNAP_SYS_BITS, NULL);
-    app_bits_write_u(&wr, p_snap->run_state, K7_SNAP_RUN_MAX,
+    app_bits_write_u(&writer, p_snap->run_state, K7_SNAP_RUN_MAX,
                      K7_SNAP_RUN_BITS, NULL);
-    app_bits_write_u(&wr, p_snap->hump_peak_mm, K7_SNAP_HUMP_PEAK_MAX,
+    app_bits_write_u(&writer, p_snap->hump_peak_mm, K7_SNAP_HUMP_PEAK_MAX,
                      K7_SNAP_HUMP_PEAK_BITS, &b_any);
-    app_bits_write_u(&wr, p_snap->odometry_mm, K7_SNAP_ODO_MM_MAX,
+    app_bits_write_u(&writer, p_snap->odometry_mm, K7_SNAP_ODO_MM_MAX,
                      K7_SNAP_ODO_MM_BITS, &b_any);
-    app_bits_write_u(&wr, p_snap->faults, K7_SNAP_FAULTS_MAX,
+    app_bits_write_u(&writer, p_snap->faults, K7_SNAP_FAULTS_MAX,
                      K7_SNAP_FAULTS_BITS, NULL);
-    app_bits_write_u(&wr, p_snap->run_time_s, K7_SNAP_RUN_S_MAX,
+    app_bits_write_u(&writer, p_snap->run_time_s, K7_SNAP_RUN_S_MAX,
                      K7_SNAP_RUN_S_BITS, &b_any);
     if (b_any)
     {
         fault_set(APP_FAULT_RANGE_CLAMP);
     }
 
-    return telem_k7_send(msg, app_bits_writer_bytes(&wr));
+    return telem_k7_send(msg, app_bits_writer_bytes(&writer));
 }
 
 /**
@@ -344,11 +344,11 @@ bool telem_post_snapshot(telem_bin_snapshot_t const * p_snap)
  */
 uint32_t telem_drops(void)
 {
-    uint32_t const k7    = app_bits_get(g_tel_k7_word, PRV_TEL_K7_DROPS_POS,
-                                        PRV_TEL_K7_DROPS_BITS);
-    uint32_t const k11   = app_bits_get(g_tel_word, PRV_TEL_DROPS_POS,
-                                        PRV_TEL_DROPS_BITS);
-    uint32_t const total = k7 + k11 + mqtt_bridge_publish_drops();
+    uint32_t const k7_drops = app_bits_get(g_tel_k7_word, PRV_TEL_K7_DROPS_POS,
+                                           PRV_TEL_K7_DROPS_BITS);
+    uint32_t const k11      = app_bits_get(g_tel_word, PRV_TEL_DROPS_POS,
+                                           PRV_TEL_DROPS_BITS);
+    uint32_t const total    = k7_drops + k11 + mqtt_bridge_publish_drops();
 
     /* cast: positive layout constant 255 */
     return app_bits_clamp_u(total, (uint32_t) MQ_HB_DROPS_MAX, NULL);
@@ -587,47 +587,47 @@ static void telem_forward(uint8_t const * p_msg, uint32_t len)
     uint8_t              out[TELEM_K11_MSG_BYTES] = {0u};
     uint32_t             out_len = 0u;
     uint32_t             word    = 0u;
-    app_bits_reader_t    rd      = {NULL, 0u, 0u, false};
+    app_bits_reader_t    reader  = {NULL, 0u, 0u, false};
     telem_bin_profile_t  prof    = {0u, 0u, 0u, 0u, 0u, 0u};
     telem_bin_summary_t  summ    = {0u, 0u, 0u, 0u, 0u};
     telem_bin_snapshot_t snap    = {0u, 0u, 0u, 0u, 0u, 0u};
 
-    app_bits_reader_init(&rd, p_msg, len);
-    word = app_bits_read(&rd, MSG_EVT_USED_BITS);
+    app_bits_reader_init(&reader, p_msg, len);
+    word = app_bits_read(&reader, MSG_EVT_USED_BITS);
 
     if (TELEM_K7_PROF_LEN == len)
     {
-        prof.angle_step     = app_bits_read(&rd, K7_PROF_ANGLE_STEP_BITS);
-        prof.width_mm       = app_bits_read(&rd, K7_PROF_WIDTH_BITS)
+        prof.angle_step     = app_bits_read(&reader, K7_PROF_ANGLE_STEP_BITS);
+        prof.width_mm       = app_bits_read(&reader, K7_PROF_WIDTH_BITS)
                               << TELEM_MM_STEP_SHIFT;
-        prof.nearest_mm     = app_bits_read(&rd, K7_PROF_NEAREST_BITS)
+        prof.nearest_mm     = app_bits_read(&reader, K7_PROF_NEAREST_BITS)
                               << TELEM_MM_STEP_SHIFT;
-        prof.clear_left_mm  = app_bits_read(&rd, K7_PROF_CLEAR_L_BITS)
+        prof.clear_left_mm  = app_bits_read(&reader, K7_PROF_CLEAR_L_BITS)
                               << TELEM_MM_STEP_SHIFT;
-        prof.clear_right_mm = app_bits_read(&rd, K7_PROF_CLEAR_R_BITS)
+        prof.clear_right_mm = app_bits_read(&reader, K7_PROF_CLEAR_R_BITS)
                               << TELEM_MM_STEP_SHIFT;
-        prof.side           = app_bits_read(&rd, K7_PROF_SIDE_BITS);
+        prof.side           = app_bits_read(&reader, K7_PROF_SIDE_BITS);
         out_len             = telem_bin_profile(&prof, out, sizeof(out));
     }
     else if ((TELEM_K7_SNAP_LEN == len)
              && (APP_EVT_SNAPSHOT == app_bits_get(word, MSG_EVT_TYPE_POS,
                                                   MSG_EVT_TYPE_BITS)))
     {
-        snap.sys_state    = app_bits_read(&rd, K7_SNAP_SYS_BITS);
-        snap.run_state    = app_bits_read(&rd, K7_SNAP_RUN_BITS);
-        snap.hump_peak_mm = app_bits_read(&rd, K7_SNAP_HUMP_PEAK_BITS);
-        snap.odometry_mm  = app_bits_read(&rd, K7_SNAP_ODO_MM_BITS);
-        snap.faults       = app_bits_read(&rd, K7_SNAP_FAULTS_BITS);
-        snap.run_time_s   = app_bits_read(&rd, K7_SNAP_RUN_S_BITS);
+        snap.sys_state    = app_bits_read(&reader, K7_SNAP_SYS_BITS);
+        snap.run_state    = app_bits_read(&reader, K7_SNAP_RUN_BITS);
+        snap.hump_peak_mm = app_bits_read(&reader, K7_SNAP_HUMP_PEAK_BITS);
+        snap.odometry_mm  = app_bits_read(&reader, K7_SNAP_ODO_MM_BITS);
+        snap.faults       = app_bits_read(&reader, K7_SNAP_FAULTS_BITS);
+        snap.run_time_s   = app_bits_read(&reader, K7_SNAP_RUN_S_BITS);
         out_len           = telem_bin_snapshot(&snap, out, sizeof(out));
     }
     else if (TELEM_K7_SUMM_LEN == len)
     {
-        summ.end_reason   = app_bits_read(&rd, K7_SUMM_END_REASON_BITS);
-        summ.hump_peak_mm = app_bits_read(&rd, K7_SUMM_HUMP_PEAK_BITS);
-        summ.odometry_mm  = app_bits_read(&rd, K7_SUMM_ODO_MM_BITS);
-        summ.faults       = app_bits_read(&rd, K7_SUMM_FAULTS_BITS);
-        summ.run_time_s   = app_bits_read(&rd, K7_SUMM_RUN_S_BITS);
+        summ.end_reason   = app_bits_read(&reader, K7_SUMM_END_REASON_BITS);
+        summ.hump_peak_mm = app_bits_read(&reader, K7_SUMM_HUMP_PEAK_BITS);
+        summ.odometry_mm  = app_bits_read(&reader, K7_SUMM_ODO_MM_BITS);
+        summ.faults       = app_bits_read(&reader, K7_SUMM_FAULTS_BITS);
+        summ.run_time_s   = app_bits_read(&reader, K7_SUMM_RUN_S_BITS);
         out_len           = telem_bin_summary(&summ, out, sizeof(out));
     }
     else
@@ -693,12 +693,14 @@ static void telem_send_sensors(void)
     status_board_t      snap = {0};
     telem_bin_sensors_t sens = {0};
     uint8_t             out[TELEM_K11_MSG_BYTES] = {0u};
-    uint32_t const      ir   = line_raw_word();     /* one load each */
-    uint32_t const      acc  = imu_acc_word();
+    uint32_t const      ir_word = line_raw_word();  /* one load each */
+    uint32_t const      acc     = imu_acc_word();
 
     status_board_read(&snap);
-    sens.ir_raw_l    = app_bits_get(ir, SH_IR_RAW_L_POS, SH_IR_RAW_L_BITS);
-    sens.ir_raw_r    = app_bits_get(ir, SH_IR_RAW_R_POS, SH_IR_RAW_R_BITS);
+    sens.ir_raw_l    = app_bits_get(ir_word, SH_IR_RAW_L_POS,
+                                    SH_IR_RAW_L_BITS);
+    sens.ir_raw_r    = app_bits_get(ir_word, SH_IR_RAW_R_POS,
+                                    SH_IR_RAW_R_BITS);
     sens.distance_mm = status_board_distance(&snap);
     sens.scan_state  = status_board_scanner_state(&snap);
     sens.bar_do      = barcode_do_level();

@@ -75,6 +75,7 @@ void drv_ir_adc_read(uint32_t * p_left, uint32_t * p_right)
     uint32_t const avg_left  = drv_ir_adc_read_channel(BOARD_ADC_CH_LINE_L);
     uint32_t const avg_right = drv_ir_adc_read_channel(BOARD_ADC_CH_LINE_R);
 
+    /* cast: null pointer check without <stddef.h> */
     if (((uint32_t *) 0) != p_left)
     {
         *p_left = avg_left;
@@ -84,6 +85,7 @@ void drv_ir_adc_read(uint32_t * p_left, uint32_t * p_right)
         /* Caller did not request the left channel reading. */
     }
 
+    /* cast: null pointer check without <stddef.h> */
     if (((uint32_t *) 0) != p_right)
     {
         *p_right = avg_right;

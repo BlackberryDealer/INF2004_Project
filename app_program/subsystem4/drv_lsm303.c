@@ -143,7 +143,7 @@ static void    lsm303_set_enable(bool b_on);
 static void    lsm303_rx_drain(void);
 static void    lsm303_delay_us(uint32_t delay_us);
 static void    lsm303_hw_setup(void);
-static int16_t lsm303_le16(uint8_t lo, uint8_t hi);
+static int16_t lsm303_le16(uint8_t low_byte, uint8_t high_byte);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -239,14 +239,14 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
         return ercd;
     }
 
+    /* casts: widen 8-bit FIFO_SRC register byte (0..255) to uint32_t */
     g_lsm303_fifo_ovr = drv_lsm303_fifo_plan((uint32_t)fifo_src, max_samples,
                                              &take, g_lsm303_fifo_ovr);
-    /* cast: byte to word,
-       zero-extended */
     if (0u != ((uint32_t)fifo_src & LSM303_FIFO_SRC_OVRN))
     {
         /* Discard up to 4 samples so the stream can continue; no sample
-           from this cycle is used (review R14). */
+           from this cycle is used (review R14).
+           cast: 7-bit I2C sub-address | auto-inc bit fits uint8_t. */
         ercd = lsm303_rx((uint8_t)(LSM303_REG_OUT_X_L_A | LSM303_AUTO_INC),
                          burst, LSM303_SAMPLES_BYTES);
         if (0 != ercd)
@@ -261,6 +261,7 @@ int32_t drv_lsm303_read_acc(drv_lsm303_acc_t * p_samples, uint32_t max_samples)
         return 0; /* no new data this cycle */
     }
 
+    /* cast: 7-bit I2C sub-address | auto-inc bit fits uint8_t */
     ercd = lsm303_rx((uint8_t)(LSM303_REG_OUT_X_L_A | LSM303_AUTO_INC),
                      burst, take * 6u);
     if (0 != ercd)
@@ -298,6 +299,7 @@ int32_t drv_lsm303_read_mag(int16_t * p_mx, int16_t * p_my, int16_t * p_mz)
     uint8_t buf[6u] = {0};
     int32_t ercd    = 0;
 
+    /* cast: 7-bit I2C sub-address | auto-inc bit fits uint8_t */
     ercd = lsm303_rx((uint8_t)(LSM303_REG_OUT_X_L_M | LSM303_AUTO_INC), buf,
                      6u);
     if (0 != ercd)
@@ -553,8 +555,8 @@ static int32_t lsm303_rx(uint8_t reg, uint8_t * p_out, uint32_t count)
         ercd = lsm303_wait_rx();
         if (0 == ercd)
         {
+            /* cast: DAT field masked to bits 0-7 (0..255) fits uint8_t */
             p_out[idx] = (uint8_t)(i2c1_hw->data_cmd & 0xFFu);
-            /* cast: DAT field is bits 0-7 */
         }
     }
 
@@ -755,17 +757,18 @@ static void lsm303_delay_us(uint32_t delay_us)
 /**
  * lsm303_le16
  * @brief   Decodes one little-endian signed 16-bit register pair.
- * @param   lo  low byte (OUT_*_L)
- * @param   hi  high byte (OUT_*_H)
+ * @param   low_byte   low byte (OUT_*_L)
+ * @param   high_byte  high byte (OUT_*_H)
  * @return  signed 16-bit axis sample
  * @context imu_task
  */
-static int16_t lsm303_le16(uint8_t lo, uint8_t hi)
+static int16_t lsm303_le16(uint8_t low_byte, uint8_t high_byte)
 {
     /* casts: 16-bit little-endian register image, no bits lost */
-    uint16_t const raw = (uint16_t)((uint32_t)lo | ((uint32_t)hi << 8u));
+    uint16_t const raw =
+        (uint16_t) ((uint32_t) low_byte | ((uint32_t) high_byte << 8u));
 
-    return (int16_t)raw;
+    return (int16_t) raw;
 }
 
 /*** end of file ***/

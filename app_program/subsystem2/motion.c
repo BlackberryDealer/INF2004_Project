@@ -299,6 +299,7 @@ static bool motion_send(uint32_t type, int32_t param)
     word = app_bits_put(0u, MSG_CMD_PARAM_POS, MSG_CMD_PARAM_BITS,
                         (uint32_t) param);
     word = app_bits_put(word, MSG_CMD_TYPE_POS, MSG_CMD_TYPE_BITS, type);
+    /* cast: widen 2-bit MSG_CMD TAG (0..3) from uint8_t to uint32_t */
     word = app_bits_put(word, MSG_CMD_TAG_POS, MSG_CMD_TAG_BITS,
                         (uint32_t) next_tag);
     msg  = (uint16_t) word;     /* cast: MSG_CMD_USED_BITS == 16 */

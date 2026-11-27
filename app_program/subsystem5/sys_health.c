@@ -329,6 +329,7 @@ static void sys_health_wdt_start(uint32_t load)
  */
 static bool sys_health_flag(uint32_t pos)
 {
+    /* cast: widen PRV_HLT byte (uint8_t) to uint32_t */
     return (0u != app_bits_get((uint32_t) g_hlt_word, pos, 1u));
 }
 

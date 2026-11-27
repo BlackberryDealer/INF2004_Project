@@ -50,7 +50,7 @@ static uint32_t g_enc_sm_r       = 0u;
 /* ---- private function prototypes ------------------------------------- */
 
 static bool     drv_encoder_try_block(PIO p_pio, uint32_t pio_index);
-static uint32_t drv_encoder_raw(uint32_t sm, bool b_is_reversed);
+static uint32_t drv_encoder_raw(uint32_t sm_idx, bool b_is_reversed);
 
 /* ---- public functions ------------------------------------------------- */
 
@@ -144,10 +144,10 @@ bool drv_encoder_location(uint32_t * p_pio_index, uint32_t * p_sm_l,
  */
 static bool drv_encoder_try_block(PIO p_pio, uint32_t pio_index)
 {
-    bool b_is_ok     = false;
-    bool b_is_loaded = false;
-    int  sm_l        = -1;
-    int  sm_r        = -1;
+    bool    b_is_ok     = false;
+    bool    b_is_loaded = false;
+    int32_t sm_l        = -1;
+    int32_t sm_r        = -1;
 
     if (pio_can_add_program_at_offset(p_pio, &quadrature_encoder_program,
                                       DRV_ENC_OFFSET))
@@ -176,14 +176,16 @@ static bool drv_encoder_try_block(PIO p_pio, uint32_t pio_index)
     else if (b_is_loaded)
     {
         /* Program fitted but fewer than two SMs were free: give back
-           everything taken. cast: each claimed sm is 0..3              */
+           everything taken.                                            */
         if (sm_l >= 0)
         {
-            pio_sm_unclaim(p_pio, (uint) sm_l);
+            /* cast: claimed PIO state machine index is 0..3 */
+            pio_sm_unclaim(p_pio, (uint32_t) sm_l);
         }
         if (sm_r >= 0)
         {
-            pio_sm_unclaim(p_pio, (uint) sm_r);
+            /* cast: claimed PIO state machine index is 0..3 */
+            pio_sm_unclaim(p_pio, (uint32_t) sm_r);
         }
         pio_remove_program(p_pio, &quadrature_encoder_program,
                            DRV_ENC_OFFSET);
@@ -199,14 +201,14 @@ static bool drv_encoder_try_block(PIO p_pio, uint32_t pio_index)
 /**
  * drv_encoder_raw
  * @brief   Reads one counter as a modular 32-bit image (E3).
- * @param   sm             state machine 0..3
+ * @param   sm_idx         state machine 0..3
  * @param   b_is_reversed  true if this encoder counts the wrong way
  * @return  count image (edges / 4); + direction = wheel driving forward
  * @context motion_task
  */
-static uint32_t drv_encoder_raw(uint32_t sm, bool b_is_reversed)
+static uint32_t drv_encoder_raw(uint32_t sm_idx, bool b_is_reversed)
 {
-    int32_t const count = quadrature_encoder_get_count(gp_enc_pio, sm);
+    int32_t const count = quadrature_encoder_get_count(gp_enc_pio, sm_idx);
 
     /* cast: two's-complement image, used only for modular differences
        (E3), so reinterpreting the sign is intended. The PIO counts every
