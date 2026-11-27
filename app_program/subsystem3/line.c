@@ -307,6 +307,7 @@ static uint32_t line_white_mark(void)
 static void line_jct_pack(line_track_jct_t const * p_jct)
 {
     uint32_t       word_a   = g_line_prv_a;
+    /* cast: PRV_LINE_B JCT_MARK max is a positive 17-bit layout bound */
     uint32_t const mark_enc = line_clamp_u(
         p_jct->mark_counts, (uint32_t) PRV_LINE_B_JCT_MARK_MAX);
 
@@ -493,6 +494,7 @@ static void line_reset_run_state(uint32_t path)
 {
     line_track_jct_t jct      = {0u, 0u, false, false, 0u};
     uint32_t const   cur_seq  = barcode_branch_seq() & LINE_SEQ_MASK;
+    /* cast: PRV_LINE_D BRANCH_PATH max is a positive 17-bit layout bound */
     uint32_t const   path_enc = line_clamp_u(
         path, (uint32_t) PRV_LINE_D_BRANCH_PATH_MAX);
     uint32_t         word_a   = 0u;
@@ -534,6 +536,7 @@ static void line_reset_run_state(uint32_t path)
  */
 static void line_cal_sample(uint32_t raw_l, uint32_t raw_r)
 {
+    /* casts: PRV_CAL_L/R WHITE max are positive 12-bit layout bounds (4095) */
     uint32_t const cl_l = line_clamp_u(raw_l, (uint32_t) PRV_CAL_L_WHITE_MAX);
     uint32_t const cl_r = line_clamp_u(raw_r, (uint32_t) PRV_CAL_R_WHITE_MAX);
     bool const     b_act = (0u != app_bits_get(
@@ -719,6 +722,7 @@ static void line_update_loss_and_found(uint32_t norm_l, uint32_t norm_r,
                 PRV_LINE_E_WHITE_MARK_BITS,
                 odometry_path_age_cap(path, line_white_mark()));
         }
+        /* cast: PRV_LINE_A LOST_CNT max is a positive 5-bit layout bound */
         if (lost_cnt < (uint32_t) PRV_LINE_A_LOST_CNT_MAX)
         {
             lost_cnt++;
@@ -819,6 +823,7 @@ static void line_handle_rejoin(bool b_is_black, uint32_t lost_cnt,
     {
         if ((!b_run_act) && line_a_flag(PRV_LINE_A_REJOIN_WHITE_POS))
         {
+            /* cast: PRV_LINE_C RUN_MARK max is a positive 17-bit bound */
             uint32_t const mark_enc = line_clamp_u(
                 path, (uint32_t) PRV_LINE_C_RUN_MARK_MAX);
 
@@ -900,6 +905,7 @@ static bool line_step_junction(uint32_t norm_l, uint32_t norm_r,
 
     if (cur_seq != last_seq)
     {
+        /* cast: PRV_LINE_D BRANCH_PATH max is a positive 17-bit bound */
         uint32_t const path_enc = line_clamp_u(
             path, (uint32_t) PRV_LINE_D_BRANCH_PATH_MAX);
         uint32_t word_d = 0u;
@@ -1037,11 +1043,11 @@ static void line_raw_publish(uint32_t raw_l, uint32_t raw_r)
 {
     uint32_t word = 0u;
 
+    /* casts: SH_IR_RAW_L/R max are positive 12-bit layout bounds (4095) */
     word = app_bits_put(word, SH_IR_RAW_L_POS, SH_IR_RAW_L_BITS,
                         line_clamp_u(raw_l, (uint32_t) SH_IR_RAW_L_MAX));
     word = app_bits_put(word, SH_IR_RAW_R_POS, SH_IR_RAW_R_BITS,
                         line_clamp_u(raw_r, (uint32_t) SH_IR_RAW_R_MAX));
-    /* casts above: the layout maxima are the positive constant 4095 */
     g_sh_ir_raw = word;
 }
 
@@ -1136,13 +1142,19 @@ static void line_test_noise_step(uint32_t raw_l, uint32_t raw_r)
 
         {
             /* casts: 0..4095 codes and differences fit int32_t / uint64_t */
-            int32_t const  dl  = (int32_t) cl_l - (int32_t) g_line_noise.ref_l;
-            int32_t const  dr  = (int32_t) cl_r - (int32_t) g_line_noise.ref_r;
-            uint32_t const adl = (dl < 0) ? (uint32_t) (-dl) : (uint32_t) dl;
-            uint32_t const adr = (dr < 0) ? (uint32_t) (-dr) : (uint32_t) dr;
+            int32_t const  delta_l =
+                (int32_t) cl_l - (int32_t) g_line_noise.ref_l;
+            int32_t const  delta_r =
+                (int32_t) cl_r - (int32_t) g_line_noise.ref_r;
+            uint32_t const adl     = (delta_l < 0)
+                                     ? (uint32_t) (-delta_l)
+                                     : (uint32_t) delta_l;
+            uint32_t const adr     = (delta_r < 0)
+                                     ? (uint32_t) (-delta_r)
+                                     : (uint32_t) delta_r;
 
-            g_line_noise.sum_dl  += dl;
-            g_line_noise.sum_dr  += dr;
+            g_line_noise.sum_dl  += delta_l;
+            g_line_noise.sum_dr  += delta_r;
             g_line_noise.sum_dl2 += (uint64_t) (adl * adl);
             g_line_noise.sum_dr2 += (uint64_t) (adr * adr);
             g_line_noise.count++;
@@ -1150,23 +1162,28 @@ static void line_test_noise_step(uint32_t raw_l, uint32_t raw_r)
 
         if (g_line_noise.count >= LINE_TEST_NOISE_N)
         {
-            int32_t const  ml   = g_line_noise.sum_dl
-                                  / (int32_t) LINE_TEST_NOISE_N;
-            int32_t const  mr   = g_line_noise.sum_dr
-                                  / (int32_t) LINE_TEST_NOISE_N;
-            uint32_t const aml  = (ml < 0) ? (uint32_t) (-ml) : (uint32_t) ml;
-            uint32_t const amr  = (mr < 0) ? (uint32_t) (-mr) : (uint32_t) mr;
+            /* casts: 1024-sample mean delta magnitude is <= 4095 */
+            int32_t const  mean_l = g_line_noise.sum_dl
+                                    / (int32_t) LINE_TEST_NOISE_N;
+            int32_t const  mean_r = g_line_noise.sum_dr
+                                    / (int32_t) LINE_TEST_NOISE_N;
+            uint32_t const aml    = (mean_l < 0)
+                                    ? (uint32_t) (-mean_l)
+                                    : (uint32_t) mean_l;
+            uint32_t const amr    = (mean_r < 0)
+                                    ? (uint32_t) (-mean_r)
+                                    : (uint32_t) mean_r;
             /* casts: mean square of 12-bit delta fits 24 bits */
-            uint32_t const ms_l =
+            uint32_t const ms_l   =
                 (uint32_t) (g_line_noise.sum_dl2 >> LINE_TEST_NOISE_SHIFT);
-            uint32_t const ms_r =
+            uint32_t const ms_r   =
                 (uint32_t) (g_line_noise.sum_dr2 >> LINE_TEST_NOISE_SHIFT);
-            uint32_t const vl   = (ms_l > (aml * aml))
-                                  ? (ms_l - (aml * aml)) : 0u;
-            uint32_t const vr   = (ms_r > (amr * amr))
-                                  ? (ms_r - (amr * amr)) : 0u;
-            uint32_t const sd_l = line_test_isqrt(vl);
-            uint32_t const sd_r = line_test_isqrt(vr);
+            uint32_t const var_l  = (ms_l > (aml * aml))
+                                    ? (ms_l - (aml * aml)) : 0u;
+            uint32_t const var_r  = (ms_r > (amr * amr))
+                                    ? (ms_r - (amr * amr)) : 0u;
+            uint32_t const sd_l   = line_test_isqrt(var_l);
+            uint32_t const sd_r   = line_test_isqrt(var_r);
 
             /* casts: 0..4095 ADC bounds and std-dev fit int32_t */
             app_log("[S3-I05/I06] 1024-smp L: min %d max %d sd %d\n",

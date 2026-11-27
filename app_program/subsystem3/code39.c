@@ -59,7 +59,8 @@ static uint16_t const g_code39_patterns[CODE39_TABLE_SIZE] =
     0x0A2u, 0x08Au, 0x02Au, 0x094u
 };
 
-/* ASCII character table matching indices 0..43. */
+/* ASCII character table matching indices 0..43.
+   casts: 7-bit printable ASCII codes (0x20..0x5A) fit uint8_t. */
 static uint8_t const g_code39_ascii[CODE39_TABLE_SIZE] =
 {
     (uint8_t) '0', (uint8_t) '1', (uint8_t) '2', (uint8_t) '3',
@@ -395,8 +396,9 @@ static uint32_t code39_try_direction(uint8_t const * p_widths,
                                      uint32_t * p_char_index)
 {
     uint32_t       result = CODE39_INVALID;
-    uint32_t const gap1   = (uint32_t) p_widths[CODE39_GAP1_IDX]; /* cast */
-    uint32_t const gap2   = (uint32_t) p_widths[CODE39_GAP2_IDX]; /* cast */
+    /* casts: widen 8-bit inter-character gap widths (0..255) to uint32_t */
+    uint32_t const gap1   = (uint32_t) p_widths[CODE39_GAP1_IDX];
+    uint32_t const gap2   = (uint32_t) p_widths[CODE39_GAP2_IDX];
 
     if ((gap1 < threshold) && (gap2 < threshold))
     {
@@ -532,6 +534,7 @@ static uint32_t code39_decode_char_split(uint8_t const * p_widths,
             thr_b = ((b_nar + b_wid) + 1u) / 2u;
             thr_s = ((s_nar + s_wid) + 1u) / 2u;
         }
+        /* casts: widen 8-bit bar/space widths (0..255) before scaling */
         else if ((((uint32_t) spaces[CODE39_SP_SPEC_WIDE] *
                    CODE39_RATIO_SCALE) >=
                   ((uint32_t) spaces[0] * BAR_WIDE_RATIO_X10_MIN)) &&
@@ -550,13 +553,13 @@ static uint32_t code39_decode_char_split(uint8_t const * p_widths,
 
         if ((thr_b > 0u) && (thr_s > 0u))
         {
-            uint16_t const pat =
+            uint16_t const pat        =
                 code39_build_pattern(p_widths, start_idx, thr_b, thr_s);
-            uint32_t const ch  = code39_lookup_pattern(pat);
+            uint32_t const decoded_ch = code39_lookup_pattern(pat);
 
-            if (CODE39_NOT_FOUND != ch)
+            if (CODE39_NOT_FOUND != decoded_ch)
             {
-                *p_char_out  = ch;
+                *p_char_out  = decoded_ch;
                 *p_thr_space = thr_s;
                 result       = CODE39_OK;
             }
@@ -610,8 +613,9 @@ static uint32_t code39_try_split_dir(uint8_t const * p_widths,
             p_widths, CODE39_CHAR2_START, bar_ratio_x10, &ch2,
             &thr_s2)))
     {
-        uint32_t const gap1 = (uint32_t) p_widths[CODE39_GAP1_IDX]; /* cast */
-        uint32_t const gap2 = (uint32_t) p_widths[CODE39_GAP2_IDX]; /* cast */
+        /* casts: widen 8-bit inter-character gap widths (0..255) to uint32_t */
+        uint32_t const gap1 = (uint32_t) p_widths[CODE39_GAP1_IDX];
+        uint32_t const gap2 = (uint32_t) p_widths[CODE39_GAP2_IDX];
 
         if ((CODE39_STAR == ch0) && (CODE39_STAR == ch2) &&
             (ch1 < APP_C39_CHAR_COUNT) &&
@@ -674,6 +678,7 @@ static uint32_t code39_try_split_both(uint8_t const * p_widths,
 static bool code39_guard_matches(uint8_t const * p_widths,
                                   uint32_t first, bool b_reverse)
 {
+    /* cast: widen 9-bit Code 39 star pattern (uint16_t) to uint32_t */
     uint32_t const star = (uint32_t) g_code39_patterns[CODE39_STAR];
     uint32_t const pattern = b_reverse ? star : (star << 1u);
     uint32_t narrow_max[2] = {0u, 0u};
@@ -682,6 +687,7 @@ static bool code39_guard_matches(uint8_t const * p_widths,
 
     for (uint32_t idx = first; idx < CODE39_START_ELEMENTS; idx++)
     {
+        /* cast: widen 8-bit element width (0..255) to uint32_t */
         uint32_t const width = (uint32_t) p_widths[idx - first];
         uint32_t const group = idx & 1u;
         /* Forward uses a trailing zero for the gap. In reverse the gap

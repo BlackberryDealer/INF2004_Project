@@ -714,17 +714,17 @@ static int32_t mission_get_s(uint32_t word, uint32_t pos, uint32_t width,
  */
 static void mission_ctx_save(mission_ctx_t const * p_ctx)
 {
-    uint32_t w[MISSION_CTX_WORDS] = {0u};
+    uint32_t words[MISSION_CTX_WORDS] = {0u};
     uint32_t idx = 0u;
 
-    mission_save_words_a_f(p_ctx, w);
-    mission_save_words_h_l(p_ctx, w);
-    mission_save_words_m_r(p_ctx, w);
+    mission_save_words_a_f(p_ctx, words);
+    mission_save_words_h_l(p_ctx, words);
+    mission_save_words_m_r(p_ctx, words);
     mission_save_timers(p_ctx);
 
     for (idx = 0u; idx < MISSION_CTX_WORDS; idx++)
     {
-        g_mis_w[idx] = w[idx];
+        g_mis_w[idx] = words[idx];
     }
 }
 
@@ -1944,11 +1944,13 @@ uint32_t mission_move_deadline_ms(uint32_t kind, int32_t param)
     {
         if (MISSION_MV_BACK == kind)
         {
+            /* cast: positive reverse speed constant (mm/s) */
             speed = (uint32_t) MOTION_REVERSE_SPEED_MM_S;
         }
         else if ((MISSION_MV_LEFT == kind) || (MISSION_MV_RIGHT == kind))
         {
             dist  = (amount * MISSION_TURN_UM_PER_DEG) / APP_UM_PER_MM;
+            /* cast: positive turn speed constant (mm/s) */
             speed = (uint32_t) MOTION_TURN_SPEED_MM_S;
         }
         else
@@ -2020,23 +2022,27 @@ static void mission_forward(mission_ctx_t const * p_ctx,
                 break;
             case APP_EVT_MAP:
             {
-                uint32_t ch  = 0u;
-                uint32_t cmd = 0u;
+                uint32_t bar_ch = 0u;
+                uint32_t cmd    = 0u;
 
-                mission_evt_barcode_unpack(p_evt->value, &cmd, &ch);
+                mission_evt_barcode_unpack(p_evt->value, &cmd, &bar_ch);
                 if (APP_SYS_RUN == p_ctx->sys_state)
                 {
                     /* casts: Code 39 index and command fit int32_t */
                     app_log("MAP refused in RUN: char index %d, command %d"
                             " (send it before START)\n",
-                            (int32_t) ch, (int32_t) cmd, 0);
+                            (int32_t) bar_ch, (int32_t) cmd, 0);
                 }
-                else if (barcode_map_set(ch, cmd))
+                else if (barcode_map_set(bar_ch, cmd))
                 {
                     (void) telem_post_event(APP_EVT_MAP, p_evt->value);
                     /* casts: Code 39 index and command fit int32_t */
                     app_log("MAP stored char index %d, command %d\n",
-                            (int32_t) ch, (int32_t) cmd, 0);
+                            (int32_t) bar_ch, (int32_t) cmd, 0);
+                }
+                else
+                {
+                    /* Invalid character/command or map table full: ignored. */
                 }
                 break;
             }

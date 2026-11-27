@@ -96,27 +96,27 @@ void test_line_run(void)
  */
 static bool test_line_early_branch(void)
 {
-    line_track_jct_t    jct = {0u, 0u, false, false, 0u};
-    line_track_jct_in_t in  = {0u, 0u, 0u, 0u, TEST_MIN_COUNTS,
-                               TEST_CONF_COUNTS, false};
-    uint32_t            cls = APP_JCT_NONE;
+    line_track_jct_t    jct     = {0u, 0u, false, false, 0u};
+    line_track_jct_in_t step_in = {0u, 0u, 0u, 0u, TEST_MIN_COUNTS,
+                                   TEST_CONF_COUNTS, false};
+    uint32_t            cls     = APP_JCT_NONE;
 
     line_track_jct_reset(&jct);
-    in.norm_l          = 500u;
-    in.norm_r          = 950u;
-    in.path_counts     = 100u;
-    in.branch_seq      = 1u;
-    in.b_branch_recent = true;
-    (void) line_track_jct_step(&jct, &in);
+    step_in.norm_l          = 500u;
+    step_in.norm_r          = 950u;
+    step_in.path_counts     = 100u;
+    step_in.branch_seq      = 1u;
+    step_in.b_branch_recent = true;
+    (void) line_track_jct_step(&jct, &step_in);
 
-    in.norm_l          = 100u;
-    in.norm_r          = 100u;
-    in.path_counts     = 140u;
-    in.b_branch_recent = false;
-    (void) line_track_jct_step(&jct, &in);
+    step_in.norm_l          = 100u;
+    step_in.norm_r          = 100u;
+    step_in.path_counts     = 140u;
+    step_in.b_branch_recent = false;
+    (void) line_track_jct_step(&jct, &step_in);
 
-    in.path_counts = 230u;
-    cls            = line_track_jct_step(&jct, &in);
+    step_in.path_counts = 230u;
+    cls                 = line_track_jct_step(&jct, &step_in);
 
     return (APP_JCT_CROSS == cls);
 }
@@ -129,26 +129,26 @@ static bool test_line_early_branch(void)
  */
 static bool test_line_late_branch(void)
 {
-    line_track_jct_t    jct = {0u, 0u, false, false, 0u};
-    line_track_jct_in_t in  = {0u, 0u, 0u, 0u, TEST_MIN_COUNTS,
-                               TEST_CONF_COUNTS, false};
-    uint32_t            cls = APP_JCT_NONE;
+    line_track_jct_t    jct     = {0u, 0u, false, false, 0u};
+    line_track_jct_in_t step_in = {0u, 0u, 0u, 0u, TEST_MIN_COUNTS,
+                                   TEST_CONF_COUNTS, false};
+    uint32_t            cls     = APP_JCT_NONE;
 
     line_track_jct_reset(&jct);
-    in.norm_l      = 500u;
-    in.norm_r      = 950u;
-    in.path_counts = 300u;
-    in.branch_seq  = 1u;
-    (void) line_track_jct_step(&jct, &in);
+    step_in.norm_l      = 500u;
+    step_in.norm_r      = 950u;
+    step_in.path_counts = 300u;
+    step_in.branch_seq  = 1u;
+    (void) line_track_jct_step(&jct, &step_in);
 
-    in.norm_l      = 500u;
-    in.norm_r      = 500u;
-    in.path_counts = 340u;
-    (void) line_track_jct_step(&jct, &in);
+    step_in.norm_l      = 500u;
+    step_in.norm_r      = 500u;
+    step_in.path_counts = 340u;
+    (void) line_track_jct_step(&jct, &step_in);
 
-    in.branch_seq  = 2u;
-    in.path_counts = 430u;
-    cls            = line_track_jct_step(&jct, &in);
+    step_in.branch_seq  = 2u;
+    step_in.path_counts = 430u;
+    cls                 = line_track_jct_step(&jct, &step_in);
 
     return (APP_JCT_CROSS == cls);
 }
@@ -211,22 +211,23 @@ static bool test_line_raw_stats_smoke(void)
 
     for (idx = 0u; idx < TEST_RAW_SAMPLES; idx++)
     {
-        uint32_t const word = line_raw_word();
-        uint32_t const cl   = app_bits_get(word, SH_IR_RAW_L_POS,
-                                           SH_IR_RAW_L_BITS);
-        uint32_t const cr   = app_bits_get(word, SH_IR_RAW_R_POS,
-                                           SH_IR_RAW_R_BITS);
+        uint32_t const word   = line_raw_word();
+        uint32_t const code_l = app_bits_get(word, SH_IR_RAW_L_POS,
+                                             SH_IR_RAW_L_BITS);
+        uint32_t const code_r = app_bits_get(word, SH_IR_RAW_R_POS,
+                                             SH_IR_RAW_R_BITS);
 
-        raw_l[idx] = cl;
-        raw_r[idx] = cr;
-        sum_l     += cl;
-        sum_r     += cr;
-        min_l      = (cl < min_l) ? cl : min_l;
-        max_l      = (cl > max_l) ? cl : max_l;
-        min_r      = (cr < min_r) ? cr : min_r;
-        max_r      = (cr > max_r) ? cr : max_r;
-        if ((cl > (uint32_t) SH_IR_RAW_L_MAX)
-            || (cr > (uint32_t) SH_IR_RAW_R_MAX))
+        raw_l[idx] = code_l;
+        raw_r[idx] = code_r;
+        sum_l     += code_l;
+        sum_r     += code_r;
+        min_l      = (code_l < min_l) ? code_l : min_l;
+        max_l      = (code_l > max_l) ? code_l : max_l;
+        min_r      = (code_r < min_r) ? code_r : min_r;
+        max_r      = (code_r > max_r) ? code_r : max_r;
+        /* casts: SH_IR_RAW_L/R_MAX are positive 12-bit layout bounds (4095) */
+        if ((code_l > (uint32_t) SH_IR_RAW_L_MAX)
+            || (code_r > (uint32_t) SH_IR_RAW_R_MAX))
         {
             b_ok = false;
         }
@@ -241,15 +242,15 @@ static bool test_line_raw_stats_smoke(void)
 
         for (idx = 0u; idx < TEST_RAW_SAMPLES; idx++)
         {
-            uint32_t const dl = (raw_l[idx] > mean_l)
-                                ? (raw_l[idx] - mean_l)
-                                : (mean_l - raw_l[idx]);
-            uint32_t const dr = (raw_r[idx] > mean_r)
-                                ? (raw_r[idx] - mean_r)
-                                : (mean_r - raw_r[idx]);
+            uint32_t const diff_l = (raw_l[idx] > mean_l)
+                                    ? (raw_l[idx] - mean_l)
+                                    : (mean_l - raw_l[idx]);
+            uint32_t const diff_r = (raw_r[idx] > mean_r)
+                                    ? (raw_r[idx] - mean_r)
+                                    : (mean_r - raw_r[idx]);
 
-            var_l += (dl * dl);
-            var_r += (dr * dr);
+            var_l += (diff_l * diff_l);
+            var_r += (diff_r * diff_r);
         }
         var_l /= TEST_RAW_SAMPLES;
         var_r /= TEST_RAW_SAMPLES;

@@ -350,6 +350,7 @@ static uint32_t run_bar_braked(mission_ctx_t * p_ctx,
  */
 static void run_bar_back(mission_ctx_t * p_ctx, uint32_t now_us)
 {
+    /* cast: MOTION_REVERSE_MAX_MM is a positive constant (150 mm) */
     uint32_t const max_mm = (uint32_t) MOTION_REVERSE_MAX_MM;
     uint32_t const step   = (p_ctx->barcode_back_left < max_mm)
                             ? p_ctx->barcode_back_left : max_mm;

@@ -184,6 +184,7 @@ static volatile uint8_t         g_echo_window_open = 0u;
    PRV_OBS_* rows of tools/layout.csv. ECHO (S5-U38) is the last real
    echo distance in APPROACH: lost pings mean "too close to measure"
    only when that echo was already inside the stop distance.          */
+/* casts: PRV_OBS_M/A state, maxima and warmup count are positive constants */
 static uint32_t g_obs_prv_m =   /* MEASURED, STATE = MONITOR, SETTLE, ON_RAMP */
     ((uint32_t) APP_SCAN_MONITOR << PRV_OBS_M_STATE_POS);
 static uint32_t g_obs_prv_i = 0u; /* INFERRED, STEP, SAMPLE_CNT */
@@ -203,7 +204,8 @@ static uint32_t g_scan_start_us = 0u; /* E_OBS_US (E5): scan-time log */
 static uint8_t  g_obs_scan[APP_SCAN_STEPS];
 static uint8_t  g_samples[OBS_SCAN_SAMPLES]; /* S5-U47 */
 /* The obstacle part of the board as last written, in the board's own
-   SB_OBS0..2 layout (obstacle_task is its only writer).              */
+   SB_OBS0..2 layout (obstacle_task is its only writer).
+   casts: SB_OBS0..1 unsigned maxima are positive layout bounds.     */
 static uint32_t g_part_w[OBS_PART_WORDS] =
 {
     ((uint32_t) SB_OBS0_DIST_MAX << SB_OBS0_DIST_POS),
@@ -347,7 +349,8 @@ ER obstacle_start(void)
 
     if (E_OK == ercd)
     {
-        gh_obstacle_task = app_start_task((FP) obstacle_task, /* cast */
+        /* cast: kernel task entry type (BARR_C_DEVIATIONS.md D2) */
+        gh_obstacle_task = app_start_task((FP) obstacle_task,
                                           APP_PRI_OBSTACLE,
                                           g_obstacle_stack,
                                           APP_STACK_OBSTACLE_BYTES,
@@ -1327,6 +1330,7 @@ static void obstacle_scan_finish(void)
                 (int32_t) edge.hi_deg);
         if (APP_PROFILE_CLEAR_MM != prof.width_mm)
         {
+            /* casts: width, uncertainty and edge range <= 1020 mm */
             app_log("WIDTH %d mm +-%d mm (high edge at %d mm)\n",
                     (int32_t) prof.width_mm, (int32_t) pm_mm,
                     (int32_t) (edge.hi_code * OBS_MM_STEP));
@@ -1458,12 +1462,14 @@ static void obstacle_block_log(bool b_is_left, uint32_t step,
     {
         if (b_is_left)
         {
+            /* casts: gap and scan range <= 1020 mm fit int32_t */
             app_log("SCAN left gap %d mm, set by the return at %d deg"
                     " (%d mm)\n", (int32_t) gap_mm, deg,
                     (int32_t) obstacle_scan_mm(step));
         }
         else
         {
+            /* casts: gap and scan range <= 1020 mm fit int32_t */
             app_log("SCAN right gap %d mm, set by the return at %d deg"
                     " (%d mm)\n", (int32_t) gap_mm, deg,
                     (int32_t) obstacle_scan_mm(step));
@@ -1522,6 +1528,7 @@ static uint8_t obstacle_mm_code(uint32_t distance_mm)
  */
 static uint32_t obstacle_scan_mm(uint32_t step)
 {
+    /* cast: widen 8-bit PRV_OBS_SCAN code (0..255) to uint32_t */
     return ((uint32_t) g_obs_scan[step] * OBS_MM_STEP);
 }
 
@@ -1550,42 +1557,43 @@ static uint32_t obstacle_part_mm(uint32_t distance_mm, uint32_t max)
  */
 static void obstacle_part_put(status_board_obs_t const * p_part)
 {
-    uint32_t w0 = 0u;
-    uint32_t w1 = 0u;
-    uint32_t w2 = 0u;
+    uint32_t word_0 = 0u;
+    uint32_t word_1 = 0u;
+    uint32_t word_2 = 0u;
 
-    w0 = app_bits_put(w0, SB_OBS0_DIST_POS, SB_OBS0_DIST_BITS,
-                      obstacle_part_mm(p_part->distance_mm,
-                                       SB_OBS0_DIST_MAX));
-    w0 = app_bits_put(w0, SB_OBS0_SCAN_STATE_POS, SB_OBS0_SCAN_STATE_BITS,
-                      p_part->scanner_state);
-    w0 = app_bits_put(w0, SB_OBS0_ANGLE_STEP_POS, SB_OBS0_ANGLE_STEP_BITS,
-                      p_part->angle_step);
-    w0 = app_bits_put(w0, SB_OBS0_PLAN_SIDE_POS, SB_OBS0_PLAN_SIDE_BITS,
-                      p_part->plan_side);
-    w0 = app_bits_put(w0, SB_OBS0_PROFILE_VALID_POS,
-                      SB_OBS0_PROFILE_VALID_BITS,
-                      p_part->b_is_profile_valid ? 1u : 0u);
-    w1 = app_bits_put(w1, SB_OBS1_WIDTH_POS, SB_OBS1_WIDTH_BITS,
-                      obstacle_part_mm(p_part->width_mm, SB_OBS1_WIDTH_MAX));
-    w1 = app_bits_put(w1, SB_OBS1_NEAREST_POS, SB_OBS1_NEAREST_BITS,
-                      obstacle_part_mm(p_part->nearest_mm,
-                                       SB_OBS1_NEAREST_MAX));
-    w1 = app_bits_put(w1, SB_OBS1_CLEAR_L_POS, SB_OBS1_CLEAR_L_BITS,
-                      obstacle_part_mm(p_part->clear_left_mm,
-                                       SB_OBS1_CLEAR_L_MAX));
-    w1 = app_bits_put(w1, SB_OBS1_CLEAR_R_POS, SB_OBS1_CLEAR_R_BITS,
-                      obstacle_part_mm(p_part->clear_right_mm,
-                                       SB_OBS1_CLEAR_R_MAX));
-    w2 = app_bits_put(w2, SB_OBS2_LEG_LAT_POS, SB_OBS2_LEG_LAT_BITS,
-                      obstacle_part_mm(p_part->leg_lateral_mm,
-                                       SB_OBS2_LEG_LAT_MAX));
-    w2 = app_bits_put(w2, SB_OBS2_LEG_FWD_POS, SB_OBS2_LEG_FWD_BITS,
-                      obstacle_part_mm(p_part->leg_forward_mm,
-                                       SB_OBS2_LEG_FWD_MAX));
-    g_part_w[0] = w0;
-    g_part_w[1] = w1;
-    g_part_w[2] = w2;
+    word_0 = app_bits_put(word_0, SB_OBS0_DIST_POS, SB_OBS0_DIST_BITS,
+                          obstacle_part_mm(p_part->distance_mm,
+                                           SB_OBS0_DIST_MAX));
+    word_0 = app_bits_put(word_0, SB_OBS0_SCAN_STATE_POS,
+                          SB_OBS0_SCAN_STATE_BITS, p_part->scanner_state);
+    word_0 = app_bits_put(word_0, SB_OBS0_ANGLE_STEP_POS,
+                          SB_OBS0_ANGLE_STEP_BITS, p_part->angle_step);
+    word_0 = app_bits_put(word_0, SB_OBS0_PLAN_SIDE_POS,
+                          SB_OBS0_PLAN_SIDE_BITS, p_part->plan_side);
+    word_0 = app_bits_put(word_0, SB_OBS0_PROFILE_VALID_POS,
+                          SB_OBS0_PROFILE_VALID_BITS,
+                          p_part->b_is_profile_valid ? 1u : 0u);
+    word_1 = app_bits_put(word_1, SB_OBS1_WIDTH_POS, SB_OBS1_WIDTH_BITS,
+                          obstacle_part_mm(p_part->width_mm,
+                                           SB_OBS1_WIDTH_MAX));
+    word_1 = app_bits_put(word_1, SB_OBS1_NEAREST_POS, SB_OBS1_NEAREST_BITS,
+                          obstacle_part_mm(p_part->nearest_mm,
+                                           SB_OBS1_NEAREST_MAX));
+    word_1 = app_bits_put(word_1, SB_OBS1_CLEAR_L_POS, SB_OBS1_CLEAR_L_BITS,
+                          obstacle_part_mm(p_part->clear_left_mm,
+                                           SB_OBS1_CLEAR_L_MAX));
+    word_1 = app_bits_put(word_1, SB_OBS1_CLEAR_R_POS, SB_OBS1_CLEAR_R_BITS,
+                          obstacle_part_mm(p_part->clear_right_mm,
+                                           SB_OBS1_CLEAR_R_MAX));
+    word_2 = app_bits_put(word_2, SB_OBS2_LEG_LAT_POS, SB_OBS2_LEG_LAT_BITS,
+                          obstacle_part_mm(p_part->leg_lateral_mm,
+                                           SB_OBS2_LEG_LAT_MAX));
+    word_2 = app_bits_put(word_2, SB_OBS2_LEG_FWD_POS, SB_OBS2_LEG_FWD_BITS,
+                          obstacle_part_mm(p_part->leg_forward_mm,
+                                           SB_OBS2_LEG_FWD_MAX));
+    g_part_w[0] = word_0;
+    g_part_w[1] = word_1;
+    g_part_w[2] = word_2;
 }
 
 /**
@@ -1596,34 +1604,34 @@ static void obstacle_part_put(status_board_obs_t const * p_part)
  */
 static void obstacle_part_get(status_board_obs_t * p_part)
 {
-    uint32_t const w0 = g_part_w[0];
-    uint32_t const w1 = g_part_w[1];
-    uint32_t const w2 = g_part_w[2];
+    uint32_t const word_0 = g_part_w[0];
+    uint32_t const word_1 = g_part_w[1];
+    uint32_t const word_2 = g_part_w[2];
 
-    p_part->distance_mm = app_bits_get(w0, SB_OBS0_DIST_POS,
+    p_part->distance_mm = app_bits_get(word_0, SB_OBS0_DIST_POS,
                                        SB_OBS0_DIST_BITS) * OBS_MM_STEP;
-    p_part->scanner_state = app_bits_get(w0, SB_OBS0_SCAN_STATE_POS,
+    p_part->scanner_state = app_bits_get(word_0, SB_OBS0_SCAN_STATE_POS,
                                          SB_OBS0_SCAN_STATE_BITS);
-    p_part->angle_step = app_bits_get(w0, SB_OBS0_ANGLE_STEP_POS,
+    p_part->angle_step = app_bits_get(word_0, SB_OBS0_ANGLE_STEP_POS,
                                       SB_OBS0_ANGLE_STEP_BITS);
-    p_part->plan_side = app_bits_get(w0, SB_OBS0_PLAN_SIDE_POS,
+    p_part->plan_side = app_bits_get(word_0, SB_OBS0_PLAN_SIDE_POS,
                                      SB_OBS0_PLAN_SIDE_BITS);
     p_part->b_is_profile_valid =
-        (0u != app_bits_get(w0, SB_OBS0_PROFILE_VALID_POS,
+        (0u != app_bits_get(word_0, SB_OBS0_PROFILE_VALID_POS,
                             SB_OBS0_PROFILE_VALID_BITS));
-    p_part->width_mm = app_bits_get(w1, SB_OBS1_WIDTH_POS,
+    p_part->width_mm = app_bits_get(word_1, SB_OBS1_WIDTH_POS,
                                     SB_OBS1_WIDTH_BITS) * OBS_MM_STEP;
-    p_part->nearest_mm = app_bits_get(w1, SB_OBS1_NEAREST_POS,
+    p_part->nearest_mm = app_bits_get(word_1, SB_OBS1_NEAREST_POS,
                                       SB_OBS1_NEAREST_BITS) * OBS_MM_STEP;
-    p_part->clear_left_mm = app_bits_get(w1, SB_OBS1_CLEAR_L_POS,
+    p_part->clear_left_mm = app_bits_get(word_1, SB_OBS1_CLEAR_L_POS,
                                          SB_OBS1_CLEAR_L_BITS) * OBS_MM_STEP;
-    p_part->clear_right_mm = app_bits_get(w1, SB_OBS1_CLEAR_R_POS,
+    p_part->clear_right_mm = app_bits_get(word_1, SB_OBS1_CLEAR_R_POS,
                                           SB_OBS1_CLEAR_R_BITS)
                              * OBS_MM_STEP;
-    p_part->leg_lateral_mm = app_bits_get(w2, SB_OBS2_LEG_LAT_POS,
+    p_part->leg_lateral_mm = app_bits_get(word_2, SB_OBS2_LEG_LAT_POS,
                                           SB_OBS2_LEG_LAT_BITS)
                              * OBS_MM_STEP;
-    p_part->leg_forward_mm = app_bits_get(w2, SB_OBS2_LEG_FWD_POS,
+    p_part->leg_forward_mm = app_bits_get(word_2, SB_OBS2_LEG_FWD_POS,
                                           SB_OBS2_LEG_FWD_BITS)
                              * OBS_MM_STEP;
 }

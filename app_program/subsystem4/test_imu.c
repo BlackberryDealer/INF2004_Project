@@ -88,7 +88,7 @@ void test_imu_run(void)
 static bool test_imu_terrain_reset(void)
 {
     terrain_t        ter;
-    terrain_input_t  in;
+    terrain_input_t  ter_in;
     terrain_output_t out;
     bool             b_ok = true;
 
@@ -108,11 +108,11 @@ static bool test_imu_terrain_reset(void)
 
     terrain_reset(&ter);
 
-    in.ax_mg     = 0;
-    in.az_mg     = 1000;
-    in.a_fwd_mg  = 0;
-    in.ds_counts = 0u;
-    terrain_step(&ter, &in, &out);
+    ter_in.ax_mg     = 0;
+    ter_in.az_mg     = 1000;
+    ter_in.a_fwd_mg  = 0;
+    ter_in.ds_counts = 0u;
+    terrain_step(&ter, &ter_in, &out);
 
     if (TERRAIN_FLAT !=
         app_bits_get(ter.word_state, PRV_IMU_A_STATE_POS, PRV_IMU_A_STATE_BITS))

@@ -74,7 +74,7 @@ static void     bridge_count(uint32_t pos, uint32_t bits, int32_t max);
 static uint32_t bridge_format(char * p_out, uint32_t size,
                               telem_log_rec_t const * p_rec);
 static uint32_t bridge_put_char(char * p_out, uint32_t size, uint32_t len,
-                                char ch);
+                                char chr);
 static uint32_t bridge_put_dec(char * p_out, uint32_t size, uint32_t len,
                                int32_t value);
 static uint32_t bridge_put_hex(char * p_out, uint32_t size, uint32_t len,
@@ -545,18 +545,18 @@ static uint32_t bridge_format(char * p_out, uint32_t size,
     uint32_t     len     = 0u;
     uint32_t     arg_idx = 0u;
     int32_t      arg     = 0;
-    char         ch      = '\0';
+    char         chr     = '\0';
 
     while (('\0' != *p_fmt) && (len < size))
     {
-        ch = *p_fmt;
+        chr = *p_fmt;
         p_fmt++;
-        if (('%' == ch) && ('\0' != *p_fmt))
+        if (('%' == chr) && ('\0' != *p_fmt))
         {
-            ch = *p_fmt;
+            chr = *p_fmt;
             p_fmt++;
             arg = 0;
-            if (('d' == ch) || ('x' == ch))
+            if (('d' == chr) || ('x' == chr))
             {
                 if (arg_idx < BRIDGE_LOG_ARGS)
                 {
@@ -564,21 +564,21 @@ static uint32_t bridge_format(char * p_out, uint32_t size,
                 }
                 arg_idx++;
             }
-            if ('d' == ch)
+            if ('d' == chr)
             {
                 len = bridge_put_dec(p_out, size, len, arg);
             }
-            else if ('x' == ch)
+            else if ('x' == chr)
             {
                 /* cast: %x prints the 32-bit pattern, as tm_printf does */
                 len = bridge_put_hex(p_out, size, len, (uint32_t) arg);
             }
             else
             {
-                len = bridge_put_char(p_out, size, len, ch); /* %% etc. */
+                len = bridge_put_char(p_out, size, len, chr); /* %% etc. */
             }
         }
-        else if (('\n' == ch) || ('\r' == ch))
+        else if (('\n' == chr) || ('\r' == chr))
         {
             if ('\0' != *p_fmt)
             {
@@ -587,7 +587,7 @@ static uint32_t bridge_format(char * p_out, uint32_t size,
         }
         else
         {
-            len = bridge_put_char(p_out, size, len, ch);
+            len = bridge_put_char(p_out, size, len, chr);
         }
     }
 
@@ -600,18 +600,18 @@ static uint32_t bridge_format(char * p_out, uint32_t size,
  * @param   p_out  output text
  * @param   size   bytes available
  * @param   len    bytes used so far
- * @param   ch     character
+ * @param   chr    character
  * @return  new length
  * @context radio task
  */
 static uint32_t bridge_put_char(char * p_out, uint32_t size, uint32_t len,
-                                char ch)
+                                char chr)
 {
     uint32_t used = len;
 
     if (used < size)
     {
-        p_out[used] = ch;
+        p_out[used] = chr;
         used++;
     }
 

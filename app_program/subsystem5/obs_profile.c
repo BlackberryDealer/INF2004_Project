@@ -72,9 +72,9 @@ static uint32_t obs_pick_blocking(obs_point_t const * p_pts);
 static void     obs_find_run(obs_point_t const * p_pts, uint32_t best,
                              uint32_t * p_lo, uint32_t * p_hi);
 static uint32_t obs_plateau_mid(obs_point_t const * p_pts, uint32_t best,
-                                uint32_t lo, uint32_t hi);
+                                uint32_t step_lo, uint32_t step_hi);
 static void     obs_find_core(obs_point_t const * p_pts, uint32_t best,
-                              uint32_t lo, uint32_t hi,
+                              uint32_t step_lo, uint32_t step_hi,
                               uint32_t * p_core_lo, uint32_t * p_core_hi);
 static void     obs_span(obs_point_t const * p_pts, uint32_t first,
                          uint32_t last, int32_t * p_x_l, int32_t * p_x_r);
@@ -82,8 +82,8 @@ static void     obs_estimate(obs_point_t const * p_pts, uint32_t best,
                              uint32_t core_lo, uint32_t core_hi,
                              obs_profile_t * p_prof);
 static void     obs_clearances(obs_point_t const * p_pts, uint32_t inferred,
-                               uint32_t best, uint32_t lo, uint32_t hi,
-                               obs_profile_t * p_prof);
+                               uint32_t best, uint32_t step_lo,
+                               uint32_t step_hi, obs_profile_t * p_prof);
 static bool     obs_is_smear(obs_point_t const * p_pts, uint32_t idx,
                              uint32_t inferred, uint32_t best,
                              int32_t x_edge, uint32_t y_edge);
@@ -113,8 +113,8 @@ void obs_profile_build(uint16_t const * p_scan_mm, uint32_t inferred,
 {
     obs_point_t pts[APP_SCAN_STEPS];
     uint32_t    best    = APP_SCAN_STEPS;   /* "none" */
-    uint32_t    lo      = 0u;
-    uint32_t    hi      = 0u;
+    uint32_t    step_lo = 0u;
+    uint32_t    step_hi = 0u;
     uint32_t    core_lo = 0u;
     uint32_t    core_hi = 0u;
     int32_t     raw_l   = 0;
@@ -146,10 +146,10 @@ void obs_profile_build(uint16_t const * p_scan_mm, uint32_t inferred,
 
     if (best < APP_SCAN_STEPS)
     {
-        obs_find_run(pts, best, &lo, &hi);
-        best = obs_plateau_mid(pts, best, lo, hi);           /* S5-U48 */
-        obs_span(pts, lo, hi, &raw_l, &raw_r);
-        obs_find_core(pts, best, lo, hi, &core_lo, &core_hi);
+        obs_find_run(pts, best, &step_lo, &step_hi);
+        best = obs_plateau_mid(pts, best, step_lo, step_hi); /* S5-U48 */
+        obs_span(pts, step_lo, step_hi, &raw_l, &raw_r);
+        obs_find_core(pts, best, step_lo, step_hi, &core_lo, &core_hi);
         p_prof->b_is_valid   = true;
         p_prof->angle_step   = best;
         p_prof->nearest_mm   = pts[best].y_mm;
@@ -174,12 +174,11 @@ void obs_profile_build(uint16_t const * p_scan_mm, uint32_t inferred,
  */
 void obs_profile_plan(obs_profile_t const * p_prof, obs_plan_t * p_plan)
 {
-    /* cast: small positive constants */
     /* S5-U53: the bypass clears plan_left/right_mm (the estimate plus
        OBS_EST_MARGIN_MM, widened to every return that may be the box)
        by the half width plus OBS_BOX_MARGIN_MM (S5-U82), and the free
        gap beyond it must hold the car plus OBS_SIDE_MARGIN_MM on both
-       sides                                                         */
+       sides. cast: small positive constants (< 300 mm) fit int32_t. */
     int32_t const  corridor = (int32_t) (OBS_ROBOT_HALF_W_MM
                                          + OBS_BOX_MARGIN_MM);
     uint32_t const gap_need = 2u * (OBS_ROBOT_HALF_W_MM
@@ -432,19 +431,19 @@ static uint32_t obs_pick_blocking(obs_point_t const * p_pts)
 static void obs_find_run(obs_point_t const * p_pts, uint32_t best,
                          uint32_t * p_lo, uint32_t * p_hi)
 {
-    uint32_t lo = best;
-    uint32_t hi = best;
+    uint32_t step_lo = best;
+    uint32_t step_hi = best;
 
-    while ((lo > 0u) && obs_is_joined(p_pts, lo - 1u))
+    while ((step_lo > 0u) && obs_is_joined(p_pts, step_lo - 1u))
     {
-        lo--;
+        step_lo--;
     }
-    while ((hi < OBS_STEP_LAST) && obs_is_joined(p_pts, hi))
+    while ((step_hi < OBS_STEP_LAST) && obs_is_joined(p_pts, step_hi))
     {
-        hi++;
+        step_hi++;
     }
-    *p_lo = lo;
-    *p_hi = hi;
+    *p_lo = step_lo;
+    *p_hi = step_hi;
 }
 
 /**
@@ -460,14 +459,14 @@ static void obs_find_run(obs_point_t const * p_pts, uint32_t best,
  * @param   p_pts    points
  * @param   inferred bit n set: step n was not measured
  * @param   best     step of the obstacle's direction (shortest echo)
- * @param   lo       first step of the obstacle core
- * @param   hi       last step of the obstacle core
+ * @param   step_lo  first step of the obstacle core
+ * @param   step_hi  last step of the obstacle core
  * @param   p_prof   profile with the estimate set; extents and
  *                   clearances written
  * @context any
  */
 static void obs_clearances(obs_point_t const * p_pts, uint32_t inferred,
-                           uint32_t best, uint32_t lo, uint32_t hi,
+                           uint32_t best, uint32_t step_lo, uint32_t step_hi,
                            obs_profile_t * p_prof)
 {
     uint32_t const reach_mm = p_prof->nearest_mm + OBS_DEPTH_ASSUMED_MM
@@ -480,7 +479,7 @@ static void obs_clearances(obs_point_t const * p_pts, uint32_t inferred,
     p_prof->plan_left_mm  = p_prof->x_left_mm - margin;
     p_prof->plan_right_mm = p_prof->x_right_mm + margin;
 
-    for (uint32_t idx = lo; idx <= hi; idx++)          /* pass 1 */
+    for (uint32_t idx = step_lo; idx <= step_hi; idx++) /* pass 1 */
     {
         if (p_pts[idx].y_mm <= reach_mm)
         {
@@ -514,7 +513,7 @@ static void obs_clearances(obs_point_t const * p_pts, uint32_t inferred,
 
     for (uint32_t idx = 0u; idx < APP_SCAN_STEPS; idx++)   /* pass 2 */
     {
-        b_box = (idx >= lo) && (idx <= hi)
+        b_box = (idx >= step_lo) && (idx <= step_hi)
                 && (((p_pts[idx].x_mm >= p_prof->plan_left_mm)
                      && (p_pts[idx].x_mm <= p_prof->plan_right_mm))
                     || obs_is_smear(p_pts, idx, inferred, best,
@@ -608,25 +607,25 @@ static bool obs_is_smear(obs_point_t const * p_pts, uint32_t idx,
  *          Returns the middle step of the contiguous steps within the run
  *          whose range is at most OBS_PLATEAU_MM above the shortest
  *          (S5-U48), the best guess for the obstacle's direction.
- * @param   p_pts points
- * @param   best  step of the shortest echo
- * @param   lo    first step of the run
- * @param   hi    last step of the run
+ * @param   p_pts    points
+ * @param   best     step of the shortest echo
+ * @param   step_lo  first step of the run
+ * @param   step_hi  last step of the run
  * @return  middle step of the plateau (rounded down)
  * @context any
  */
 static uint32_t obs_plateau_mid(obs_point_t const * p_pts, uint32_t best,
-                                uint32_t lo, uint32_t hi)
+                                uint32_t step_lo, uint32_t step_hi)
 {
     uint32_t const limit_mm = p_pts[best].r_mm + OBS_PLATEAU_MM;
     uint32_t       first    = best;
     uint32_t       last     = best;
 
-    while ((first > lo) && (p_pts[first - 1u].r_mm <= limit_mm))
+    while ((first > step_lo) && (p_pts[first - 1u].r_mm <= limit_mm))
     {
         first--;
     }
-    while ((last < hi) && (p_pts[last + 1u].r_mm <= limit_mm))
+    while ((last < step_hi) && (p_pts[last + 1u].r_mm <= limit_mm))
     {
         last++;
     }
@@ -637,20 +636,20 @@ static uint32_t obs_plateau_mid(obs_point_t const * p_pts, uint32_t best,
 /**
  * obs_find_core
  * @brief   Background subtraction with hysteresis (S5-U45): from the
- *          shortest echo, widens the core within the run [lo, hi] over
- *          steps whose range is at most OBS_CORE_BAND_MM longer; up to
+ *          shortest echo, widens the core within the run [step_lo, step_hi]
+ *          over steps whose range is at most OBS_CORE_BAND_MM longer; up to
  *          OBS_CORE_GAP_STEPS out-of-band steps in a row are bridged if
  *          an in-band step follows.
  * @param   p_pts     points
  * @param   best      step of the shortest echo
- * @param   lo        first step of the run
- * @param   hi        last step of the run
+ * @param   step_lo   first step of the run
+ * @param   step_hi   last step of the run
  * @param   p_core_lo first step of the core
  * @param   p_core_hi last step of the core
  * @context any
  */
 static void obs_find_core(obs_point_t const * p_pts, uint32_t best,
-                          uint32_t lo, uint32_t hi,
+                          uint32_t step_lo, uint32_t step_hi,
                           uint32_t * p_core_lo, uint32_t * p_core_hi)
 {
     uint32_t const limit_mm = p_pts[best].r_mm + OBS_CORE_BAND_MM;
@@ -659,7 +658,7 @@ static void obs_find_core(obs_point_t const * p_pts, uint32_t best,
     uint32_t       idx      = best;
     uint32_t       gap      = 0u;
 
-    while ((idx > lo) && (gap <= OBS_CORE_GAP_STEPS))
+    while ((idx > step_lo) && (gap <= OBS_CORE_GAP_STEPS))
     {
         idx--;
         if (p_pts[idx].r_mm <= limit_mm)
@@ -675,7 +674,7 @@ static void obs_find_core(obs_point_t const * p_pts, uint32_t best,
 
     idx = best;
     gap = 0u;
-    while ((idx < hi) && (gap <= OBS_CORE_GAP_STEPS))
+    while ((idx < step_hi) && (gap <= OBS_CORE_GAP_STEPS))
     {
         idx++;
         if (p_pts[idx].r_mm <= limit_mm)

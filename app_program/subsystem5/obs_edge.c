@@ -36,7 +36,7 @@ static bool     obs_edge_is_coarse_clear(bool b_is_lo, uint32_t edge_deg,
                                          uint32_t edge_code,
                                          uint8_t const * p_scan_codes);
 static bool     obs_edge_at_limit(bool b_is_lo, uint32_t deg);
-static uint32_t obs_edge_out(bool b_is_lo, uint32_t deg, uint32_t by);
+static uint32_t obs_edge_out(bool b_is_lo, uint32_t deg, uint32_t delta_deg);
 static uint32_t obs_edge_step_deg(uint32_t step);
 static uint32_t obs_edge_start_step(uint8_t const * p_scan_codes,
                                     uint32_t end_step, uint32_t mid_step);
@@ -368,15 +368,15 @@ static bool obs_edge_at_limit(bool b_is_lo, uint32_t deg)
 /**
  * obs_edge_out
  * @brief   An angle moved outward (away from the obstacle) on a side.
- * @param   b_is_lo true = low-angle side (outward = smaller angles)
- * @param   deg     angle, deg (> by on the low side)
- * @param   by      degrees
+ * @param   b_is_lo   true = low-angle side (outward = smaller angles)
+ * @param   deg       angle, deg (> delta_deg on the low side)
+ * @param   delta_deg degrees
  * @return  the moved angle
  * @context any
  */
-static uint32_t obs_edge_out(bool b_is_lo, uint32_t deg, uint32_t by)
+static uint32_t obs_edge_out(bool b_is_lo, uint32_t deg, uint32_t delta_deg)
 {
-    return b_is_lo ? (deg - by) : (deg + by);
+    return b_is_lo ? (deg - delta_deg) : (deg + delta_deg);
 }
 
 /**

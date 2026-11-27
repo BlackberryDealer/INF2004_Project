@@ -150,7 +150,7 @@ static void     imu_i2c_result(bool b_ok, bool b_is_acc);
 static bool     imu_configure_if_needed(void);
 static void     imu_need_cfg_set(bool b_need);
 static void     imu_acc_publish(void);
-static uint32_t imu_acc_code(int32_t mg);
+static uint32_t imu_acc_code(int32_t accel_mg);
 static int32_t  imu_field_get(uint32_t word, uint32_t pos, uint32_t width,
                               int32_t offset);
 static uint32_t imu_field_put(uint32_t word, uint32_t pos, uint32_t width,
@@ -368,7 +368,7 @@ static void imu_task(INT stacd, void * p_exinf)
 static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw,
                                bool b_on_line)
 {
-    terrain_input_t  in;
+    terrain_input_t  ter_in;
     terrain_output_t out;
     int32_t          prev_l =
         app_bits_decode(app_bits_get(g_imu_prv_e, PRV_IMU_E_PREV_POS_L_POS,
@@ -402,12 +402,12 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw,
                         &b_clamped));
     imu_clamp_fault(b_clamped);
 
-    in.ax_mg     = imu_ax_mg();
-    in.az_mg     = imu_az_mg();
-    in.a_fwd_mg  = imu_a_fwd_mg();
-    in.ds_counts = terrain_ds_counts(dpos_l, dpos_r);
+    ter_in.ax_mg     = imu_ax_mg();
+    ter_in.az_mg     = imu_az_mg();
+    ter_in.a_fwd_mg  = imu_a_fwd_mg();
+    ter_in.ds_counts = terrain_ds_counts(dpos_l, dpos_r);
 
-    terrain_step(&g_terrain, &in, &out);
+    terrain_step(&g_terrain, &ter_in, &out);
 
     /* S4-U18: the demo hump lifts only the right wheel (a sideways
        tilt), which the nose-up check above never sees */
@@ -419,8 +419,8 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw,
                                              &roll_mm);
         if (roll_mm > 0u)
         {
+            /* cast: roll_mm <= 64, fits int32_t */
             app_log("HUMP (one wheel): %d mm\n", (int32_t)roll_mm, 0, 0);
-            /* cast: roll_mm <= 64 */
         }
         if (roll_mm > out.hump_done_mm)
         {
@@ -444,12 +444,12 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw,
 
         if (out.hump_done_mm > run_peak)
         {
+            /* cast: hump_done_mm <= 2148, clamped to PRV_IMU_C RUN_PEAK */
             g_imu_prv_c = app_bits_put(
                 g_imu_prv_c, PRV_IMU_C_RUN_PEAK_POS, PRV_IMU_C_RUN_PEAK_BITS,
                 app_bits_encode((int32_t)out.hump_done_mm,
                                 PRV_IMU_C_RUN_PEAK_MIN, PRV_IMU_C_RUN_PEAK_MAX,
                                 PRV_IMU_C_RUN_PEAK_OFFSET, &b_clamped));
-            /* cast: hump_done_mm < 2^31 */
             imu_clamp_fault(b_clamped);
         }
         (void)mission_post_event(APP_EVT_HUMP, out.hump_done_mm);
@@ -458,6 +458,7 @@ static void imu_terrain_update(int32_t pos_l, int32_t pos_r, int32_t speed_cpw,
            APP_FAULT_RANGE_CLAMP for a peak beyond the 7-bit event
            field (A25 / correction T6) */
 #if (IMU_LOG_HUMPS != 0)
+        /* casts: hump heights <= 2148 mm fit int32_t */
         app_log("hump int %d geo %d\n", (int32_t)out.hump_done_mm,
                 (int32_t)out.hump_geo_mm, 0);
 #endif
@@ -575,20 +576,22 @@ static bool imu_read_acc(uint32_t * p_n_samples)
         {
             for (idx = 0u; idx < n_samples; idx++)
             {
+                /* casts: widen int16_t FIFO samples to int32_t sum */
                 sum_x += (int32_t)samples[idx].acc_x;
                 sum_y += (int32_t)samples[idx].acc_y;
                 sum_z += (int32_t)samples[idx].acc_z;
             }
             /* Signed average: (sum x recip[n]) / 32768, never >> on a
                signed value (review F-07). |sum| <= 4 x 32768, so the
-               product fits int32. The LSM303D delivers a plain 16-bit
-               sample, so the average fits an int16 (E4 image). */
+               product fits int32. casts: average of int16 samples fits
+               int16_t (E4 image). */
             g_avg_raw_x =
                 (int16_t)((sum_x * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
             g_avg_raw_y =
                 (int16_t)((sum_y * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
             g_avg_raw_z =
                 (int16_t)((sum_z * g_recip_q15[n_samples]) / IMU_AVG_Q15_ONE);
+            /* casts: widen int16_t raw averages before x61/500 mg scaling */
             int32_t const ax_mg =
                 ((((int32_t)g_avg_raw_x * IMU_MG_NUM) / IMU_MG_DEN) - ofs_ax)
                 * IMU_X_FORWARD_SIGN;
@@ -839,6 +842,10 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
         imu_g_flag_set(PRV_IMU_G_CAL_ACTIVE_POS, false);
         return;
     }
+    else
+    {
+        /* Calibration already active: continue sampling below. */
+    }
 
     if (!b_read_ok || (0u != (fault_get() & APP_FAULT_IMU)))
     {
@@ -849,16 +856,20 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
         /* Check before applying offsets. An invalid constant on all axes
            would otherwise calibrate to exactly (0, 0, 1000) mg. The
            16-bit input is at most 3998 mg/axis, so the sum fits int32. */
-        int32_t const ax = ((int32_t)g_avg_raw_x * IMU_MG_NUM) / IMU_MG_DEN;
-        int32_t const ay = ((int32_t)g_avg_raw_y * IMU_MG_NUM) / IMU_MG_DEN;
-        int32_t const az = ((int32_t)g_avg_raw_z * IMU_MG_NUM) / IMU_MG_DEN;
-        int32_t const gravity_sq = (ax * ax) + (ay * ay) + (az * az);
+        int32_t const acc_x      =
+            ((int32_t) g_avg_raw_x * IMU_MG_NUM) / IMU_MG_DEN;
+        int32_t const acc_y      =
+            ((int32_t) g_avg_raw_y * IMU_MG_NUM) / IMU_MG_DEN;
+        int32_t const acc_z      =
+            ((int32_t) g_avg_raw_z * IMU_MG_NUM) / IMU_MG_DEN;
+        int32_t const gravity_sq =
+            (acc_x * acc_x) + (acc_y * acc_y) + (acc_z * acc_z);
 
         if ((gravity_sq < (IMU_CAL_GRAVITY_MIN_MG * IMU_CAL_GRAVITY_MIN_MG))
             || (gravity_sq > (IMU_CAL_GRAVITY_MAX_MG * IMU_CAL_GRAVITY_MAX_MG)))
         {
             app_log("IMU calibration rejected: ax %d ay %d az %d mg\n",
-                    ax, ay, az);
+                    acc_x, acc_y, acc_z);
             if (0u == app_bits_get(g_imu_prv_b, PRV_IMU_B_CAL_RETRIED_POS,
                                     PRV_IMU_B_CAL_RETRIED_BITS))
             {
@@ -897,7 +908,8 @@ static void imu_calibrate(bool b_mode_set, bool b_read_ok)
         /* Event-time division by the sample count (once per mode). The
            sums are in raw register units, so each average is converted
            to mg exactly like imu_read_acc does before it can be
-           subtracted there: mg = raw x 61 / 500 (0.122 mg/LSB). */
+           subtracted there: mg = raw x 61 / 500 (0.122 mg/LSB).
+           casts: IMU_CAL_SAMPLES is a small positive constant (200). */
         avg_raw_x = g_cal_sum_x / (int32_t)IMU_CAL_SAMPLES;
         avg_raw_y = g_cal_sum_y / (int32_t)IMU_CAL_SAMPLES;
         avg_raw_z = g_cal_sum_z / (int32_t)IMU_CAL_SAMPLES;
@@ -955,6 +967,7 @@ static void imu_run_start(int32_t pos_l, int32_t pos_r)
 
     terrain_reset(&g_terrain);
     terrain_speed_hist_reset(&g_speed_hist);
+    /* cast: PRV_IMU_R FILT offset (512) is a positive layout constant */
     g_imu_prv_r = ((uint32_t)PRV_IMU_R_FILT_OFFSET << PRV_IMU_R_FILT_POS);
     g_imu_prv_c = app_bits_put(g_imu_prv_c, PRV_IMU_C_RUN_PEAK_POS,
                                PRV_IMU_C_RUN_PEAK_BITS, 0u);
@@ -1125,8 +1138,8 @@ static int32_t imu_mag_rate(bool b_mag_read, bool * pb_use_enc)
         return 0;
     }
 
+    /* cast: IMU_MAG_MAX_PITCH_DDEG is a positive threshold constant */
     if (terrain_abs(imu_pitch_ddeg()) > (uint32_t)IMU_MAG_MAX_PITCH_DDEG)
-    /* cast: positive constant, comparison only */
     {
         /* On a hump there is no tilt compensation: use the encoder rate
            and drop the magnetometer reference. */
@@ -1146,8 +1159,8 @@ static int32_t imu_mag_rate(bool b_mag_read, bool * pb_use_enc)
                               PRV_IMU_M_MX_BITS, PRV_IMU_M_MX_OFFSET)
                     - IMU_MAG_OFS_X) *
             IMU_MAG_HEADING_SIGN;
+        /* cast: terrain_heading_wrap_ddeg returns 0..3599 (PRV_IMU_C) */
         uint32_t heading_wrap = (uint32_t)terrain_heading_wrap_ddeg(heading);
-        /* cast: wrap >= 0 */
         bool b_hdg_valid =
             (0u != app_bits_get(g_imu_prv_c, PRV_IMU_C_PREV_HDG_VALID_POS,
                                 PRV_IMU_C_PREV_HDG_VALID_BITS));
@@ -1192,14 +1205,14 @@ static bool imu_turn_disagrees(int32_t imu_dps, int32_t enc_dps)
     {
         diff = 0 - diff;
     }
+    /* cast: IMU_TURN_CHECK_MIN_DPS is a positive constant */
     if (terrain_abs(enc_dps) < (uint32_t)IMU_TURN_CHECK_MIN_DPS)
-    /* cast: positive constant, comparison only */
     {
         return false; /* too slow to judge */
     }
+    /* casts: ENC_HDG is 23 bits, so |enc_dps| < 2^21; pct product fits int32 */
     return ((diff * 100) >
             ((int32_t)IMU_TURN_DISAGREE_PCT * (int32_t)terrain_abs(enc_dps)));
-    /* casts: both products are far below 2^31 */
 }
 
 /**
@@ -1319,10 +1332,19 @@ static void imu_classify(int32_t speed_cpw)
         {
             class_gap++;
         }
+        else
+        {
+            /* Unreachable while IMU_CLASS_MIN_GAP_TICKS <=
+               IMU_CLASS_GAP_MAX. */
+        }
     }
     else if (class_gap < IMU_CLASS_GAP_MAX)
     {
         class_gap++;
+    }
+    else
+    {
+        /* Gap already saturated at IMU_CLASS_GAP_MAX. */
     }
     g_imu_prv_a = app_bits_put(g_imu_prv_a, PRV_IMU_A_LAST_CLASS_POS,
                                PRV_IMU_A_LAST_CLASS_BITS, last_class);
@@ -1513,16 +1535,16 @@ static void imu_acc_publish(void)
  * imu_acc_code
  * @brief   One axis in mg as its SH_IMU_ACC code (4 mg steps, clamped to
  *          +/-2044 mg, offset 512). The three axes share one range.
- * @param   mg  calibrated acceleration, mg
+ * @param   accel_mg  calibrated acceleration, mg
  * @return  0..1023
  * @context imu_task
  */
-static uint32_t imu_acc_code(int32_t mg)
+static uint32_t imu_acc_code(int32_t accel_mg)
 {
     bool b_clamped = false;
 
     /* integer division truncates toward zero; never >> on a signed value */
-    return app_bits_encode(mg / 4, SH_IMU_ACC_AX_MIN, SH_IMU_ACC_AX_MAX,
+    return app_bits_encode(accel_mg / 4, SH_IMU_ACC_AX_MIN, SH_IMU_ACC_AX_MAX,
                            SH_IMU_ACC_AX_OFFSET, &b_clamped);
 }
 

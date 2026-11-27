@@ -893,12 +893,12 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
                              mission_evt_in_t const * p_evt,
                              status_board_t const * p_snap, uint32_t now_us)
 {
-    uint32_t const type = p_evt->b_has_event ? p_evt->type : APP_EVT_COUNT;
-    uint32_t const lo   = (p_ctx->rejoin_e_mm * MISSION_REJOIN_LO_PCT)
-                          / RUN_PCT;
-    uint32_t const hi   = (p_ctx->rejoin_e_mm
-                           * (RUN_PCT + MISSION_REJOIN_WIN_PCT)) / RUN_PCT;
-    uint32_t       done = 0u;
+    uint32_t const type   = p_evt->b_has_event ? p_evt->type : APP_EVT_COUNT;
+    uint32_t const win_lo = (p_ctx->rejoin_e_mm * MISSION_REJOIN_LO_PCT)
+                            / RUN_PCT;
+    uint32_t const win_hi = (p_ctx->rejoin_e_mm
+                             * (RUN_PCT + MISSION_REJOIN_WIN_PCT)) / RUN_PCT;
+    uint32_t       done   = 0u;
 
     if ((RUN_SUB_FIRST == p_ctx->substep) && (APP_EVT_MOVE_DONE == type))
     {
@@ -935,7 +935,7 @@ static void run_avoid_rejoin(mission_ctx_t * p_ctx,
                     (int32_t) done, (int32_t) p_evt->value,
                     (int32_t) MISSION_REJOIN_WIDTH_MM);
         }
-        if ((done >= lo) && (done <= hi)
+        if ((done >= win_lo) && (done <= win_hi)
             && (p_evt->value + MISSION_REJOIN_WIDTH_TOL_MM
                 >= MISSION_REJOIN_WIDTH_MM)
             && (p_evt->value
@@ -1204,6 +1204,7 @@ static void run_post_profile(mission_ctx_t const * p_ctx,
                 " (0 = left, 1 = right; 1020 = clear)\n",
                 (int32_t) prof.width_mm, (int32_t) prof.nearest_mm,
                 (int32_t) prof.side);
+        /* casts: clearance gaps 0..1020 mm fit int32_t */
         app_log("OBSTACLE free gap left %d mm, right %d mm\n",
                 (int32_t) prof.clear_left_mm, (int32_t) prof.clear_right_mm,
                 0);

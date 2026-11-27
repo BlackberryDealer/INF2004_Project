@@ -91,7 +91,7 @@ static int32_t const g_sin_tab[91] = {
 /* ---- private function prototypes ------------------------------------- */
 
 static uint32_t terrain_state_get(terrain_t const * p_ter);
-static int32_t  terrain_lift_clamp(int32_t mg);
+static int32_t  terrain_lift_clamp(int32_t accel_mg);
 static void     terrain_state_set(terrain_t * p_ter, uint32_t state);
 static uint32_t terrain_hyst_get(terrain_t const * p_ter);
 static void     terrain_hyst_set(terrain_t * p_ter, uint32_t hyst);
@@ -177,6 +177,7 @@ int32_t terrain_atan2_ddeg(int32_t y_value, int32_t x_value)
         big   = mag_x;
     }
 
+    /* cast: TERRAIN_ATAN_SCALE is a positive constant (1024) */
     ratio = (small * (uint32_t)TERRAIN_ATAN_SCALE) / big;
     /* 0..1024; the one division */
     tab_idx = ratio >> 5; /* 0..32 */
@@ -187,6 +188,7 @@ int32_t terrain_atan2_ddeg(int32_t y_value, int32_t x_value)
     }
     else
     {
+        /* cast: frac is masked to 0..31, fits int32_t */
         angle = g_atan_tab[tab_idx] +
                 (((g_atan_tab[tab_idx + 1u] - g_atan_tab[tab_idx]) *
                   (int32_t)frac) /
@@ -240,23 +242,27 @@ int32_t terrain_sin_q14(int32_t ddeg)
     ddeg_u = (uint32_t)ddeg; /* cast: 0 <= ddeg < 3600 */
 
     /* Fold in 0.1 deg units before splitting degree + fraction so Q2/Q4
-       interpolate downward from 90 deg and never index past 90. */
+       interpolate downward from 90 deg and never index past 90.
+       casts: quadrant angle constants (900..3600) are positive. */
     if (ddeg_u <= (uint32_t)TERRAIN_DDEG_QUADRANT)
     {
         fold_ddeg = ddeg_u;
     }
     else if (ddeg_u < (uint32_t)TERRAIN_DDEG_HALF)
     {
+        /* cast: TERRAIN_DDEG_HALF (1800) > ddeg_u */
         fold_ddeg = (uint32_t)TERRAIN_DDEG_HALF - ddeg_u;
     }
     else if (ddeg_u <= (uint32_t)TERRAIN_DDEG_THREE_Q)
     {
         b_is_neg  = true;
+        /* cast: TERRAIN_DDEG_HALF (1800) <= ddeg_u */
         fold_ddeg = ddeg_u - (uint32_t)TERRAIN_DDEG_HALF;
     }
     else
     {
         b_is_neg  = true;
+        /* cast: TERRAIN_DDEG_CIRCLE (3600) > ddeg_u */
         fold_ddeg = (uint32_t)TERRAIN_DDEG_CIRCLE - ddeg_u;
     }
 
@@ -310,8 +316,8 @@ int32_t terrain_heading_wrap_ddeg(int32_t heading)
  */
 int32_t terrain_heading_delta_ddeg(uint32_t prev_wrap, uint32_t now_wrap)
 {
+    /* casts: both wrapped headings are 0..3599, fit int32_t */
     int32_t delta = (int32_t)now_wrap - (int32_t)prev_wrap;
-    /* casts: both below 3600 */
     if (delta > TERRAIN_DDEG_HALF)
     {
         delta -= TERRAIN_DDEG_CIRCLE;
@@ -489,10 +495,12 @@ uint32_t terrain_classify(uint32_t terrain_state, bool b_is_lifted,
     {
         return APP_MCLASS_DESCENDING;
     }
+    /* cast: IMU_TURNING_DPS is a positive threshold constant */
     if (terrain_abs(turn_dps) >= (uint32_t)IMU_TURNING_DPS)
     {
         return APP_MCLASS_TURNING;
     }
+    /* cast: IMU_ACCEL_MG is a positive threshold constant */
     if (terrain_abs(a_fwd_mg) >= (uint32_t)IMU_ACCEL_MG)
     {
         return APP_MCLASS_ACCELERATING;
@@ -531,14 +539,16 @@ uint32_t terrain_lift_step(uint32_t lift_cnt, int32_t ax_mg, int32_t ay_mg,
     /* Clamped to +-8192 mg (the +-4 g range plus the 12-bit offsets
        stays inside it), so each square is < 6.8e7 and the sum < 2.1e8:
        no overflow in int32_t. */
-    int32_t const ax       = terrain_lift_clamp(ax_mg);
-    int32_t const ay       = terrain_lift_clamp(ay_mg);
-    int32_t const az       = terrain_lift_clamp(az_mg);
-    int32_t const mag2     = (ax * ax) + (ay * ay) + (az * az);
-    int32_t const lo       = IMU_REST_AZ_MG - IMU_LIFT_DG_MG;
-    int32_t const hi       = IMU_REST_AZ_MG + IMU_LIFT_DG_MG;
+    int32_t const acc_x    = terrain_lift_clamp(ax_mg);
+    int32_t const acc_y    = terrain_lift_clamp(ay_mg);
+    int32_t const acc_z    = terrain_lift_clamp(az_mg);
+    int32_t const mag2     = (acc_x * acc_x) + (acc_y * acc_y)
+                             + (acc_z * acc_z);
+    int32_t const low_mg   = IMU_REST_AZ_MG - IMU_LIFT_DG_MG;
+    int32_t const high_mg  = IMU_REST_AZ_MG + IMU_LIFT_DG_MG;
     bool const    b_tilted = (az_mg < IMU_LIFT_TILT_AZ_MG);
-    bool const    b_push   = (mag2 < (lo * lo)) || (mag2 > (hi * hi));
+    bool const    b_push   = (mag2 < (low_mg * low_mg))
+                             || (mag2 > (high_mg * high_mg));
     uint32_t      cnt      = 0u;
 
     if (b_tilted || b_push)
@@ -646,6 +656,7 @@ uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
     {
         ticks = 0u;
         peak  = 0u;
+        /* cast: TERRAIN_ROLL_START_MG is a positive threshold constant */
         if (b_strt && (mag >= (uint32_t)TERRAIN_ROLL_START_MG))
         {
             hyst++;
@@ -663,6 +674,7 @@ uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
     }
     else
     {
+        /* cast: PRV_IMU_R TICKS max is a positive 8-bit layout bound (255) */
         bool const b_latched = (ticks >= (uint32_t)PRV_IMU_R_TICKS_MAX);
 
         if (!b_latched)
@@ -680,6 +692,7 @@ uint32_t terrain_roll_hump_step(uint32_t word, int32_t ay_mg, int32_t dpos_l,
                 peak  = 0u;
             }
         }
+        /* cast: TERRAIN_ROLL_LEVEL_MG is a positive threshold constant */
         if (mag <= (uint32_t)TERRAIN_ROLL_LEVEL_MG)
         {
             hyst++;
@@ -767,13 +780,13 @@ uint32_t terrain_roll_hump_line(uint32_t word, int32_t ay_mg, int32_t dpos_l,
 /**
  * terrain_lift_clamp
  * @brief   Clamps one axis to +-TERRAIN_LIFT_AXIS_MAX before squaring.
- * @param   mg  calibrated average, mg
+ * @param   accel_mg  calibrated average, mg
  * @return  the clamped value
  * @context imu_task, host test
  */
-static int32_t terrain_lift_clamp(int32_t mg)
+static int32_t terrain_lift_clamp(int32_t accel_mg)
 {
-    int32_t out = mg;
+    int32_t out = accel_mg;
 
     if (out > TERRAIN_LIFT_AXIS_MAX)
     {
@@ -859,6 +872,7 @@ static uint32_t terrain_peak_get(terrain_t const * p_ter)
 
 static void terrain_peak_set(terrain_t * p_ter, uint32_t peak_mm)
 {
+    /* cast: peak_mm <= 2148, clamped to PRV_IMU_B PEAK_NOW (0..127) */
     uint32_t raw = app_bits_encode((int32_t)peak_mm, PRV_IMU_B_PEAK_NOW_MIN,
                                    PRV_IMU_B_PEAK_NOW_MAX,
                                    PRV_IMU_B_PEAK_NOW_OFFSET, NULL);
@@ -1043,6 +1057,7 @@ static uint32_t terrain_sin_q14_deg(uint32_t deg, uint32_t frac_ddeg)
     {
         return base;
     }
+    /* cast: g_sin_tab is non-decreasing (0..16384), so diff >= 0 */
     return base +
            (((uint32_t)(g_sin_tab[deg + 1u] - g_sin_tab[deg]) * frac_ddeg) /
             APP_DDEG_PER_DEG);
@@ -1113,7 +1128,8 @@ static void terrain_flat_step(terrain_t * p_ter, int32_t pitch_ddeg)
            TERRAIN_MAX_CLIMB_MM was rejected as a ramp, do not re-arm
            CLIMBING while the surface is still pitched. The latch clears
            once the pitch stays <= TERRAIN_LEVEL_DDEG for
-           TERRAIN_HYST_SAMPLES cycles. */
+           TERRAIN_HYST_SAMPLES cycles.
+           cast: TERRAIN_LEVEL_DDEG is a positive threshold constant. */
         if (terrain_abs(pitch_ddeg) <= (uint32_t)TERRAIN_LEVEL_DDEG)
         {
             terrain_hyst_bump(p_ter);
@@ -1166,8 +1182,9 @@ static void terrain_climb_step(terrain_t * p_ter, terrain_input_t const * p_in,
                                int32_t pitch_ddeg, int32_t delta_a,
                                uint32_t ds_um, terrain_output_t * p_out)
 {
+    /* cast: ds_um <= 20736 um (64 counts x 324 um) fits int32_t;
+       with |delta_a| <= 12286 mg, the product fits int32_t */
     int32_t accum = p_ter->acc_um_mg + ((int32_t)ds_um * delta_a);
-    /* cast: ds_um <= 5235 per cycle, so the product fits int32 */
 
     p_ter->acc_um_mg   = accum;
     p_out->hump_now_mm = terrain_acc_to_mm(accum);
@@ -1223,12 +1240,14 @@ static void terrain_descend_step(terrain_t * p_ter, int32_t pitch_ddeg,
                                  int32_t delta_a, uint32_t ds_um,
                                  terrain_output_t * p_out)
 {
+    /* cast: ds_um <= 20736 um (64 counts x 324 um) fits int32_t;
+       with |delta_a| <= 12286 mg, the product fits int32_t */
     int32_t accum = p_ter->acc_um_mg + ((int32_t)ds_um * delta_a);
-    /* cast: ds_um <= 5235 per cycle, so the product fits int32 */
 
     p_ter->acc_um_mg   = accum;
     p_out->hump_now_mm = terrain_acc_to_mm(accum);
 
+    /* cast: TERRAIN_LEVEL_DDEG is a positive threshold constant */
     if (terrain_abs(pitch_ddeg) > (uint32_t)TERRAIN_LEVEL_DDEG)
     {
         terrain_hyst_set(p_ter, 0u);
@@ -1242,14 +1261,12 @@ static void terrain_descend_step(terrain_t * p_ter, int32_t pitch_ddeg,
     }
 
     {
+        /* casts: wheelbase and APP_Q14_ONE (16384) are positive; maximum
+           pitch >= TERRAIN_CLIMB_START_DDEG > 0 so sine is in 0..16384 */
         uint32_t geo_mm =
             ((uint32_t)TERRAIN_WHEELBASE_MM *
              (uint32_t)terrain_sin_q14(terrain_pitch_max_get(p_ter))) /
             (uint32_t)APP_Q14_ONE;
-        /* casts: the wheelbase is positive and, because the maximum
-           pitch is >= TERRAIN_CLIMB_START_DDEG > 0, the sine is >= 0;
-           the division is by a power of two (never >> on a signed
-           value) */
 
         terrain_state_set(p_ter, TERRAIN_FLAT);
         terrain_hyst_set(p_ter, 0u);

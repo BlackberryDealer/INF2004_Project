@@ -112,6 +112,7 @@ static bool test_barcode_u10_edge_pack(void)
     for (idx = 0u; idx < 5u; idx++)
     {
         uint32_t const lvl  = idx & 1u;
+        /* casts: MSG_EDGE GAP max is a positive 15-bit layout bound (32767) */
         uint32_t const sat  = (gaps[idx] > (uint32_t) MSG_EDGE_GAP_MAX)
                                   ? (uint32_t) MSG_EDGE_GAP_MAX
                                   : gaps[idx];
@@ -123,6 +124,7 @@ static bool test_barcode_u10_edge_pack(void)
                                 MSG_EDGE_LEVEL_BITS, lvl);
         ring_val = (uint16_t) word; /* cast: MSG_EDGE_USED_BITS <= 16 */
 
+        /* casts: widen 16-bit MSG_EDGE ring entry to uint32_t */
         if ((exp_gap[idx] != app_bits_get((uint32_t) ring_val,
                                           MSG_EDGE_GAP_POS,
                                           MSG_EDGE_GAP_BITS)) ||
