@@ -90,4 +90,5 @@ following hardware-only checks remain unrecorded:
 - Hang-injection watchdog tests (`S5-I02`/`INT-08`) and open demo-day hardware defects indexed in `testing/TEST_SUMMARY_2026-11-25.md`.
 
 Natural types kept on purpose are not in this list: they are the
-exceptions E1-E8 in `docs/BARR_C_DEVIATIONS.md` (D5).
+exceptions E1-E8 in `docs/BARR_C_DEVIATIONS.md` (D5), pending the
+professor.

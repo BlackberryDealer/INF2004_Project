@@ -244,8 +244,8 @@ the car (section 3) confirm the real margin.
 
 Final course image built with `testing/run-demo.sh course`
 (`make SMP=0 NET=lwip MQTT=1`, Pico SDK 2.3.0, `arm-none-eabi-gcc 15.2.1`):
-`mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.elf` / `.uf2`, SHA-256
-`072aa8b78f9cf6e817f94f259859f5730f6574644a392e159091b42d580a09a9`.
+`mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.elf` / `.uf2` (UF2 SHA-256
+`072aa8b78f9cf6e817f94f259859f5730f6574644a392e159091b42d580a09a9`).
 This is the exact binary demonstrated on the car on 25 Nov (`f4e94ad`) and
 reproduced byte-for-byte after the unit-constant (`ee23a2e`) and BARR-C:2018
 (`6899aa0`) merges; no firmware source file has changed since `6899aa0`.
