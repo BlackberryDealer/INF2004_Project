@@ -12,12 +12,11 @@ Usage (from the repo root, or from build_make/ via "make layout"):
     python3 tools/gen_layout.py --check <csv>     # validate only, write nothing
 
 Reads the CSV, validates every row (exit 1 with "layout.csv:<line>: <problem>"
-on the first error) and then writes three files, located relative to this
+on the first error) and then writes two files, located relative to this
 script so the working directory does not matter:
 
     app_program/app_layout.h       C macros (Part D.12)
     tools/telem_fields.py          field table for the laptop decoder
-    docs/data_representation.md    data representation table (Week 13)
 
 Python 3 standard library only. Same CSV in, byte-identical files out.
 """
@@ -41,21 +40,6 @@ TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(TOOLS_DIR)
 OUT_HEADER = os.path.join(REPO_DIR, "app_program", "app_layout.h")
 OUT_FIELDS = os.path.join(TOOLS_DIR, "telem_fields.py")
-OUT_DOC = os.path.join(REPO_DIR, "docs", "data_representation.md")
-
-# Range assumptions referenced by the layout rows (descriptions "(A23)" ...).
-# Each one is the stored range of the rows that cite it.
-ASSUMPTIONS = (
-    ("A23", "One run is at most 32 m (APP_RUN_MAX_MM): encoder positions "
-            "fit +/-131071 counts, path length 131071 counts, odometry "
-            "32767 mm."),
-    ("A24", "Pitch stays within +/-45.0 deg (+/-450 x 0.1 deg)."),
-    ("A25", "A hump is at most 127 mm high."),
-    ("A26", "Turn rate stays within +/-360 deg/s."),
-    ("A27", "Obstacle width and clearances are reported up to 1020 mm "
-            "(255 x 4 mm); the top code means clear / out of range."),
-    ("A28", "One run lasts at most 1023 s, about 17 min (APP_RUN_MAX_S)."),
-)
 
 
 class LayoutError(Exception):
@@ -337,69 +321,6 @@ def render_fields(records):
     return "".join(out)
 
 
-def md_cell(text):
-    """Escapes a table cell (units such as mm|deg|mm/s contain pipes)."""
-    return str(text).replace("|", "\\|")
-
-
-def render_doc(records):
-    out = []
-    out.append("# Data representation\n")
-    out.append("\n")
-    out.append("GENERATED from `tools/layout.csv` by `tools/gen_layout.py`. "
-               "Do not edit;\n")
-    out.append("change the CSV and run `make layout` in `build_make/`.\n")
-    out.append("\n")
-    out.append("Stored value = clamp(value, min, max) + offset, in stored LSB "
-               "units. *Bits\n")
-    out.append("needed* = ceil(log2(max - min + 1)). Class S = shared, "
-               "P = private,\n")
-    out.append("E = justified exception (natural C type kept; *bits stored* "
-               "is that type's\n")
-    out.append("width). Kinds: SAT saturates silently at a sentinel; RNG "
-               "clamps and sets\n")
-    out.append("`APP_FAULT_RANGE_CLAMP`; PAD and RAW are exempt from the "
-               "minimal-width rule.\n")
-
-    for owner in OWNERS:
-        rows = [rec for rec in records if rec["owner"] == owner]
-        if not rows:
-            continue
-        out.append("\n")
-        out.append("## %s\n" % owner)
-        out.append("\n")
-        out.append("| Field | Group | Range | LSB | Bits needed | Bits stored "
-                   "| Kind | Class | Description |\n")
-        out.append("|---|---|---|---|---|---|---|---|---|\n")
-        for rec in rows:
-            stored = rec["group_bits"] if rec["class"] == "E" else rec["bits"]
-            rng = "%d..%d × %d %s" % (rec["min"], rec["max"], rec["lsb"],
-                                      rec["unit"])
-            out.append("| %s | %s | %s | %d | %d | %d | %s | %s | %s |\n"
-                       % (md_cell(rec["field"]), md_cell(rec["group"]),
-                          md_cell(rng), rec["lsb"], rec["needed"], stored,
-                          rec["kind"], rec["class"],
-                          md_cell(rec["description"])))
-
-    out.append("\n")
-    out.append("## Groups\n")
-    out.append("\n")
-    out.append("| Group | Used bits | Storage bits |\n")
-    out.append("|---|---|---|\n")
-    for group, rows in groups_in_order(records):
-        used = sum(rec["bits"] for rec in rows)
-        width = rows[0]["group_bits"]
-        storage = width if width > 0 else ((used + 7) // 8) * 8
-        out.append("| %s | %d | %d |\n" % (md_cell(group), used, storage))
-
-    out.append("\n")
-    out.append("## Range assumptions\n")
-    out.append("\n")
-    for ident, text in ASSUMPTIONS:
-        out.append("- **%s** %s\n" % (ident, text))
-    return "".join(out)
-
-
 def write_text(path, text):
     with open(path, "w", newline="\n", encoding="utf-8") as handle:
         handle.write(text)
@@ -432,16 +353,14 @@ def main(argv):
 
     write_text(OUT_HEADER, render_header(records))
     write_text(OUT_FIELDS, render_fields(records))
-    write_text(OUT_DOC, render_doc(records))
 
     for group, rows in groups_in_order(records):
         if rows[0]["group_bits"] == 0:
             used = sum(rec["bits"] for rec in rows)
             print("%-10s %3d bits = %2d bytes" % (group, used, (used + 7) // 8))
-    print("wrote %s, %s, %s"
+    print("wrote %s, %s"
           % (os.path.relpath(OUT_HEADER, REPO_DIR),
-             os.path.relpath(OUT_FIELDS, REPO_DIR),
-             os.path.relpath(OUT_DOC, REPO_DIR)))
+             os.path.relpath(OUT_FIELDS, REPO_DIR)))
     return 0
 
 

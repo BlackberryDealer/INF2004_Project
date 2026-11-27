@@ -3,7 +3,7 @@
 mqtt_size_log.py - log the size of every MQTT message seen on the broker.
 
 Owner:  Buddy 1 (communications)
-Spec:   CSC28 spec, B1.4 step 9, B1.5 (docs/message_sizes.md), S1-I10
+Spec:   CSC28 spec, B1.4 step 9, B1.5, S1-I10
 
 Usage (from the repo root, broker on this laptop):
 

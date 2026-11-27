@@ -4,7 +4,7 @@
 #
 # Usage:
 #   tools/ram_report.sh <baseline.elf> <packed.elf> \
-#       [baseline_stack.txt] [packed_stack.txt] > docs/ram_comparison.md
+#       [baseline_stack.txt] [packed_stack.txt] > ram_comparison.md
 #
 # Section 1: arm-none-eabi-size -A for both images: .data, .bss, .text and
 #            totals with deltas.
