@@ -1,0 +1,26 @@
+# Commit record for Results rows that name a branch, phase or placeholder instead of a commit
+# File: testing/subsystem4/TEST_LOG.md
+# Source: git history of main at 22a73b4.
+# Method: for each row, git log -S "| <date> | <test ID> | <label> |" -- <file>; the oldest match is the commit that added the row.
+# 'Recorded in' is that commit. Where the row was committed together with the code, it is also the tested code.
+# The old rows are not changed (append-only); this file only adds the missing commit reference.
+# Rows: 17
+
+Date        | Test ID | Label in the row | Recorded in (date) | Note
+2026-10-22 | S4-U01, U02, U03, U06, U07, U12, U13, U14 | Phase 2 commit | fdc4740 (2026-10-22)
+2026-10-22 | S4-U13, normal+TEST=1 builds | Phase 2 commit | fdc4740 (2026-10-22)
+2026-10-22 | S4-U01, U02, U03, U06, U07, U12, U13, U10 | Phase 4 commit | fdc4740 (2026-10-22)
+2026-10-22 | RAM report (Phase 5) | Phase 5 commit | 25d4c04 (2026-10-22)
+2026-10-22 | S4-U01, U02, U03, U06, U07, U12, U13, U10, U14 | audit commit | dcc7e88 (2026-10-22)
+2026-10-22 | S4-U11 | audit commit | dcc7e88 (2026-10-22)
+2026-10-22 | normal + `TEST=1` builds, `barr_check.sh` | audit commit | dcc7e88 (2026-10-22)
+2026-10-22 | RAM report (Phase 5, regenerated) | audit commit | dcc7e88 (2026-10-22)
+2026-10-22 | S4-U14 + SQ-B4-2 register facts | LSM303D port | 69c3a94 (2026-10-22)
+2026-11-12 | S4-U01–U03, U06, U07, U10, U12–U14, U16 | imu-lift-stop | 9f648bc (2026-11-12)
+2026-11-18 | S4-U17 | tribunal1-car-test | 3e0bba7 (2026-11-18)
+2026-11-18 | S4-U18 | tribunal1-car-test | fe06144 (2026-11-18)
+2026-11-18 | S4-U18 | tribunal1-car-test | fe06144 (2026-11-18)
+2026-11-24 | S4-U19 | fine-width-scan | 5d8990c (2026-11-24)
+2026-11-24 | S4-U19 (wheel shape) | fine-width-scan v2 | 5d8990c (2026-11-24) | code version tested here was not committed on its own
+2026-11-24 | S4-U20 | before fix (car, v3 dbg image) | 5d8990c (2026-11-24) | code version tested here was not committed on its own
+2026-11-24 | S4-U20 | fine-width-scan v4 | 5d8990c (2026-11-24) | code version tested here was not committed on its own

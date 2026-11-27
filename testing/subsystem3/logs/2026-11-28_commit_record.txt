@@ -1,0 +1,58 @@
+# Commit record for Results rows that name a branch, phase or placeholder instead of a commit
+# File: testing/subsystem3/TEST_LOG.md
+# Source: git history of main at 22a73b4.
+# Method: for each row, git log -S "| <date> | <test ID> | <label> |" -- <file>; the oldest match is the commit that added the row.
+# 'Recorded in' is that commit. Where the row was committed together with the code, it is also the tested code.
+# The old rows are not changed (append-only); this file only adds the missing commit reference.
+# Rows: 49
+
+Date        | Test ID | Label in the row | Recorded in (date) | Note
+2026-10-22 | S3-U01 | Phase 2 | 454f98c (2026-10-22)
+2026-10-22 | S3-U02 | Phase 2 | 454f98c (2026-10-22)
+2026-10-22 | S3-U03 | Phase 2 | 454f98c (2026-10-22)
+2026-10-22 | S3-U04 | Phase 2 | 454f98c (2026-10-22)
+2026-10-22 | S3-U05 | Phase 2 | 454f98c (2026-10-22)
+2026-10-22 | S3-U06 | Phase 2 | 454f98c (2026-10-22)
+2026-10-22 | S3-U07 | Phase 2 | 454f98c (2026-10-22)
+2026-10-22 | S3-U08 | Phase 2 | 454f98c (2026-10-22)
+2026-10-22 | S3-U09 | Phase 2 | 454f98c (2026-10-22)
+2026-10-22 | S3-U14 | Phase 2 | 454f98c (2026-10-22)
+2026-11-05 | S3-U01..U11, U14..U18 | Phase 4 | cc9e4a7 (2026-11-05)
+2026-11-09 | S3-U23 | obstacle-rejoin-barcode-reread-steering-cap | c444a37 (2026-11-10)
+2026-11-09 | S3-U24 | obstacle-rejoin-barcode-reread-steering-cap | c444a37 (2026-11-10)
+2026-11-09 | S3-U25 | obstacle-rejoin-barcode-reread-steering-cap | c444a37 (2026-11-10)
+2026-11-09 | S3-U26 | obstacle-rejoin-barcode-reread-steering-cap | c444a37 (2026-11-10)
+2026-11-09 | S3-U27 | obstacle-rejoin-barcode-reread-steering-cap | c444a37 (2026-11-10)
+2026-11-09 | S3-U28 | obstacle-rejoin-barcode-reread-steering-cap | c444a37 (2026-11-10)
+2026-11-09 | S3-U29 | obstacle-rejoin-barcode-reread-steering-cap | c444a37 (2026-11-10)
+2026-11-09 | S3-U30 | obstacle-rejoin-barcode-reread-steering-cap | c444a37 (2026-11-10)
+2026-11-10 | S3-U27, S3-U31 | barcode-rewind-partial-guard-only | 6eac4dd (2026-11-10)
+2026-11-10 | S3-U32, S3-U33 | Before pulse and stripe fixes | 6eac4dd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U28, S3-U32, S3-U33 | Subsystem 3 candidate | 6eac4dd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U34 | Before failed-capture retry | 6eac4dd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U34 | Failed-capture retry candidate | 6eac4dd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U35 | Before steering adjustment | 6eac4dd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U35 | Steering adjustment candidate | 6eac4dd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U36 | Before edge log | 6eac4dd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U36 | barcode-edge-log | 6eac4dd (2026-11-10)
+2026-11-10 | S3-U37 | Before transition settle | 6eac4dd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U37 | barcode-transition-settle | 6eac4dd (2026-11-10)
+2026-11-10 | S3-U11, S3-U14, S3-U18, S3-U30, S3-U32, S3-U34 | barcode-transition-settle | 6eac4dd (2026-11-10)
+2026-11-10 | S3-U38 | barcode-transition-settle | 3ffa82d (2026-11-10)
+2026-11-10 | S3-U38 | barcode-reread-full-strip | 3ffa82d (2026-11-10)
+2026-11-10 | S3-U39 | before fix | 5efabbd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U39 | barcode-reread-full-strip | 5efabbd (2026-11-10)
+2026-11-10 | S3-U40 | before fix | 5efabbd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S3-U40 | barcode-reread-full-strip | 5efabbd (2026-11-10)
+2026-11-11 | S3-U02, S3-U14, S3-U41 | one-cross-junction-type | b3c4505 (2026-11-11)
+2026-11-12 | S3-U43 | barcode-end-bars-narrow | 2b293ea (2026-11-12)
+2026-11-12 | S3-U44 | line-no-line-end | ce2947e (2026-11-12)
+2026-11-12 | S3-U23, S3-U27, S3-U29, S3-U34, S3-U45 | barcode-reread-any-bars | fc52ce8 (2026-11-12)
+2026-11-12 | S3-U46 | barcode-edge-ring-drop-barrier | d9d8e14 (2026-11-12)
+2026-11-12 | S3-U43, S3-U44, S3-U45, S3-U46 | shared-event-type-range (patches 6–15) | 2d5536d (2026-11-12)
+2026-11-16 | S3-U50 | path-wraps | a47ec41 (2026-11-18)
+2026-11-18 | S3-U48 | before fix (tribunal1-path-wrap-motion-pack + safe gaps) | d50de2a (2026-11-18) | code version tested here was not committed on its own
+2026-11-18 | S3-U48 | tribunal1-car-test | d50de2a (2026-11-18)
+2026-11-18 | S3-U51 | tribunal1-car-test | afa422e (2026-11-18)
+2026-11-18 | S3-U01..S3-U51 (packing check) | tribunal1-car-test + B3 late packing | a7807ae (2026-11-18)
+2026-11-16 | S3-U02, S3-U14, S3-U41 | tribunal1-safe-gaps | 6465107 (2026-11-16)

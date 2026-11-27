@@ -1,0 +1,48 @@
+# Commit record for Results rows that name a branch, phase or placeholder instead of a commit
+# File: testing/subsystem5/TEST_LOG.md
+# Source: git history of main at 22a73b4.
+# Method: for each row, git log -S "| <date> | <test ID> | <label> |" -- <file>; the oldest match is the commit that added the row.
+# 'Recorded in' is that commit. Where the row was committed together with the code, it is also the tested code.
+# The old rows are not changed (append-only); this file only adds the missing commit reference.
+# Rows: 39
+
+Date        | Test ID | Label in the row | Recorded in (date) | Note
+2026-10-22 | S5-U30 | (this branch) | 7ecd2ef (2026-10-22)
+2026-11-09 | S5-U56 | obstacle-rejoin-barcode-reread-steering-cap | e662666 (2026-11-10)
+2026-11-09 | S5-U57 | obstacle-rejoin-barcode-reread-steering-cap | e662666 (2026-11-10)
+2026-11-09 | S5-U58 | obstacle-rejoin-barcode-reread-steering-cap | e662666 (2026-11-10)
+2026-11-09 | S5-U59 | obstacle-rejoin-barcode-reread-steering-cap | e662666 (2026-11-10)
+2026-11-09 | S5-U60 | obstacle-rejoin-barcode-reread-steering-cap | e662666 (2026-11-10)
+2026-11-09 | S5-U61 | obstacle-rejoin-barcode-reread-steering-cap | e662666 (2026-11-10)
+2026-11-09 | S5-U62 | obstacle-rejoin-barcode-reread-steering-cap | e662666 (2026-11-10)
+2026-11-09 | S5-U63 | obstacle-rejoin-barcode-reread-steering-cap | e662666 (2026-11-10)
+2026-11-09 | S5-U64 | obstacle-rejoin-barcode-reread-steering-cap | e662666 (2026-11-10)
+2026-11-10 | S5-U65, S5-U66 | barcode-transition-settle | 3ffa82d (2026-11-10)
+2026-11-10 | S5-U64, S5-U65, S5-U66 | barcode-reread-full-strip | 3ffa82d (2026-11-10)
+2026-11-10 | S5-U67 | before fix | 8127082 (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S5-U67 | barcode-reread-full-strip | 8127082 (2026-11-10)
+2026-11-10 | S5-U68 | before fix | 5efabbd (2026-11-10) | code version tested here was not committed on its own
+2026-11-10 | S5-U68 | barcode-reread-full-strip | 5efabbd (2026-11-10)
+2026-11-11 | S5-U57, S5-U62, S5-U67, S5-U68, S5-U69 | one-cross-junction-type | b3c4505 (2026-11-11)
+2026-11-12 | S5-U07, S5-U08, S5-U74 | pack-status-board-words | 25f71d3 (2026-11-12)
+2026-11-12 | S5-U04, S5-U07, S5-U75 | pack-mission-event-word | d38e7d9 (2026-11-12)
+2026-11-12 | S5-U57, S5-U68, S5-U76 | barcode-reread-time-limit | 14fcf99 (2026-11-12)
+2026-11-12 | S5-U75, S5-U77 | shared-event-type-range | 552f09c (2026-11-12)
+2026-11-12 | S5-U74, S5-U75, S5-U76, S5-U77 | shared-event-type-range (patches 6–15) | 2d5536d (2026-11-12)
+2026-11-12 | S5-U07, S5-U16, S5-U32, S5-U33, S5-U78 | imu-lift-stop | 9f648bc (2026-11-12)
+2026-11-16 | S5-U20, S5-U79, S5-U80 | path-wraps | a47ec41 (2026-11-18)
+2026-11-18 | S5-U68, S5-U81 | tribunal1-car-test | afa422e (2026-11-18)
+2026-11-18 | S5-U82 | tribunal1-car-test | 3b486c1 (2026-11-18)
+2026-11-18 | S5-U17, S5-U08 (packing check) | tribunal1-packing | e0bb32d (2026-11-18)
+2026-11-18 | S5-U08..S5-U82 obstacle (packing check) | tribunal1-packing | 9696a59 (2026-11-18)
+2026-11-18 | HMI + health (packing check) | tribunal1-packing | 7edfd74 (2026-11-18)
+2026-11-18 | S5-PACK | tribunal1-packing | 2032fb7 (2026-11-18)
+2026-11-16 | S5-U74 | tribunal1-safe-gaps | 6465107 (2026-11-16)
+2026-11-23 | S5-U61 | map-only-outside-run | 4110d44 (2026-11-23)
+2026-11-24 | S5-U83 | fine-width-scan | 5d8990c (2026-11-24)
+2026-11-24 | S5-U83 (review) | fine-width-scan v2 | 5d8990c (2026-11-24) | code version tested here was not committed on its own
+2026-11-24 | S5-U83 (fringe echo) | before fix (fine-width-scan v2) | 5d8990c (2026-11-24) | code version tested here was not committed on its own
+2026-11-24 | S5-U83 (fringe echo) | fine-width-scan v3 | 5d8990c (2026-11-24) | code version tested here was not committed on its own
+2026-11-24 | S5-U83 (car 70 mm box) | before fix (car, v3 dbg image) | 5d8990c (2026-11-24) | code version tested here was not committed on its own
+2026-11-24 | S5-U83 (car 70 mm box) | fine-width-scan v4 | 5d8990c (2026-11-24) | code version tested here was not committed on its own
+2026-11-25 | S5-I06 | n/a (ruler) | 59f524e (2026-11-25) | measurement only, no code under test

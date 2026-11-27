@@ -1,0 +1,15 @@
+# Commit record for Results rows that name a branch, phase or placeholder instead of a commit
+# File: testing/subsystem1/TEST_LOG.md
+# Source: git history of main at 22a73b4.
+# Method: for each row, git log -S "| <date> | <test ID> | <label> |" -- <file>; the oldest match is the commit that added the row.
+# 'Recorded in' is that commit. Where the row was committed together with the code, it is also the tested code.
+# The old rows are not changed (append-only); this file only adds the missing commit reference.
+# Rows: 6
+
+Date        | Test ID | Label in the row | Recorded in (date) | Note
+2026-10-21 | S1-U20..U24 | <commit> | 143c973 (2026-10-22) | placeholder left in the row
+2026-11-03 | S1-U38 | b1-wifi-latency | 9d4a68a (2026-11-03)
+2026-11-03 | S1-U39 | b1-wifi-latency | 38a72b5 (2026-11-03)
+2026-11-03 | S1-U40..U43, S5-U05 | b1-snapshot-cmd | dee1be5 (2026-11-03)
+2026-11-11 | S1-U44 | one-cross-junction-type | b3c4505 (2026-11-11)
+2026-11-16 | S1-U38, S1-U44, S1-U46 | tribunal1-safe-gaps | 6465107 (2026-11-16)

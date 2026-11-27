@@ -1,6 +1,6 @@
 # Subsystem 1 — test log
 
-**Subsystem:** Communications, telemetry and packing tools  ·  **Student ID:** <student ID>  ·  **Code:** `app_program/subsystem1/`
+**Subsystem:** Communications, telemetry and packing tools  ·  **Student ID:** 2500949  ·  **Code:** `app_program/subsystem1/`
 
 See `testing/README.md` for how to run tests and record results.
 
@@ -52,6 +52,11 @@ Define a test here before running it. Test IDs never change.
 | S1-I11 | **Added.** "Summary now" on the car: `py tools/telem_cmd.py summary` in READY, during RUN and after STOP | FR12 | manual (with B5) | `telem_cmd.py summary` + `telem_decode.py` | reply within 1 s each time; RUN distance/time grow, FINISHED values stay fixed; the car's state never changes |
 | S1-I12 | **Added.** Web dashboard on the car: `tools/dashboard/index.html` connected to the laptop broker over WebSocket (port 9001) | FR11, FR12 | manual (with B5) | READY → START button → RUN → STOP button → FINISHED → RESET button → READY; SUMMARY in READY and RUN; unplug the car | each command shows "✓ Car went … in x s"; state, speeds and odometer match `telem_decode.py` run alongside; SUMMARY card after STOP; START is greyed out in FINISHED; Car pill turns OFFLINE within the keep-alive after unplugging |
 | A10 | Broker bring-up: car connects to the laptop broker, messages visible with `mosquitto_sub -v -t '#'` | A10 | manual (bench) | copy `config/wifi_secrets.example.h` → `config/wifi_secrets.h` (never commit) | car online, messages arrive |
+| S1-U45 | Debug topics: SENSORS publishes on `c28/d` and LOG on `c28/l`, QoS 0, not retained, with the topic names the dashboard uses | FR10, K13 | auto (host) | `test_mqtt_bridge_host.c` | `[TEST] S1-U45 PASS` ×3 |
+| S1-U46 | LOG payload from the console mirror (K13): header byte 0 = version 1, type 9; `%d` arguments (negative, hexadecimal, `%%`, INT32_MIN; a 4th `%d` prints 0); trailing newline removed, inner newline → space; never writes past the buffer, a 1-byte buffer takes nothing; a K13 overflow is reported first and the drop count is told once; an image without the mirror sends nothing | K13 | auto (host) | `test_mqtt_bridge_host.c` | `[TEST] S1-U46 PASS` ×10 |
+| S1-U47 | SENSORS payload is 12 bytes (header version 1, type 8, plus 11 data bytes); out-of-range values are clamped and never widen the payload; an 11-byte buffer returns 0 and writes nothing | FR10, NFR8 | auto (host) | `test_telem_bin_host.c` | `[TEST] S1-U47 PASS` ×4 |
+| S1-U48 | Broker beacon on UDP 18830: while not connected a beacon aborts the old attempt, skips the back-off and connects to the beacon's sender; the pbuf is always freed; other datagrams are ignored; the same address again does not restart the attempt; while connected the working link is kept, and after it drops the newest beacon address is used | FR10 (broker discovery) | auto (host) | `test_mqtt_utk_host.c` | `[TEST] S1-U48 PASS` ×7 |
+| S1-U49 | Console pacing over MQTT: at most 2 console lines per drain call (the third goes on the next call); no console line while a telemetry payload is refused, and a refused console line is not counted as a telemetry drop; when the ring is more than a quarter full console lines wait | NFR8, K11, K13 | auto (host) | `test_mqtt_utk_host.c` | `[TEST] S1-U49 PASS` ×6 |
 
 *Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
 **manual** = a person observes the result (LED, scope, meter, phone app…).
@@ -72,6 +77,18 @@ never block.
 
 **Extra test IDs S1-U30..U37** cover the bridge and radio-task behaviour
 that the spec lists as requirements but gives no unit-test ID.
+
+**S1-U01 and S1-U02 each have two rows.** The *(baseline)* rows are the
+original JSON payload checks (`logs/2026-10-22_host_s1_baseline.txt`, `6932292`).
+When telemetry moved to packed binary (`5bb213b`, same day) the same two IDs
+were kept for the same checks on the new format: the *(packed)* rows
+(`logs/2026-10-22_host_s1_packed.txt`). The *(packed)* rows are the current
+definition and what the host suite prints today; the *(baseline)* rows stay as
+history because rows are never deleted. Each ID is one test, not two.
+
+**S1-U45..U49** were added with the Wi-Fi debug telemetry (`591ff1b`, 7 Nov)
+and printed by the host suite from then on; their rows in the table above were
+added on 28 Nov.
 
 ## Results
 
@@ -114,3 +131,5 @@ Add a new row for every run. Never edit or delete old rows.
 | 2026-11-25 | Closing note | — | Dylan | — | [Summary](../TEST_SUMMARY_2026-11-25.md) | Current host result for all subsystems: `f4e94ad`, 947 PASS, 0 FAIL (row above, tester Dylan); it supersedes the earlier host rows. S1-I03 stays PARTIAL (broker restart survived; detection and retry timing not observed). Car dismantled after the 13:22 run; no further measurement possible. |
 | 2026-11-25 | S1–S5 host suites (final HEAD) | `5751975` | Dylan | PASS (host) | [Host run](logs/2026-11-25_host_5751975_linux.txt), [static checks](../system/logs/2026-11-25_5751975_static_checks.txt) | 947 PASS, 0 FAIL on the submitted HEAD (firmware source identical to `f4e94ad`; run on the laptop's Linux workspace). BARR-C 101 files, no findings; layout.csv OK, 397 rows. |
 | 2026-11-25 | S1-U44 (development run, kept for history) | uncommitted tree on `41194f0` | Dylan | FAIL | [Host run 11:43](logs/2026-11-25_114323_host_41194f0_awwd8T.txt) | Run while the IMU fix was half-written: generated dashboard tables out of date. Not a result for any commit; fixed by regenerating the tables in `f4e94ad` ([passing run](logs/2026-11-25_120829_host_f4e94ad_C1q6qT.txt)). |
+| 2026-11-28 | S1 host suite: 32 IDs incl. S1-U02, S1-U10, S1-U11, S1-U13, S1-U15, S1-U21, S1-U22, S1-U23, S1-U30, S1-U31, S1-U32, S1-U33, S1-U34, S1-U35, S1-U36, S1-U37, S1-U42, S1-U43, S1-U45, S1-U46, S1-U47, S1-U48, S1-U49 | `22a73b4` | Dylan | PASS (host) | [Host run](logs/2026-11-28_host_22a73b4.txt) | `make -B -C testing/subsystem1/host`, MSYS2 gcc 15.2.0 (sources identical to `6899aa0`): 165 PASS, 0 FAIL. First Results row naming these IDs individually; S1-U45..U49 checks existed since `591ff1b` and their Test cases rows were added today. |
+| 2026-11-28 | Commit record for 6 earlier rows | `22a73b4` | Dylan | — | [Commit record](logs/2026-11-28_commit_record.txt) | 6 earlier rows give a branch name, phase or placeholder in the Commit column instead of the commit hash. The file lists, for each of them, the commit on main that added the row (from git history at `22a73b4`). The 21 Oct `<commit>` row is included. The earlier rows are unchanged. |

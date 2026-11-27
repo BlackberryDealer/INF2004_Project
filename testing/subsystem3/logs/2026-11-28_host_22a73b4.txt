@@ -1,0 +1,213 @@
+# Host test run: subsystem3
+# Commit: 22a73b4 (origin/main; firmware and test sources identical to 6899aa0)
+# Command: make -B -C testing/subsystem3/host
+# Compiler: gcc.exe (Rev8, Built by MSYS2 project) 15.2.0
+# Date: 2026-11-28
+
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -I../../host -I../../../app_program -I../../../app_program/subsystem3 -o test_line_track_host.out test_line_track_host.c ../../../app_program/subsystem3/line_track.c
+./test_line_track_host.out
+[TEST] S3-U06 PASS  cal_finish succeeds with valid spans
+[TEST] S3-U06 PASS  high-is-black: raw == lo gives exact 0
+[TEST] S3-U06 PASS  high-is-black: raw == hi gives exact 1000 (span 3000)
+[TEST] S3-U06 PASS  high-is-black: raw == hi-1 does not overshoot 1000
+[TEST] S3-U06 PASS  low-is-black: raw == hi (white) gives exact 0
+[TEST] S3-U06 PASS  low-is-black: raw == lo (black) gives exact 1000
+[TEST] S3-U01 PASS  low-is-black: midpoint gives 500
+[TEST] S3-U06 PASS  cal_finish orders reversed endpoints without underflow
+[TEST] S3-U06 PASS  cal_finish rejects span < LINE_CAL_MIN_SPAN (399 < 400)
+[TEST] S3-U01 PASS  raw below white clamps to 0
+[TEST] S3-U01 PASS  raw above black clamps to 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  equal sensors give 0 steering
+[TEST] S3-U01 PASS  left full black, right white gives +1000
+[TEST] S3-U01 PASS  right full black, left white gives -1000
+[TEST] S3-U41 PASS  stripe, then both white: one APP_JCT_CROSS event
+[TEST] S3-U02 PASS  stripe, then tape still seen: one APP_JCT_CROSS event
+[TEST] S3-U41 PASS  no T class: the junction codes run NONE, CROSS, SIDE_L, SIDE_R
+[TEST] S3-U02 PASS  Left branch trace classified as APP_JCT_SIDE_L once
+[TEST] S3-U02 PASS  Right branch trace classified as APP_JCT_SIDE_R once
+[TEST] S3-U02 PASS  Curve trace produces no junction event
+[TEST] S3-U02 PASS  Short extra-black noise (< min_counts) ignored
+[TEST] S3-U14 PASS  Early barcode branch (b_branch_recent) sets barcode-side flag
+[TEST] S3-U14 PASS  Late barcode branch (in CONFIRM) sets barcode-side flag
+[TEST] S3-U16 PASS  both white, line never seen: no steering
+[TEST] S3-U16 PASS  step to +1000 is smoothed, not applied at once
+[TEST] S3-U16 PASS  rising error: damping term adds, output clamped
+[TEST] S3-U16 PASS  held error converges to +1000 (no damping when steady)
+[TEST] S3-U16 PASS  error falling fast: damping pulls the output below it
+[TEST] S3-U16 PASS  line lost to the left: keep steering left (recover)
+[TEST] S3-U16 PASS  line lost to the right: recover to the right
+[TEST] S3-U16 PASS  centred on the line: steering settles to 0
+[TEST] S3-U19 PASS  after reset the line counts as between the sensors
+[TEST] S3-U19 PASS  grazing the left edge steers left
+[TEST] S3-U19 PASS  grey graze then both white: line between, steering 0
+[TEST] S3-U19 PASS  grey graze: still between the sensors (not lost)
+[TEST] S3-U19 PASS  grey graze on the right: steering back to 0
+[TEST] S3-U19 PASS  line went black under the left sensor: recover left
+[TEST] S3-U19 PASS  a later grey-only graze clears the old exit side
+[TEST] S3-U21 PASS  recovery starts near LINE_RECOVER_STEER
+[TEST] S3-U21 PASS  then grows smoothly to ~LINE_RECOVER_MAX in 600 ms
+[TEST] S3-U21 PASS  next exit (left) starts again from LINE_RECOVER_STEER
+[TEST] S3-U39 PASS  swing L then R: coast, no recovery arc after 300 ms
+[TEST] S3-U39 PASS  still white after the long coast: recover right
+[TEST] S3-U39 PASS  same side twice (curve): short coast, then recover
+[TEST] S3-U26 PASS  visible curve keeps full steering authority
+[TEST] S3-U26 PASS  coast near straight while keeping the possible exit
+[TEST] S3-U26 PASS  visible tape overrides the coast in either direction
+[TEST] S3-U35 PASS  half-scale left error targets a quarter-scale steer
+[TEST] S3-U35 PASS  half-scale right error targets a quarter-scale steer
+[TEST] line_track SUMMARY 50 passed, 0 failed
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -I../../host -I../../../app_program -I../../../app_program/subsystem3 -o test_code39_host.out test_code39_host.c ../../../app_program/subsystem3/code39.c
+./test_code39_host.out
+[TEST] S3-U03 PASS  full-scale forward decodes all 43 Code 39 characters
+[TEST] S3-U03 PASS  full-scale reverse decodes all 43 Code 39 characters
+[TEST] S3-U03 PASS  code39_char_ascii maps indices and out-of-range
+[TEST] S3-U04 PASS  half-scale forward decodes all 43 Code 39 characters
+[TEST] S3-U04 PASS  half-scale reverse decodes all 43 Code 39 characters
+[TEST] S3-U05 PASS  every Code 39 pattern has exactly three wide (1) bits
+[TEST] S3-U05 PASS  all 44 Code 39 patterns are unique
+[TEST] S3-U05 PASS  28-element capture is rejected
+[TEST] S3-U05 PASS  30-element capture is rejected
+[TEST] S3-U05 PASS  NULL widths pointer is rejected
+[TEST] S3-U05 PASS  wide/narrow ratio < 1.8 is rejected
+[TEST] S3-U05 PASS  wide inter-character gap is rejected
+[TEST] S3-U18 PASS  small barcode with optical bar/space bias decodes all 43 chars fwd
+[TEST] S3-U18 PASS  small barcode with optical bar/space bias decodes all 43 chars rev
+[TEST] S3-U18 PASS  large barcode with optical bias + 40% speed change decodes all 43 fwd
+[TEST] S3-U18 PASS  large barcode with optical bias + 40% speed change decodes all 43 rev
+[TEST] S3-U43 PASS  on-car capture with a 10.8 mm first bar decodes 'A'
+[TEST] S3-U43 PASS  same capture read the other way (long last bar) decodes 'A'
+[TEST] S3-U43 PASS  first bar 1.7x narrow: all 43 chars decode fwd and rev
+[TEST] S3-U43 PASS  last bar 1.7x narrow: all 43 chars decode fwd and rev
+[TEST] S3-U43 PASS  long first bar does not rescue a broken start guard
+[TEST] S3-U43 PASS  long first bar does not rescue a broken data character
+[TEST] S3-U51 PASS  on-car reread with a 12.4 mm grey bar decodes 'A'
+[TEST] S3-U51 PASS  same capture read the other way decodes 'A'
+[TEST] S3-U51 PASS  bar ratio 1.17 is still rejected
+[TEST] S3-U51 PASS  12:33 pass 1 (grey bar ratio 1.31) decodes 'A'
+[TEST] S3-U51 PASS  12:33 pass 3 (grey bar ratio 1.38) decodes 'A'
+[TEST] S3-U51 PASS  spaces keep the 1.8 ratio: a weak wide space is rejected
+[TEST] S3-U51 PASS  bar ratio 1.5, space ratio 2.5: all 43 chars decode fwd
+[TEST] S3-U51 PASS  bar ratio 1.5, space ratio 2.5: all 43 chars decode rev
+[TEST] code39 SUMMARY 30 passed, 0 failed
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -I../../host -I../../../app_program -I../../../app_program/subsystem3 -Imock -o test_line_barcode_sim_host.out test_line_barcode_sim_host.c \
+    ../../../app_program/subsystem3/line_track.c ../../../app_program/subsystem3/code39.c ../../../app_program/app_bits.c \
+    ../../../app_program/subsystem2/odometry.c
+./test_line_barcode_sim_host.out
+[TEST] S3-U07 PASS  29th element triggers immediate APP_EVT_BARCODE without quiet zone wait
+[TEST] S3-U08 PASS  out-of-range MAP values report failure
+[TEST] S3-U08 PASS  existing and new mappings report success
+[TEST] S3-U08 PASS  invalid map_set rejected and valid remap of 'A' -> UTURN visible
+[TEST] S3-U08 PASS  newly mapped character 'E' -> RIGHT decoded and posted
+[TEST] S3-U08 PASS  a full table rejects new letters and updates existing ones
+[TEST] S3-U10 PASS  16-bit MSG_EDGE ring (128 B) packs/unpacks 0, 1, 0x7FFE, 0x7FFF and saturates
+[TEST] S3-U11 PASS  repeated MSG_EDGE_LEVEL bits no longer reset the capture (S3-U37)
+[TEST] S3-U17 PASS  'D' with one edge read mid-flicker still decodes as U-turn
+[TEST] S3-U17 PASS  'D' with a flicker edge 1.5 ms after a bar edge still decodes
+[TEST] S3-U18 PASS  small half-scale '*A*' with 0.5 mm eroded narrow bars decodes as LEFT
+[TEST] S3-U18 PASS  small '*B*' preceded by 2 stray edges decodes via 29-element sliding window
+[TEST] S3-U09 PASS  rejoin mode reports both the rejected mark and the real line
+[TEST] S3-U09 PASS  first LINE_FOUND ~10 mm, second LINE_FOUND ~45 mm
+[TEST] S3-U15 PASS  white, grey edge, black: LINE_FOUND ~25 mm is still posted
+[TEST] S3-U19 PASS  centred, both white 400 ms / 40 mm: no LINE_LOST, line ON
+[TEST] S3-U19 PASS  grey graze, then 400 ms both white: still no LINE_LOST
+[TEST] S3-U44 PASS  centred 2 m without touching the line: no LINE_LOST, line ON
+[TEST] S3-U19 PASS  line black under a sensor, then gone: LINE_LOST
+[TEST] S3-U20 PASS  black exit, 300 ms but only 30 mm both white: no LINE_LOST
+[TEST] S3-U20 PASS  line back under the other sensor: no LINE_LOST at all
+[TEST] S3-U20 PASS  centred 200 mm without touching the line: no LINE_LOST
+[TEST] S3-U20 PASS  loss distance after a black exit >= 50 mm
+[TEST] S3-U44 PASS  rewind 220 mm + slow pass 400 mm centred: no LINE_LOST
+[TEST] S3-U44 PASS  then 1 m more centred at cruise: still no LINE_LOST
+[TEST] S3-U44 PASS  black exit, then gone: LINE_LOST as before
+[TEST] S3-U45 PASS  four bar-like widths without a start guard: rewind
+[TEST] S3-U45 PASS  four flicker widths (0.5-1.5 mm, one < 1.2): no rewind
+[TEST] S3-U45 PASS  the same capture dropped without a guard: rewind
+[TEST] S3-U46 PASS  a capture is in progress (4 elements)
+[TEST] S3-U46 PASS  ring full: the ISR dropped and counted edges
+[TEST] S3-U46 PASS  drop count changed: capture and queued edges discarded
+[TEST] S3-U46 PASS  the next edge is read normally (no repeated discard)
+[TEST] S3-U22 PASS  26-element capture dropped at the quiet zone (as on the car)
+[TEST] S3-U22 PASS  its widths are printed, 2 per line, up to element 26
+[TEST] S3-U22 PASS  widths are the measured element widths (narrow, wide, narrow)
+[TEST] S3-U23 PASS  four plausible widths do not justify a rewind
+[TEST] S3-U23 PASS  reverse guard with first bar missing requests a rewind
+[TEST] S3-U23 PASS  edges during the rewind are discarded
+[TEST] S3-U23 PASS  full slow reread decodes reverse F with its new map
+[TEST] S3-U23 PASS  a slow capture still missing the first bar is invalid
+[TEST] S3-U23 PASS  29 elements without valid Code 39 also fail the reread
+[TEST] S3-U31 PASS  reconstructed F at cruise decodes without rewind
+[TEST] S3-U31 PASS  opposite scan at cruise decodes without rewind
+[TEST] S3-U24 PASS  four similar short elements do not trigger a rewind
+[TEST] S3-U27 PASS  the eight reported yellow-tape widths cannot trigger
+[TEST] S3-U27 PASS  mixed narrow and wide noise fails the guard pattern
+[TEST] S3-U27 PASS  a forward guard missing its first bar can retry
+[TEST] S3-U34 PASS  an intact guard alone lets the scan continue
+[TEST] S3-U34 PASS  repeated DO levels after an intact guard keep the capture (S3-U37)
+[TEST] S3-U34 PASS  quiet after a known start can request one rewind
+[TEST] S3-U34 PASS  an invalid short frame reports failure before retrying
+[TEST] S3-U45 PASS  the recorded eleven-element fragment now asks for the reread
+[TEST] S3-U34 PASS  a failed slow reread does not request another rewind
+[TEST] S3-U38 PASS  a logged misread with a 23.8 mm guard bar asks for a rewind of the whole strip
+[TEST] S3-U40 PASS  an intact guard at cruise asks for a slow reread
+[TEST] S3-U40 PASS  the slow reread itself does not ask again
+[TEST] S3-U29 PASS  the measured guard requests a retry within 150 mm
+[TEST] S3-U29 PASS  a measured 28-element frame still cannot arm a turn
+[TEST] S3-U30 PASS  short pulses do not fragment a complete measured F
+[TEST] S3-U30 PASS  a short leading pulse leaves the scanner idle
+[TEST] S3-U30 PASS  a rejected sub-millisecond return also leaves the scanner idle
+[TEST] S3-U32 PASS  a rejected pulse return does not break the measured F
+[TEST] S3-U25 PASS  single IRQ flags preserve edge direction across bounce
+[TEST] S3-U25 PASS  rewind discards queued edges and the initial element count
+[TEST] S3-U25 PASS  a falling first edge on reread still decodes all 29 elements
+[TEST] S3-U36 PASS  a dropped capture announces a dump of its 7 raw edges
+[TEST] S3-U36 PASS  one line per raw edge, then the log is cleared
+[TEST] S3-U36 PASS  the end of the first bar shows its gap (negative = now white) and the speed used
+[TEST] S3-U37 PASS  logged 21:09 pass: 21 elements, no drop on chatter
+[TEST] S3-U37 PASS  its first 10 elements are the '*' start guard
+[TEST] S3-U37 PASS  *A* and *F* with chatter and wrong DO levels decode in both directions
+[TEST] S3-U14 PASS  16 mm single bar increments barcode_branch_seq on trailing edge
+[TEST] S3-U14 PASS  full task replay: early barcode branch + right sat -> APP_JCT_CROSS
+[TEST] S3-U14 PASS  full task replay: late barcode branch + right sat -> APP_JCT_CROSS
+[TEST] S3-U28 PASS  ordinary one-sided black still turns toward the line
+[TEST] S3-U28 PASS  a staggered cross edge cannot steer the car
+[TEST] S3-U33 PASS  the next cycle on the trailing stripe keeps steering centred
+[TEST] S3-U28 PASS  both white after the stripe does not start a recovery swing
+[TEST] S3-U28 PASS  continuing tape still confirms the cross and clears bias
+[TEST] S3-U28 PASS  line following responds normally after the cross
+[TEST] S3-U33 PASS  a brief dark band clears steering without a junction event
+[TEST] S3-U33 PASS  a lasting one-sided reading steers again after the hold
+[TEST] S3-U48 PASS  control: *A* without a clamped gap decodes A
+[TEST] S3-U48 PASS  *A* holding a clamped gap: not decoded
+[TEST] S3-U48 PASS  the capture carries on (no drop): same path as a frame that does not decode
+[TEST] S3-U50 PASS  *A* read while the path wraps decodes A (no quiet-zone drop)
+[TEST] S3-U50 PASS  black exit across the path wrap: no LINE_LOST before 60 mm
+[TEST] S3-U50 PASS  black exit across the path wrap: LINE_LOST after 60 mm
+[TEST] S3-U55 PASS  continuous run step 1: full-scale *A* decodes -> LEFT
+[TEST] S3-U55 PASS  continuous run step 2: cross-junction #1 classified
+[TEST] S3-U55 PASS  continuous run step 3: half-scale *B* decodes -> RIGHT
+[TEST] S3-U55 PASS  continuous run step 4: cross-junction #2 classified
+[TEST] line_barcode_sim SUMMARY 93 passed, 0 failed
+gcc -std=c99 -Wall -Wextra -Werror -pedantic -I../../host -I../../../app_program -I../../../app_program/subsystem3 -Wconversion -Wsign-conversion -DAPP_TEST=1 -Imock \
+    -o test_s3_diag_host.out test_s3_diag_host.c ../../../app_program/subsystem3/test_line.c \
+    ../../../app_program/subsystem3/test_barcode.c ../../../app_program/subsystem3/line_track.c \
+    ../../../app_program/subsystem3/code39.c ../../../app_program/app_bits.c ../../../app_program/subsystem2/odometry.c
+./test_s3_diag_host.out
+[TEST] S3-U06 PASS  cal_finish accepts both polarities
+[TEST] S3-U01 PASS  exact endpoints 0 and 1000
+[TEST] S3-U01 PASS  midpoint normalises to 500
+[TEST] S3-U01 PASS  steering sign convention +left -right
+[TEST] S3-U14 PASS  early barcode branch + right sat classifies T
+[TEST] S3-U02 PASS  late barcode branch + right sat + line present -> CROSS
+[TEST] S3-U56 PASS  SH_IR_RAW stationary ADC sampling & std-dev under US ping
+[TEST] line SUMMARY 7 passed, 0 failed
+[TEST] S3-U03 PASS  code39 decodes *A* to index 10
+[TEST] S3-U05 PASS  28-element capture rejected
+[TEST] S3-U08 PASS  barcode_map_set boundary calls safe
+[TEST] S3-U10 PASS  MSG_EDGE pack/unpack at 0, 1, 0x7FFE, 0x7FFF and saturation
+[TEST] barcode SUMMARY 4 passed, 0 failed
+[TEST] S3-U56 PASS  target test_line.c and test_barcode.c pass under APP_TEST=1
+[TEST] S3-U56 PASS  1024-sample bench ADC logger computes exact min, max, and std-dev
+[TEST] S3-U56 PASS  1000-cycle timing logger reports exact 10 ms period and 240 us WCET
+[TEST] S3-U56 PASS  S3-I03 logger reports exact 320 us decode latency after 29th edge
+[TEST] s3_diag SUMMARY 4 passed, 0 failed
