@@ -3,7 +3,7 @@
 gen_layout.py - generate the packed layout from tools/layout.csv.
 
 Owner:  Buddy 1 (communications)
-Spec:   CSC28 AI spec, Part D.11 (layout table), D.12 (header format), B1.0.2
+Spec:   CSC28 spec, Part D.11 (layout table), D.12 (header format), B1.0.2
 
 Usage (from the repo root, or from build_make/ via "make layout"):
 

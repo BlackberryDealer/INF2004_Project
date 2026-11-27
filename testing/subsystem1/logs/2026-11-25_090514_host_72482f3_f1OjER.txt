@@ -3,7 +3,7 @@ Tester: Dylan
 Checkout commit: 72482f3da1f921e07cb6267ae3f0c1cde2f36dc3
 Mode: host
 Command: make -B -C testing/host
-make: Entering directory '/c/Users/dylan/Documents/ChatGPT/Embedded Systems Robot Car 4/PicoCar-demo-submission/testing/host'
+make: Entering directory 'testing/host'
 gcc -std=c99 -Wall -Wextra -Werror -pedantic -I../../host -I../../../app_program -I../../../app_program/subsystem1 -DLAYOUT_SB_MSG_FIELDS=44 -o test_app_bits_host.out \
     test_app_bits_host.c ../../../app_program/app_bits.c
 ./test_app_bits_host.out
@@ -3200,4 +3200,4 @@ cc -std=c99 -Wall -Wextra -Werror -pedantic -I../../../app_program -Wconversion 
 [TEST] S5-U85 PASS  FAULT drives red LED and alternating alarm buzzer
 [TEST] hmi SUMMARY 13 passed, 0 failed
 host tests: all subsystems passed
-make: Leaving directory '/c/Users/dylan/Documents/ChatGPT/Embedded Systems Robot Car 4/PicoCar-demo-submission/testing/host'
+make: Leaving directory 'testing/host'

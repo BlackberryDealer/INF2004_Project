@@ -1,6 +1,6 @@
 # System — test log
 
-Tests of the complete product against its requirements, run on the final hardware set-up. Run the full set before every demo and before hand-in. Use the blank [trial sheet template](track_trials.csv) for repeated measurements.
+Tests of the complete product against its requirements, run on the final hardware set-up. Run the full set before every demo and before hand-in.
 
 See `testing/README.md` for how to run tests and record results.
 

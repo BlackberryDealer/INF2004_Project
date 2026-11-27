@@ -3,7 +3,7 @@
 telem_decode.py - laptop decoder of the car's packed MQTT payloads.
 
 Owner:  Buddy 1 (communications)
-Spec:   CSC28 AI spec, B1.4 step 9 and 10, Part D.4 (LSB-first writer)
+Spec:   CSC28 spec, B1.4 step 9 and 10, Part D.4 (LSB-first writer)
 
 Usage (from the repo root):
 

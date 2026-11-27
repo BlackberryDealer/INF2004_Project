@@ -61,7 +61,7 @@ git status --short
 git add -- testing videos/README.md
 git diff --cached --stat
 git commit -m "Record single-core bench and course results"
-git push -u origin codex/demo-submission
+git push -u origin <your-branch>
 ```
 
 Open the branch's pull request into `main` and verify the logs open on the submitted revision. Use the push command after the team is ready to publish.

@@ -1,6 +1,6 @@
 # Integration — test log
 
-Tests that two or more subsystems work together. There is one test (or more) for every interface listed in TEAM.md section 5.
+Tests that two or more subsystems work together. There is one test (or more) for every interface listed in TEAM.md section 5. Both owners agree on the test and sign off the result.
 
 See `testing/README.md` for how to run tests and record results.
 

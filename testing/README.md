@@ -1,9 +1,5 @@
 # Testing
 
-## Demo evidence
-
-Start with the [demo-day run sheet](DEMO.md) for the two firmware images, live capture commands and track worksheet.
-
 All test records for the project live in this folder. A test only counts as
 done when it is **written down here with its result and a saved log**.
 

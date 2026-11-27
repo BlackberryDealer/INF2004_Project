@@ -7,7 +7,7 @@ GNU Make 4.4.1
 Python 3.12.11
 v26.13.0
 Command: make -C testing/host
-make: Entering directory '/c/Users/dylan/Documents/ChatGPT/Embedded Systems Robot Car 4/.host-audit-708f750b/source/testing/host'
+make: Entering directory 'testing/host'
 gcc -std=c99 -Wall -Wextra -Werror -pedantic -I../../host -I../../../app_program -I../../../app_program/subsystem1 -DLAYOUT_SB_MSG_FIELDS=44 -o test_app_bits_host.out \
     test_app_bits_host.c ../../../app_program/app_bits.c
 ./test_app_bits_host.out
@@ -221,6 +221,6 @@ python3 ../../../tools/dashboard/test_dashboard.py golden
 [TEST] dashboard SUMMARY 1 failed
 make[1]: *** [Makefile:156: dashboard] Error 1
 make: *** [Makefile:16: all] Error 2
-make: Leaving directory '/c/Users/dylan/Documents/ChatGPT/Embedded Systems Robot Car 4/.host-audit-708f750b/source/testing/host'
+make: Leaving directory 'testing/host'
 make exit code: 2
 Run finished: 2026-11-25 03:48:24 +08

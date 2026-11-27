@@ -2,7 +2,7 @@
  * decode.js - packed-payload decoder and command encoder for the dashboard.
  *
  * Owner:  Buddy 1 (communications)
- * Spec:   CSC28 AI spec, B1.4 step 9 and 10, Part D.4 (LSB-first writer)
+ * Spec:   CSC28 spec, B1.4 step 9 and 10, Part D.4 (LSB-first writer)
  *
  * A line-for-line port of tools/telem_decode.py (decode, unit_value,
  * event_text, line_for) and tools/telem_cmd.py (command_bytes,

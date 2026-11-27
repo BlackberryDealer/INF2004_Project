@@ -2,7 +2,7 @@
 
 The single place that says **who owns what**, so that five people can work in
 one firmware image without clashing over pins, priorities, or kernel objects.
-Every value here comes from the team spec (`CSC28 PicoCar — AI Implementation
+Every value here comes from the team spec (`CSC28 PicoCar — Implementation
 Spec`, Part B and Part D); if the two disagree, the spec wins and this file is
 fixed by pull request.
 

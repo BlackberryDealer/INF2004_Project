@@ -3,7 +3,7 @@
 telem_cmd.py - send one command to the car over MQTT (topic c28/c).
 
 Owner:  Buddy 1 (communications)
-Spec:   CSC28 AI spec, B1.4 (commands), B1.7 (new command = new
+Spec:   CSC28 spec, B1.4 (commands), B1.7 (new command = new
         APP_MQ_TYPE_CMD_*); FR11 remote START / STOP, FR12 two-way link
 
 Usage (from the repo root; broker on this laptop unless --host is given):

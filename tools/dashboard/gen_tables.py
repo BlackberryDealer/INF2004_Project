@@ -3,7 +3,7 @@
 gen_tables.py - write the dashboard's lookup tables (telem_tables.js).
 
 Owner:  Buddy 1 (communications)
-Spec:   CSC28 AI spec, B1.4 (telemetry and commands), Part D.11 (layout)
+Spec:   CSC28 spec, B1.4 (telemetry and commands), Part D.11 (layout)
 
 Usage (from the repo root):
 
